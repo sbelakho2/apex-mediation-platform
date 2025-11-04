@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability disclosure
+    url: https://bel-consulting.ee/security
+    about: Please report security issues privately so we can verify and respond quickly.
+  - name: Commercial support
+    url: https://bel-consulting.ee/support
+    about: Reach out for enterprise onboarding or account-specific questions.

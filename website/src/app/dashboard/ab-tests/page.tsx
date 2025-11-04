@@ -1,0 +1,390 @@
+'use client';
+
+// Reference: Design.md § "Dashboard Pages" & WEBSITE_DESIGN.md § "A/B Tests Page"
+// A/B testing platform with Bayesian statistics and Thompson Sampling
+
+import {
+    BeakerIcon,
+    CheckCircleIcon,
+    ClockIcon,
+    PlayIcon,
+    StopIcon,
+} from '@heroicons/react/24/outline';
+import { useState } from 'react';
+
+interface ABTest {
+  id: string;
+  name: string;
+  status: 'running' | 'completed' | 'draft' | 'paused';
+  startDate: string;
+  endDate?: string;
+  variantA: {
+    name: string;
+    impressions: number;
+    revenue: number;
+    ecpm: number;
+  };
+  variantB: {
+    name: string;
+    impressions: number;
+    revenue: number;
+    ecpm: number;
+  };
+  confidence: number;
+  winner?: 'A' | 'B' | null;
+}
+
+export default function ABTestsPage() {
+  const [tests] = useState<ABTest[]>([
+    {
+      id: '1',
+      name: 'Banner Position Test',
+      status: 'running',
+      startDate: 'Nov 1, 2025',
+      variantA: {
+        name: 'Top Banner',
+        impressions: 45678,
+        revenue: 634.89,
+        ecpm: 13.90,
+      },
+      variantB: {
+        name: 'Bottom Banner',
+        impressions: 45234,
+        revenue: 723.45,
+        ecpm: 15.99,
+      },
+      confidence: 87.3,
+      winner: 'B',
+    },
+    {
+      id: '2',
+      name: 'Rewarded Video Timing',
+      status: 'running',
+      startDate: 'Oct 28, 2025',
+      variantA: {
+        name: 'Level Start',
+        impressions: 23456,
+        revenue: 456.78,
+        ecpm: 19.47,
+      },
+      variantB: {
+        name: 'Level End',
+        impressions: 23890,
+        revenue: 512.34,
+        ecpm: 21.45,
+      },
+      confidence: 92.1,
+      winner: 'B',
+    },
+    {
+      id: '3',
+      name: 'Interstitial Frequency',
+      status: 'completed',
+      startDate: 'Oct 15, 2025',
+      endDate: 'Oct 30, 2025',
+      variantA: {
+        name: 'Every 3 levels',
+        impressions: 89234,
+        revenue: 1234.56,
+        ecpm: 13.83,
+      },
+      variantB: {
+        name: 'Every 5 levels',
+        impressions: 88901,
+        revenue: 1189.23,
+        ecpm: 13.38,
+      },
+      confidence: 95.8,
+      winner: 'A',
+    },
+    {
+      id: '4',
+      name: 'Ad Network Priority',
+      status: 'paused',
+      startDate: 'Oct 20, 2025',
+      variantA: {
+        name: 'AdMob First',
+        impressions: 12345,
+        revenue: 178.90,
+        ecpm: 14.49,
+      },
+      variantB: {
+        name: 'Meta First',
+        impressions: 12098,
+        revenue: 167.34,
+        ecpm: 13.83,
+      },
+      confidence: 45.2,
+      winner: null,
+    },
+  ]);
+
+  const runningTests = tests.filter((t) => t.status === 'running').length;
+  const completedTests = tests.filter((t) => t.status === 'completed').length;
+
+  return (
+    <div className="p-6 space-y-6">
+      {/* Page Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-h2-sm font-bold uppercase text-primary-blue tracking-tight">
+            A/B Testing Platform
+          </h1>
+          <p className="text-sm text-gray-600 mt-1">
+            Optimize your ad strategy with Bayesian statistics & Thompson Sampling
+          </p>
+        </div>
+        <button className="btn-primary-yellow px-6 py-3 flex items-center gap-2">
+          <BeakerIcon className="w-5 h-5" />
+          Create New Test
+        </button>
+      </div>
+
+      {/* Summary Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+        <div className="card-blue p-6">
+          <div className="flex items-center gap-3 mb-2">
+            <PlayIcon className="w-6 h-6 text-sunshine-yellow" />
+            <p className="text-sunshine-yellow font-bold uppercase text-sm">Running Tests</p>
+          </div>
+          <p className="text-white text-4xl font-bold">{runningTests}</p>
+        </div>
+        <div className="card p-6 border-2 border-primary-blue">
+          <div className="flex items-center gap-3 mb-2">
+            <CheckCircleIcon className="w-6 h-6 text-green-500" />
+            <p className="text-primary-blue font-bold uppercase text-sm">Completed</p>
+          </div>
+          <p className="text-primary-blue text-4xl font-bold">{completedTests}</p>
+        </div>
+        <div className="card p-6 border-2 border-sunshine-yellow">
+          <div className="flex items-center gap-3 mb-2">
+            <BeakerIcon className="w-6 h-6 text-sunshine-yellow" />
+            <p className="text-primary-blue font-bold uppercase text-sm">Avg Lift</p>
+          </div>
+          <p className="text-primary-blue text-4xl font-bold">+14.2%</p>
+        </div>
+        <div className="card p-6 border-2 border-gray-300">
+          <div className="flex items-center gap-3 mb-2">
+            <ClockIcon className="w-6 h-6 text-gray-500" />
+            <p className="text-primary-blue font-bold uppercase text-sm">Avg Duration</p>
+          </div>
+          <p className="text-primary-blue text-4xl font-bold">12 days</p>
+        </div>
+      </div>
+
+      {/* Tests List */}
+      <div className="space-y-6">
+        {tests.map((test) => (
+          <ABTestCard key={test.id} test={test} />
+        ))}
+      </div>
+
+      {/* Statistical Method Info */}
+      <div className="card-blue p-6">
+        <h2 className="text-sunshine-yellow font-bold uppercase text-lg mb-4">
+          How Our A/B Testing Works
+        </h2>
+        <div className="grid md:grid-cols-2 gap-6 text-white">
+          <div>
+            <h3 className="font-bold text-sunshine-yellow mb-2">Bayesian Statistics</h3>
+            <p className="text-sm leading-relaxed mb-4">
+              Unlike frequentist methods, our Bayesian approach provides:
+            </p>
+            <ul className="space-y-2 text-sm">
+              <li className="flex items-start gap-2">
+                <span className="text-sunshine-yellow">•</span>
+                <span>Real-time probability of winning (not just p-values)</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-sunshine-yellow">•</span>
+                <span>Continuous learning as data accumulates</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-sunshine-yellow">•</span>
+                <span>No need for pre-defined sample sizes</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-sunshine-yellow">•</span>
+                <span>Confidence intervals that actually make sense</span>
+              </li>
+            </ul>
+          </div>
+          <div>
+            <h3 className="font-bold text-sunshine-yellow mb-2">Thompson Sampling</h3>
+            <p className="text-sm leading-relaxed mb-4">
+              Our multi-armed bandit algorithm automatically:
+            </p>
+            <ul className="space-y-2 text-sm">
+              <li className="flex items-start gap-2">
+                <span className="text-sunshine-yellow">•</span>
+                <span>Allocates more traffic to winning variants</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-sunshine-yellow">•</span>
+                <span>Minimizes opportunity cost during testing</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-sunshine-yellow">•</span>
+                <span>Balances exploration vs exploitation</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-sunshine-yellow">•</span>
+                <span>Reaches conclusions 30% faster than traditional A/B tests</span>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+interface ABTestCardProps {
+  test: ABTest;
+}
+
+function ABTestCard({ test }: ABTestCardProps) {
+  const statusConfig = {
+    running: { color: 'border-green-500 bg-green-50', badge: 'bg-green-500', icon: PlayIcon },
+    completed: { color: 'border-blue-500 bg-blue-50', badge: 'bg-blue-500', icon: CheckCircleIcon },
+    draft: { color: 'border-gray-400 bg-gray-50', badge: 'bg-gray-400', icon: ClockIcon },
+    paused: { color: 'border-yellow-500 bg-yellow-50', badge: 'bg-yellow-500', icon: StopIcon },
+  };
+
+  const config = statusConfig[test.status];
+  const StatusIcon = config.icon;
+
+  const liftB = ((test.variantB.ecpm - test.variantA.ecpm) / test.variantA.ecpm) * 100;
+
+  return (
+    <div className="card p-6">
+      {/* Header */}
+      <div className="flex items-start justify-between mb-6">
+        <div className="flex-1">
+          <h3 className="text-xl font-bold text-primary-blue mb-2">{test.name}</h3>
+          <div className="flex items-center gap-4 text-sm text-gray-600">
+            <span>Started: {test.startDate}</span>
+            {test.endDate && <span>• Ended: {test.endDate}</span>}
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          <div className={`${config.badge} text-white px-4 py-2 rounded flex items-center gap-2`}>
+            <StatusIcon className="w-4 h-4" />
+            <span className="text-sm font-bold uppercase">{test.status}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Variants Comparison */}
+      <div className="grid md:grid-cols-2 gap-6 mb-6">
+        {/* Variant A */}
+        <div className={`border-2 rounded p-4 ${test.winner === 'A' ? 'border-sunshine-yellow bg-yellow-50' : 'border-gray-300'}`}>
+          <div className="flex items-center justify-between mb-4">
+            <h4 className="font-bold text-primary-blue">Variant A: {test.variantA.name}</h4>
+            {test.winner === 'A' && (
+              <div className="bg-sunshine-yellow text-primary-blue px-3 py-1 rounded text-xs font-bold">
+                WINNER
+              </div>
+            )}
+          </div>
+          <div className="space-y-2 text-sm">
+            <div className="flex justify-between">
+              <span className="text-gray-600">Impressions:</span>
+              <span className="font-bold text-primary-blue">{test.variantA.impressions.toLocaleString()}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-600">Revenue:</span>
+              <span className="font-bold text-primary-blue">${test.variantA.revenue.toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-600">eCPM:</span>
+              <span className="font-bold text-primary-blue">${test.variantA.ecpm.toFixed(2)}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Variant B */}
+        <div className={`border-2 rounded p-4 ${test.winner === 'B' ? 'border-sunshine-yellow bg-yellow-50' : 'border-gray-300'}`}>
+          <div className="flex items-center justify-between mb-4">
+            <h4 className="font-bold text-primary-blue">Variant B: {test.variantB.name}</h4>
+            {test.winner === 'B' && (
+              <div className="bg-sunshine-yellow text-primary-blue px-3 py-1 rounded text-xs font-bold">
+                WINNER
+              </div>
+            )}
+          </div>
+          <div className="space-y-2 text-sm">
+            <div className="flex justify-between">
+              <span className="text-gray-600">Impressions:</span>
+              <span className="font-bold text-primary-blue">{test.variantB.impressions.toLocaleString()}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-600">Revenue:</span>
+              <span className="font-bold text-primary-blue">${test.variantB.revenue.toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-600">eCPM:</span>
+              <span className="font-bold text-primary-blue">${test.variantB.ecpm.toFixed(2)}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Statistical Results */}
+      <div className="bg-cream p-4 rounded">
+        <div className="flex items-center justify-between mb-3">
+          <div>
+            <p className="text-sm text-gray-600 mb-1">Statistical Confidence</p>
+            <p className="text-2xl font-bold text-primary-blue">{test.confidence}%</p>
+          </div>
+          <div className="text-right">
+            <p className="text-sm text-gray-600 mb-1">Variant B Lift</p>
+            <p className={`text-2xl font-bold ${liftB > 0 ? 'text-green-600' : 'text-red-600'}`}>
+              {liftB > 0 ? '+' : ''}{liftB.toFixed(1)}%
+            </p>
+          </div>
+        </div>
+        <div className="w-full bg-gray-300 h-3 rounded-full overflow-hidden">
+          <div
+            className="bg-primary-blue h-full"
+            style={{ width: `${test.confidence}%` }}
+          />
+        </div>
+        <p className="text-xs text-gray-600 mt-2">
+          {test.confidence >= 95 ? '✓ Test has reached statistical significance' :
+           test.confidence >= 80 ? '⚠ Test is approaching significance' :
+           '⏳ Test needs more data to reach significance'}
+        </p>
+      </div>
+
+      {/* Actions */}
+      <div className="flex items-center justify-end gap-3 mt-4 pt-4 border-t border-gray-200">
+        {test.status === 'running' && (
+          <>
+            <button className="px-4 py-2 text-sm font-bold text-gray-600 border border-gray-300 rounded hover:bg-gray-50">
+              Pause Test
+            </button>
+            <button className="px-4 py-2 text-sm font-bold text-white bg-primary-blue rounded hover:bg-primary-blue/90">
+              Stop & Choose Winner
+            </button>
+          </>
+        )}
+        {test.status === 'completed' && (
+          <button className="px-4 py-2 text-sm font-bold text-primary-blue border border-primary-blue rounded hover:bg-primary-blue hover:text-white">
+            View Full Report
+          </button>
+        )}
+        {test.status === 'paused' && (
+          <>
+            <button className="px-4 py-2 text-sm font-bold text-white bg-green-500 rounded hover:bg-green-600">
+              Resume Test
+            </button>
+            <button className="px-4 py-2 text-sm font-bold text-red-600 border border-red-600 rounded hover:bg-red-50">
+              Delete Test
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}

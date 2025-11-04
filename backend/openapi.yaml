@@ -1,0 +1,174 @@
+openapi: 3.0.3
+info:
+  title: Apex Mediation API
+  version: 1.0.0
+servers:
+  - url: http://localhost:4000/api/v1
+paths:
+  /auth/login:
+    post:
+      summary: Authenticate user and return JWT token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+      responses:
+        '200':
+          description: Successful authentication
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '401':
+          description: Invalid credentials
+  /revenue/summary:
+    get:
+      summary: Get revenue summary
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Revenue summary data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RevenueSummary'
+  /rtb/bid:
+    post:
+      summary: Execute RTB bid request
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BidRequest'
+      responses:
+        '200':
+          description: Winning bid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BidResponse'
+        '204':
+          description: No eligible bids
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    AuthResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            token:
+              type: string
+            user:
+              type: object
+              properties:
+                id:
+                  type: string
+                email:
+                  type: string
+                publisherId:
+                  type: string
+    RevenueSummary:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            today:
+              type: number
+            yesterday:
+              type: number
+            thisMonth:
+              type: number
+            lastMonth:
+              type: number
+            lifetime:
+              type: number
+    BidRequest:
+      type: object
+      required:
+        - requestId
+        - placementId
+        - adFormat
+        - floorCpm
+        - device
+        - user
+        - app
+      properties:
+        requestId:
+          type: string
+          format: uuid
+        placementId:
+          type: string
+        adFormat:
+          type: string
+          enum: [banner, interstitial, rewarded, native]
+        floorCpm:
+          type: number
+        device:
+          type: object
+          properties:
+            platform:
+              type: string
+            osVersion:
+              type: string
+            model:
+              type: string
+        user:
+          type: object
+          properties:
+            country:
+              type: string
+            language:
+              type: string
+        app:
+          type: object
+          properties:
+            id:
+              type: string
+            name:
+              type: string
+            bundle:
+              type: string
+            version:
+              type: string
+    BidResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            bidId:
+              type: string
+            adapter:
+              type: string
+            cpm:
+              type: number
+            currency:
+              type: string
+            creativeUrl:
+              type: string

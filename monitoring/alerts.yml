@@ -1,0 +1,284 @@
+# Prometheus alerting rules for ApexMediation
+groups:
+  # Backend API alerts
+  - name: backend_api
+    interval: 30s
+    rules:
+      - alert: BackendAPIDown
+        expr: up{job="backend-api"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          service: backend
+        annotations:
+          summary: "Backend API is down"
+          description: "Backend API has been down for more than 2 minutes."
+
+      - alert: HighErrorRate
+        expr: rate(http_requests_total{status=~"5.."}[5m]) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+          service: backend
+        annotations:
+          summary: "High error rate detected"
+          description: "Error rate is {{ $value | humanizePercentage }} over the last 5 minutes."
+
+      - alert: HighLatency
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+          service: backend
+        annotations:
+          summary: "High API latency detected"
+          description: "P95 latency is {{ $value }}s, above 500ms threshold."
+
+      - alert: HighMemoryUsage
+        expr: process_resident_memory_bytes{job="backend-api"} / 1024 / 1024 > 450
+        for: 10m
+        labels:
+          severity: warning
+          service: backend
+        annotations:
+          summary: "High memory usage"
+          description: "Backend API is using {{ $value }}MB of memory (limit: 512MB)."
+
+      - alert: DatabaseConnectionPoolExhausted
+        expr: pg_pool_size - pg_pool_available < 5
+        for: 5m
+        labels:
+          severity: warning
+          service: backend
+        annotations:
+          summary: "Database connection pool nearly exhausted"
+          description: "Only {{ $value }} database connections available in pool."
+
+  # Payment processing alerts
+  - name: payments
+    interval: 1m
+    rules:
+      - alert: HighPaymentFailureRate
+        expr: rate(stripe_payment_failed_total[5m]) / rate(stripe_payment_attempted_total[5m]) > 0.10
+        for: 5m
+        labels:
+          severity: critical
+          service: billing
+        annotations:
+          summary: "High payment failure rate"
+          description: "Payment failure rate is {{ $value | humanizePercentage }}, above 10% threshold."
+
+      - alert: StripeWebhookDeliveryFailed
+        expr: increase(stripe_webhook_failures_total[5m]) > 3
+        for: 5m
+        labels:
+          severity: warning
+          service: billing
+        annotations:
+          summary: "Stripe webhook delivery failures"
+          description: "{{ $value }} webhook delivery failures in the last 5 minutes."
+
+  # Database alerts
+  - name: database
+    interval: 30s
+    rules:
+      - alert: PostgreSQLDown
+        expr: up{job="postgres"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: database
+        annotations:
+          summary: "PostgreSQL is down"
+          description: "PostgreSQL has been down for more than 1 minute."
+
+      - alert: HighDatabaseConnections
+        expr: pg_stat_activity_count > 50
+        for: 5m
+        labels:
+          severity: warning
+          service: database
+        annotations:
+          summary: "High number of database connections"
+          description: "{{ $value }} active connections to PostgreSQL (limit: 60)."
+
+      - alert: SlowQueries
+        expr: rate(pg_stat_statements_mean_exec_time[5m]) > 1000
+        for: 10m
+        labels:
+          severity: warning
+          service: database
+        annotations:
+          summary: "Slow database queries detected"
+          description: "Average query execution time is {{ $value }}ms."
+
+      - alert: DatabaseDiskSpaceRunningOut
+        expr: pg_database_size_bytes / pg_settings_max_wal_size_bytes > 0.85
+        for: 10m
+        labels:
+          severity: warning
+          service: database
+        annotations:
+          summary: "Database disk space running low"
+          description: "Database is using {{ $value | humanizePercentage }} of allocated space."
+
+  # Cache alerts (Redis)
+  - name: cache
+    interval: 30s
+    rules:
+      - alert: RedisDown
+        expr: up{job="redis"} == 0
+        for: 2m
+        labels:
+          severity: warning
+          service: cache
+        annotations:
+          summary: "Redis is down"
+          description: "Redis has been down for more than 2 minutes. App will function but with degraded performance."
+
+      - alert: HighCacheMissRate
+        expr: rate(redis_keyspace_misses_total[5m]) / rate(redis_keyspace_hits_total[5m]) > 0.5
+        for: 10m
+        labels:
+          severity: info
+          service: cache
+        annotations:
+          summary: "High cache miss rate"
+          description: "Cache miss rate is {{ $value | humanizePercentage }}."
+
+  # System resource alerts
+  - name: system_resources
+    interval: 30s
+    rules:
+      - alert: HighCPUUsage
+        expr: 100 - (avg by(instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+        for: 10m
+        labels:
+          severity: warning
+          service: infrastructure
+        annotations:
+          summary: "High CPU usage"
+          description: "CPU usage is {{ $value }}% on {{ $labels.instance }}."
+
+      - alert: HighDiskUsage
+        expr: (node_filesystem_size_bytes - node_filesystem_avail_bytes) / node_filesystem_size_bytes > 0.85
+        for: 10m
+        labels:
+          severity: warning
+          service: infrastructure
+        annotations:
+          summary: "High disk usage"
+          description: "Disk usage is {{ $value | humanizePercentage }} on {{ $labels.instance }}."
+
+      - alert: SystemOutOfMemory
+        expr: (node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / node_memory_MemTotal_bytes > 0.90
+        for: 5m
+        labels:
+          severity: critical
+          service: infrastructure
+        annotations:
+          summary: "System running out of memory"
+          description: "Memory usage is {{ $value | humanizePercentage }} on {{ $labels.instance }}."
+
+  # Business metrics alerts
+  - name: business_metrics
+    interval: 5m
+    rules:
+      - alert: NoNewCustomersIn24Hours
+        expr: increase(customers_created_total[24h]) == 0
+        for: 1h
+        labels:
+          severity: info
+          service: business
+        annotations:
+          summary: "No new customer signups in 24 hours"
+          description: "No new customers have signed up in the last 24 hours. Check marketing campaigns."
+
+      - alert: HighChurnRate
+        expr: rate(subscriptions_cancelled_total[7d]) / rate(subscriptions_created_total[7d]) > 0.20
+        for: 1h
+        labels:
+          severity: warning
+          service: business
+        annotations:
+          summary: "High customer churn rate"
+          description: "Churn rate is {{ $value | humanizePercentage }} over the last 7 days."
+
+      - alert: RevenueDropDetected
+        expr: sum(rate(stripe_revenue_cents[24h])) < 0.7 * sum(rate(stripe_revenue_cents[7d] offset 7d))
+        for: 2h
+        labels:
+          severity: warning
+          service: business
+        annotations:
+          summary: "Significant revenue drop detected"
+          description: "Revenue is down {{ $value }}% compared to last week's average."
+
+  # SDK health alerts
+  - name: sdk_health
+    interval: 5m
+    rules:
+      - alert: HighSDKCrashRate
+        expr: rate(sdk_crashes_total[1h]) / rate(sdk_sessions_total[1h]) > 0.001
+        for: 30m
+        labels:
+          severity: critical
+          service: sdk
+        annotations:
+          summary: "High SDK crash rate detected"
+          description: "SDK crash rate is {{ $value | humanizePercentage }}, above 0.1% threshold."
+
+      - alert: HighANRRate
+        expr: rate(sdk_anr_total[1h]) / rate(sdk_sessions_total[1h]) > 0.0002
+        for: 30m
+        labels:
+          severity: warning
+          service: sdk
+        annotations:
+          summary: "High ANR rate detected"
+          description: "SDK ANR rate is {{ $value | humanizePercentage }}, above 0.02% threshold."
+
+  # AI automation cost controls
+  - name: ai_cost_controls
+    interval: 1h
+    rules:
+      - alert: OpenAISpendExceeds50Percent
+        expr: openai_monthly_spend_dollars > openai_budget_dollars * 0.5
+        for: 1h
+        labels:
+          severity: warning
+          service: ai_automation
+        annotations:
+          summary: "OpenAI spend at 50% of monthly budget"
+          description: "Current spend: ${{ $value }}, Budget: {{ $labels.budget }}. Review usage and consider optimizing AI calls."
+
+      - alert: OpenAISpendExceeds80Percent
+        expr: openai_monthly_spend_dollars > openai_budget_dollars * 0.8
+        for: 30m
+        labels:
+          severity: critical
+          service: ai_automation
+        annotations:
+          summary: "OpenAI spend at 80% of monthly budget"
+          description: "Current spend: ${{ $value }}. Review usage immediately. Consider disabling non-critical AI flags."
+
+      - alert: OpenAIHardLimitReached
+        expr: openai_requests_blocked_total > 0
+        for: 5m
+        labels:
+          severity: critical
+          service: ai_automation
+        annotations:
+          summary: "OpenAI hard limit reached - requests blocked"
+          description: "AI automation is offline. Increase budget or disable flags. See runbook: infrastructure/runbooks/AI_COST_CONTROLS.md"
+
+      - alert: UnexpectedAISpendSpike
+        expr: rate(openai_monthly_spend_dollars[1h]) > rate(openai_monthly_spend_dollars[24h] offset 24h) * 3
+        for: 2h
+        labels:
+          severity: warning
+          service: ai_automation
+        annotations:
+          summary: "Unexpected AI spend spike detected"
+          description: "Spend rate increased 3x+ compared to yesterday. Investigate for bugs or abuse."
+

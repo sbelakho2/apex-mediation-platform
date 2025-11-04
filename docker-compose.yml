@@ -1,0 +1,74 @@
+version: '3.9'
+
+services:
+  backend:
+    build:
+      context: ./backend
+    ports:
+      - "4000:4000"
+    environment:
+      - NODE_ENV=development
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/apexmediation
+      - REDIS_URL=redis://redis:6379
+      - CLICKHOUSE_URL=http://clickhouse:8123
+      - JWT_SECRET=change-me
+      - JWT_EXPIRES_IN=7d
+    depends_on:
+      - postgres
+      - redis
+      - clickhouse
+    networks:
+      - ad-stack
+
+  console:
+    build:
+      context: ./console
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+      - NEXT_PUBLIC_API_URL=http://localhost:4000/api/v1
+    depends_on:
+      - backend
+    networks:
+      - ad-stack
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_DB=apexmediation
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./backend/migrations:/docker-entrypoint-initdb.d
+    networks:
+      - ad-stack
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    networks:
+      - ad-stack
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:23.9
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    environment:
+      - CLICKHOUSE_DB=analytics
+      - CLICKHOUSE_USER=default
+      - CLICKHOUSE_PASSWORD=
+    networks:
+      - ad-stack
+
+networks:
+  ad-stack:
+    driver: bridge
+
+volumes:
+  postgres-data:

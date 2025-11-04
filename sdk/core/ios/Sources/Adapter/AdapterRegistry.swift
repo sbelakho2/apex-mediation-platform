@@ -1,0 +1,365 @@
+import Foundation
+
+// MARK: - Adapter Protocol
+
+/// Base adapter protocol
+///
+/// All ad network adapters must implement this protocol
+public protocol AdNetworkAdapter {
+    /// Adapter metadata
+    var networkName: String { get }
+    var version: String { get }
+    var minSDKVersion: String { get }
+    
+    /// Initialize adapter with app-level configuration
+    func initialize(config: [String: Any]) throws
+    
+    /// Load an ad
+    func loadAd(
+        placement: String,
+        adType: AdType,
+        config: [String: Any],
+        completion: @escaping (Result<Ad, AdapterError>) -> Void
+    )
+    
+    /// Check if adapter supports specific ad type
+    func supportsAdType(_ adType: AdType) -> Bool
+    
+    /// Clean up adapter resources
+    func destroy()
+}
+
+// MARK: - Adapter Registry
+
+/// Adapter registry with dynamic loading
+///
+/// Features:
+/// - Dynamic framework loading
+/// - Version compatibility checking
+/// - Lazy initialization
+/// - Thread-safe adapter management
+public class AdapterRegistry {
+    private var adapters: [String: AdapterWrapper] = [:]
+    private var adapterClasses: [String: AdNetworkAdapter.Type] = [:]
+    private let lock = NSLock()
+    
+    private let sdkVersion: String
+    
+    /// Adapter wrapper with metadata
+    private struct AdapterWrapper {
+        let adapter: AdNetworkAdapter
+        var isInitialized: Bool
+        var initError: String?
+    }
+    
+    /// Initialize adapter registry
+    public init(sdkVersion: String) {
+        self.sdkVersion = sdkVersion
+        discoverAdapters()
+    }
+    
+    // MARK: - Adapter Discovery
+    
+    /// Discover available adapters
+    private func discoverAdapters() {
+        // List of known adapter classes
+        let adapterNames = [
+            "AdMobAdapter",
+            "AppLovinAdapter",
+            "IronSourceAdapter",
+            "UnityAdsAdapter",
+            "FacebookAdapter",
+            "VungleAdapter",
+            "ChartboostAdapter",
+            "PangleAdapter",
+            "MintegralAdapter"
+        ]
+        
+        for adapterName in adapterNames {
+            // Try to load adapter class dynamically
+            if let adapterClass = NSClassFromString("RivalApexMediation.\(adapterName)") as? AdNetworkAdapter.Type {
+                let networkName = adapterName.replacingOccurrences(of: "Adapter", with: "").lowercased()
+                adapterClasses[networkName] = adapterClass
+            }
+        }
+    }
+    
+    /// Register custom adapter
+    public func registerAdapter(networkName: String, adapterClass: AdNetworkAdapter.Type) {
+        lock.lock()
+        adapterClasses[networkName] = adapterClass
+        lock.unlock()
+    }
+    
+    // MARK: - Adapter Management
+    
+    /// Get adapter instance (lazy initialization)
+    public func getAdapter(networkName: String) -> AdNetworkAdapter? {
+        lock.lock()
+        defer { lock.unlock() }
+        
+        // Check if already initialized
+        if let wrapper = adapters[networkName], wrapper.isInitialized {
+            return wrapper.adapter
+        }
+        
+        // Load adapter class
+        guard let adapterClass = adapterClasses[networkName] else {
+            return nil
+        }
+        
+        // Create adapter instance
+        let adapter = adapterClass.init()
+        
+        // Check version compatibility
+        if !isCompatible(minVersion: adapter.minSDKVersion) {
+            adapters[networkName] = AdapterWrapper(
+                adapter: adapter,
+                isInitialized: false,
+                initError: "Incompatible SDK version"
+            )
+            return nil
+        }
+        
+        adapters[networkName] = AdapterWrapper(
+            adapter: adapter,
+            isInitialized: false,
+            initError: nil
+        )
+        
+        return adapter
+    }
+    
+    /// Initialize adapter
+    public func initializeAdapter(networkName: String, config: [String: Any]) {
+        lock.lock()
+        defer { lock.unlock() }
+        
+        guard var wrapper = adapters[networkName] else { return }
+        
+        if wrapper.isInitialized {
+            return
+        }
+        
+        do {
+            try wrapper.adapter.initialize(config: config)
+            wrapper.isInitialized = true
+            wrapper.initError = nil
+            adapters[networkName] = wrapper
+        } catch {
+            wrapper.isInitialized = false
+            wrapper.initError = error.localizedDescription
+            adapters[networkName] = wrapper
+        }
+    }
+    
+    /// Check if adapter is initialized
+    public func isInitialized(networkName: String) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return adapters[networkName]?.isInitialized ?? false
+    }
+    
+    /// Get all available adapters
+    public func getAvailableAdapters() -> [String] {
+        lock.lock()
+        defer { lock.unlock() }
+        return Array(adapterClasses.keys)
+    }
+    
+    /// Get all initialized adapters
+    public func getInitializedAdapters() -> [String] {
+        lock.lock()
+        defer { lock.unlock() }
+        return adapters.filter { $0.value.isInitialized }.map { $0.key }
+    }
+    
+    /// Get adapter initialization error
+    public func getAdapterError(networkName: String) -> String? {
+        lock.lock()
+        defer { lock.unlock() }
+        return adapters[networkName]?.initError
+    }
+    
+    // MARK: - Version Compatibility
+    
+    /// Check version compatibility
+    private func isCompatible(minVersion: String) -> Bool {
+        return compareVersions(sdkVersion, minVersion) >= 0
+    }
+    
+    /// Compare semantic versions
+    private func compareVersions(_ version1: String, _ version2: String) -> Int {
+        let parts1 = version1.split(separator: ".").compactMap { Int($0) }
+        let parts2 = version2.split(separator: ".").compactMap { Int($0) }
+        
+        let maxLength = max(parts1.count, parts2.count)
+        
+        for i in 0..<maxLength {
+            let part1 = i < parts1.count ? parts1[i] : 0
+            let part2 = i < parts2.count ? parts2[i] : 0
+            
+            if part1 != part2 {
+                return part1 < part2 ? -1 : 1
+            }
+        }
+        
+        return 0
+    }
+    
+    /// Clean up all adapters
+    public func destroy() {
+        lock.lock()
+        defer { lock.unlock() }
+        
+        for (_, wrapper) in adapters {
+            wrapper.adapter.destroy()
+        }
+        
+        adapters.removeAll()
+        adapterClasses.removeAll()
+    }
+}
+
+// MARK: - Adapter Error
+
+/// Adapter errors
+public enum AdapterError: Error, LocalizedError {
+    case notInitialized
+    case loadFailed(String)
+    case unsupportedAdType
+    case timeout
+    case networkError
+    
+    public var errorDescription: String? {
+        switch self {
+        case .notInitialized:
+            return "Adapter not initialized"
+        case .loadFailed(let message):
+            return "Ad load failed: \(message)"
+        case .unsupportedAdType:
+            return "Unsupported ad type"
+        case .timeout:
+            return "Ad load timeout"
+        case .networkError:
+            return "Network error"
+        }
+    }
+}
+
+// MARK: - Example Adapter Implementation
+
+/// Example AdMob adapter implementation
+public class AdMobAdapter: AdNetworkAdapter {
+    public var networkName: String { "admob" }
+    public var version: String { "1.0.0" }
+    public var minSDKVersion: String { "1.0.0" }
+    
+    private var isInitialized = false
+    
+    public required init() {}
+    
+    public func initialize(config: [String: Any]) throws {
+        guard let appId = config["app_id"] as? String else {
+            throw AdapterError.loadFailed("app_id required")
+        }
+        
+        // Initialize AdMob SDK
+        // GADMobileAds.sharedInstance().start(completionHandler: nil)
+        
+        isInitialized = true
+    }
+    
+    public func loadAd(
+        placement: String,
+        adType: AdType,
+        config: [String: Any],
+        completion: @escaping (Result<Ad, AdapterError>) -> Void
+    ) {
+        guard isInitialized else {
+            completion(.failure(.notInitialized))
+            return
+        }
+        
+        guard supportsAdType(adType) else {
+            completion(.failure(.unsupportedAdType))
+            return
+        }
+        
+        // Load ad from AdMob
+        // Implementation depends on AdMob SDK integration
+        
+        // Example failure
+        completion(.failure(.loadFailed("Not implemented")))
+    }
+    
+    public func supportsAdType(_ adType: AdType) -> Bool {
+        switch adType {
+        case .banner, .interstitial, .rewarded:
+            return true
+        default:
+            return false
+        }
+    }
+    
+    public func destroy() {
+        isInitialized = false
+    }
+}
+
+// MARK: - Example AppLovin Adapter
+
+/// Example AppLovin adapter implementation
+public class AppLovinAdapter: AdNetworkAdapter {
+    public var networkName: String { "applovin" }
+    public var version: String { "1.0.0" }
+    public var minSDKVersion: String { "1.0.0" }
+    
+    private var isInitialized = false
+    
+    public required init() {}
+    
+    public func initialize(config: [String: Any]) throws {
+        guard let sdkKey = config["sdk_key"] as? String else {
+            throw AdapterError.loadFailed("sdk_key required")
+        }
+        
+        // Initialize AppLovin SDK
+        // ALSdk.shared()?.initialize(withSdkKey: sdkKey)
+        
+        isInitialized = true
+    }
+    
+    public func loadAd(
+        placement: String,
+        adType: AdType,
+        config: [String: Any],
+        completion: @escaping (Result<Ad, AdapterError>) -> Void
+    ) {
+        guard isInitialized else {
+            completion(.failure(.notInitialized))
+            return
+        }
+        
+        guard supportsAdType(adType) else {
+            completion(.failure(.unsupportedAdType))
+            return
+        }
+        
+        // Load ad from AppLovin
+        completion(.failure(.loadFailed("Not implemented")))
+    }
+    
+    public func supportsAdType(_ adType: AdType) -> Bool {
+        switch adType {
+        case .banner, .interstitial, .rewarded:
+            return true
+        default:
+            return false
+        }
+    }
+    
+    public func destroy() {
+        isInitialized = false
+    }
+}

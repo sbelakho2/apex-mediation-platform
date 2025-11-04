@@ -1,0 +1,181 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --primary-blue: #005293;
+  --sunshine-yellow: #FECB00;
+  --pale-yellow: #FFD481;
+  --cream: #E8E3D1;
+  --accent-red: #C04437;
+  --success-green: #5BAA2A;
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply text-body antialiased text-primary-blue;
+    font-family: 'Sweden Sans', 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    letter-spacing: -0.02em;
+    min-height: 100vh;
+    background: linear-gradient(180deg, rgba(0, 82, 147, 0.97) 0%, rgba(0, 82, 147, 0.97) 440px, #E8E3D1 440px, #E8E3D1 100%);
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    @apply font-bold uppercase text-primary-blue;
+    letter-spacing: 0.18em;
+  }
+
+  p {
+    @apply text-body text-primary-blue;
+    letter-spacing: -0.02em;
+  }
+
+  a {
+    @apply transition-colors duration-200;
+  }
+}
+
+@layer components {
+  /* Buttons */
+  .btn-primary-yellow {
+    @apply inline-flex items-center justify-center rounded-full border border-transparent bg-sunshine-yellow px-8 py-3 font-bold uppercase text-primary-blue shadow-hero transition-transform duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-blue hover:-translate-y-0.5 hover:shadow-lg;
+    letter-spacing: 0.2em;
+  }
+
+  .btn-secondary-blue {
+    @apply inline-flex items-center justify-center rounded-full border border-sunshine-yellow/40 bg-primary-blue px-8 py-3 font-bold uppercase text-white shadow-hero transition-transform duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sunshine-yellow hover:-translate-y-0.5 hover:shadow-lg;
+    letter-spacing: 0.2em;
+  }
+
+  .btn-success {
+    @apply inline-flex items-center justify-center rounded-full bg-success-green px-6 py-3 font-bold uppercase text-white transition-transform duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-success-green hover:-translate-y-0.5 hover:shadow-lg;
+    letter-spacing: 0.18em;
+  }
+
+  .btn-danger {
+    @apply inline-flex items-center justify-center rounded-full bg-accent-red px-6 py-3 font-bold uppercase text-white transition-transform duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-red hover:-translate-y-0.5 hover:shadow-lg;
+    letter-spacing: 0.18em;
+  }
+
+  .btn-outline {
+    @apply inline-flex items-center justify-center rounded-full border-2 border-primary-blue bg-white px-6 py-3 font-bold uppercase text-primary-blue transition-transform duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-blue hover:-translate-y-0.5 hover:bg-pale-yellow hover:border-sunshine-yellow;
+    letter-spacing: 0.18em;
+  }
+
+  /* Cards */
+  .card {
+    @apply rounded-3xl border-2 border-primary-blue bg-white/95 p-8 shadow-xl shadow-primary-blue/10 transition-shadow duration-200 hover:shadow-hero;
+  }
+
+  .card-yellow {
+    @apply border-2 border-primary-blue bg-pale-yellow;
+  }
+
+  .card-blue {
+    @apply border-2 border-sunshine-yellow bg-primary-blue text-white;
+  }
+
+  /* Forms */
+  .input {
+    @apply w-full rounded-full border-2 border-primary-blue bg-white px-4 py-3 transition-all duration-200 focus:outline-none focus:ring-4 focus:ring-sunshine-yellow/50;
+  }
+
+  .input-blue {
+    @apply border-2 border-sunshine-yellow bg-primary-blue text-white placeholder:text-pale-yellow;
+  }
+
+  .label {
+    @apply mb-2 block text-sm font-bold uppercase text-primary-blue;
+    letter-spacing: 0.18em;
+  }
+
+  /* Badges */
+  .badge {
+    @apply inline-flex items-center rounded-full px-3 py-1 text-xs font-bold uppercase;
+    letter-spacing: 0.24em;
+  }
+
+  .badge-success {
+    @apply bg-success-green text-white;
+  }
+
+  .badge-warning {
+    @apply bg-sunshine-yellow text-primary-blue;
+  }
+
+  .badge-danger {
+    @apply bg-accent-red text-white;
+  }
+
+  .badge-info {
+    @apply bg-primary-blue text-white;
+  }
+
+  /* Wave Divider */
+  .wave-divider {
+    @apply relative h-16 bg-transparent;
+  }
+
+  .wave-divider svg {
+    @apply absolute bottom-0 h-full w-full;
+  }
+
+  /* Typography Utilities */
+  .sweden-heading {
+    @apply font-bold uppercase text-primary-blue;
+    letter-spacing: 0.18em;
+  }
+
+  .body-text {
+    letter-spacing: -0.02em;
+  }
+
+  .section-container {
+    @apply container space-y-12 md:space-y-16;
+  }
+
+  .section-eyebrow {
+    @apply text-xs font-bold uppercase text-sunshine-yellow md:text-sm;
+    letter-spacing: 0.32em;
+  }
+
+  .section-heading {
+    @apply text-h2-sm text-center text-primary-blue md:text-h2-md md:text-left lg:text-h2;
+  }
+
+  .icon-badge {
+    @apply inline-flex h-12 w-12 items-center justify-center rounded-full bg-sunshine-yellow text-2xl font-bold text-primary-blue;
+  }
+
+  /* Animations */
+  .animate-on-scroll {
+    @apply translate-y-4 opacity-0 transition-all duration-700;
+  }
+
+  .animate-on-scroll.visible {
+    @apply translate-y-0 opacity-100;
+  }
+}
+
+@layer utilities {
+  .text-shadow-sm {
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+  }
+
+  .text-shadow {
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  }
+
+  .text-shadow-lg {
+    text-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+  }
+}

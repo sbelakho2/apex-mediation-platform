@@ -1,0 +1,52 @@
+{
+  "version": "v20251104-194634",
+  "weights": {
+    "click_frequency": 1.8075250058896026,
+    "conversion_rate": -1.5813084112383353,
+    "day_of_week": 0.06666818890810221,
+    "device_age": -1.5881771414530066,
+    "device_app_count": -1.5997609919841418,
+    "device_ip_count": 1.7667858036962683,
+    "historical_fraud_rate": 2.5738905039554396,
+    "hour_of_day": 0.06922990277761715,
+    "is_datacenter": 1.2723542929832696,
+    "is_mobile_ua": -0.7609097287440453,
+    "is_proxy": 0.9031819832182788,
+    "is_vpn": 0.8986143202452848,
+    "is_weekend": 0.32154187971887416,
+    "session_duration": -1.8727305749705327,
+    "time_between_clicks": -1.8313487295235211,
+    "ua_entropy": -1.493357869073501,
+    "ua_length": -1.7500241520199982
+  },
+  "bias": 1.6248433921620091,
+  "threshold": 0.5,
+  "features": [
+    "device_age",
+    "device_ip_count",
+    "device_app_count",
+    "click_frequency",
+    "session_duration",
+    "time_between_clicks",
+    "hour_of_day",
+    "day_of_week",
+    "is_weekend",
+    "is_datacenter",
+    "is_vpn",
+    "is_proxy",
+    "ua_length",
+    "ua_entropy",
+    "is_mobile_ua",
+    "historical_fraud_rate",
+    "conversion_rate"
+  ],
+  "updated_at": "2025-11-04T19:46:34.979948+01:00",
+  "metrics": {
+    "accuracy": 1,
+    "precision": 0,
+    "recall": 0,
+    "f1_score": 0,
+    "auc": 0.5
+  },
+  "training_samples": 350000
+}

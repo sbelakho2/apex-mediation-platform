@@ -1,0 +1,101 @@
+plugins {
+    id 'com.android.library'
+    id 'kotlin-android'
+    id 'maven-publish'
+}
+
+android {
+    namespace 'com.rivalapexmediation.sdk'
+    compileSdk 34
+
+    defaultConfig {
+        minSdk 21
+        targetSdk 34
+        versionCode 1
+        versionName "0.1.0"
+
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        consumerProguardFiles "consumer-rules.pro"
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+        debug {
+            // Enable StrictMode in debug builds
+            buildConfigField "boolean", "STRICT_MODE_ENABLED", "true"
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    kotlinOptions {
+        jvmTarget = '17'
+        freeCompilerArgs += [
+            '-opt-in=kotlin.RequiresOptIn'
+        ]
+    }
+
+    publishing {
+        singleVariant('release') {
+            withSourcesJar()
+            withJavadocJar()
+        }
+    }
+}
+
+dependencies {
+    // Kotlin
+    implementation "org.jetbrains.kotlin:kotlin-stdlib:1.9.21"
+    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3"
+
+    // Networking
+    implementation "com.squareup.okhttp3:okhttp:4.12.0"
+    implementation "com.squareup.retrofit2:retrofit:2.9.0"
+    implementation "com.squareup.retrofit2:converter-gson:2.9.0"
+
+    // Protobuf
+    implementation "com.google.protobuf:protobuf-kotlin-lite:3.24.4"
+
+    // Crypto
+    implementation "com.google.crypto.tink:tink-android:1.11.0"
+
+    // AndroidX
+    implementation "androidx.annotation:annotation:1.7.1"
+    implementation "androidx.lifecycle:lifecycle-process:2.7.0"
+
+    // Testing
+    testImplementation "junit:junit:4.13.2"
+    testImplementation "org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3"
+    testImplementation "io.mockk:mockk:1.13.8"
+    androidTestImplementation "androidx.test.ext:junit:1.1.5"
+    androidTestImplementation "androidx.test:runner:1.5.2"
+}
+
+// Size check task
+tasks.register('checkSdkSize') {
+    doLast {
+        def aar = fileTree("$buildDir/outputs/aar").matching {
+            include "**/*-release.aar"
+        }.singleFile
+        
+        def size = aar.length()
+        def maxSize = 512000 // 500KB
+        
+        println "SDK Size: ${size} bytes (${size/1024}KB)"
+        
+        if (size > maxSize) {
+            logger.error("SDK size $size exceeds maximum $maxSize bytes")
+            throw new RuntimeException("SDK size $size exceeds maximum $maxSize bytes")
+        }
+    }
+}
+
+tasks.named('assembleRelease').configure {
+    finalizedBy 'checkSdkSize'
+}
