@@ -14,9 +14,10 @@ import (
 
 // MLFraudDetector implements ML-based fraud detection
 type MLFraudDetector struct {
-	redis *redis.Client
-	model *FraudModel
-	mu    sync.RWMutex
+	redis      *redis.Client
+	model      *FraudModel
+	mu         sync.RWMutex
+	shadowMode bool
 }
 
 // FraudModel represents a trained fraud detection model
@@ -26,6 +27,7 @@ type FraudModel struct {
 	Threshold float64            `json:"threshold"`
 	Features  []string           `json:"features"`
 	UpdatedAt time.Time          `json:"updated_at"`
+	Metrics   map[string]float64 `json:"metrics,omitempty"`
 }
 
 // FeatureVector represents extracted features for ML model
@@ -63,7 +65,8 @@ type FeatureVector struct {
 // NewMLFraudDetector creates a new ML fraud detector
 func NewMLFraudDetector(redisClient *redis.Client) *MLFraudDetector {
 	detector := &MLFraudDetector{
-		redis: redisClient,
+		redis:      redisClient,
+		shadowMode: true, // default to shadow mode for safety
 	}
 
 	// Try to load trained model from file
@@ -73,10 +76,55 @@ func NewMLFraudDetector(redisClient *redis.Client) *MLFraudDetector {
 		detector.model = loadDefaultModel()
 	} else {
 		detector.model = model
-		log.WithField("version", model.Version).Info("Loaded trained fraud detection model")
+		log.WithFields(log.Fields{
+			"version":   model.Version,
+			"threshold": model.Threshold,
+		}).Info("Loaded trained fraud detection model")
 	}
 
-	return detector
+	// Shadow mode configuration via env var (default true)
+	if v := os.Getenv("MLFRAUD_SHADOW_MODE"); v != "" {
+		if v == "false" || v == "0" || v == "off" {
+			detector.shadowMode = false
+		}
+	}
+
+	// Safety: if model metrics look degenerate, force shadow mode
+	if isDegenerateModel(detector.model) {
+		if !detector.shadowMode {
+			log.Warn("Forcing shadow mode: trained model metrics appear degenerate (low AUC/zero precision/recall)")
+		}
+		detector.shadowMode = true
+	}
+
+ return detector
+}
+
+// IsShadowMode returns whether ML fraud detector is running in shadow (no-block) mode
+func (mfd *MLFraudDetector) IsShadowMode() bool {
+	mfd.mu.RLock()
+	defer mfd.mu.RUnlock()
+	return mfd.shadowMode
+}
+
+// isDegenerateModel checks if the trained model metrics look ineffective
+func isDegenerateModel(model *FraudModel) bool {
+	if model == nil {
+		return true
+	}
+	if model.Metrics == nil {
+		return false // no metrics to judge; keep default behavior
+	}
+	auc := model.Metrics["auc"]
+	precision := model.Metrics["precision"]
+	recall := model.Metrics["recall"]
+	if auc > 0 && auc <= 0.55 {
+		return true
+	}
+	if precision == 0 && recall == 0 {
+		return true
+	}
+	return false
 }
 
 // Predict predicts fraud score using ML model
@@ -394,6 +442,7 @@ func loadTrainedModel() (*FraudModel, error) {
 		Threshold float64            `json:"threshold"`
 		Features  []string           `json:"features"`
 		UpdatedAt time.Time          `json:"updated_at"`
+		Metrics   map[string]float64 `json:"metrics"`
 	}
 
 	if err := json.Unmarshal(data, &trainedModel); err != nil {
@@ -414,6 +463,7 @@ func loadTrainedModel() (*FraudModel, error) {
 		Threshold: trainedModel.Threshold,
 		Features:  trainedModel.Features,
 		UpdatedAt: trainedModel.UpdatedAt,
+		Metrics:   trainedModel.Metrics,
 	}
 
 	return model, nil

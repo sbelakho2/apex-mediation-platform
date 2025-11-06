@@ -28,6 +28,10 @@ const navigation = [
   { name: 'Fraud Detection', href: '/dashboard/fraud', icon: ShieldCheckIcon },
   { name: 'Apps', href: '/dashboard/apps', icon: DevicePhoneMobileIcon },
   { name: 'Placements', href: '/dashboard/placements', icon: MapPinIcon },
+  // Observability
+  { name: 'Observability Overview', href: '/dashboard/observability/overview', icon: ChartBarIcon },
+  { name: 'Adapter Metrics', href: '/dashboard/observability/metrics', icon: ChartBarIcon },
+  { name: 'Mediation Debugger', href: '/dashboard/observability/debugger', icon: BeakerIcon },
   { name: 'Settings', href: '/dashboard/settings', icon: Cog6ToothIcon },
 ];
 

@@ -10,15 +10,19 @@ data class Ad(
     val adType: AdType,
     val ecpm: Double,
     val creative: Creative,
-    val metadata: Map<String, String> = emptyMap()
+    val metadata: Map<String, String> = emptyMap(),
+    // Optional absolute expiry timestamp for the ad (epoch millis). If null, ad does not expire by time.
+    val expiryTimeMs: Long? = null,
+    // Creation time (epoch millis) recorded by the SDK; informative only.
+    val createdAtMs: Long = System.currentTimeMillis()
 ) {
     fun show(activity: android.app.Activity) {
         // Implementation for showing ad
     }
     
     fun isExpired(): Boolean {
-        // Check if ad is still valid
-        return false
+        val exp = expiryTimeMs
+        return exp != null && System.currentTimeMillis() >= exp
     }
 }
 
@@ -171,5 +175,6 @@ data class FeatureFlags(
     val telemetryEnabled: Boolean = true,
     val crashReportingEnabled: Boolean = true,
     val debugLoggingEnabled: Boolean = false,
-    val experimentalFeaturesEnabled: Boolean = false
+    val experimentalFeaturesEnabled: Boolean = false,
+    val killSwitch: Boolean = false
 )

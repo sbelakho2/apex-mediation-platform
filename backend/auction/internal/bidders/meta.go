@@ -14,9 +14,12 @@ import (
 
 // MetaAdapter implements bidding for Meta Audience Network
 type MetaAdapter struct {
-	appID      string
-	appSecret  string
-	client     *http.Client
+	appID     string
+	appSecret string
+	client    *http.Client
+
+	// circuit breaker (shared, clock-enabled)
+	cb *CircuitBreaker
 }
 
 // MetaBidRequest represents a bid request to Meta
@@ -85,24 +88,104 @@ func NewMetaAdapter(appID, appSecret string) *MetaAdapter {
 		client: &http.Client{
 			Timeout: 5 * time.Second,
 		},
+		cb: NewCircuitBreaker(3, 30*time.Second),
 	}
 }
 
 // RequestBid requests a bid from Meta Audience Network
 func (m *MetaAdapter) RequestBid(ctx context.Context, req BidRequest) (*BidResponse, error) {
-	// Convert generic bid request to Meta format
+	// Tracing span
+	ctx, span := StartSpan(ctx, "adapter.request", map[string]string{"adapter": "meta"})
+	defer span.End()
+	// Circuit breaker: fail fast if open
+	if m.isCircuitOpen() {
+		return &BidResponse{
+			RequestID:   req.RequestID,
+			AdapterName: "meta",
+			NoBid:       true,
+			NoBidReason: "circuit_open",
+		}, nil
+	}
+
+	recordRequest("meta")
+	startTime := time.Now()
+
 	metaReq := m.convertToMetaRequest(req)
 
-	// Make HTTP request to Meta
-	bidResponse, err := m.sendBidRequest(ctx, metaReq)
-	if err != nil {
-		log.WithError(err).Error("Meta bid request failed")
-		return nil, err
+	var bidResponse *MetaBidResponse
+	operation := func() error {
+		// Default endpoint constructed from placement ID
+		endpoint := fmt.Sprintf("https://graph.facebook.com/v18.0/%s/bidding", metaReq.PlacementID)
+		// Test override for offline conformance
+		if ep, ok := req.Metadata["test_endpoint"]; ok && ep != "" {
+			endpoint = ep
+		}
+		resp, err := m.sendBidRequestToURL(ctx, metaReq, endpoint)
+		if err != nil {
+			return err
+		}
+		bidResponse = resp
+		return nil
 	}
+
+		err := DoWithRetry(ctx, operation)
+	if err != nil {
+		m.onFailure()
+		reason := MapErrorToNoBid(err)
+		observeLatency("meta", float64(time.Since(startTime).Milliseconds()))
+		if reason == NoBidNoFill {
+			recordNoFill("meta")
+		} else if reason == NoBidTimeout {
+			recordTimeout("meta")
+		} else {
+			recordError("meta", reason)
+		}
+		span.SetAttr("outcome", "no_bid")
+		span.SetAttr("reason", reason)
+		log.WithError(err).Error("Meta bid request failed after retries")
+		return &BidResponse{
+			RequestID:   req.RequestID,
+			AdapterName: "meta",
+			NoBid:       true,
+			NoBidReason: reason,
+		}, nil
+	}
+
+	m.onSuccess()
 
 	// Convert Meta response to generic format
 	genericResponse := m.convertToGenericResponse(bidResponse, req)
-
+	observeLatency("meta", float64(time.Since(startTime).Milliseconds()))
+	if genericResponse.NoBid {
+		if genericResponse.NoBidReason == NoBidNoFill {
+			recordNoFill("meta")
+		} else if genericResponse.NoBidReason == NoBidTimeout {
+			recordTimeout("meta")
+		} else {
+			recordError("meta", genericResponse.NoBidReason)
+		}
+		span.SetAttr("outcome", "no_bid")
+		span.SetAttr("reason", genericResponse.NoBidReason)
+		CaptureDebugEvent(DebugEvent{
+			PlacementID: req.PlacementID,
+			RequestID:   req.RequestID,
+			Adapter:     "meta",
+			Outcome:     "no_bid",
+			Reason:      genericResponse.NoBidReason,
+			TimingsMS:   map[string]float64{"total": float64(time.Since(startTime).Milliseconds())},
+			RespSummary: map[string]any{"error_code": genericResponse.Metadata["error_code"]},
+		})
+	} else {
+		recordSuccess("meta")
+		span.SetAttr("outcome", "success")
+		CaptureDebugEvent(DebugEvent{
+			PlacementID: req.PlacementID,
+			RequestID:   req.RequestID,
+			Adapter:     "meta",
+			Outcome:     "success",
+			TimingsMS:   map[string]float64{"total": float64(time.Since(startTime).Milliseconds())},
+		})
+	}
 	return genericResponse, nil
 }
 
@@ -150,11 +233,14 @@ func (m *MetaAdapter) convertToMetaRequest(req BidRequest) MetaBidRequest {
 	}
 }
 
-// sendBidRequest sends HTTP request to Meta
+// sendBidRequest sends HTTP request to Meta (default endpoint)
 func (m *MetaAdapter) sendBidRequest(ctx context.Context, req MetaBidRequest) (*MetaBidResponse, error) {
-	// Meta Audience Network Bidding API endpoint
 	endpoint := fmt.Sprintf("https://graph.facebook.com/v18.0/%s/bidding", req.PlacementID)
+	return m.sendBidRequestToURL(ctx, req, endpoint)
+}
 
+// sendBidRequestToURL sends HTTP request to Meta using a specific endpoint (for tests)
+func (m *MetaAdapter) sendBidRequestToURL(ctx context.Context, req MetaBidRequest, endpoint string) (*MetaBidResponse, error) {
 	// Serialize request
 	reqBody, err := json.Marshal(req)
 	if err != nil {
@@ -171,10 +257,12 @@ func (m *MetaAdapter) sendBidRequest(ctx context.Context, req MetaBidRequest) (*
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("User-Agent", "ApexMediation-Mediation/1.0")
 
-	// Add authentication
-	q := httpReq.URL.Query()
-	q.Add("access_token", fmt.Sprintf("%s|%s", m.appID, m.appSecret))
-	httpReq.URL.RawQuery = q.Encode()
+	// Add authentication (if calling real endpoint)
+	if httpReq.URL.Host != "" {
+		q := httpReq.URL.Query()
+		q.Add("access_token", fmt.Sprintf("%s|%s", m.appID, m.appSecret))
+		httpReq.URL.RawQuery = q.Encode()
+	}
 
 	// Send request
 	startTime := time.Now()
@@ -193,13 +281,16 @@ func (m *MetaAdapter) sendBidRequest(ctx context.Context, req MetaBidRequest) (*
 		return nil, fmt.Errorf("failed to read response: %w", err)
 	}
 
-	// Check status code
+	// Check status code and map
+	if resp.StatusCode == http.StatusNoContent {
+		return nil, fmt.Errorf("no_fill")
+	}
 	if resp.StatusCode != http.StatusOK {
 		log.WithFields(log.Fields{
 			"status_code": resp.StatusCode,
 			"response":    string(respBody),
 		}).Error("Meta returned non-200 status")
-		return nil, fmt.Errorf("Meta returned status %d: %s", resp.StatusCode, string(respBody))
+		return nil, fmt.Errorf("status_%d", resp.StatusCode)
 	}
 
 	// Parse response
@@ -227,7 +318,11 @@ func (m *MetaAdapter) convertToGenericResponse(resp *MetaBidResponse, req BidReq
 			AdapterName: "meta",
 			CPM:         0,
 			NoBid:       true,
-			NoBidReason: fmt.Sprintf("error: %s - %s", resp.ErrorCode, resp.ErrorMessage),
+			NoBidReason: "error",
+			Metadata: map[string]string{
+				"error_code":    resp.ErrorCode,
+				"error_message": resp.ErrorMessage,
+			},
 		}
 	}
 
@@ -238,7 +333,7 @@ func (m *MetaAdapter) convertToGenericResponse(resp *MetaBidResponse, req BidReq
 			AdapterName: "meta",
 			CPM:         resp.BidPrice,
 			NoBid:       true,
-			NoBidReason: "below_floor_price",
+			NoBidReason: "below_floor",
 		}
 	}
 
@@ -286,4 +381,25 @@ func (m *MetaAdapter) GetName() string {
 // GetTimeout returns adapter timeout
 func (m *MetaAdapter) GetTimeout() time.Duration {
 	return 5 * time.Second
+}
+
+// --- minimal resiliency helpers (retry + jitter + circuit breaker) ---
+
+func (m *MetaAdapter) isCircuitOpen() bool {
+	if m.cb == nil {
+		return false
+	}
+	return !m.cb.Allow()
+}
+
+func (m *MetaAdapter) onFailure() {
+	if m.cb != nil {
+		m.cb.OnFailure()
+	}
+}
+
+func (m *MetaAdapter) onSuccess() {
+	if m.cb != nil {
+		m.cb.OnSuccess()
+	}
 }

@@ -363,9 +363,11 @@ These credentials are stored **per publisher** in the `adapter_configs` PostgreS
 ```json
 {
   "gameId": "xxxxxxx",
-  "placementId": "Rewarded_iOS" or "Rewarded_Android"
+  "placementId": "Rewarded_iOS"
 }
 ```
+
+Note: Use the appropriate placementId for platform, e.g., "Rewarded_Android" on Android.
 
 #### 4. Google AdMob
 
@@ -782,3 +784,64 @@ grep NEXT_PUBLIC website/.env.local
 
 **Last Updated:** November 4, 2025
 **Maintained by:** ApexMediation Team
+
+
+---
+
+### Fyber (Digital Turbine FairBid) — Development placeholders
+Purpose: Enable S2S bidding via placeholder adapter for offline conformance and dev.
+
+Required fields (dev/local):
+- FYBER_APP_ID — application identifier
+- FYBER_API_KEY — API key (mask in logs; do not commit)
+
+Adapter wiring (Go backend): backend/auction/internal/bidders/fyber.go
+- Supports test_endpoint override for offline tests
+- Standardized retry + jitter + circuit breaker; normalized NoBid taxonomy
+
+Configuration example (dev):
+```
+FYBER_APP_ID=your_app_id
+FYBER_API_KEY=your_api_key
+```
+
+Notes:
+- Do not paste secrets into code or docs. Use environment variables.
+- Sandbox/official endpoints to be configured during FT phase.
+
+### Appodeal — Development placeholders
+Purpose: Enable S2S bidding via placeholder adapter for offline conformance and dev.
+
+Required fields (dev/local):
+- APPODEAL_APP_KEY — SDK/app key
+
+Adapter wiring (Go backend): backend/auction/internal/bidders/appodeal.go
+- Supports test_endpoint override for offline tests
+- Standardized resiliency and taxonomy; circuit breaker enabled
+
+Configuration example (dev):
+```
+APPODEAL_APP_KEY=your_appodeal_key
+```
+
+### Admost — Development placeholders
+Purpose: Enable S2S bidding via placeholder adapter for offline conformance and dev.
+
+Required fields (dev/local):
+- ADMOST_APP_ID — application identifier
+- ADMOST_API_KEY — API key (bearer)
+
+Adapter wiring (Go backend): backend/auction/internal/bidders/admost.go
+- Supports test_endpoint override for offline tests
+- Standardized resiliency and taxonomy; circuit breaker enabled
+
+Configuration example (dev):
+```
+ADMOST_APP_ID=your_app_id
+ADMOST_API_KEY=your_api_key
+```
+
+Operational notes:
+- All new adapters adhere to the normalized NoBid taxonomy: timeout, network_error, status_XXX, no_fill, circuit_open, error.
+- Offline conformance tests for these adapters live in backend/auction/internal/bidders/adapter_conformance_test.go
+- Production/sandbox credentials and endpoint validation occur in FT phase per DEVELOPMENT_ROADMAP.md

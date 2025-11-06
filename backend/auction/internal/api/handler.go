@@ -3,11 +3,14 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
+	"time"
 
 	"github.com/gorilla/mux"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/rivalapexmediation/auction/internal/bidding"
+	"github.com/rivalapexmediation/auction/internal/bidders"
 	"github.com/rivalapexmediation/auction/internal/waterfall"
 )
 
@@ -89,6 +92,66 @@ func (h *Handlers) GetWaterfall(w http.ResponseWriter, r *http.Request) {
 	}
 
 	respondJSON(w, http.StatusOK, config)
+}
+
+// GetMediationDebugEvents returns last-N mediation debugger events (sanitized) for a placement.
+// Query params:
+//   placement_id: string (optional; empty returns events stored under unknown bucket)
+//   n: int (optional; default 50, max 200)
+func (h *Handlers) GetMediationDebugEvents(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	placementID := q.Get("placement_id")
+	n := 50
+	if ns := q.Get("n"); ns != "" {
+		if v, err := strconv.Atoi(ns); err == nil && v > 0 {
+			if v > 200 { v = 200 }
+			n = v
+		}
+	}
+	events := bidders.GetLastDebugEvents(placementID, n)
+	respondJSON(w, http.StatusOK, map[string]any{
+		"success": true,
+		"data":    events,
+	})
+}
+
+// GetAdapterMetrics returns a read-only snapshot of per-adapter metrics (requests, outcomes, percentiles).
+// Route: GET /v1/metrics/adapters
+func (h *Handlers) GetAdapterMetrics(w http.ResponseWriter, r *http.Request) {
+	snaps := bidders.GetAdapterMetricsSnapshot()
+	respondJSON(w, http.StatusOK, map[string]any{
+		"success": true,
+		"data":    snaps,
+	})
+}
+
+// GetAdapterMetricsTimeSeries returns 7-day time-series buckets (5-min) per adapter.
+// Route: GET /v1/metrics/adapters/timeseries?days=7
+func (h *Handlers) GetAdapterMetricsTimeSeries(w http.ResponseWriter, r *http.Request) {
+	days := 7
+	if s := r.URL.Query().Get("days"); s != "" {
+		if v, err := strconv.Atoi(s); err == nil && v > 0 && v <= 14 { days = v }
+	}
+	maxAge := time.Duration(days) * 24 * time.Hour
+	snaps := bidders.GetTimeSeriesSnapshot(maxAge)
+	respondJSON(w, http.StatusOK, map[string]any{
+		"success": true,
+		"data":    snaps,
+	})
+}
+
+// GetAdapterSLO returns current SLO status per adapter for 1h and 24h windows.
+// Route: GET /v1/metrics/slo
+func (h *Handlers) GetAdapterSLO(w http.ResponseWriter, r *http.Request) {
+	status1h := bidders.EvaluateSLO(1 * time.Hour)
+	status24h := bidders.EvaluateSLO(24 * time.Hour)
+	respondJSON(w, http.StatusOK, map[string]any{
+		"success": true,
+		"data": map[string]any{
+			"window_1h":  status1h,
+			"window_24h": status24h,
+		},
+	})
 }
 
 // Helper functions

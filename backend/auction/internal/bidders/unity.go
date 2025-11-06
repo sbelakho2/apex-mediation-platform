@@ -13,9 +13,12 @@ import (
 
 // UnityAdapter implements bidding for Unity Ads
 type UnityAdapter struct {
-	gameID    string
-	apiKey    string
-	client    *http.Client
+	gameID string
+	apiKey string
+	client *http.Client
+
+	// circuit breaker (shared, clock-enabled)
+	cb *CircuitBreaker
 }
 
 // NewUnityAdapter creates a new Unity Ads adapter
@@ -24,14 +27,34 @@ func NewUnityAdapter(gameID, apiKey string) *UnityAdapter {
 		gameID: gameID,
 		apiKey: apiKey,
 		client: &http.Client{Timeout: 5 * time.Second},
+		cb:     NewCircuitBreaker(3, 30*time.Second),
 	}
 }
 
 // RequestBid requests a bid from Unity Ads
 func (u *UnityAdapter) RequestBid(ctx context.Context, req BidRequest) (*BidResponse, error) {
-	// Unity Ads Monetization API endpoint
-	endpoint := "https://auction.unityads.unity3d.com/v6/games/%s/requests"
-	url := fmt.Sprintf(endpoint, u.gameID)
+	// Tracing span
+	ctx, span := StartSpan(ctx, "adapter.request", map[string]string{"adapter": "unity"})
+	defer span.End()
+	// Circuit breaker: fail fast if open
+	if u.isCircuitOpen() {
+		return &BidResponse{
+			RequestID:   req.RequestID,
+			AdapterName: "unity",
+			NoBid:       true,
+			NoBidReason: "circuit_open",
+		}, nil
+	}
+
+	recordRequest("unity")
+	callStart := time.Now()
+
+	// Unity Ads Monetization API endpoint (allow test override for offline conformance)
+	defaultPattern := "https://auction.unityads.unity3d.com/v6/games/%s/requests"
+	url := fmt.Sprintf(defaultPattern, u.gameID)
+	if ep, ok := req.Metadata["test_endpoint"]; ok && ep != "" {
+		url = ep
+	}
 
 	// Build request
 	payload := map[string]interface{}{
@@ -45,36 +68,73 @@ func (u *UnityAdapter) RequestBid(ctx context.Context, req BidRequest) (*BidResp
 	}
 
 	reqBody, _ := json.Marshal(payload)
-	httpReq, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(reqBody))
-	if err != nil {
-		return nil, err
+
+	var result map[string]interface{}
+	operation := func() error {
+		httpReq, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(reqBody))
+		if err != nil {
+			return err
+		}
+		httpReq.Header.Set("Content-Type", "application/json")
+		httpReq.Header.Set("Authorization", fmt.Sprintf("Bearer %s", u.apiKey))
+
+		startTime := time.Now()
+		resp, err := u.client.Do(httpReq)
+		latency := time.Since(startTime)
+		if err != nil {
+			log.WithError(err).WithField("latency_ms", latency.Milliseconds()).Error("Unity HTTP request failed")
+			return err
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode == http.StatusNoContent {
+			return fmt.Errorf("no_fill")
+		}
+		if resp.StatusCode != http.StatusOK {
+			// Treat non-200 as no-bid, but surface for retry if transient
+			return fmt.Errorf("status_%d", resp.StatusCode)
+		}
+
+		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+			return err
+		}
+		log.WithFields(log.Fields{
+			"game_id":    u.gameID,
+			"latency_ms": latency.Milliseconds(),
+		}).Info("Unity bid response received")
+		return nil
 	}
 
-	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("Authorization", fmt.Sprintf("Bearer %s", u.apiKey))
-
-	startTime := time.Now()
-	resp, err := u.client.Do(httpReq)
-	latency := time.Since(startTime)
-
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
+	if err := DoWithRetry(ctx, operation); err != nil {
+		u.onFailure()
+		reason := MapErrorToNoBid(err)
+		observeLatency("unity", float64(time.Since(callStart).Milliseconds()))
+		if reason == NoBidNoFill {
+			recordNoFill("unity")
+		} else if reason == NoBidTimeout {
+			recordTimeout("unity")
+		} else {
+			recordError("unity", reason)
+		}
+		span.SetAttr("outcome", "no_bid")
+		span.SetAttr("reason", reason)
+		CaptureDebugEvent(DebugEvent{
+			PlacementID: req.PlacementID,
+			RequestID:   req.RequestID,
+			Adapter:     "unity",
+			Outcome:     "no_bid",
+			Reason:      reason,
+			TimingsMS:   map[string]float64{"total": float64(time.Since(callStart).Milliseconds())},
+		})
 		return &BidResponse{
 			RequestID:   req.RequestID,
 			AdapterName: "unity",
 			NoBid:       true,
-			NoBidReason: fmt.Sprintf("status_%d", resp.StatusCode),
+			NoBidReason: reason,
 		}, nil
 	}
 
-	var result map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, err
-	}
+	u.onSuccess()
 
 	// Parse Unity response
 	if fills, ok := result["fills"].([]interface{}); ok && len(fills) > 0 {
@@ -83,14 +143,7 @@ func (u *UnityAdapter) RequestBid(ctx context.Context, req BidRequest) (*BidResp
 		if bidPrice, ok := fill["bidPrice"].(float64); ok {
 			cpm = bidPrice
 		}
-
-		log.WithFields(log.Fields{
-			"game_id":    u.gameID,
-			"latency_ms": latency.Milliseconds(),
-			"cpm":        cpm,
-		}).Info("Unity bid response received")
-
-		return &BidResponse{
+		resp := &BidResponse{
 			BidID:       fmt.Sprintf("%v", fill["fillId"]),
 			RequestID:   req.RequestID,
 			AdapterName: "unity",
@@ -99,9 +152,17 @@ func (u *UnityAdapter) RequestBid(ctx context.Context, req BidRequest) (*BidResp
 			CreativeID:  fmt.Sprintf("%v", fill["campaignId"]),
 			AdMarkup:    fmt.Sprintf("%v", fill["adMarkup"]),
 			ReceivedAt:  time.Now(),
-		}, nil
+		}
+		observeLatency("unity", float64(time.Since(callStart).Milliseconds()))
+		recordSuccess("unity")
+		span.SetAttr("outcome", "success")
+		return resp, nil
 	}
 
+	observeLatency("unity", float64(time.Since(callStart).Milliseconds()))
+	recordNoFill("unity")
+	span.SetAttr("outcome", "no_bid")
+	span.SetAttr("reason", "no_fill")
 	return &BidResponse{
 		RequestID:   req.RequestID,
 		AdapterName: "unity",
@@ -131,3 +192,25 @@ func (u *UnityAdapter) GetName() string {
 func (u *UnityAdapter) GetTimeout() time.Duration {
 	return 5 * time.Second
 }
+
+// --- minimal resiliency helpers (retry + jitter + circuit breaker) ---
+
+func (u *UnityAdapter) isCircuitOpen() bool {
+	if u.cb == nil {
+		return false
+	}
+	return !u.cb.Allow()
+}
+
+func (u *UnityAdapter) onFailure() {
+	if u.cb != nil {
+		u.cb.OnFailure()
+	}
+}
+
+func (u *UnityAdapter) onSuccess() {
+	if u.cb != nil {
+		u.cb.OnSuccess()
+	}
+}
+

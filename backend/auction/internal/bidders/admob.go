@@ -17,6 +17,9 @@ type AdMobAdapter struct {
 	apiKey      string
 	publisherID string
 	client      *http.Client
+
+	// circuit breaker (shared, clock-enabled)
+	cb *CircuitBreaker
 }
 
 // AdMobBidRequest represents a bid request to AdMob
@@ -127,24 +130,102 @@ func NewAdMobAdapter(apiKey, publisherID string) *AdMobAdapter {
 		client: &http.Client{
 			Timeout: 5 * time.Second,
 		},
+		cb: NewCircuitBreaker(3, 30*time.Second),
 	}
 }
 
 // RequestBid requests a bid from AdMob
 func (a *AdMobAdapter) RequestBid(ctx context.Context, req BidRequest) (*BidResponse, error) {
-	// Convert generic bid request to AdMob format
+	// Tracing span
+	ctx, span := StartSpan(ctx, "adapter.request", map[string]string{"adapter": "admob"})
+	defer span.End()
+	// Circuit breaker: fail fast if open
+	if a.isCircuitOpen() {
+		return &BidResponse{
+			RequestID:   req.RequestID,
+			AdapterName: "admob",
+			NoBid:       true,
+			NoBidReason: "circuit_open",
+		}, nil
+	}
+
+	recordRequest("admob")
+	startTime := time.Now()
+
 	admobReq := a.convertToAdMobRequest(req)
 
-	// Make HTTP request to AdMob
-	bidResponse, err := a.sendBidRequest(ctx, admobReq)
-	if err != nil {
-		log.WithError(err).Error("AdMob bid request failed")
-		return nil, err
+	var bidResponse *AdMobBidResponse
+	operation := func() error {
+		endpoint := "https://googleads.g.doubleclick.net/mads/static/mad/sdk/native/production/ads"
+		if ep, ok := req.Metadata["test_endpoint"]; ok && ep != "" {
+			endpoint = ep
+		}
+		resp, err := a.sendBidRequestToURL(ctx, admobReq, endpoint)
+		if err != nil {
+			return err
+		}
+		bidResponse = resp
+		return nil
 	}
+
+	err := DoWithRetry(ctx, operation)
+	if err != nil {
+		a.onFailure()
+		reason := MapErrorToNoBid(err)
+		observeLatency("admob", float64(time.Since(startTime).Milliseconds()))
+		if reason == NoBidNoFill {
+			recordNoFill("admob")
+		} else if reason == NoBidTimeout {
+			recordTimeout("admob")
+		} else {
+			recordError("admob", reason)
+		}
+		span.SetAttr("outcome", "no_bid")
+		span.SetAttr("reason", reason)
+		// Mediation Debugger capture (sanitized)
+		CaptureDebugEvent(DebugEvent{
+			PlacementID: req.PlacementID,
+			RequestID:   req.RequestID,
+			Adapter:     "admob",
+			Outcome:     "no_bid",
+			Reason:      reason,
+			TimingsMS:   map[string]float64{"total": float64(time.Since(startTime).Milliseconds())},
+		})
+		log.WithError(err).Error("AdMob bid request failed after retries")
+		return &BidResponse{
+			RequestID:   req.RequestID,
+			AdapterName: "admob",
+			NoBid:       true,
+			NoBidReason: reason,
+		}, nil
+	}
+
+	a.onSuccess()
 
 	// Convert AdMob response to generic format
 	genericResponse := a.convertToGenericResponse(bidResponse, req)
-
+	observeLatency("admob", float64(time.Since(startTime).Milliseconds()))
+	if genericResponse.NoBid {
+		if genericResponse.NoBidReason == NoBidNoFill {
+			recordNoFill("admob")
+		} else if genericResponse.NoBidReason == NoBidTimeout {
+			recordTimeout("admob")
+		} else {
+			recordError("admob", genericResponse.NoBidReason)
+		}
+		span.SetAttr("outcome", "no_bid")
+		span.SetAttr("reason", genericResponse.NoBidReason)
+	} else {
+		recordSuccess("admob")
+		span.SetAttr("outcome", "success")
+		CaptureDebugEvent(DebugEvent{
+			PlacementID: req.PlacementID,
+			RequestID:   req.RequestID,
+			Adapter:     "admob",
+			Outcome:     "success",
+			TimingsMS:   map[string]float64{"total": float64(time.Since(startTime).Milliseconds())},
+		})
+	}
 	return genericResponse, nil
 }
 
@@ -221,11 +302,13 @@ func (a *AdMobAdapter) convertToAdMobRequest(req BidRequest) AdMobBidRequest {
 	}
 }
 
-// sendBidRequest sends HTTP request to AdMob
+// sendBidRequest sends HTTP request to AdMob (default endpoint)
 func (a *AdMobAdapter) sendBidRequest(ctx context.Context, req AdMobBidRequest) (*AdMobBidResponse, error) {
-	// AdMob RTB endpoint
-	endpoint := "https://googleads.g.doubleclick.net/mads/static/mad/sdk/native/production/ads"
+	return a.sendBidRequestToURL(ctx, req, "https://googleads.g.doubleclick.net/mads/static/mad/sdk/native/production/ads")
+}
 
+// sendBidRequestToURL sends HTTP request to a provided endpoint (used for tests)
+func (a *AdMobAdapter) sendBidRequestToURL(ctx context.Context, req AdMobBidRequest, endpoint string) (*AdMobBidResponse, error) {
 	// Serialize request
 	reqBody, err := json.Marshal(req)
 	if err != nil {
@@ -265,12 +348,15 @@ func (a *AdMobAdapter) sendBidRequest(ctx context.Context, req AdMobBidRequest) 
 	}
 
 	// Check status code
+	if resp.StatusCode == http.StatusNoContent {
+		return nil, fmt.Errorf("no_fill")
+	}
 	if resp.StatusCode != http.StatusOK {
 		log.WithFields(log.Fields{
 			"status_code": resp.StatusCode,
 			"response":    string(respBody),
 		}).Error("AdMob returned non-200 status")
-		return nil, fmt.Errorf("AdMob returned status %d", resp.StatusCode)
+		return nil, fmt.Errorf("status_%d", resp.StatusCode)
 	}
 
 	// Parse response
@@ -330,6 +416,29 @@ func (a *AdMobAdapter) isGDPR(consentString string) int {
 		return 1 // Has consent string = GDPR applies
 	}
 	return 0
+}
+
+// --- minimal resiliency helpers (retry + jitter + circuit breaker) ---
+
+
+
+func (a *AdMobAdapter) isCircuitOpen() bool {
+	if a.cb == nil {
+		return false
+	}
+	return !a.cb.Allow()
+}
+
+func (a *AdMobAdapter) onFailure() {
+	if a.cb != nil {
+		a.cb.OnFailure()
+	}
+}
+
+func (a *AdMobAdapter) onSuccess() {
+	if a.cb != nil {
+		a.cb.OnSuccess()
+	}
 }
 
 // GetName returns adapter name

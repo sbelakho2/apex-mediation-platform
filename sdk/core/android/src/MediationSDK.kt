@@ -9,6 +9,11 @@ import java.util.concurrent.CompletableFuture
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeoutException
 import kotlinx.coroutines.*
+import com.rivalapexmediation.sdk.config.ConfigManager
+import com.rivalapexmediation.sdk.telemetry.TelemetryCollector
+import com.rivalapexmediation.sdk.models.*
+import com.rivalapexmediation.sdk.threading.CircuitBreaker
+import com.rivalapexmediation.sdk.network.AuctionClient
 
 /**
  * Main entry point for the Rival ApexMediation SDK
@@ -78,11 +83,37 @@ class MediationSDK private constructor(
     private val telemetry = TelemetryCollector(context, config)
     private val adapterRegistry = AdapterRegistry()
     private val circuitBreakers = mutableMapOf<String, CircuitBreaker>()
+    // Simple in-memory ad cache per placement (interstitials): preserves last loaded ad for fast show.
+    private data class CachedAd(val ad: Ad, val expiryAtMs: Long)
+    private val adCache = mutableMapOf<String, CachedAd>()
+    // Consent preferences propagated to auction metadata (GDPR/USP/COPPA/LAT)
+    @Volatile private var consentOptions: AuctionClient.ConsentOptions = AuctionClient.ConsentOptions()
+    @Volatile private var auctionClient: AuctionClient? = null
+    @Volatile private var auctionApiKey: String = ""
+    @Volatile private var testModeOverride: Boolean? = null
+    @Volatile private var testDeviceId: String? = null
+
+    // Debug/diagnostic getters used by DebugPanel (safe, read-only)
+    fun getAppId(): String = config.appId
+    fun getPlacements(): List<String> = try { configManager.getAllPlacements().keys.toList() } catch (_: Throwable) { emptyList() }
+    fun isTestModeEffective(): Boolean = (testModeOverride ?: config.testMode)
+    fun getConsentDebugSummary(): Map<String, Any?> = mapOf(
+        "gdpr_applies" to consentOptions.gdprApplies,
+        "us_privacy" to consentOptions.usPrivacy,
+        "coppa" to consentOptions.coppa,
+        "limit_ad_tracking" to consentOptions.limitAdTracking,
+    )
     
     /**
      * Enable StrictMode in debug builds to catch threading violations
      */
     private fun setupStrictMode() {
+        // Lazily create auction client to avoid overhead on init
+        if (auctionClient == null) {
+            auctionClient = try {
+                AuctionClient(config.auctionEndpoint, apiKey = "")
+            } catch (_: Throwable) { null }
+        }
         if (BuildConfig.DEBUG) {
             StrictMode.setThreadPolicy(
                 StrictMode.ThreadPolicy.Builder()
@@ -109,6 +140,45 @@ class MediationSDK private constructor(
     /**
      * Initialize SDK internals on background thread
      */
+    // Public: set auction API key for S2S requests (resets client)
+    fun setAuctionApiKey(key: String) {
+        this.auctionApiKey = key
+        this.auctionClient = null // will be recreated lazily
+    }
+
+    // Public: set consent and privacy flags to be propagated to auction metadata
+    fun setConsent(
+        gdprApplies: Boolean? = null,
+        consentString: String? = null,
+        usPrivacy: String? = null,
+        coppa: Boolean? = null,
+        limitAdTracking: Boolean? = null,
+    ) {
+        this.consentOptions = AuctionClient.ConsentOptions(
+            gdprApplies = gdprApplies,
+            consentString = consentString,
+            usPrivacy = usPrivacy,
+            coppa = coppa,
+            limitAdTracking = limitAdTracking,
+        )
+    }
+
+    private fun ensureAuctionClient(): AuctionClient {
+        val existing = auctionClient
+        if (existing != null) return existing
+        val created = AuctionClient(config.auctionEndpoint, auctionApiKey)
+        auctionClient = created
+        return created
+    }
+
+    fun setTestModeOverride(enabled: Boolean?) {
+        this.testModeOverride = enabled
+    }
+
+    fun setTestDeviceId(id: String?) {
+        this.testDeviceId = id
+    }
+
     private fun initializeInternal() {
         backgroundExecutor.execute {
             try {
@@ -122,7 +192,7 @@ class MediationSDK private constructor(
                 telemetry.start()
                 
                 // Record initialization time
-                telemetry.recordInitialization(System.currentTimeMillis())
+                telemetry.recordInitialization()
             } catch (e: Exception) {
                 telemetry.recordError("initialization_failed", e)
             }
@@ -139,29 +209,87 @@ class MediationSDK private constructor(
         // All operations on background thread
         backgroundExecutor.execute {
             val startTime = System.currentTimeMillis()
-            
+
             try {
+                // Check kill switch before any work
+                val features = configManager.getFeatureFlags()
+                if (features.killSwitch) {
+                    telemetry.recordError("killed_by_config", IllegalStateException("kill_switch_active"))
+                    postToMainThread { callback.onError(AdError.INTERNAL_ERROR, "kill_switch_active") }
+                    return@execute
+                }
+
                 // Get placement configuration
                 val placementConfig = configManager.getPlacementConfig(placement)
                     ?: throw IllegalArgumentException("Unknown placement: $placement")
-                
-                // Get enabled adapters for this placement
+
+                // 1) Try S2S auction first (competitive path). Falls back to adapters on no_fill.
+                try {
+                    val client = ensureAuctionClient()
+                    val meta = mutableMapOf<String, String>()
+                    val effectiveTest = testModeOverride ?: config.testMode
+                    if (effectiveTest) meta["test_mode"] = "1" else meta["test_mode"] = "0"
+                    testDeviceId?.let { if (it.isNotBlank()) meta["test_device"] = it }
+                    val opts = AuctionClient.InterstitialOptions(
+                        publisherId = config.appId,
+                        placementId = placement,
+                        floorCpm = placementConfig.floorPrice,
+                        adapters = placementConfig.enabledNetworks,
+                        metadata = meta,
+                        timeoutMs = placementConfig.timeoutMs.toInt().coerceAtLeast(100),
+                        auctionType = "header_bidding",
+                    )
+                    val result = client.requestInterstitial(opts, consentOptions)
+                    // Map to Ad model and callback success
+                    val ttlMs = computeDefaultExpiryMs(placementConfig)
+                    val ad = Ad(
+                        id = result.creativeId ?: ("ad-" + System.currentTimeMillis()),
+                        placementId = placement,
+                        networkName = result.adapter,
+                        adType = AdType.INTERSTITIAL,
+                        ecpm = result.ecpm,
+                        creative = Creative.Banner(width = 0, height = 0, markupHtml = result.adMarkup ?: ""),
+                        expiryTimeMs = System.currentTimeMillis() + ttlMs
+                    )
+                    cacheAd(placement, ad)
+                    val latency = System.currentTimeMillis() - startTime
+                    telemetry.recordAdLoad(placement, latency, true)
+                    postToMainThread { callback.onAdLoaded(ad) }
+                    return@execute
+                } catch (ae: AuctionClient.AuctionException) {
+                    // Map taxonomy to AdError; if no_fill, proceed to adapter fallback; else report error
+                    val reason = ae.reason
+                    if (reason == "no_fill") {
+                        // proceed to adapters
+                    } else {
+                        val err = when {
+                            reason == "timeout" -> AdError.TIMEOUT
+                            reason == "network_error" -> AdError.NETWORK_ERROR
+                            reason.startsWith("status_") -> AdError.INTERNAL_ERROR
+                            else -> AdError.INTERNAL_ERROR
+                        }
+                        telemetry.recordAdLoad(placement, System.currentTimeMillis() - startTime, false)
+                        postToMainThread { callback.onError(err, reason) }
+                        return@execute
+                    }
+                }
+
+                // 2) Adapter fallback: parallel loading with timeouts
                 val adapters = getEnabledAdapters(placementConfig)
-                
+
                 if (adapters.isEmpty()) {
                     postToMainThread {
                         callback.onError(AdError.NO_FILL, "No adapters available")
                     }
                     return@execute
                 }
-                
-                // Parallel loading with timeouts
+
                 val futures = adapters.map { adapter ->
                     CompletableFuture.supplyAsync({
                         loadWithCircuitBreaker(adapter, placement, placementConfig)
                     }, networkExecutor)
                 }
-                
+
                 // Collect results with timeout
                 val results = futures.mapNotNull { future ->
                     try {
@@ -174,30 +302,25 @@ class MediationSDK private constructor(
                         null
                     }
                 }
-                
+
                 // Select best ad (highest eCPM)
                 val bestAd = selectBestAd(results)
                 
                 if (bestAd != null) {
+                    // Cache with TTL for readiness & fast show
+                    val cached = bestAd.copy(expiryTimeMs = System.currentTimeMillis() + computeDefaultExpiryMs(placementConfig))
+                    cacheAd(placement, cached)
                     val latency = System.currentTimeMillis() - startTime
                     telemetry.recordAdLoad(placement, latency, true)
-                    
-                    postToMainThread {
-                        callback.onAdLoaded(bestAd)
-                    }
+                    postToMainThread { callback.onAdLoaded(cached) }
                 } else {
                     telemetry.recordAdLoad(placement, System.currentTimeMillis() - startTime, false)
-                    
-                    postToMainThread {
-                        callback.onError(AdError.NO_FILL, "No valid bids received")
-                    }
+                    postToMainThread { callback.onError(AdError.NO_FILL, "No valid bids received") }
                 }
-                
+
             } catch (e: Exception) {
                 telemetry.recordError("load_ad_failed", e)
-                postToMainThread {
-                    callback.onError(AdError.INTERNAL_ERROR, e.message ?: "Unknown error")
-                }
+                postToMainThread { callback.onError(AdError.INTERNAL_ERROR, e.message ?: "Unknown error") }
             }
         }
     }
@@ -266,15 +389,54 @@ class MediationSDK private constructor(
      */
     fun isAdReady(placement: String): Boolean {
         // This can be called from any thread
-        return synchronized(this) {
-            // Check internal ad cache
-            false // TODO: Implement caching
+        synchronized(adCache) {
+            pruneExpiredLocked()
+            val cached = adCache[placement]
+            return cached != null && System.currentTimeMillis() < cached.expiryAtMs
         }
+    }
+
+    // Cache helpers
+    private fun cacheAd(placement: String, ad: Ad) {
+        val expiry = ad.expiryTimeMs ?: (System.currentTimeMillis() + 60_000L)
+        synchronized(adCache) {
+            adCache[placement] = CachedAd(ad, expiry)
+            pruneExpiredLocked()
+        }
+    }
+
+    private fun pruneExpiredLocked() {
+        val now = System.currentTimeMillis()
+        val it = adCache.entries.iterator()
+        while (it.hasNext()) {
+            val e = it.next()
+            if (now >= e.value.expiryAtMs) it.remove()
+        }
+    }
+
+    private fun computeDefaultExpiryMs(placementConfig: PlacementConfig): Long {
+        // If refreshInterval provided, use 2x refresh as TTL; else default to 60 minutes.
+        val refreshSec = placementConfig.refreshInterval
+        return if (refreshSec != null && refreshSec > 0) (refreshSec * 2L * 1000L) else 60L * 60L * 1000L
     }
     
     /**
      * Shutdown SDK and cleanup resources
      */
+    fun getCachedAd(placement: String): Ad? {
+        synchronized(adCache) {
+            pruneExpiredLocked()
+            return adCache[placement]?.ad
+        }
+    }
+
+    fun consumeCachedAd(placement: String): Ad? {
+        synchronized(adCache) {
+            pruneExpiredLocked()
+            return adCache.remove(placement)?.ad
+        }
+    }
+
     fun shutdown() {
         backgroundExecutor.execute {
             telemetry.stop()

@@ -3,7 +3,7 @@ package com.rivalapexmediation.sdk.telemetry
 import android.content.Context
 import com.rivalapexmediation.sdk.models.TelemetryEvent
 import com.rivalapexmediation.sdk.models.EventType
-import com.rivalapexmediation.sdk.models.SDKConfig
+import com.rivalapexmediation.sdk.SDKConfig
 import com.google.gson.Gson
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient

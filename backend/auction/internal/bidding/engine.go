@@ -10,6 +10,8 @@ import (
 
 	"github.com/redis/go-redis/v9"
 	log "github.com/sirupsen/logrus"
+
+	"github.com/rivalapexmediation/auction/internal/bidders"
 )
 
 // AuctionType represents the type of auction
@@ -90,13 +92,51 @@ type AuctionResult struct {
 type AuctionEngine struct {
 	redis *redis.Client
 	mu    sync.RWMutex
+
+	// internal knobs
+	hedgingEnabled bool
+	hedgeDelay     time.Duration
+	requester      func(ctx context.Context, req BidRequest, adapterName string) (*BidResponse, error)
 }
 
 // NewAuctionEngine creates a new auction engine
 func NewAuctionEngine(redisClient *redis.Client) *AuctionEngine {
 	return &AuctionEngine{
-		redis: redisClient,
+		redis:    redisClient,
+		hedgeDelay: 0,
+		requester: defaultRequester,
 	}
+}
+
+// SetHedgingEnabled enables or disables hedged adapter requests.
+func (ae *AuctionEngine) SetHedgingEnabled(enabled bool) { ae.mu.Lock(); ae.hedgingEnabled = enabled; ae.mu.Unlock() }
+
+// SetHedgeDelay sets a fixed hedge delay. If zero, the engine may decide based on metrics.
+func (ae *AuctionEngine) SetHedgeDelay(d time.Duration) { ae.mu.Lock(); ae.hedgeDelay = d; ae.mu.Unlock() }
+
+// SetRequester allows tests to inject a custom requester implementation.
+func (ae *AuctionEngine) SetRequester(f func(ctx context.Context, req BidRequest, adapterName string) (*BidResponse, error)) {
+	ae.mu.Lock(); ae.requester = f; ae.mu.Unlock()
+}
+
+// defaultRequester simulates an adapter call (placeholder for real integration).
+func defaultRequester(ctx context.Context, req BidRequest, adapterName string) (*BidResponse, error) {
+	// Simulate adapter latency 100ms
+	select {
+	case <-time.After(100 * time.Millisecond):
+	case <-ctx.Done():
+		return nil, fmt.Errorf("adapter timeout")
+	}
+	return &BidResponse{
+		BidID:       fmt.Sprintf("%s-%s", req.RequestID, adapterName),
+		RequestID:   req.RequestID,
+		AdapterName: adapterName,
+		CPM:         2.50 + float64(len(adapterName))*0.1,
+		Currency:    "USD",
+		CreativeID:  "creative-123",
+		AdMarkup:    "<html>Ad</html>",
+		ReceivedAt:  time.Now(),
+	}, nil
 }
 
 // RunAuction executes an auction
@@ -256,27 +296,81 @@ func (ae *AuctionEngine) runHybridAuction(ctx context.Context, req BidRequest) (
 
 // requestBidFromAdapter requests a bid from a specific adapter
 func (ae *AuctionEngine) requestBidFromAdapter(ctx context.Context, req BidRequest, adapterName string) (*BidResponse, error) {
-	// This would call the actual adapter SDK or make HTTP request
-	// For now, return mock bid
-
-	// Simulate adapter latency
-	select {
-	case <-time.After(100 * time.Millisecond):
-	case <-ctx.Done():
-		return nil, fmt.Errorf("adapter timeout")
+	// If hedging disabled, single request path using requester
+	if !ae.hedgingEnabled {
+		return ae.requester(ctx, req, adapterName)
 	}
 
-	// Mock bid
-	return &BidResponse{
-		BidID:       fmt.Sprintf("%s-%s", req.RequestID, adapterName),
-		RequestID:   req.RequestID,
-		AdapterName: adapterName,
-		CPM:         2.50 + float64(len(adapterName))*0.1, // Mock CPM
-		Currency:    "USD",
-		CreativeID:  "creative-123",
-		AdMarkup:    "<html>Ad</html>",
-		ReceivedAt:  time.Now(),
-	}, nil
+	// Hedged path: launch primary request; after a delay, launch a single backup if still pending.
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	resCh := make(chan *BidResponse, 1)
+	errCh := make(chan error, 2)
+
+	launch := func() {
+		bid, err := ae.requester(ctx, req, adapterName)
+		if err != nil {
+			select { case errCh <- err: default: }
+			return
+		}
+		select {
+		case resCh <- bid:
+			// winner delivered
+			cancel()
+		default:
+		}
+	}
+
+	// Start primary
+	go launch()
+
+	// Compute hedge delay
+	delay := ae.hedgeDelay
+	if delay <= 0 {
+		// Use adapter p95 if available
+		_, p95, _ := bidders.GetAdapterPercentiles(adapterName)
+		if p95 > 0 {
+			delay = time.Duration(p95) * time.Millisecond
+		} else {
+			// fallback conservative delay
+			delay = 150 * time.Millisecond
+		}
+	}
+
+	// Respect remaining ctx deadline
+	if deadline, ok := ctx.Deadline(); ok {
+		rem := time.Until(deadline)
+		if delay > rem/2 && rem > 0 {
+			// ensure hedge has a chance to finish before deadline
+			delay = rem / 2
+			if delay < 10*time.Millisecond { delay = 10 * time.Millisecond }
+		}
+	}
+
+	t := time.NewTimer(delay)
+	defer t.Stop()
+
+	launchedHedge := false
+	for {
+		select {
+		case bid := <-resCh:
+			return bid, nil
+		case <-t.C:
+			if !launchedHedge {
+				launchedHedge = true
+				go launch()
+			}
+		case <-ctx.Done():
+			// If any error captured, prefer first error
+			select {
+			case err := <-errCh:
+				return nil, err
+			default:
+				return nil, fmt.Errorf("adapter timeout")
+			}
+		}
+	}
 }
 
 // applyFloorPrice filters bids below floor price

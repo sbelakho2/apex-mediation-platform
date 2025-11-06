@@ -3,6 +3,7 @@ package com.rivalapexmediation.sdk.config
 import android.content.Context
 import android.content.SharedPreferences
 import com.rivalapexmediation.sdk.models.*
+import com.rivalapexmediation.sdk.SDKConfig
 import com.google.gson.Gson
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -21,14 +22,15 @@ import java.util.concurrent.TimeUnit
  */
 class ConfigManager(
     private val context: Context,
-    private val sdkConfig: SDKConfig
+    private val sdkConfig: SDKConfig,
+    private val client: OkHttpClient? = null
 ) {
     private val prefs: SharedPreferences = context.getSharedPreferences(
         "rival_ad_stack_config",
         Context.MODE_PRIVATE
     )
     
-    private val httpClient: OkHttpClient = OkHttpClient.Builder()
+    private val httpClient: OkHttpClient = client ?: OkHttpClient.Builder()
         .connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(10, TimeUnit.SECONDS)
         .build()
@@ -230,5 +232,15 @@ class ConfigManager(
     fun shutdown() {
         httpClient.dispatcher.executorService.shutdown()
         httpClient.connectionPool.evictAll()
+    }
+
+    /**
+     * Staged rollout check using stable per-install bucketing (non-PII InstallId).
+     * Returns true if this install should participate given the percentage [0..100].
+     */
+    fun isInRollout(percentage: Int): Boolean {
+        return try {
+            com.rivalapexmediation.sdk.util.Rollout.isInRollout(context, percentage)
+        } catch (_: Throwable) { percentage >= 100 }
     }
 }

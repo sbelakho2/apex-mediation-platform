@@ -551,3 +551,76 @@ Created `website/SECURITY.md` with:
 **Document Status:** COMPLETE
 **Last Updated:** November 4, 2025
 **Next Review:** November 11, 2025
+
+
+
+## 2025-11-06 Update: Adapter resiliency + ML safety hardening
+
+Context: Following the extended evaluation, we focused on improving safety and functionality without introducing breaking changes or live network dependencies.
+
+What changed (code):
+- Ad adapters
+  - Unity adapter (backend/auction/internal/bidders/unity.go)
+    - Added minimal resiliency: retry with jitter (single retry), simple in-memory circuit breaker, and standardized NoBid reason mapping.
+    - Improved logging around HTTP failures and latency.
+  - AppLovin adapter (backend/auction/internal/bidders/applovin.go)
+    - Added the same resiliency patterns (retry + jitter + circuit breaker) and standardized NoBid reason mapping.
+    - Masked SDK key in logs.
+- Fraud ML loader (backend/fraud/internal/ml/fraud_ml.go)
+  - Now imports model metrics from trained_fraud_model.json to enable existing shadow-mode safety checks when metrics are degenerate (e.g., precision/recall 0, AUC ≤ 0.55).
+
+Why:
+- Ensure adapters degrade gracefully under transient network issues and do not stall auctions.
+- Improve correctness and observability of NoBid classifications across adapters.
+- Keep ML blocking safe by honoring metrics-based shadow-mode gating.
+
+Notes on behavior:
+- Circuit breaker opens after 3 consecutive failures for 30s (per adapter instance).
+- Retry attempts: 1 retry with 10–100ms jitter on transient errors/timeouts; non-200 HTTP codes are considered transient only for 5xx (Unity/AppLovin).
+- No live external network calls are required to validate code paths; live/sandbox credentials will be needed for full conformance tests.
+
+Next steps (recommended):
+- Obtain sandbox credentials for Meta, AdMob, Unity, and AppLovin to run conformance tests per adapter.
+- Keep ML fraud detection in shadow mode until a validated model with non-degenerate metrics is available; then tune threshold based on PR/ROC targets.
+- Add latency/error/fill-rate metrics exports for adapters to support SLOs and alerting.
+
+
+## 2025-11-06 Addendum: Competitive Gap Plan + ML Training Data Sources
+
+To align our roadmap with a best-in-class mediation standard and to satisfy the request for a comprehensive competitive audit and ready training data sources for fraud ML, the following internal documents were added:
+
+- docs/Internal/COMPETITIVE_GAP_ANALYSIS.md
+  - Head-to-head feature expectations vs. AppLovin MAX, ironSource LevelPlay, AdMob Mediation, and Unity.
+  - Concrete gap list with P0/P1/P2 prioritization and acceptance criteria/KPIs.
+  - A prioritized closure plan to outperform competitors (reliability, observability, optimization, DX, privacy, analytics, fraud).
+
+- docs/Internal/ML_FRAUD_TRAINING_DATA_SOURCES.md
+  - Ready data sources: internal events + weak supervision, AbuseIPDB, Tor exit nodes, cloud IP lists, UA parsing (uap-core), SKAdNetwork/MMP postbacks (where available).
+  - Governance (PII minimization, consent), schema contracts, feature parity with inference, evaluation protocol and go/no-go criteria for leaving shadow mode.
+
+Next actions derived from these documents (high-level):
+- P0 (0–6 weeks):
+  - Standardize resiliency across all adapters; add hedged requests and partial aggregation.
+  - Ship per-adapter metrics/traces/SLOs + mediation debugger (MVP).
+  - Stand up labeled data pipeline for fraud ML; keep ML in shadow until targets met (AUC ≥ 0.85; Prec ≥ 0.8 @ Rec ≥ 0.9).
+- P1 (6–12 weeks):
+  - Dynamic floors, eCPM decay, pacing/capping, A/B/n bandits; SDK sample apps and integration linter; privacy test matrix and SKAN integration.
+- P2 (12–20 weeks):
+  - Expand to ≥12 certified adapters; revenue reconciliation workflows; cohort/LTV analytics dashboards.
+
+These additions formalize our plan to exceed competitor expectations and establish a clear, data-backed path to a production-ready platform.
+
+See also Development Roadmap (coding first, sandbox testing last): docs/Internal/Development/DEVELOPMENT_ROADMAP.md
+
+
+
+## 2025-11-06 Addendum: Development TODO Checklist
+
+A phased, checkable TODO list that operationalizes the Development Roadmap and Competitive Gap Analysis has been added for day-to-day execution and progress tracking:
+
+- docs/Internal/Development/DEVELOPMENT_TODO_CHECKLIST.md
+
+Use this checklist to track completion against acceptance criteria for P0/P1/P2 and the Final Test & Certification phase. Keep it in sync with:
+- docs/Internal/Development/DEVELOPMENT_ROADMAP.md
+- docs/Internal/COMPETITIVE_GAP_ANALYSIS.md
+- docs/Internal/ML_FRAUD_TRAINING_DATA_SOURCES.md

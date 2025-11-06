@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"time"
 
@@ -13,9 +14,12 @@ import (
 
 // IronSourceAdapter implements bidding for ironSource
 type IronSourceAdapter struct {
-	appKey string
+	appKey    string
 	secretKey string
-	client *http.Client
+	client    *http.Client
+
+	// circuit breaker (shared, clock-enabled)
+	cb *CircuitBreaker
 }
 
 // NewIronSourceAdapter creates a new ironSource adapter
@@ -24,13 +28,33 @@ func NewIronSourceAdapter(appKey, secretKey string) *IronSourceAdapter {
 		appKey:    appKey,
 		secretKey: secretKey,
 		client:    &http.Client{Timeout: 5 * time.Second},
+		cb:        NewCircuitBreaker(3, 30*time.Second),
 	}
 }
 
 // RequestBid requests a bid from ironSource
 func (i *IronSourceAdapter) RequestBid(ctx context.Context, req BidRequest) (*BidResponse, error) {
-	// ironSource Mediation API
+	// Tracing span
+	ctx, span := StartSpan(ctx, "adapter.request", map[string]string{"adapter": "ironsource"})
+	defer span.End()
+	// Circuit breaker: fail fast if open
+	if i.isCircuitOpen() {
+		return &BidResponse{
+			RequestID:   req.RequestID,
+			AdapterName: "ironsource",
+			NoBid:       true,
+			NoBidReason: "circuit_open",
+		}, nil
+	}
+
+	recordRequest("ironsource")
+	callStart := time.Now()
+
 	endpoint := "https://outcome-ssp.supersonicads.com/mediation"
+	// Test override for offline conformance tests
+	if ep, ok := req.Metadata["test_endpoint"]; ok && ep != "" {
+		endpoint = ep
+	}
 
 	payload := map[string]interface{}{
 		"appKey":        i.appKey,
@@ -48,36 +72,79 @@ func (i *IronSourceAdapter) RequestBid(ctx context.Context, req BidRequest) (*Bi
 	}
 
 	reqBody, _ := json.Marshal(payload)
-	httpReq, err := http.NewRequestWithContext(ctx, "POST", endpoint, bytes.NewReader(reqBody))
-	if err != nil {
-		return nil, err
+
+	var result map[string]interface{}
+	operation := func() error {
+		httpReq, err := http.NewRequestWithContext(ctx, "POST", endpoint, bytes.NewReader(reqBody))
+		if err != nil {
+			return err
+		}
+		httpReq.Header.Set("Content-Type", "application/json")
+		httpReq.Header.Set("Authorization", fmt.Sprintf("Bearer %s", i.secretKey))
+
+		startTime := time.Now()
+		resp, err := i.client.Do(httpReq)
+		latency := time.Since(startTime)
+		if err != nil {
+			log.WithError(err).WithField("latency_ms", latency.Milliseconds()).Error("ironSource HTTP request failed")
+			return err
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode == http.StatusNoContent {
+			return fmt.Errorf("no_fill")
+		}
+		if resp.StatusCode != http.StatusOK {
+			// transient only for 5xx via DoWithRetry
+			return fmt.Errorf("status_%d", resp.StatusCode)
+		}
+
+		// read and decode
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return err
+		}
+		if err := json.Unmarshal(body, &result); err != nil {
+			return err
+		}
+
+		log.WithFields(log.Fields{
+			"app_key":    maskKey(i.appKey),
+			"latency_ms": latency.Milliseconds(),
+		}).Info("ironSource bid response received")
+		return nil
 	}
 
-	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("Authorization", fmt.Sprintf("Bearer %s", i.secretKey))
-
-	startTime := time.Now()
-	resp, err := i.client.Do(httpReq)
-	latency := time.Since(startTime)
-
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
+	if err := DoWithRetry(ctx, operation); err != nil {
+		i.onFailure()
+		reason := MapErrorToNoBid(err)
+		observeLatency("ironsource", float64(time.Since(callStart).Milliseconds()))
+		if reason == NoBidNoFill {
+			recordNoFill("ironsource")
+		} else if reason == NoBidTimeout {
+			recordTimeout("ironsource")
+		} else {
+			recordError("ironsource", reason)
+		}
+		span.SetAttr("outcome", "no_bid")
+		span.SetAttr("reason", reason)
+		CaptureDebugEvent(DebugEvent{
+			PlacementID: req.PlacementID,
+			RequestID:   req.RequestID,
+			Adapter:     "ironsource",
+			Outcome:     "no_bid",
+			Reason:      reason,
+			TimingsMS:   map[string]float64{"total": float64(time.Since(callStart).Milliseconds())},
+		})
 		return &BidResponse{
 			RequestID:   req.RequestID,
 			AdapterName: "ironsource",
 			NoBid:       true,
-			NoBidReason: fmt.Sprintf("status_%d", resp.StatusCode),
+			NoBidReason: reason,
 		}, nil
 	}
 
-	var result map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, err
-	}
+	i.onSuccess()
 
 	// Parse ironSource response
 	if providerName, ok := result["providerName"].(string); ok && providerName != "" {
@@ -85,15 +152,7 @@ func (i *IronSourceAdapter) RequestBid(ctx context.Context, req BidRequest) (*Bi
 		if revenue, ok := result["revenue"].(float64); ok {
 			cpm = revenue
 		}
-
-		log.WithFields(log.Fields{
-			"app_key":    i.appKey[:10] + "...",
-			"latency_ms": latency.Milliseconds(),
-			"cpm":        cpm,
-			"provider":   providerName,
-		}).Info("ironSource bid response received")
-
-		return &BidResponse{
+		resp := &BidResponse{
 			BidID:       fmt.Sprintf("%v", result["auctionId"]),
 			RequestID:   req.RequestID,
 			AdapterName: "ironsource",
@@ -103,12 +162,20 @@ func (i *IronSourceAdapter) RequestBid(ctx context.Context, req BidRequest) (*Bi
 			AdMarkup:    fmt.Sprintf("%v", result["adMarkup"]),
 			ReceivedAt:  time.Now(),
 			Metadata: map[string]string{
-				"provider": providerName,
+				"provider":    providerName,
 				"instance_id": fmt.Sprintf("%v", result["instanceId"]),
 			},
-		}, nil
+		}
+		observeLatency("ironsource", float64(time.Since(callStart).Milliseconds()))
+		recordSuccess("ironsource")
+		span.SetAttr("outcome", "success")
+		return resp, nil
 	}
 
+	observeLatency("ironsource", float64(time.Since(callStart).Milliseconds()))
+	recordNoFill("ironsource")
+	span.SetAttr("outcome", "no_bid")
+	span.SetAttr("reason", "no_fill")
 	return &BidResponse{
 		RequestID:   req.RequestID,
 		AdapterName: "ironsource",
@@ -123,4 +190,25 @@ func (i *IronSourceAdapter) GetName() string {
 
 func (i *IronSourceAdapter) GetTimeout() time.Duration {
 	return 5 * time.Second
+}
+
+// --- minimal resiliency helpers (retry + jitter + circuit breaker) ---
+
+func (i *IronSourceAdapter) isCircuitOpen() bool {
+	if i.cb == nil {
+		return false
+	}
+	return !i.cb.Allow()
+}
+
+func (i *IronSourceAdapter) onFailure() {
+	if i.cb != nil {
+		i.cb.OnFailure()
+	}
+}
+
+func (i *IronSourceAdapter) onSuccess() {
+	if i.cb != nil {
+		i.cb.OnSuccess()
+	}
 }
