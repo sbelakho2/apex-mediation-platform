@@ -1,0 +1,398 @@
+# Development TODO Checklist (Phased, Check‑off)
+
+Last updated: 2025-11-06
+Owner: Platform Engineering
+
+Source of truth for tasks:
+- Roadmap: docs/Internal/Development/DEVELOPMENT_ROADMAP.md
+- Competitive gaps: docs/Internal/COMPETITIVE_GAP_ANALYSIS.md
+- ML data sources: docs/Internal/ML_FRAUD_TRAINING_DATA_SOURCES.md
+- Current system gaps summary: GAPS_RESOLUTION.md
+
+How to use
+- Check items off only when acceptance criteria are met.
+- If an item is partially done, add a sub‑checkbox and link to evidence (PRs, dashboards, test runs).
+- Keep this file in sync with the Roadmap; update weekly.
+
+Legend
+- [ ] Not started
+- [~] In progress
+- [x] Done
+
+P0 — Reliability, Adapters, Observability, ML Safety (0–6 weeks)
+
+1) Adapter resiliency and conformance
+- [x] Standardize retry + jitter + circuit breaker across ALL adapters (AdMob, Meta, Unity, AppLovin, ironSource)
+  - [x] AdMob uses shared resiliency helpers (1 retry, 10–100ms jitter, CB 3 fails/30s)
+  - [x] Meta uses shared resiliency helpers (same policy)
+  - [x] Unity uses shared resiliency helpers (verified switch to shared helpers)
+  - [x] AppLovin uses shared resiliency helpers (verified switch to shared helpers)
+  - [x] ironSource adapter parity
+  - [x] Migrate adapters to shared Clock-enabled CircuitBreaker (commons.CircuitBreaker) for deterministic behavior
+- [x] Hedged requests for slow adapters (launch a backup request at p95 latency budget)
+  - Evidence: feature-flagged in backend/auction/internal/bidding/engine.go (SetHedgingEnabled/SetHedgeDelay, hedged path in requestBidFromAdapter); env: AUCTION_HEDGING_ENABLED, AUCTION_HEDGE_DELAY_MS
+  - Tests: backend/auction/internal/bidding/engine_hedge_test.go (hedged earlier return)
+- [x] Partial aggregation: accept late/failed adapters without stalling the auction; ensure auction deadline adherence
+  - Tests: backend/auction/internal/bidding/engine_hedge_test.go (RunAuction honors TimeoutMS and returns collected bids)
+- [x] Define and implement a normalized NoBid taxonomy (timeout, network_error, status_XXX, no_fill, below_floor)
+  - [x] Added taxonomy constants in backend/auction/internal/bidders/commons.go and wired MapErrorToNoBid
+  - [x] Applied below_floor constant in Meta adapter
+  - [x] Standardized Meta error path to "error" with details in Metadata
+  - [x] Applied taxonomy to AppLovin adapter (replaced "invalid_response" with standardized "error")
+  - [x] Apply taxonomy across all adapters (AdMob, Meta, Unity, AppLovin, ironSource)
+  - [x] Add unit tests for taxonomy mapping and transient error handling (commons_test.go)
+  - [x] Deterministic circuit breaker tests using Clock abstraction (backend/auction/internal/bidders/circuitbreaker_test.go); Clock added to commons.go
+- [x] Add conformance tests (offline) for request schema and response parsing for each adapter
+  - Evidence: backend/auction/internal/bidders/adapter_conformance_test.go covers AppLovin, ironSource, AdMob, Meta, and Unity (success, 204 no_fill, 5xx retry→success, circuit_open)
+  - Note: AdMob, Meta, and Unity support req.Metadata["test_endpoint"] for offline tests
+  - Status: Initial suite complete for current adapters; keep adding edge cases and golden fixtures
+  - New edge cases added (AdMob, Meta): 4xx non-transient (status_400 no retry), and 200 with malformed JSON -> standardized "error" no-bid (see tests at bottom of adapter_conformance_test.go)
+  - New edge cases added (Unity, AppLovin, ironSource): 4xx non-transient (status_400 no retry), and 200 with malformed JSON -> standardized "error" no-bid (see tests appended in adapter_conformance_test.go)
+
+Acceptance:
+- [x] p99 auction runtime never exceeds timeout budget due to a single adapter (evidence: backend/auction/internal/bidding/engine_timeout_test.go)
+- [x] Unit/integration tests cover transient errors and CB open/close behavior (evidence: bidders/commons_test.go, bidders/circuitbreaker_test.go, bidders/adapter_conformance_test.go)
+
+2) Observability, SLOs, Mediation Debugger (MVP)
+- [x] Per‑adapter metrics exported (latency p50/p95/p99, error rate, fill rate)
+  - [x] Added minimal metrics scaffolding with no‑op default: backend/auction/internal/bidders/metrics.go
+  - [x] Instrumented adapters (AdMob, Meta, AppLovin, Unity, ironSource) with request/latency/success/error/no_fill/timeout counters
+  - [x] Unit tests for metrics signals using test recorder: backend/auction/internal/bidders/metrics_test.go
+  - [x] Hook exporter/collector and compute percentiles (initial in-process RollingMetricsRecorder; see backend/auction/internal/bidders/metrics_rollup.go with tests in metrics_rollup_test.go)
+  - [x] Read-only metrics snapshot API: GET /v1/metrics/adapters (returns per-adapter counters and p50/p95/p99); default recorder wired in main.go
+    - [x] Website Adapter Metrics page consuming snapshot API
+      - Evidence: website/src/app/dashboard/observability/metrics/page.tsx; client: website/src/lib/auctionApi.ts
+- [x] Tracing spans across auction and adapter calls (scaffolded; no-op default)
+  - [x] Added lightweight tracing scaffold: backend/auction/internal/bidders/tracing.go (Tracer/Span, SetTracer, StartSpan)
+  - [x] Instrumented adapters (AdMob, Meta, AppLovin, Unity, ironSource) with start/end spans and outcome/reason attrs
+  - [x] Unit test for tracing scaffold: backend/auction/internal/bidders/tracing_test.go
+  - [ ] Consider wiring OpenTelemetry in host app later (out of scope for now)
+- [x] Dashboards for adapters + auction KPIs
+- [x] SLOs defined and alerts configured (p99 latency, error/fill thresholds)
+  - [x] Time-series metrics aggregator (5-min buckets, 7 days): backend/auction/internal/bidders/metrics_timeseries.go with tests metrics_timeseries_test.go
+  - [x] SLO evaluator + API: backend/auction/internal/bidders/slo.go with tests slo_test.go; Admin API GET /v1/metrics/slo
+  - [x] Time-series API: GET /v1/metrics/adapters/timeseries; default aggregator wired in main.go
+  - [x] Observability Overview page (7-day trends + SLO badges): website/src/app/dashboard/observability/overview/page.tsx
+- [x] Mediation Debugger (MVP): per‑request timeline, payload redaction, response/no‑bid reason display
+  - [x] Added in-process debugger scaffold with ring buffer and redaction: backend/auction/internal/bidders/debugger.go
+  - [x] Adapters emit sanitized debug events (success/no-bid): AdMob, Meta, Unity, AppLovin, ironSource
+  - [x] Unit tests for ring buffer + redaction: backend/auction/internal/bidders/debugger_test.go
+  - [x] Admin API wiring to retrieve last-N events per placement (auction: GET /v1/debug/mediation?placement_id=&n=)
+  - [x] Debugger viewer page in Website (sanitized)
+    - Evidence: website/src/app/dashboard/observability/debugger/page.tsx; client: website/src/lib/auctionApi.ts
+    - Note: Ensure CORS_ORIGIN is set for auction service to allow website access
+
+Acceptance:
+- [x] Dashboards show last 7 days with functioning alerts; runbooks exist
+  - Evidence: Website Observability Overview (website/src/app/dashboard/observability/overview/page.tsx); APIs /v1/metrics/adapters/timeseries and /v1/metrics/slo; runbooks docs/runbooks/SLOS_AND_ALERTS.md and docs/runbooks/OBSERVABILITY_RUNBOOK.md
+- [x] Debugger usable on dev; sensitive fields redacted
+  - Evidence: Website Debugger page (website/src/app/dashboard/observability/debugger/page.tsx); API /v1/debug/mediation; redaction tests backend/auction/internal/bidders/debugger_test.go
+
+3) ML Fraud — Shadow Mode and Data Pipeline bring‑up
+- [x] Enforce shadow mode unless model meets go/no‑go metrics (code safety in place)
+  - [x] Unit tests: backend/fraud/internal/ml/fraud_ml_test.go verifies degenerate metrics force shadow mode and healthy model respects override
+- [ ] ETL: extract last 30 days events from ClickHouse into training parquet
+- [ ] Enrichment: AbuseIPDB, Tor, cloud IP ranges, UA parsing (uap‑core) cached locally
+- [ ] Weak supervision label functions from rules + honeypots
+- [ ] Training: baseline logistic + GBM; calibration (Platt/isotonic)
+- [ ] Evaluation harness with ROC/PR curves and metric export into trained_fraud_model.json
+- [ ] Online shadow evaluation: score distribution monitoring + drift checks
+
+Acceptance:
+- [ ] Offline: AUC ≥ 0.85; Precision ≥ 0.8 at Recall ≥ 0.9 on time‑sliced validation
+- [ ] Online: stable score distributions; shadow correlation with weak labels
+- [ ] Model artifact includes metrics; blocking remains shadow until targets met
+
+4) Security/Privacy early guardrails
+- [ ] Consent propagation verified (GDPR/CCPA/ATT fields) in adapters and SDK events
+- [ ] PII minimization in training datasets (hash, truncate IPs)
+
+Acceptance:
+- [ ] Privacy checklist completed for data pipeline exports
+
+P1 — Optimization, DX, Privacy (6–12 weeks)
+
+5) Optimization & Experimentation
+- [ ] Dynamic floors (global + per‑geo/device)
+- [ ] eCPM decay model for waterfall ordering
+- [ ] Pacing/capping per placement
+- [ ] A/B/n bandit framework (e.g., Thompson Sampling) integrated into selection
+
+Acceptance:
+- [ ] Demonstrated ≥5% eCPM uplift vs baseline in controlled test
+
+6) Developer Experience (SDKs and tooling)
+- [ ] Sample apps: Android, iOS, Unity (rendering + events)
+- [ ] Integration linter/validator for SDK setup
+- [ ] CI mocks/sandbox packs for adapters
+- [ ] Documentation: quick‑start and troubleshooting
+
+SDKs — Verification status and competitiveness (pre‑P1):
+- [x] Web SDK: offline stub path, timeout/error taxonomy mapping aligned; unit tests for init, offline stub, HTTP status mapping, timeout abort, success/no_fill events.
+  - Evidence: sdks/web/src/index.test.ts; mapping change in sdks/web/src/index.ts
+- [~] Android SDK: AuctionClient implemented (OkHttp) with backend-aligned schema, consent propagation, and normalized taxonomy; unit tests added (MockWebServer) for success/no_fill/4xx/5xx retry/timeout; MediationSDK wired to S2S auction with fallback to adapters; size budget guard retained. New: Interstitial caching + isAdReady() with TTL; Ad expiry semantics (JVM tests); InterstitialController (full lifecycle) with double-callback guards and unit tests; Public facade APIs for Rewarded and Banner (BelRewarded/BelBanner); ConsentManager.normalize/redact tests; Quickstart updated with Rewarded/Banner and Debug Panel.
+  - Evidence: sdk/core/android/src/MediationSDK.kt (cacheAd/isAdReady), sdk/core/android/src/Models.kt (expiryTimeMs), sdk/core/android/src/interstitial/InterstitialController.kt, sdk/core/android/src/test/interstitial/InterstitialControllerTest.kt, sdk/core/android/src/test/models/AdExpiryTest.kt, sdk/core/android/src/BelRewarded.kt, sdk/core/android/src/BelBanner.kt, sdk/core/android/src/test/consent/ConsentManagerTest.kt, docs/Customer-Facing/SDKs/ANDROID_QUICKSTART.md
+- [~] iOS SDK: Core API parity scaffold implemented (initialize, setConsent, requestInterstitial; offline stub + HTTP path) with unit tests; taxonomy parsing extended (204 → no_fill; malformed JSON → error); sample app pending; ensure size/perf budgets and consent propagation.
+  - Evidence: sdks/ios/Sources/ApexMediation/ApexMediation.swift; sdks/ios/Tests/ApexMediationTests/{ApexMediationTests.swift,MockURLProtocol.swift}
+- [ ] Unity SDK: verify API parity and add conformance mocks/tests; sample scene for interstitial flow (mocked).
+
+Acceptance:
+- [ ] Time‑to‑first‑impression < 1 day for new dev; sample apps run green in CI
+
+7) Privacy & SKAdNetwork
+- [ ] Consent matrix tests across GDPR/CCPA/ATT combinations
+- [ ] SKAdNetwork postback parsing and validation
+
+Acceptance:
+- [ ] Privacy CI suite passes; SKAN parsing success >99%
+
+P2 — Scale out, Reconciliation, Analytics (12–20 weeks)
+
+8) Adapter expansion and certification readiness
+- [ ] Implement and verify additional adapters to reach ≥12
+- [ ] Compatibility matrix documented
+  
+  Must‑have adapter coverage (add/check each; implement stubs with offline conformance tests if sandbox creds not yet available):
+  - [ ] AdMob by Google (Server‑to‑Server bidding) — STATUS: exists (admob.go); conformance/tests pending
+  - [ ] ironSource (LevelPlay) — STATUS: exists (ironsource.go); conformance/tests pending
+  - [ ] MAX (AppLovin) — STATUS: exists (applovin.go); conformance/tests pending
+  - [ ] Unity Mediation — STATUS: partial (unity.go targets Unity Ads; evaluate mediation/bidding endpoint parity)
+  - [ ] MoPub — STATUS: legacy/sunset; consider compatibility shim or documented waiver
+  - [x] Fyber (Digital Turbine FairBid) — STATUS: exists (backend/auction/internal/bidders/fyber.go); offline conformance tests in bidders/adapter_conformance_test.go
+  - [x] Appodeal — STATUS: exists (backend/auction/internal/bidders/appodeal.go); offline conformance tests in bidders/adapter_conformance_test.go
+  - [ ] Aerserv — STATUS: legacy (acquired/sunset); consider compatibility shim or documented waiver
+  - [ ] AdTapsy — STATUS: legacy; consider compatibility shim or documented waiver
+  - [ ] AppMediation — STATUS: new adapter required (confirm current API/vendor)
+  - [x] Admost — STATUS: exists (backend/auction/internal/bidders/admost.go); offline conformance tests in bidders/adapter_conformance_test.go
+  - [ ] Chocolate Platform — STATUS: new adapter required (confirm current API/vendor)
+  - [ ] Tapdaq — STATUS: new adapter required (confirm current API/vendor)
+  
+  Acceptance for each network:
+  - [ ] Adapter implemented (RequestBid/GetName/GetTimeout), standardized resiliency (retry+jitter, circuit breaker), and NoBid taxonomy
+  - [ ] Offline conformance tests: request schema fixtures, typical response mapping (200 bid, no_fill, 5xx retry→success, circuit_open)
+  - [ ] Documentation updated in API_KEYS_AND_INTEGRATIONS_GUIDE.md with required keys and config
+
+Acceptance:
+- [ ] ≥12 adapters pass internal conformance tests
+
+9) Revenue reconciliation and workflows
+- [ ] Add pipeline hooks for revenue reconciliation and invalid traffic refunds
+- [ ] Console UI for discrepancies and appeals
+
+Acceptance:
+- [ ] Reconciliation report generated for test accounts; workflow walkthrough documented
+
+10) Analytics dashboards (cohort/LTV, publisher‑facing)
+- [ ] Ingestion verification service and lag monitoring (<5 min)
+- [ ] Cohort/LTV dashboards and ARPDAU/retention overlays
+
+Acceptance:
+- [ ] Dashboards live with demo data; latency SLO met
+
+W — Website & Customer Dashboard (Pre‑FT, mandatory)
+
+12) Design adherence & IA
+- [ ] Map all routes and pages to Website.docx and DESIGN_SYSTEM_IMPLEMENTATION_STATUS.md
+- [ ] Implement AppShell, Navigation, and RBAC-aware route guards
+- [ ] Redaction utilities for mediation debugger payloads (PII-safe)
+
+13) Core pages and flows (with mocks/fixtures)
+- [ ] Overview dashboard (Revenue/eCPM/Fill/Win-rate + Alerts)
+- [ ] Placements & Ad Units CRUD with history and preview
+- [ ] Networks & Adapters management (enable/disable, status, masked creds)
+- [ ] Optimization: Floors (global/per-geo/device), Pacing/Capping, A/B/n setup
+- [ ] Fraud & Quality: stats, type breakdown, shadow-mode distributions, appeals stub
+- [ ] Analytics: cohort/LTV, ARPDAU, retention overlays
+- [ ] Mediation Debugger viewer (sanitized traces)
+- [ ] Billing & Reconciliation (mock invoices, discrepancy center)
+- [ ] Settings: API keys (masked), Webhooks, Roles, Audit logs
+
+14) UI/UX excellence and a11y
+- [ ] WCAG 2.2 AA checks (axe-core): 0 critical violations
+- [ ] Performance budgets: LCP < 2.5s, TTI < 3s, CLS < 0.1; Lighthouse ≥ 90 (Perf), ≥ 95 (A11y), ≥ 95 (BP), ≥ 90 (SEO)
+- [ ] Responsive layouts (mobile/tablet/desktop); touch targets ≥ 44px; keyboard navigation
+- [ ] Error/empty/loading/skeleton states across pages; content guidelines
+
+15) Cost governance for autonomy and CI
+- [ ] Enforce $500/month hard cap (see docs/Internal/COST_BUDGET_POLICY.md)
+- [ ] Daily LLM limit and per-PR cost cap; degrade autonomy modes at 50/75/90/100%
+- [ ] Dual-LLM routing (Junie + ChatGPT) for planner/executor under caps
+
+Acceptance (Pre‑FT Website stage)
+- [ ] End-to-end clickable flows for key pages above with deterministic mocks
+- [ ] Lighthouse/a11y tests pass thresholds; screenshots and walkthrough recorded in docs/Customer-Facing
+
+FT — Final Test & Certification (after coding complete)
+
+11) Sandbox and certification pass
+- [ ] Obtain sandbox credentials for all target ad networks
+- [ ] Run official conformance packs; fix schema/auth issues
+- [ ] Payment processor test flows (if applicable)
+- [ ] Security review and privacy audit
+- [ ] Release notes, versioning, and migration guides
+
+Acceptance:
+- [ ] All networks certified or waiver documented; audits passed; tag v1.0.0‑rc
+
+AUTO — Autonomous Operation & Self‑Evolution (Continuous)
+
+Goals
+- The platform must run with minimal human intervention and continuously improve itself using the existing ChatGPT API hookup.
+- Changes must be safe, observable, reversible, and cost‑bounded.
+
+12) Autonomous Planner & RFC bot (LLM‑driven)
+- [ ] Weekly scheduled job assembles a "planner snapshot" (metrics/logs/test outcomes/doc drift) and proposes prioritized TODO updates with rationale
+- [ ] Opens PRs that update this checklist and DEVELOPMENT_ROADMAP.md with links to evidence (dashboards, test runs)
+- [ ] Idempotent, cost‑bounded (budget caps), and rate‑limited; includes dry‑run mode and change summary
+
+13) Scoped LLM Change Executor (safe, reversible)
+- [ ] Executes narrowly scoped refactors/fixes behind feature flags; runs unit/integration tests; opens PRs (no direct pushes to main)
+- [ ] Produces rollback plans and verifies canary/offline conformance before requesting human review on high‑risk changes
+- [ ] Enforces coding standards, lint, and secret‑scan gates in CI
+
+14) Observability feeds for autonomy (planner inputs)
+- [ ] Export structured weekly snapshot for the planner: adapter latency/error/fill trends, auction deadline overruns, circuit breaker rates, test flake stats
+- [ ] ML: shadow‑mode score distributions and drift metrics; fraud label coverage/quality summary
+- [ ] Adapter coverage gaps vs. "Must‑have" list and competitive set
+- [ ] All snapshots redacted (PII‑safe) with a documented data contract
+
+15) Adapter discovery & stub generator
+- [ ] Maintain a monitored watchlist of target networks/APIs; auto‑generate adapter stubs + offline conformance tests from templates
+- [ ] Auto‑update this checklist with new items and cross‑links to generated files
+
+16) ML continuous training & evaluation automation
+- [ ] Nightly ETL/train/evaluate pipeline produces trained_fraud_model.json with full metrics; uploads model + reports; pins versions
+- [ ] Shadow‑mode gating enforced automatically (do not leave shadow unless targets met); planner proposes threshold changes via PR only
+
+17) Experiment auto‑tuning proposals
+- [ ] Planner analyzes eCPM trends, floors, pacing/capping; proposes config deltas via PRs guarded by bandit/AB test safety rails
+
+18) Autonomous documentation updater
+- [ ] Keep GAPS_RESOLUTION.md, DEVELOPMENT_ROADMAP.md, and this checklist in sync; add change logs and next review dates
+- [ ] Redact/avoid secrets; verify references and anchors
+
+19) Safety & governance
+- [ ] Policy prompts/guardrails for LLM tools; budget and token usage limits; allowlist of files/paths
+- [ ] Secret scanning, license checks, and permission scopes; human approval required for high‑risk changes (schema, privacy, payments)
+- [ ] Quarterly rollback drill (simulate revert of last 5 autonomy PRs)
+
+Acceptance (Autonomy)
+- [ ] Planner produces ≥ 2 useful PRs/week with passing CI (tests + static analysis) and clear rationale
+- [ ] Zero secret leaks; monthly cost within budget cap; redaction verified in snapshots
+- [ ] Rollback drill completed and documented; no production incidents caused by autonomy PRs
+
+Traceability
+- Roadmap alignment: docs/Internal/Development/DEVELOPMENT_ROADMAP.md
+- Competitive gaps reference: docs/Internal/COMPETITIVE_GAP_ANALYSIS.md
+- ML training plan: docs/Internal/ML_FRAUD_TRAINING_DATA_SOURCES.md
+- System gaps baseline: GAPS_RESOLUTION.md
+
+
+
+## 2025-11-06 — Android SDK perfection pass (progress notes)
+- Added opt-in IAB consent reader: sdk/core/android/src/consent/ConsentManager.fromIabStorage(Context) with unit tests (ConsentManagerFromIabStorageTest.kt).
+- Added Rewarded lifecycle controller mirroring Interstitial: sdk/core/android/src/rewarded/RewardedController.kt with tests (RewardedControllerTest.kt).
+- Public facades expanded:
+  - BelRewardedInterstitial (load/show/isReady)
+  - BelAppOpen (load/show/isReady)
+- AuctionClient: corrected User-Agent formatting; added test to assert UA and X-Api-Key headers.
+- BelAds: added safe warnings for test mode misconfiguration (debug/release) — redaction preserved.
+- Docs updated: ANDROID_QUICKSTART.md includes IAB consent helper and new facades.
+
+Impact on plan
+- SDKs — Verification status and competitiveness (pre‑P1): Android SDK remains [~] but progressed with lifecycle, consent, DX, and tests.
+- Next: StrictMode instrumentation sample, integration validator task, sample app skeleton, and Java/Kotlin API reference generation.
+
+
+## 2025-11-06 — Android SDK perfection pass (continued)
+- Added staged rollout utility based on stable, non-PII InstallId bucketing (0–99) with unit tests.
+  - Evidence: sdk/core/android/src/util/Rollout.kt; sdk/core/android/src/test/util/RolloutTest.kt
+- Exposed ConfigManager.isInRollout(percentage) for OTA staged config rollouts without risking blast radius.
+  - Evidence: sdk/core/android/src/config/ConfigManager.kt
+- Fixed AuctionClientTest to properly assert consent serialization into metadata and to separately validate UA/API key headers.
+  - Evidence: sdk/core/android/src/test/network/AuctionClientTest.kt (consentSerialization_setsMetadataFlags, headersContainUserAgentAndApiKey)
+- Next (planned, P0 for SDK OTA safety): implement Ed25519 signature verification using dev test keys and add pass/fail unit tests; wire staged rollout gating for new features.
+
+
+## 2025-11-06 — Daily summary of changes (comprehensive)
+
+Scope: Completed and validated major portions of Part 1 (Adapter resiliency & conformance) and Part 2 (Observability, SLOs, Mediation Debugger, Website). Expanded adapter coverage, strengthened ML safety, and advanced Android/iOS SDK competitiveness. All work is dependency‑free/offline by default and aligned with the ≤ $500/month budget policy.
+
+Backend — bidders, auction engine, fraud, admin APIs
+- Resiliency/taxonomy foundation and tests
+  - Shared resiliency helpers (retry + jitter, transient classification, CircuitBreaker with Clock) and normalized NoBid taxonomy wired across all current adapters (AdMob, Meta, Unity, AppLovin MAX, ironSource).
+  - Deterministic CircuitBreaker via Clock abstraction and unit tests.
+  - Files: backend/auction/internal/bidders/commons.go, circuitbreaker_test.go, commons_test.go
+- Offline adapter conformance (all current adapters)
+  - Added safe test_endpoint overrides where needed; httptest suites cover 200 bid, 204 no_fill, 5xx retry→success, circuit_open, 4xx no‑retry, malformed JSON → standardized "error".
+  - Files: backend/auction/internal/bidders/* (admob.go, meta.go, unity.go, applovin.go, ironsource.go), adapter_conformance_test.go
+- New adapters added toward ≥12 coverage
+  - Fyber (Digital Turbine FairBid), Appodeal, Admost — implemented with standardized resiliency and full offline conformance tests.
+  - Files: backend/auction/internal/bidders/fyber.go, appodeal.go, admost.go (+ tests in adapter_conformance_test.go)
+- Observability P0
+  - Metrics: per‑adapter counters + latency, rolling percentiles (p50/p95/p99) with in‑process recorder; snapshot API and tests.
+  - Tracing: no‑op tracer interfaces + spans instrumented across adapters; unit tests.
+  - Mediation Debugger: sanitized, in‑memory ring buffer; capture hooks in adapters; unit tests; read‑only Admin API to fetch last‑N events.
+  - Time‑series (7‑day) metrics aggregator (5‑minute buckets) and SLO evaluator (p99 latency, error rate, fill) with Admin APIs and tests.
+  - Files: backend/auction/internal/bidders/{metrics.go,metrics_rollup.go,metrics_timeseries.go,tracing.go,debugger.go,slo.go} (+ *_test.go), backend/auction/internal/api/handler.go, backend/auction/cmd/main.go
+- Auction engine reliability features
+  - Feature‑flagged hedged requests + partial aggregation; unit tests for hedge correctness and deadline adherence; p99 auction timeout test.
+  - Files: backend/auction/internal/bidding/engine.go, engine_hedge_test.go, engine_timeout_test.go
+- ML safety
+  - Shadow‑mode gating tests ensure ineffective models cannot block traffic (AUC threshold/degenerate metrics).
+  - Files: backend/fraud/internal/ml/fraud_ml.go, fraud_ml_test.go
+
+Website — Observability and Debugger
+- Added dashboard pages that consume Admin APIs:
+  - Observability Overview (sparklines + SLO badges), Adapter Metrics, Mediation Debugger viewer (placement filter, limits, grouped view).
+  - Files: website/src/app/dashboard/observability/{overview,page.tsx}, metrics/page.tsx, debugger/page.tsx; website/src/lib/auctionApi.ts; components/Sidebar.tsx
+- Enabled CORS in auction service with env‑driven origin; OPTIONS handling for browser access.
+  - Files: backend/auction/cmd/main.go
+
+Docs, runbooks, audits
+- Runbooks: SLOs & Alerts, Observability usage and diagnostics.
+  - Files: docs/runbooks/SLOS_AND_ALERTS.md, docs/runbooks/OBSERVABILITY_RUNBOOK.md
+- Competitive gap execution & integrations guide updates for new adapters.
+  - Files: docs/Internal/COMPETITIVE_GAP_ANALYSIS.md (referenced), API_KEYS_AND_INTEGRATIONS_GUIDE.md (new sections for Fyber/Appodeal/Admost)
+- Internal audit of TODO‑driven changes and quality/bug findings with action items.
+  - Files: docs/Internal/Development/TODO_CHANGES_AUDIT.md
+
+Android SDK — Production hardening and DX
+- S2S auction client (OkHttp + Gson) with normalized taxonomy; robust tests (success/no_fill/4xx/5xx retry/timeout), consent propagation and header assertions.
+  - Files: sdk/core/android/src/network/AuctionClient.kt, src/test/network/AuctionClientTest.kt
+- Config & OTA safety
+  - ConfigManager with caching and signature‑verification scaffold; staged rollout utility (stable per‑install SHA‑256 bucketing) + tests; isInRollout() helper.
+  - Files: sdk/core/android/src/config/ConfigManager.kt, src/util/Rollout.kt, src/test/util/RolloutTest.kt
+- Lifecycle & readiness
+  - Interstitial and Rewarded controllers (strict state machines with double‑callback guards) and unit tests; ad expiry semantics and tests; in‑memory cache with TTL; isAdReady().
+  - Files: sdk/core/android/src/interstitial/InterstitialController.kt, src/test/interstitial/InterstitialControllerTest.kt, src/rewarded/RewardedController.kt, src/test/rewarded/RewardedControllerTest.kt, src/Models.kt (expiry), src/test/models/AdExpiryTest.kt
+- Public facades and Debugging
+  - Minimal, stable APIs: BelInterstitial, BelRewarded, BelRewardedInterstitial, BelAppOpen, BelBanner; in‑app Debug Panel.
+  - Files: sdk/core/android/src/{BelInterstitial.kt,BelRewarded.kt,BelRewardedInterstitial.kt,BelAppOpen.kt,BelBanner.kt,debug/DebugPanel.kt}
+- Consent utilities and logging safety
+  - ConsentManager.normalize/fromIabStorage with tests; centralized Logger with redaction utils and tests.
+  - Files: sdk/core/android/src/consent/ConsentManager.kt, src/test/consent/{ConsentManagerTest.kt,ConsentManagerFromIabStorageTest.kt}, src/logging/{Logger.kt,Redactor.kt}, src/test/logging/RedactorTest.kt
+- Build & quality gates
+  - Gradle: release AAR size guard (≤500KB) enforced; StrictMode policies in debug.
+  - Files: sdk/core/android/build.gradle, consumer-rules.pro
+- Docs
+  - Expanded Android Quickstart with consent helper, rewarded/banner facades, Debug Panel, additional ad formats.
+  - Files: docs/Customer-Facing/SDKs/ANDROID_QUICKSTART.md
+
+iOS SDK — Parity and taxonomy correctness
+- Swift package MVP with S2S auction path; offline stub mode when no URL.
+- Mapped 204 → no_fill; 400 → status_400; malformed JSON → error; timeout mapping; unit tests cover success/no_fill/status/timeout/malformed.
+  - Files: sdks/ios/Sources/ApexMediation/ApexMediation.swift, sdks/ios/Tests/ApexMediationTests/{ApexMediationTests.swift,MockURLProtocol.swift}
+
+Part 1/Part 2 checklist impact and acceptance
+- Part 1 (Adapter resiliency & conformance): Completed — standardized resiliency, taxonomy, offline conformance (incl. edge cases), auction deadline adherence, hedged requests behind flag.
+- Part 2 (Observability, SLOs, Mediation Debugger): Completed — metrics (snapshot + percentiles + time‑series), tracing, Mediation Debugger (capture + Admin API + website viewer), SLO evaluator + APIs, runbooks, CORS.
+
+Budget/cost governance
+- All additions are local/offline and preserve the ≤ $500/month operating cap. No new external services introduced. Dual‑LLM autonomy scaffolding remains documented and cost‑capped (no runtime changes in this pass).
+
+Next actions (tracked in checklist)
+- Android SDK: dev‑only Ed25519 config signature verification + tests; StrictMode sample smoke tests + CI gate; integration validator task; API reference generation.
+- Adapter expansion toward ≥12: add Chocolate Platform and Tapdaq (+ offline conformance), decide on legacy waivers (MoPub/AerServ/AdTapsy) vs shims.
+- Website: complete remaining pre‑FT pages with mocks; Lighthouse/a11y CI to hit performance/a11y budgets.
+- ML: begin offline ETL/enrichment stubs and evaluation harness per ML_FRAUD_TRAINING_DATA_SOURCES.md while keeping shadow mode enforced.
