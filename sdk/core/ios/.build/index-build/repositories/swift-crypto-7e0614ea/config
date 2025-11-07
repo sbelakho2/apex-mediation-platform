@@ -12,4 +12,3 @@
 	tagOpt = --no-tags
 	fetch = +refs/*:refs/*
 	mirror = true
-	fetch = +refs/*:refs/*

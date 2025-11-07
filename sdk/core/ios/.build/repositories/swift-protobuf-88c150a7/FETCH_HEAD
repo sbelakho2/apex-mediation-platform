@@ -1,6 +1,6 @@
 7e3da4b9a10cfa8ed2ac23ae2dd2848bd7b059b7	not-for-merge	branch '1_x_release_branch' of https://github.com/apple/swift-protobuf
-c169a5744230951031770e27e475ff6eefe51f9d	not-for-merge	branch 'main' of https://github.com/apple/swift-protobuf
-f1250e581859d1f1da568e01b68cd3291566158e	not-for-merge	branch 'table-driven-branch' of https://github.com/apple/swift-protobuf
+a028b77456218b581f77f95d083682b82847bd1c	not-for-merge	branch 'main' of https://github.com/apple/swift-protobuf
+77948eb2db60092956bd4284a0b3cf11dd303145	not-for-merge	branch 'table-driven-branch' of https://github.com/apple/swift-protobuf
 c9e5d97b9f805de84762434b475582777db9bddc	not-for-merge	'refs/pull/100/head' of https://github.com/apple/swift-protobuf
 40eb38d25d06f8fcdbd01503ad93143ced54d03a	not-for-merge	'refs/pull/1001/head' of https://github.com/apple/swift-protobuf
 c0f09b736fb02deef20f42efec9ec9e8c8264455	not-for-merge	'refs/pull/1002/head' of https://github.com/apple/swift-protobuf
@@ -749,7 +749,25 @@ cedb136396f348771ef6ae5765971cb318be0193	not-for-merge	'refs/pull/1882/head' of 
 d4883dc528e017633d3b52e852bf778bd599fdf9	not-for-merge	'refs/pull/1885/head' of https://github.com/apple/swift-protobuf
 65de69e4bef6e153e691041b8f5269701fab2114	not-for-merge	'refs/pull/1888/head' of https://github.com/apple/swift-protobuf
 616e6b443e3f53c95ae099f674aa6ee2df184a4a	not-for-merge	'refs/pull/1889/head' of https://github.com/apple/swift-protobuf
+4d2b3471531b1a544eb7adb1781df5bcadf63e33	not-for-merge	'refs/pull/1891/head' of https://github.com/apple/swift-protobuf
+8c7fc1ebd5eaaa0f4e2ba700234517038658573d	not-for-merge	'refs/pull/1892/head' of https://github.com/apple/swift-protobuf
+9029674537ddcaf36a5198b13e9a7d03aaa18350	not-for-merge	'refs/pull/1893/head' of https://github.com/apple/swift-protobuf
+ecf445b6d5905f1a9bf5c3f966bc25bc202214d2	not-for-merge	'refs/pull/1894/head' of https://github.com/apple/swift-protobuf
+49737b495fbf285829131d860a038586bfdfb6ac	not-for-merge	'refs/pull/1895/head' of https://github.com/apple/swift-protobuf
+84b4e7ff8fc354b3f516a663781cae450f40fa09	not-for-merge	'refs/pull/1896/head' of https://github.com/apple/swift-protobuf
+cee20282693c03b05d20d3f359ff9dba3fd69b7f	not-for-merge	'refs/pull/1897/head' of https://github.com/apple/swift-protobuf
+be96e11e1923ee7d8c081ae946767fe1480ca1f7	not-for-merge	'refs/pull/1898/head' of https://github.com/apple/swift-protobuf
+021cc39daf0e6405b9c70008525a009846f94692	not-for-merge	'refs/pull/1899/head' of https://github.com/apple/swift-protobuf
 76bd619e94668df65b5dda2cb71fe0f28d3ea1c4	not-for-merge	'refs/pull/190/head' of https://github.com/apple/swift-protobuf
+7cd31c51140628675f3b09b5af4256e40efd2f42	not-for-merge	'refs/pull/1900/head' of https://github.com/apple/swift-protobuf
+ad8f739cc64ceee21d6227ac66ee13a71896ae1c	not-for-merge	'refs/pull/1901/head' of https://github.com/apple/swift-protobuf
+b0c666ffbbb2338a15cc19d582113a2ceef5bf6e	not-for-merge	'refs/pull/1901/merge' of https://github.com/apple/swift-protobuf
+8678bdcd546b815b6bcd64e38bf231b54e764ada	not-for-merge	'refs/pull/1902/head' of https://github.com/apple/swift-protobuf
+2f07371bce1490c4465f2054922a34dad3086754	not-for-merge	'refs/pull/1903/head' of https://github.com/apple/swift-protobuf
+c0cc8eac823a8ee199125b31e1ce5e0e3ba67c0e	not-for-merge	'refs/pull/1905/head' of https://github.com/apple/swift-protobuf
+4ea13a7ae6311a28de17d4e220987291ab7254b7	not-for-merge	'refs/pull/1906/head' of https://github.com/apple/swift-protobuf
+a17522e99c7dc02b5a0e20c5042cd089170099d7	not-for-merge	'refs/pull/1907/head' of https://github.com/apple/swift-protobuf
+abde73355f10f9f50294d8d506b2a8b2bef52dae	not-for-merge	'refs/pull/1907/merge' of https://github.com/apple/swift-protobuf
 260d619cef87437a6afb9b7e2d27070ed639554c	not-for-merge	'refs/pull/191/head' of https://github.com/apple/swift-protobuf
 a73bc55cd59952e47efe405da6dcdfd7b59ca906	not-for-merge	'refs/pull/192/head' of https://github.com/apple/swift-protobuf
 921e45f2f8ad0d7a439ff8e586e04fc2ea9e7c77	not-for-merge	'refs/pull/193/head' of https://github.com/apple/swift-protobuf

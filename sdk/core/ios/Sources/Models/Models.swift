@@ -258,17 +258,63 @@ public struct TelemetryEvent: Codable {
 // MARK: - SDK Configuration
 
 /// SDK configuration
-public struct SDKConfig: Codable {
+public struct SDKConfig: Codable, Equatable {
     public let appId: String
     public let configEndpoint: String
+    public let auctionEndpoint: String
     public let telemetryEnabled: Bool
     public let logLevel: LogLevel
-    
-    public init(appId: String, configEndpoint: String, telemetryEnabled: Bool = true, logLevel: LogLevel = .info) {
+    public let testMode: Bool
+    public let configSignaturePublicKey: String?
+
+    public init(
+        appId: String,
+        configEndpoint: String,
+        auctionEndpoint: String,
+        telemetryEnabled: Bool = true,
+        logLevel: LogLevel = .info,
+        testMode: Bool = false,
+        configSignaturePublicKey: String? = nil
+    ) {
         self.appId = appId
         self.configEndpoint = configEndpoint
+        self.auctionEndpoint = auctionEndpoint
         self.telemetryEnabled = telemetryEnabled
         self.logLevel = logLevel
+        self.testMode = testMode
+        self.configSignaturePublicKey = configSignaturePublicKey
+    }
+
+    public func withAppId(_ newAppId: String) -> SDKConfig {
+        SDKConfig(
+            appId: newAppId,
+            configEndpoint: configEndpoint,
+            auctionEndpoint: auctionEndpoint,
+            telemetryEnabled: telemetryEnabled,
+            logLevel: logLevel,
+            testMode: testMode,
+            configSignaturePublicKey: configSignaturePublicKey
+        )
+    }
+
+    public static func `default`(
+        appId: String,
+        configEndpoint: String = "https://config.rivalapexmediation.com",
+        auctionEndpoint: String = "https://auction.rivalapexmediation.com",
+        telemetryEnabled: Bool = true,
+        logLevel: LogLevel = .info,
+        testMode: Bool = false,
+        configSignaturePublicKey: String? = nil
+    ) -> SDKConfig {
+        SDKConfig(
+            appId: appId,
+            configEndpoint: configEndpoint,
+            auctionEndpoint: auctionEndpoint,
+            telemetryEnabled: telemetryEnabled,
+            logLevel: logLevel,
+            testMode: testMode,
+            configSignaturePublicKey: configSignaturePublicKey
+        )
     }
 }
 

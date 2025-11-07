@@ -1,312 +1,202 @@
 import Foundation
-import UIKit
 
-/**
- * Main entry point for Rival ApexMediation iOS SDK
- *
- * Thread-Safety Guarantees:
- * - All network I/O on background queues
- * - Main queue only for UI updates
- * - Actor-based concurrency model (Swift 5.5+)
- *
- * Performance Targets:
- * - Cold start: ≤100ms
- * - Warm start: ≤50ms
- * - Memory footprint: ≤10MB
- */
 @MainActor
 public final class MediationSDK {
-    
-    // MARK: - Singleton
-    
     public static let shared = MediationSDK()
-    
-    private init() {}
-    
-    // MARK: - Properties
-    
+
+    private let sdkVersion = "1.0.0"
+
     private var config: SDKConfig?
+    private var remoteConfig: SDKRemoteConfig?
+    private var configManager: ConfigManager?
+    private var telemetry: TelemetryCollector?
+    private var adapterRegistry: AdapterRegistry?
+    private var signatureVerifier: SignatureVerifier?
     private var isInitialized = false
-    
-    private let backgroundQueue = DispatchQueue(
-        label: "com.rivalapexmediation.sdk.background",
-        qos: .userInitiated,
-        attributes: .concurrent
-    )
-    
-    private let networkQueue = DispatchQueue(
-        label: "com.rivalapexmediation.sdk.network",
-        qos: .userInitiated,
-        attributes: .concurrent
-    )
-    
-    private lazy var configManager: ConfigManager = {
-        ConfigManager(config: self.config!)
-    }()
-    
-    private lazy var telemetry: TelemetryCollector = {
-        TelemetryCollector(config: self.config!)
-    }()
-    
-    private lazy var adapterRegistry: AdapterRegistry = {
-        AdapterRegistry()
-    }()
-    
-    private var circuitBreakers: [String: CircuitBreaker] = [:]
-    
-    // MARK: - Initialization
-    
-    /**
-     * Initialize the SDK
-     *
-     * Must be called from main thread, typically in AppDelegate
-     *
-     * - Parameters:
-     *   - appId: Your application ID from Rival ApexMediation
-     *   - config: Optional SDK configuration
-     * - Throws: SDKError if initialization fails
-     */
-    public func initialize(appId: String, config: SDKConfig = SDKConfig()) async throws {
+
+    private init() {}
+
+    /// Initialize the mediation SDK.
+    /// - Parameters:
+    ///   - appId: Application identifier provisioned in the Rival Apex console.
+    ///   - configuration: Optional configuration to override defaults. When omitted, production endpoints are used.
+    public func initialize(appId: String, configuration: SDKConfig? = nil) async throws {
         guard !isInitialized else {
             throw SDKError.alreadyInitialized
         }
-        
-        self.config = config.with(appId: appId)
-        
-        // Perform heavy initialization on background queue
-        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            backgroundQueue.async { [weak self] in
-                guard let self = self else {
-                    continuation.resume(throwing: SDKError.internalError)
-                    return
-                }
-                
-                do {
-                    // Load configuration
-                    try self.configManager.loadConfig()
-                    
-                    // Initialize adapters
-                    try self.adapterRegistry.initialize()
-                    
-                    // Start telemetry
-                    self.telemetry.start()
-                    
-                    // Record initialization
-                    self.telemetry.recordInitialization()
-                    
-                    self.isInitialized = true
-                    continuation.resume()
-                } catch {
-                    self.telemetry.recordError("initialization_failed", error: error)
-                    continuation.resume(throwing: error)
-                }
-            }
+
+        let providedConfig = configuration ?? SDKConfig.default(appId: appId)
+        let resolvedConfig = providedConfig.withAppId(appId)
+
+        if resolvedConfig.configSignaturePublicKey != nil || resolvedConfig.testMode {
+            signatureVerifier = SignatureVerifier(
+                testMode: resolvedConfig.testMode,
+                productionPublicKey: resolvedConfig.configSignaturePublicKey
+            )
+        } else {
+            signatureVerifier = nil
         }
+
+        let manager = ConfigManager(config: resolvedConfig, signatureVerifier: signatureVerifier)
+        let remote = try await manager.loadConfig()
+
+        let registry = AdapterRegistry(sdkVersion: sdkVersion)
+        configureAdapters(registry: registry, with: remote)
+
+        let telemetryCollector = TelemetryCollector(config: resolvedConfig)
+        telemetryCollector.start()
+        telemetryCollector.recordInitialization()
+
+        config = resolvedConfig
+        remoteConfig = remote
+        configManager = manager
+        telemetry = telemetryCollector
+        adapterRegistry = registry
+        isInitialized = true
     }
-    
-    // MARK: - Ad Loading
-    
-    /**
-     * Load an ad for the specified placement
-     *
-     * - Parameters:
-     *   - placement: The ad placement identifier
-     * - Returns: Loaded ad or nil if no fill
-     * - Throws: SDKError on failure
-     */
-    public func loadAd(placement: String) async throws -> Ad? {
+
+    /// Load an ad for the supplied placement.
+    /// - Parameter placementId: Placement identifier configured in the console.
+    /// - Returns: Loaded ad or `nil` when no adapter returned fill.
+    public func loadAd(placementId: String) async throws -> Ad? {
         guard isInitialized else {
             throw SDKError.notInitialized
         }
-        
-        let startTime = Date()
-        
-        return try await withCheckedThrowingContinuation { continuation in
-            backgroundQueue.async { [weak self] in
-                guard let self = self else {
-                    continuation.resume(throwing: SDKError.internalError)
-                    return
-                }
-                
-                do {
-                    // Get placement configuration
-                    guard let placementConfig = try self.configManager.getPlacementConfig(placement) else {
-                        throw SDKError.invalidPlacement(placement)
-                    }
-                    
-                    // Get enabled adapters
-                    let adapters = self.getEnabledAdapters(for: placementConfig)
-                    
-                    guard !adapters.isEmpty else {
-                        continuation.resume(returning: nil)
-                        return
-                    }
-                    
-                    // Parallel loading with timeout
-                    let group = DispatchGroup()
-                    var responses: [AdResponse] = []
-                    let responsesLock = NSLock()
-                    
-                    for adapter in adapters {
-                        group.enter()
-                        self.networkQueue.async {
-                            defer { group.leave() }
-                            
-                            if let response = self.loadWithCircuitBreaker(
-                                adapter: adapter,
-                                placement: placement,
-                                config: placementConfig
-                            ) {
-                                responsesLock.lock()
-                                responses.append(response)
-                                responsesLock.unlock()
-                            }
-                        }
-                    }
-                    
-                    // Wait with timeout
-                    let timeout = DispatchTimeInterval.milliseconds(Int(placementConfig.timeoutMs))
-                    let result = group.wait(timeout: .now() + timeout)
-                    
-                    if result == .timedOut {
-                        self.telemetry.recordTimeout(placement: placement)
-                    }
-                    
-                    // Select best ad
-                    let bestAd = self.selectBestAd(from: responses)
-                    
-                    let latency = Date().timeIntervalSince(startTime) * 1000
-                    self.telemetry.recordAdLoad(
-                        placement: placement,
-                        latency: latency,
-                        success: bestAd != nil
-                    )
-                    
-                    continuation.resume(returning: bestAd)
-                    
-                } catch {
-                    self.telemetry.recordError("load_ad_failed", error: error)
-                    continuation.resume(throwing: error)
-                }
+
+        let config = try await ensureRemoteConfig()
+        guard let placement = config.placements.first(where: { $0.placementId == placementId }) else {
+            throw SDKError.invalidPlacement(placementId)
+        }
+
+        guard let registry = adapterRegistry else {
+            throw SDKError.internalError
+        }
+
+        let adaptersInPriority = placement.adapterPriority
+        guard !adaptersInPriority.isEmpty else {
+            return nil
+        }
+
+        for networkName in adaptersInPriority {
+            guard let adapterConfig = config.adapters[networkName], adapterConfig.enabled else {
+                continue
+            }
+
+            guard let adapter = registry.getAdapter(networkName: networkName) else {
+                continue
+            }
+
+            if !adapter.supportsAdType(placement.adType) {
+                continue
+            }
+
+            ensureAdapterInitialized(networkName: networkName, adapterConfig: adapterConfig)
+
+            let settings = adapterConfig.settings.mapValues { $0.value }
+            let start = Date()
+
+            do {
+                let ad = try await loadAd(from: adapter, placement: placementId, adType: placement.adType, settings: settings)
+                let latency = Int(Date().timeIntervalSince(start) * 1_000)
+                telemetry?.recordAdLoad(
+                    placement: placementId,
+                    adType: placement.adType,
+                    networkName: networkName,
+                    latency: latency,
+                    success: true
+                )
+                return ad
+            } catch AdapterError.timeout {
+                telemetry?.recordTimeout(placement: placementId, adType: placement.adType, reason: "adapter_timeout")
+            } catch {
+                let latency = Int(Date().timeIntervalSince(start) * 1_000)
+                telemetry?.recordAdLoad(
+                    placement: placementId,
+                    adType: placement.adType,
+                    networkName: networkName,
+                    latency: latency,
+                    success: false
+                )
+                telemetry?.recordError(errorCode: "adapter_failure", error: error)
             }
         }
-    }
-    
-    // MARK: - Private Methods
-    
-    private func loadWithCircuitBreaker(
-        adapter: AdAdapter,
-        placement: String,
-        config: PlacementConfig
-    ) -> AdResponse? {
-        let breaker = circuitBreakers[adapter.name] ?? CircuitBreaker(
-            failureThreshold: 5,
-            resetTimeoutMs: 60000
+
+        telemetry?.recordAdLoad(
+            placement: placementId,
+            adType: placement.adType,
+            networkName: "none",
+            latency: 0,
+            success: false
         )
-        circuitBreakers[adapter.name] = breaker
-        
-        return breaker.execute {
-            return try adapter.loadAd(placement: placement, config: config)
-        }
+        return nil
     }
-    
-    private func getEnabledAdapters(for config: PlacementConfig) -> [AdAdapter] {
-        return config.enabledNetworks.compactMap { networkId in
-            guard let adapter = adapterRegistry.getAdapter(networkId) else {
-                return nil
-            }
-            
-            // Check if adapter is available and circuit breaker is not open
-            guard adapter.isAvailable(),
-                  let breaker = circuitBreakers[adapter.name],
-                  !breaker.isOpen else {
-                return nil
-            }
-            
-            return adapter
-        }
-    }
-    
-    private func selectBestAd(from responses: [AdResponse]) -> Ad? {
-        return responses
-            .filter { $0.isValid }
-            .max(by: { $0.ecpm < $1.ecpm })
-            ?.ad
-    }
-    
-    // MARK: - Public API
-    
-    /**
-     * Check if an ad is ready to show
-     */
-    public func isAdReady(placement: String) -> Bool {
-        // TODO: Implement caching
+
+    /// Check if an ad is cached and ready. Placeholder implementation; caching is pending.
+    public func isAdReady(placementId: String) -> Bool {
+        // TODO: Implement ad caching in a follow-up pass.
         return false
     }
-    
-    /**
-     * Shutdown SDK and cleanup resources
-     */
+
+    /// Shutdown the SDK and release resources.
     public func shutdown() {
-        backgroundQueue.async { [weak self] in
-            guard let self = self else { return }
-            
-            self.telemetry.stop()
-            self.adapterRegistry.shutdown()
-            self.configManager.shutdown()
-            
-            self.isInitialized = false
+        guard isInitialized else { return }
+
+        telemetry?.stop()
+        adapterRegistry?.destroy()
+        configManager?.shutdown()
+
+        telemetry = nil
+        adapterRegistry = nil
+        configManager = nil
+        remoteConfig = nil
+        config = nil
+        signatureVerifier = nil
+        isInitialized = false
+    }
+
+    private func ensureRemoteConfig() async throws -> SDKRemoteConfig {
+        if let cached = remoteConfig {
+            return cached
+        }
+        guard let manager = configManager else {
+            throw SDKError.internalError
+        }
+        let refreshed = try await manager.loadConfig()
+        remoteConfig = refreshed
+        if let registry = adapterRegistry {
+            configureAdapters(registry: registry, with: refreshed)
+        }
+        return refreshed
+    }
+
+    private func configureAdapters(registry: AdapterRegistry, with config: SDKRemoteConfig) {
+        for (networkName, adapterConfig) in config.adapters where adapterConfig.enabled {
+            let settings = adapterConfig.settings.mapValues { $0.value }
+            registry.initializeAdapter(networkName: networkName, config: settings)
+        }
+    }
+
+    private func ensureAdapterInitialized(networkName: String, adapterConfig: AdapterConfig) {
+        guard let registry = adapterRegistry else { return }
+        if !registry.isInitialized(networkName: networkName) {
+            let settings = adapterConfig.settings.mapValues { $0.value }
+            registry.initializeAdapter(networkName: networkName, config: settings)
+        }
+    }
+
+    private func loadAd(
+        from adapter: AdNetworkAdapter,
+        placement: String,
+        adType: AdType,
+        settings: [String: Any]
+    ) async throws -> Ad {
+        try await withCheckedThrowingContinuation { continuation in
+            adapter.loadAd(placement: placement, adType: adType, config: settings) { result in
+                continuation.resume(with: result)
+            }
         }
     }
 }
-
-// MARK: - Configuration
-
-public struct SDKConfig {
-    public let appId: String
-    public let testMode: Bool
-    public let logLevel: LogLevel
-    public let telemetryEnabled: Bool
-    public let configEndpoint: String
-    public let auctionEndpoint: String
-    
-    public init(
-        appId: String = "",
-        testMode: Bool = false,
-        logLevel: LogLevel = .info,
-        telemetryEnabled: Bool = true,
-        configEndpoint: String = "https://config.rivalapexmediation.com",
-        auctionEndpoint: String = "https://auction.rivalapexmediation.com"
-    ) {
-        self.appId = appId
-        self.testMode = testMode
-        self.logLevel = logLevel
-        self.telemetryEnabled = telemetryEnabled
-        self.configEndpoint = configEndpoint
-        self.auctionEndpoint = auctionEndpoint
-    }
-    
-    func with(appId: String) -> SDKConfig {
-        return SDKConfig(
-            appId: appId,
-            testMode: testMode,
-            logLevel: logLevel,
-            telemetryEnabled: telemetryEnabled,
-            configEndpoint: configEndpoint,
-            auctionEndpoint: auctionEndpoint
-        )
-    }
-}
-
-public enum LogLevel {
-    case verbose
-    case debug
-    case info
-    case warning
-    case error
-}
-
-// MARK: - Errors
 
 public enum SDKError: Error, LocalizedError {
     case notInitialized
@@ -316,7 +206,7 @@ public enum SDKError: Error, LocalizedError {
     case timeout
     case networkError
     case internalError
-    
+
     public var errorDescription: String? {
         switch self {
         case .notInitialized:

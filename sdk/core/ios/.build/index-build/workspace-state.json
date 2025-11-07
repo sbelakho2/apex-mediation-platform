@@ -7,23 +7,6 @@
       {
         "basedOn" : null,
         "packageRef" : {
-          "identity" : "alamofire",
-          "kind" : "remoteSourceControl",
-          "location" : "https://github.com/Alamofire/Alamofire.git",
-          "name" : "Alamofire"
-        },
-        "state" : {
-          "checkoutState" : {
-            "revision" : "513364f870f6bfc468f9d2ff0a95caccc10044c5",
-            "version" : "5.10.2"
-          },
-          "name" : "sourceControlCheckout"
-        },
-        "subpath" : "Alamofire"
-      },
-      {
-        "basedOn" : null,
-        "packageRef" : {
           "identity" : "swift-asn1",
           "kind" : "remoteSourceControl",
           "location" : "https://github.com/apple/swift-asn1.git",
@@ -37,23 +20,6 @@
           "name" : "sourceControlCheckout"
         },
         "subpath" : "swift-asn1"
-      },
-      {
-        "basedOn" : null,
-        "packageRef" : {
-          "identity" : "swift-crypto",
-          "kind" : "remoteSourceControl",
-          "location" : "https://github.com/apple/swift-crypto.git",
-          "name" : "swift-crypto"
-        },
-        "state" : {
-          "checkoutState" : {
-            "revision" : "95ba0316a9b733e92bb6b071255ff46263bbe7dc",
-            "version" : "3.15.1"
-          },
-          "name" : "sourceControlCheckout"
-        },
-        "subpath" : "swift-crypto"
       }
     ],
     "prebuilts" : [

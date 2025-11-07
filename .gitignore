@@ -53,6 +53,15 @@ coverage/
 *.xcworkspace
 xcuserdata/
 DerivedData/
+.build/
+.swiftpm/
+.xcresult/
+.gradle/
+gradle/
+gradlew
+gradlew.bat
+local.properties
+Package.resolved
 
 # Terraform
 .terraform/

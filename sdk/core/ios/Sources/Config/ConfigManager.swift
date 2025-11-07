@@ -1,5 +1,4 @@
 import Foundation
-import CryptoKit
 
 /// Configuration manager with remote fetching and caching
 ///
@@ -8,24 +7,24 @@ import CryptoKit
 /// - UserDefaults caching with TTL
 /// - Async/await concurrency
 /// - Automatic retry with exponential backoff
-public class ConfigManager {
+public final class ConfigManager {
     private let config: SDKConfig
     private let urlSession: URLSession
     private let userDefaults: UserDefaults
+    private let signatureVerifier: SignatureVerifier?
     
     private let cacheKey = "com.rivalapexmediation.config"
     private let cacheVersionKey = "com.rivalapexmediation.config.version"
     private let cacheTimestampKey = "com.rivalapexmediation.config.timestamp"
     
     private let cacheTTL: TimeInterval = 3600 // 1 hour
-    private let publicKey: String
     
     private var cachedConfig: SDKRemoteConfig?
     
     /// Initialize config manager
-    public init(config: SDKConfig, publicKey: String) {
+    public init(config: SDKConfig, signatureVerifier: SignatureVerifier?) {
         self.config = config
-        self.publicKey = publicKey
+        self.signatureVerifier = signatureVerifier
         
         let configuration = URLSessionConfiguration.default
         configuration.timeoutIntervalForRequest = 10
@@ -46,8 +45,10 @@ public class ConfigManager {
         // Fetch from remote
         let remoteConfig = try await fetchRemoteConfig()
         
-        // Verify signature
-        try verifySignature(config: remoteConfig)
+        // Verify signature when verifier available
+        if let verifier = signatureVerifier {
+            try verifySignature(config: remoteConfig, verifier: verifier)
+        }
         
         // Cache the config
         cacheConfig(remoteConfig)
@@ -59,6 +60,11 @@ public class ConfigManager {
     /// Get placement config by ID
     public func getPlacement(id: String) -> PlacementConfig? {
         return cachedConfig?.placements.first { $0.placementId == id }
+    }
+
+    /// Convenience accessor used by the mediation layer
+    public func getPlacementConfig(_ id: String) -> PlacementConfig? {
+        getPlacement(id: id)
     }
     
     /// Check if adapter is enabled
@@ -131,26 +137,17 @@ public class ConfigManager {
     // MARK: - Signature Verification
     
     /// Verify Ed25519 signature
-    private func verifySignature(config: SDKRemoteConfig) throws {
+    private func verifySignature(config: SDKRemoteConfig, verifier: SignatureVerifier) throws {
         guard let signature = config.signature else {
             throw ConfigError.missingSignature
         }
-        
-        // Create payload (all fields except signature)
+
         let payload = createSignaturePayload(config: config)
-        
-        guard let payloadData = payload.data(using: .utf8),
-              let signatureData = Data(base64Encoded: signature),
-              let publicKeyData = Data(base64Encoded: publicKey) else {
-            throw ConfigError.invalidSignature
-        }
-        
+
         do {
-            let key = try Curve25519.Signing.PublicKey(rawRepresentation: publicKeyData)
-            
-            if !key.isValidSignature(signatureData, for: payloadData) {
-                throw ConfigError.invalidSignature
-            }
+            try verifier.verifySignature(message: payload, signatureBase64: signature)
+        } catch let error as SignatureError {
+            throw ConfigError.signatureVerificationFailed(error)
         } catch {
             throw ConfigError.signatureVerificationFailed(error)
         }
@@ -218,6 +215,12 @@ public class ConfigManager {
         userDefaults.removeObject(forKey: cacheKey)
         userDefaults.removeObject(forKey: cacheVersionKey)
         userDefaults.removeObject(forKey: cacheTimestampKey)
+        cachedConfig = nil
+    }
+    
+    /// Release resources and clear cached config
+    public func shutdown() {
+        urlSession.invalidateAndCancel()
         cachedConfig = nil
     }
 }

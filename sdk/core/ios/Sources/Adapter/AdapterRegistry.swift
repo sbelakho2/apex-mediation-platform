@@ -6,6 +6,7 @@ import Foundation
 ///
 /// All ad network adapters must implement this protocol
 public protocol AdNetworkAdapter {
+    init()
     /// Adapter metadata
     var networkName: String { get }
     var version: String { get }
@@ -38,7 +39,7 @@ public protocol AdNetworkAdapter {
 /// - Version compatibility checking
 /// - Lazy initialization
 /// - Thread-safe adapter management
-public class AdapterRegistry {
+public final class AdapterRegistry {
     private var adapters: [String: AdapterWrapper] = [:]
     private var adapterClasses: [String: AdNetworkAdapter.Type] = [:]
     private let lock = NSLock()
@@ -53,35 +54,20 @@ public class AdapterRegistry {
     }
     
     /// Initialize adapter registry
-    public init(sdkVersion: String) {
+    public init(sdkVersion: String = "1.0.0") {
         self.sdkVersion = sdkVersion
-        discoverAdapters()
+        registerBuiltInAdapters()
     }
     
     // MARK: - Adapter Discovery
     
-    /// Discover available adapters
-    private func discoverAdapters() {
-        // List of known adapter classes
-        let adapterNames = [
-            "AdMobAdapter",
-            "AppLovinAdapter",
-            "IronSourceAdapter",
-            "UnityAdsAdapter",
-            "FacebookAdapter",
-            "VungleAdapter",
-            "ChartboostAdapter",
-            "PangleAdapter",
-            "MintegralAdapter"
+    /// Register built-in adapters that ship with the SDK target
+    private func registerBuiltInAdapters() {
+        let builtIns: [String: AdNetworkAdapter.Type] = [
+            "admob": AdMobAdapter.self,
+            "applovin": AppLovinAdapter.self
         ]
-        
-        for adapterName in adapterNames {
-            // Try to load adapter class dynamically
-            if let adapterClass = NSClassFromString("RivalApexMediation.\(adapterName)") as? AdNetworkAdapter.Type {
-                let networkName = adapterName.replacingOccurrences(of: "Adapter", with: "").lowercased()
-                adapterClasses[networkName] = adapterClass
-            }
-        }
+        adapterClasses.merge(builtIns) { _, new in new }
     }
     
     /// Register custom adapter
@@ -260,7 +246,7 @@ public class AdMobAdapter: AdNetworkAdapter {
     public required init() {}
     
     public func initialize(config: [String: Any]) throws {
-        guard let appId = config["app_id"] as? String else {
+        guard config["app_id"] as? String != nil else {
             throw AdapterError.loadFailed("app_id required")
         }
         
@@ -320,7 +306,7 @@ public class AppLovinAdapter: AdNetworkAdapter {
     public required init() {}
     
     public func initialize(config: [String: Any]) throws {
-        guard let sdkKey = config["sdk_key"] as? String else {
+        guard config["sdk_key"] as? String != nil else {
             throw AdapterError.loadFailed("sdk_key required")
         }
         

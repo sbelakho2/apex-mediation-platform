@@ -316,6 +316,8 @@ fc856e50450e18ca2b2f45ab363b265ca6b2281c	not-for-merge	'refs/pull/421/head' of h
 83f8d6502ca6a582708ac0d599620f2fb9b1fed8	not-for-merge	'refs/pull/422/head' of https://github.com/apple/swift-crypto
 26d87eb70c04a935cf1ad147f82f41c3b51d2032	not-for-merge	'refs/pull/422/merge' of https://github.com/apple/swift-crypto
 2c3b8d794c46296ae0e10b12f92320aaa6c28153	not-for-merge	'refs/pull/423/head' of https://github.com/apple/swift-crypto
+63bff550740e524201d9ba183642f25ea0c255eb	not-for-merge	'refs/pull/424/head' of https://github.com/apple/swift-crypto
+ab7792c33a0dc770073015a3fafa007d8b03eceb	not-for-merge	'refs/pull/424/merge' of https://github.com/apple/swift-crypto
 bca04964e3f3c05a31940edf0073f5d1ce94b753	not-for-merge	'refs/pull/44/head' of https://github.com/apple/swift-crypto
 8fc7b45812ce98e1a173d7df5a25d0cc4595b2a1	not-for-merge	'refs/pull/46/head' of https://github.com/apple/swift-crypto
 8378da2dc32bb6afc0f88b21da4d18ab7c5f2e5b	not-for-merge	'refs/pull/47/head' of https://github.com/apple/swift-crypto
