@@ -23,7 +23,8 @@ import java.util.concurrent.TimeUnit
 class ConfigManager(
     private val context: Context,
     private val sdkConfig: SDKConfig,
-    private val client: OkHttpClient? = null
+    private val client: OkHttpClient? = null,
+    private val configPublicKey: ByteArray? = null
 ) {
     private val prefs: SharedPreferences = context.getSharedPreferences(
         "rival_ad_stack_config",
@@ -54,7 +55,8 @@ class ConfigManager(
         if (shouldFetchRemote()) {
             try {
                 val remoteConfig = fetchRemoteConfig()
-                if (verifySignature(remoteConfig)) {
+                val sigOk = if (sdkConfig.testMode) true else verifySignature(remoteConfig)
+                if (sigOk && validateSchema(remoteConfig)) {
                     currentConfig = remoteConfig
                     saveToCache(remoteConfig)
                     lastFetchTime = System.currentTimeMillis()
@@ -133,25 +135,35 @@ class ConfigManager(
      * Verify configuration signature (Ed25519)
      */
     private fun verifySignature(config: SDKRemoteConfig): Boolean {
-        // TODO: Implement Ed25519 signature verification
-        // For now, return true in development mode
-        if (sdkConfig.testMode) {
-            return true
-        }
-        
-        // In production, verify using public key
+        // In test mode, bypass strict verification to ease development.
+        if (sdkConfig.testMode) return true
+        // Require a configured public key in non-test builds.
+        val pubKeyBytes = configPublicKey ?: return false
         return try {
             val message = createSigningMessage(config)
-            val signature = android.util.Base64.decode(
-                config.signature,
-                android.util.Base64.NO_WRAP
-            )
-            
-            // Verify signature with Ed25519
-            // Implementation would use a crypto library
-            true
-        } catch (e: Exception) {
-            false
+            val sigBytes = decodeBase64(config.signature)
+            // Try JDK Ed25519 first (available on JVM 17); Android may fall back if provider missing.
+            val kf = java.security.KeyFactory.getInstance("Ed25519")
+            val pubKey = kf.generatePublic(java.security.spec.X509EncodedKeySpec(pubKeyBytes))
+            val verifier = java.security.Signature.getInstance("Ed25519")
+            verifier.initVerify(pubKey)
+            verifier.update(message)
+            verifier.verify(sigBytes)
+        } catch (t: Throwable) {
+            // Best-effort fallback using Tink, if available on the classpath.
+            try {
+                // Tink PublicKeyVerify expects a key in its own format; skip if not available.
+                val clazz = Class.forName("com.google.crypto.tink.subtle.Ed25519Verify")
+                val ctor = clazz.getConstructor(ByteArray::class.java)
+                val verifier = ctor.newInstance(pubKeyBytes)
+                val method = clazz.getMethod("verify", ByteArray::class.java, ByteArray::class.java)
+                val message = createSigningMessage(config)
+                val sigBytes = decodeBase64(config.signature)
+                method.invoke(verifier, sigBytes, message)
+                true
+            } catch (_: Throwable) {
+                false
+            }
         }
     }
     
@@ -165,6 +177,26 @@ class ConfigManager(
             "timestamp" to config.timestamp
         )
         return gson.toJson(data).toByteArray()
+    }
+
+    /**
+     * Lightweight schema validation for remote config payloads before trusting.
+     * Ensures required fields are present and placements have minimal fields.
+     */
+    private fun validateSchema(cfg: SDKRemoteConfig): Boolean {
+        if (cfg.configId.isBlank()) return false
+        if (cfg.version <= 0) return false
+        if (cfg.timestamp <= 0) return false
+        // placements may be empty, but if present, keys and placementId must match and adType must be non-empty
+        cfg.placements.forEach { (key, pl) ->
+            if (key.isBlank()) return false
+            if (pl.placementId.isBlank()) return false
+            // basic sanity on timeout bounds
+            if (pl.timeoutMs <= 0 || pl.timeoutMs > 30_000L) return false
+            if (pl.maxWaitMs <= 0 || pl.maxWaitMs > 60_000L) return false
+        }
+        // features non-null by model; adapters can be empty
+        return true
     }
     
     /**
@@ -242,5 +274,24 @@ class ConfigManager(
         return try {
             com.rivalapexmediation.sdk.util.Rollout.isInRollout(context, percentage)
         } catch (_: Throwable) { percentage >= 100 }
+    }
+}
+
+
+// Base64 decoder that works on both JVM and Android without hard dependency on java.util.Base64 at runtime on older APIs.
+private fun decodeBase64(input: String): ByteArray {
+    return try {
+        java.util.Base64.getDecoder().decode(input)
+    } catch (_: Throwable) {
+        try {
+            android.util.Base64.decode(input, android.util.Base64.DEFAULT)
+        } catch (_: Throwable) {
+            // As a last resort, attempt URL-safe variant
+            try {
+                java.util.Base64.getUrlDecoder().decode(input)
+            } catch (_: Throwable) {
+                ByteArray(0)
+            }
+        }
     }
 }

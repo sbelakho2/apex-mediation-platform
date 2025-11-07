@@ -105,7 +105,7 @@ class AuctionClient(
                         throw AuctionException("no_fill")
                     }
                     if (!resp.isSuccessful) {
-                        val reason = "status_${'$'}code"
+                        val reason = "status_" + code
                         throw AuctionException(reason)
                     }
                     val bodyStr = resp.body?.string() ?: "{}"
@@ -117,9 +117,14 @@ class AuctionClient(
                         throw AuctionException("no_fill")
                     }
                     val adapter = (winner["adapter_name"] as? String)
-                        ?: (winner["AdapterName"] as? String) ?: "unknown"
-                    val ecpm = (winner["cpm"] as? Number)?.toDouble()
-                        ?: (winner["CPM"] as? Number)?.toDouble() ?: 0.0
+                        ?: (winner["AdapterName"] as? String)
+                    val ecpmNum = (winner["cpm"] as? Number)
+                        ?: (winner["CPM"] as? Number)
+                    if (adapter.isNullOrBlank() || ecpmNum == null) {
+                        // Treat missing critical fields as no_fill to avoid crashing integrators on malformed payloads
+                        throw AuctionException("no_fill")
+                    }
+                    val ecpm = ecpmNum.toDouble()
                     val currency = (winner["currency"] as? String)
                         ?: (winner["Currency"] as? String) ?: "USD"
                     val creativeId = (winner["creative_id"] as? String)
@@ -177,7 +182,8 @@ class AuctionClient(
 
     private fun buildRequestBody(opts: InterstitialOptions, consent: ConsentOptions?): Map<String, Any?> {
         val now = System.currentTimeMillis()
-        val reqId = "android-${'$'}now-${'$'}{(0..999_999).random()}"
+        val rand = (0..999_999).random()
+        val reqId = "android-$now-$rand"
         val deviceInfo = mapOf(
             "os" to "android",
             "os_version" to (Build.VERSION.RELEASE ?: ""),

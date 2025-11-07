@@ -79,7 +79,11 @@ class MediationSDK private constructor(
         }
     }
     
-    private val configManager = ConfigManager(context, config)
+    private val configManager = run {
+        val keyB64 = config.configPublicKeyBase64
+        val keyBytes = if (!keyB64.isNullOrBlank()) decodeBase64Compat(keyB64) else null
+        ConfigManager(context, config, null, keyBytes)
+    }
     private val telemetry = TelemetryCollector(context, config)
     private val adapterRegistry = AdapterRegistry()
     private val circuitBreakers = mutableMapOf<String, CircuitBreaker>()
@@ -115,25 +119,23 @@ class MediationSDK private constructor(
             } catch (_: Throwable) { null }
         }
         if (BuildConfig.DEBUG) {
-            StrictMode.setThreadPolicy(
-                StrictMode.ThreadPolicy.Builder()
-                    .detectNetwork()
-                    .detectDiskReads()
-                    .detectDiskWrites()
-                    .detectCustomSlowCalls()
-                    .penaltyLog()
-                    .penaltyDeath() // Crash immediately on violation
-                    .build()
-            )
-            
-            StrictMode.setVmPolicy(
-                StrictMode.VmPolicy.Builder()
-                    .detectLeakedSqlLiteObjects()
-                    .detectLeakedClosableObjects()
-                    .detectActivityLeaks()
-                    .penaltyLog()
-                    .build()
-            )
+            val threadBuilder = StrictMode.ThreadPolicy.Builder()
+                .detectNetwork()
+                .detectDiskReads()
+                .detectDiskWrites()
+                .detectCustomSlowCalls()
+                .penaltyLog()
+            if (config.strictModePenaltyDeath) {
+                threadBuilder.penaltyDeath()
+            }
+            StrictMode.setThreadPolicy(threadBuilder.build())
+
+            val vmBuilder = StrictMode.VmPolicy.Builder()
+                .detectLeakedSqlLiteObjects()
+                .detectLeakedClosableObjects()
+                .detectActivityLeaks()
+                .penaltyLog()
+            StrictMode.setVmPolicy(vmBuilder.build())
         }
     }
     
@@ -458,24 +460,40 @@ data class SDKConfig(
     val logLevel: LogLevel = LogLevel.INFO,
     val telemetryEnabled: Boolean = true,
     val configEndpoint: String = "https://config.rivalapexmediation.com",
-    val auctionEndpoint: String = "https://auction.rivalapexmediation.com"
+    val auctionEndpoint: String = "https://auction.rivalapexmediation.com",
+    // Debug-only: if true, enable StrictMode penaltyDeath. Default false to avoid crashing host apps.
+    val strictModePenaltyDeath: Boolean = false,
+    // Optional: Base64-encoded Ed25519 public key for config signature verification (non-test builds)
+    val configPublicKeyBase64: String? = null,
 ) {
     class Builder {
         private var appId: String = ""
         private var testMode: Boolean = false
         private var logLevel: LogLevel = LogLevel.INFO
         private var telemetryEnabled: Boolean = true
+        private var configEndpoint: String = "https://config.rivalapexmediation.com"
+        private var auctionEndpoint: String = "https://auction.rivalapexmediation.com"
+        private var strictModePenaltyDeath: Boolean = false
+        private var configPublicKeyBase64: String? = null
         
         fun appId(id: String) = apply { this.appId = id }
         fun testMode(enabled: Boolean) = apply { this.testMode = enabled }
         fun logLevel(level: LogLevel) = apply { this.logLevel = level }
         fun telemetryEnabled(enabled: Boolean) = apply { this.telemetryEnabled = enabled }
+        fun configEndpoint(url: String) = apply { this.configEndpoint = url }
+        fun auctionEndpoint(url: String) = apply { this.auctionEndpoint = url }
+        fun strictModePenaltyDeath(enabled: Boolean) = apply { this.strictModePenaltyDeath = enabled }
+        fun configPublicKeyBase64(b64: String?) = apply { this.configPublicKeyBase64 = b64 }
         
         fun build() = SDKConfig(
             appId = appId,
             testMode = testMode,
             logLevel = logLevel,
-            telemetryEnabled = telemetryEnabled
+            telemetryEnabled = telemetryEnabled,
+            configEndpoint = configEndpoint,
+            auctionEndpoint = auctionEndpoint,
+            strictModePenaltyDeath = strictModePenaltyDeath,
+            configPublicKeyBase64 = configPublicKeyBase64,
         )
     }
 }
@@ -498,4 +516,22 @@ enum class AdError {
     NETWORK_ERROR,
     INTERNAL_ERROR,
     INVALID_PLACEMENT
+}
+
+
+// Base64 decoder usable from SDK core without relying on specific Android/JVM versions.
+private fun decodeBase64Compat(input: String): ByteArray {
+    return try {
+        java.util.Base64.getDecoder().decode(input)
+    } catch (_: Throwable) {
+        try {
+            android.util.Base64.decode(input, android.util.Base64.DEFAULT)
+        } catch (_: Throwable) {
+            try {
+                java.util.Base64.getUrlDecoder().decode(input)
+            } catch (_: Throwable) {
+                ByteArray(0)
+            }
+        }
+    }
 }

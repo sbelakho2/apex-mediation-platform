@@ -17,12 +17,24 @@ This guide helps you integrate the Android SDK quickly with a focus on privacy, 
 The SDK is an Android library module in this repository (sdk/core/android). Build it via Gradle and include the AAR as needed. A release AAR size guard (≤ 500KB) is enforced.
 
 ## 3) Initialize the SDK
-Call initialize early (e.g., Application.onCreate). StrictMode is enabled in debug builds to surface integration issues.
+Call initialize early (e.g., Application.onCreate). StrictMode checks are enabled in debug builds and default to penaltyLog (non-crashing). You can opt into penaltyDeath via SDKConfig.Builder for CI smoke apps.
 
 ```kotlin
+val cfg = com.rivalapexmediation.sdk.SDKConfig.Builder()
+    .appId("your-publisher-id")
+    // Optional overrides for local/dev
+    .configEndpoint("http://10.0.2.2:8081")
+    .auctionEndpoint("http://10.0.2.2:8081")
+    // (Production) Provide Base64 Ed25519 public key for OTA config signature verification
+    .configPublicKeyBase64("BASE64_X509_ED25519_PUBLIC_KEY")
+    // For CI smoke app only: crash on StrictMode violations in debug
+    .strictModePenaltyDeath(true)
+    .build()
+
 val sdk = com.rivalapexmediation.sdk.BelAds.initialize(
     context = applicationContext,
-    appId = "your-publisher-id"
+    appId = "your-publisher-id",
+    config = cfg
 )
 
 // Optional: provide an auction API key (not required; defaults to empty)

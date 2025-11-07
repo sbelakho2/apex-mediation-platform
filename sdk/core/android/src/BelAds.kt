@@ -13,6 +13,7 @@ import com.rivalapexmediation.sdk.debug.DebugPanel
 object BelAds {
     /** Initialize the SDK. Safe to call multiple times (idempotent). */
     @JvmStatic
+    @JvmOverloads
     fun initialize(context: Context, appId: String, config: SDKConfig = SDKConfig.Builder().appId(appId).build()): MediationSDK {
         val sdk = MediationSDK.initialize(context, appId, config)
         Logger.setLevel(config.logLevel)
@@ -39,6 +40,7 @@ object BelAds {
 
     /** Explicit consent source of truth. */
     @JvmStatic
+    @JvmOverloads
     fun setConsent(
         tcString: String? = null,
         usPrivacy: String? = null,

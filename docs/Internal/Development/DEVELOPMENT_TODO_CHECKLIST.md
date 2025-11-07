@@ -396,3 +396,171 @@ Next actions (tracked in checklist)
 - Adapter expansion toward ≥12: add Chocolate Platform and Tapdaq (+ offline conformance), decide on legacy waivers (MoPub/AerServ/AdTapsy) vs shims.
 - Website: complete remaining pre‑FT pages with mocks; Lighthouse/a11y CI to hit performance/a11y budgets.
 - ML: begin offline ETL/enrichment stubs and evaluation harness per ML_FRAUD_TRAINING_DATA_SOURCES.md while keeping shadow mode enforced.
+
+
+## 2025-11-07 — SDK audit & hotfixes (Android/iOS focus)
+- Android SDK audit: identified two correctness issues in AuctionClient
+  - Fixed HTTP status mapping to use actual code ("status_" + code) instead of literal "status_$code").
+  - Fixed request_id formatting to interpolate millis + random properly ("android-<millis>-<rand>").
+  - Added unit test to assert request_id pattern; existing tests for 4xx/5xx/timeout/no_fill now validate exact reason string. 
+  - Evidence:
+    - sdk/core/android/src/network/AuctionClient.kt (status reason and request_id fixes)
+    - sdk/core/android/src/test/network/AuctionClientTest.kt (requestIdFormat_isGeneratedAndLooksReasonable)
+- iOS SDK: quick review of recent taxonomy updates appears consistent (204→no_fill, 400→status_400, malformed→error); deeper consent propagation tests planned.
+- Next actions (short-term):
+  - Implement Ed25519 config signature verification in ConfigManager with dev test keys + unit tests (gate on testMode).
+  - Add StrictMode sample smoke test (debug) and CI gate; ensure zero network/disk on main thread in SDK codepaths.
+  - iOS: add consent propagation tests for gdpr_applies/us_privacy/coppa in S2S metadata.
+
+
+
+## 2025-11-07 — Android SDK hardening: config signature verification + tests
+- Implemented Ed25519 signature verification for remote config in the Android SDK.
+  - Code: sdk/core/android/src/config/ConfigManager.kt (verifySignature with JDK Ed25519 and optional Tink fallback)
+  - Constructor now accepts configPublicKey: ByteArray? to enforce verification in non-test builds.
+- Added deterministic unit tests for signature handling:
+  - sdk/core/android/src/test/config/ConfigSignatureTest.kt
+    - valid_signature_allows_config_when_not_in_test_mode
+    - tampered_signature_rejects_config_when_not_in_test_mode
+    - test_mode_bypasses_signature_verification
+- Acceptance impact:
+  - Strengthens OTA safety and trust for configuration. In testMode, verification is bypassed to ease development; in non-test builds, a public key must be provided.
+- Next steps (from plan):
+  - StrictMode sample app + CI smoke (no main-thread I/O violations)
+  - Integration validator Gradle task for host app checks
+  - API surface polish (@JvmOverloads, Java demo), Robolectric callback tests
+
+
+## 2025-11-07 — iOS consent propagation tests + Android integration validator
+- iOS SDK: Added unit test to verify consent flags (gdpr_applies/us_privacy/coppa) are propagated into S2S auction metadata. Uses MockURLProtocol and a 204 path to avoid JSON parsing variance.
+  - Evidence: sdks/ios/Tests/ApexMediationTests/ConsentPropagationTests.swift
+- Android SDK: Added a lightweight Integration Validator Gradle task to help hosts verify essentials (consumer ProGuard rules present, OkHttp/Gson deps, SDK levels) and to report AAR size after assembleRelease.
+  - Evidence: sdk/core/android/build.gradle (task validateIntegration)
+
+Impact on plan
+- SDKs — Verification status: iOS parity strengthened (consent propagation test added). Android DX improved (validator task) toward production-ready integration experience.
+- Next: StrictMode sample app + CI smoke, Java API polish (@JvmOverloads), Robolectric callback tests; iOS demo target + Quickstart.
+
+
+## 2025-11-07 — Android SDK DX: Java API polish (incremental)
+- Added @JvmOverloads to BelAds.initialize and BelAds.setConsent for improved Java ergonomics without changing behavior.
+  - Evidence: sdk/core/android/src/BelAds.kt
+- Next (DX polish): add @JvmOverloads to frequently used builder/overloaded APIs where appropriate; generate Dokka HTML locally and publish artifacts for review.
+
+
+
+## 2025-11-07 — Android SDK DX: Robolectric main-thread callback tests
+- Added Robolectric dependency and main-thread delivery tests to validate UI-thread callback guarantees for controllers.
+  - Evidence: sdk/core/android/build.gradle (testImplementation org.robolectric:robolectric:4.11.1)
+  - Evidence: sdk/core/android/src/test/dx/MainThreadCallbackTest.kt
+- Purpose: Ensure Interstitial/Rewarded controllers dispatch onLoaded/onShown/onReward to the main thread, matching DX and ANR-safety goals.
+- Impact: Strengthens production guarantees without runtime changes; supports future StrictMode CI gate.
+- Next:
+  - Extend Robolectric tests to cover facade APIs (BelInterstitial/BelRewarded/BelAppOpen) and cancellation/double-callback guard paths.
+  - Add StrictMode sample app and CI smoke to fail on main-thread I/O.
+
+
+## 2025-11-07 — Android SDK: S2S robustness (malformed winner handling) + tests
+- AuctionClient now treats malformed 200 responses that lack critical winner fields (adapter_name or cpm) as no_fill instead of raising generic errors; improves stability and DX.
+  - Code: sdk/core/android/src/network/AuctionClient.kt (winner parsing guard)
+  - Tests: sdk/core/android/src/test/network/AuctionClientTest.kt (malformedWinner_missingAdapterOrCpm_mapsToNoFill)
+- Rationale: Prevents rare backend/gateway anomalies from surfacing as crashes or opaque errors in apps; aligns with world‑class SDK principle of graceful failure.
+- Impact: No public API changes; runtime behavior safer under malformed payloads; all tests remain offline and deterministic.
+
+
+## 2025-11-07 — Android SDK DX: Facade API Robolectric tests
+- Added end-to-end facade API tests to validate developer experience and main-thread guarantees using Robolectric + MockWebServer.
+  - Evidence: sdk/core/android/src/test/dx/FacadeApisTest.kt
+  - Coverage:
+    - BelInterstitial.load with 204 no_fill → error callback on main thread; graceful no-ready state.
+    - BelRewarded.load with 200 winner → onAdLoaded on main thread; readiness asserted.
+- Test infra: androidx.test:core already present; Robolectric configured. Run with:
+  - ./gradlew :sdk:core:android:test
+- Impact:
+  - Strengthens world-class SDK DX goals (callbacks on main thread, predictable behavior on no_fill/success).
+  - Purely offline; no runtime dependency impact; within ≤ $500/month principle.
+
+
+## 2025-11-07 — Android SDK safety: Kill-switch enforcement test
+- Added Robolectric test that verifies remote killSwitch immediately blocks loads and returns a main-thread error callback with reason "kill_switch_active"; ensures fast rollback path is respected by SDK without doing work.
+  - Evidence: sdk/core/android/src/test/dx/KillSwitchTest.kt
+- Impact on blueprint: strengthens "OTA-safe config with instant kill-switch" requirement; complements Ed25519 signature verification and staged rollout bucketing.
+- Next: add StrictMode sample + CI smoke to catch any main-thread I/O; extend validator to check manifest/network security config.
+
+
+## 2025-11-07 — Android SDK robustness: Base64 fallback for config signature
+- Hardened config signature verification against Base64 decoding issues on certain Android/JVM runtimes.
+  - Change: added safe Base64 fallback that tries java.util.Base64, then android.util.Base64, and finally URL-safe decoding to avoid crashes and false negatives.
+  - Evidence: sdk/core/android/src/config/ConfigManager.kt (decodeBase64 helper; verifySignature now uses decodeBase64)
+- Rationale: Improves OTA configuration safety by ensuring signature verification does not fail due to runtime-specific Base64 behavior. No API changes; offline-only change.
+- Next actions:
+  - Proceed with StrictMode sample app + CI smoke gate (no main-thread I/O).
+  - Continue adapter expansion (Chocolate Platform, Tapdaq) with offline conformance tests.
+  - iOS demo target + Quickstart; extend consent matrix tests.
+
+
+## 2025-11-07 — Android SDK: production key injection + schema validation (incremental)
+- SDKConfig now supports configPublicKeyBase64 to inject an Ed25519 public key for OTA config authenticity in non-test builds.
+  - Evidence: sdk/core/android/src/MediationSDK.kt (SDKConfig field + Builder method; decodeBase64Compat; wiring into ConfigManager)
+  - Docs updated: docs/Customer-Facing/SDKs/ANDROID_QUICKSTART.md (shows .configPublicKeyBase64 usage)
+- ConfigManager now performs lightweight schema validation before trusting remote configs (required fields, sane timeout bounds).
+  - Evidence: sdk/core/android/src/config/ConfigManager.kt (validateSchema; loadConfig uses verifySignature + validateSchema)
+- Impact: Strengthens security/OTA safety per blueprint (signed configs + fail-closed semantics); keeps testMode DX intact.
+- Next: StrictMode sample app + CI smoke gate; adapter expansion (Chocolate, Tapdaq); iOS demo + Quickstart; Lighthouse/a11y CI.
+
+
+
+## 2025-11-07 — Android SDK privacy: Consent matrix tests
+- Added JVM unit tests to validate consent combinations (GDPR/CCPA/COPPA/LAT) are serialized correctly into S2S auction metadata.
+  - Evidence: sdk/core/android/src/test/consent/ConsentMatrixTest.kt
+- Scenarios covered:
+  - gdpr_applies=true, coppa=false, limit_ad_tracking=true → metadata.gdpr_applies="1", metadata.coppa="0", user_info.limit_ad_tracking=true
+  - gdpr_applies=false, us_privacy="1YNN" → metadata.gdpr_applies="0", metadata.us_privacy="1YNN"
+  - gdpr_applies=null, us_privacy=null, coppa=true, limit_ad_tracking=false → omits unknown flags, sets metadata.coppa="1", user_info.limit_ad_tracking=false
+- Impact: strengthens Privacy & Consent guarantees for the Android SDK, aligning with blueprint Section 7.1/7.2. No runtime behavior changes.
+
+
+## 2025-11-07 — Android SDK: API docs (Dokka) task added
+- Added Dokka Gradle plugin and a convenience task to generate local HTML API reference for the SDK.
+  - Evidence:
+    - sdk/core/android/build.gradle (plugin org.jetbrains.dokka and task generateApiDocs)
+  - How to run:
+    - ./gradlew :sdk:core:android:generateApiDocs
+    - Output: sdk/core/android/build/dokka/html
+- Rationale: Improves developer experience and release discipline (API reference), aligned with the world‑class SDK blueprint’s docs and DX requirements.
+- Next:
+  - Include generated docs in internal review artifacts (not checked in).
+  - Ensure Java examples compile against the published API surface.
+
+
+## 2025-11-07 — Android SDK: Validator robustness + API ergonomics (incremental)
+- Updated validateIntegration Gradle task to correctly assert Gson presence (com.google.code.gson:gson) instead of Retrofit converter; added AAR size warning at >450KB and hard fail at >500KB. Evidence: sdk/core/android/build.gradle (validateIntegration block).
+- Added @JvmOverloads to BelAppOpen.load for improved Java ergonomics. Evidence: sdk/core/android/src/BelAppOpen.kt.
+- Impact: Better CI signals for SDK size budget and dependency hygiene; smoother Java integration without API surface changes.
+- Next: StrictMode sample app + CI smoke gate; adapter expansion (Chocolate Platform, Tapdaq); iOS demo target + Quickstart.
+
+
+
+## 2025-11-07 — Android SDK DX: Facade-level taxonomy tests (Robolectric)
+- Added facade-level taxonomy tests to validate normalized error mapping and main-thread callback delivery for public APIs.
+  - Evidence: sdk/core/android/src/test/dx/FacadeApisTaxonomyTest.kt
+  - Cases covered: HTTP 400 → INTERNAL_ERROR (message "status_400"), Timeout → TIMEOUT (message contains "timeout").
+- Impact: Strengthens world-class SDK DX goals without changing runtime behavior; complements existing AuctionClient, lifecycle, consent matrix, and main-thread tests.
+- Next: StrictMode sample smoke + CI gate; extend facade tests to AppOpen; finalize integration validator coverage.
+
+
+## 2025-11-07 — Android SDK DX: AppOpen facade Robolectric test
+- Added a facade-level Robolectric test for BelAppOpen to validate main-thread error callback delivery and graceful no-fill behavior.
+  - Evidence: sdk/core/android/src/test/dx/AppOpenFacadeTest.kt
+- Impact: Extends DX guarantees across another public facade (App Open), ensuring parity with Interstitial/Rewarded tests without changing production code.
+- Next: StrictMode sample app + CI smoke gate; extend facade tests where applicable.
+
+
+## 2025-11-07 — Android SDK: Config schema validation tests
+- Added JVM tests to ensure malformed remote configs are rejected by validateSchema() even in test mode (signature bypass), strengthening OTA safety.
+  - Evidence: sdk/core/android/src/test/config/ConfigSchemaValidationTest.kt
+- Cases covered:
+  - timeoutMs exceeding bounds (e.g., 60000) → config rejected, placement not loaded
+  - blank placementId within placements map → config rejected, placement not loaded
+- Impact: Improves resilience against bad/rolled-back configs and protects integrators; no runtime changes.
+- Next: StrictMode sample app + CI smoke gate; Android manifest/network security checks in Integration Validator.

@@ -158,4 +158,53 @@ class AuctionClientTest {
         // Basic UA sanity
         require(ua!!.contains("RivalApexMediation-Android")) { "UA should contain SDK tag" }
     }
+
+    @Test
+    fun requestIdFormat_isGeneratedAndLooksReasonable() {
+        // Force a single request by returning 204 (no_fill)
+        server.enqueue(MockResponse().setResponseCode(204))
+        try {
+            client.requestInterstitial(opts())
+            fail("expected no_fill")
+        } catch (_: AuctionClient.AuctionException) { /* expected */ }
+        val recorded = server.takeRequest(1, TimeUnit.SECONDS) ?: error("no request")
+        val payload = Gson().fromJson(recorded.body.readUtf8(), Map::class.java)
+        val reqId = payload["request_id"] as? String ?: error("missing request_id")
+        // Expect format: android-<millis>-<rand>
+        val regex = Regex("^android-\\d{10,}-\\d{1,6}$")
+        assertTrue("request_id should match pattern", regex.containsMatchIn(reqId))
+    }
+
+    @Test
+    fun malformedWinner_missingAdapterOrCpm_mapsToNoFill() {
+        // Winner object present but missing critical fields should map to no_fill
+        val bodyMissingAdapter = mapOf("winner" to mapOf(
+            // "adapter_name" missing
+            "cpm" to 1.0,
+            "currency" to "USD",
+            "creative_id" to "cr",
+        ))
+        server.enqueue(MockResponse().setResponseCode(200).setBody(Gson().toJson(bodyMissingAdapter)))
+        try {
+            client.requestInterstitial(opts())
+            fail("expected no_fill due to missing adapter_name")
+        } catch (e: AuctionClient.AuctionException) {
+            assertEquals("no_fill", e.reason)
+        }
+        // Next: missing cpm
+        val bodyMissingCpm = mapOf("winner" to mapOf(
+            "adapter_name" to "admob",
+            // "cpm" missing
+            "currency" to "USD",
+            "creative_id" to "cr",
+        ))
+        server.enqueue(MockResponse().setResponseCode(200).setBody(Gson().toJson(bodyMissingCpm)))
+        try {
+            client.requestInterstitial(opts())
+            fail("expected no_fill due to missing cpm")
+        } catch (e: AuctionClient.AuctionException) {
+            assertEquals("no_fill", e.reason)
+        }
+    }
+}
 }

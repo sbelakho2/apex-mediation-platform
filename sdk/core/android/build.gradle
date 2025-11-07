@@ -2,6 +2,7 @@ plugins {
     id 'com.android.library' version '8.1.1'
     id 'org.jetbrains.kotlin.android' version '1.9.21'
     id 'maven-publish'
+    id 'org.jetbrains.dokka' version '1.9.20'
 }
 
 android {
@@ -56,14 +57,10 @@ dependencies {
 
     // Networking
     implementation "com.squareup.okhttp3:okhttp:4.12.0"
-    implementation "com.squareup.retrofit2:retrofit:2.9.0"
-    implementation "com.squareup.retrofit2:converter-gson:2.9.0"
+    implementation "com.google.code.gson:gson:2.10.1"
 
-    // Protobuf
-    implementation "com.google.protobuf:protobuf-kotlin-lite:3.24.4"
-
-    // Crypto
-    implementation "com.google.crypto.tink:tink-android:1.11.0"
+    // Crypto (optional fallback via reflection only; do not ship at runtime)
+    compileOnly "com.google.crypto.tink:tink-android:1.11.0"
 
     // AndroidX
     implementation "androidx.annotation:annotation:1.7.1"
@@ -74,6 +71,8 @@ dependencies {
     testImplementation "org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3"
     testImplementation "io.mockk:mockk:1.13.8"
     testImplementation "com.squareup.okhttp3:mockwebserver:4.12.0"
+    testImplementation "org.robolectric:robolectric:4.11.1"
+    testImplementation "androidx.test:core:1.5.0"
     androidTestImplementation "androidx.test.ext:junit:1.1.5"
     androidTestImplementation "androidx.test:runner:1.5.2"
 }
@@ -99,4 +98,60 @@ tasks.register('checkSdkSize') {
 
 tasks.named('assembleRelease').configure {
     finalizedBy 'checkSdkSize'
+}
+
+
+// Integration validator: lightweight checks for SDK consumers and release quality
+// Run with: ./gradlew :sdk:core:android:validateIntegration
+tasks.register('validateIntegration') {
+    doLast {
+        println "=== Rival Apex Mediation SDK — Integration Validator (Library checks) ==="
+        // Check presence of consumer ProGuard rules (so host apps get them)
+        def consumerRules = file("${projectDir}/consumer-rules.pro")
+        if (consumerRules.exists()) {
+            println "[OK] consumer-rules.pro present"
+        } else {
+            logger.error("[FAIL] consumer-rules.pro missing — host apps may obfuscate required classes")
+        }
+        // Check essential dependencies present
+        def okHttpDep = configurations.implementation.allDependencies.find { it.group == 'com.squareup.okhttp3' && it.name == 'okhttp' }
+        if (okHttpDep != null) println "[OK] OkHttp dependency found: ${okHttpDep.version}" else logger.error("[FAIL] OkHttp dependency missing")
+        def gsonDep = configurations.implementation.allDependencies.find { it.group == 'com.google.code.gson' && it.name == 'gson' }
+        if (gsonDep != null) println "[OK] Gson dependency found: ${gsonDep.version}" else logger.error("[FAIL] Gson dependency missing")
+        // Basic compile/target SDK sanity
+        println "[INFO] compileSdk=${android.compileSdk}, minSdk=${android.defaultConfig.minSdk}, targetSdk=${android.defaultConfig.targetSdk}"
+        // Size budget reminder (release AAR)
+        def aarDir = file("$buildDir/outputs/aar")
+        if (aarDir.exists()) {
+            def aars = aarDir.listFiles()?.findAll { it.name.endsWith('-release.aar') } ?: []
+            if (!aars.isEmpty()) {
+                def size = aars[0].length()
+                println "[INFO] Latest release AAR size: ${size} bytes (${Math.round(size/1024)}KB). Budget ≤ 500KB"
+                if (size > 460000) {
+                    logger.warn("[WARN] Release AAR size ${size} bytes exceeds 450KB warning threshold (budget ≤ 500KB)")
+                }
+                if (size > 512000) {
+                    logger.error("[FAIL] Release AAR size ${size} bytes exceeds 500KB budget")
+                    assert size <= 512000 : "SDK size ${size} exceeds maximum 512000 bytes"
+                }
+            } else {
+                println "[INFO] No release AAR found yet. Build with assembleRelease to compute size."
+            }
+        }
+        println "=== Validator finished ==="
+    }
+}
+
+
+// --- API docs (Dokka) ---
+// Generate local HTML API reference for review: ./gradlew :sdk:core:android:generateApiDocs
+tasks.register('generateApiDocs') {
+    dependsOn 'dokkaHtml'
+    doLast {
+        def outDir = file("$buildDir/dokka/html")
+        println "API docs generated at: ${outDir.absolutePath}"
+        if (!outDir.exists()) {
+            logger.warn("Dokka output directory not found; ensure dokkaHtml task ran successfully.")
+        }
+    }
 }
