@@ -1,0 +1,10 @@
+# Minimal ML pipeline dependencies (CPU-only)
+# Pin versions for reproducibility; keep lightweight to respect budget
+pandas==2.2.2
+numpy==1.26.4
+scikit-learn==1.5.1
+pyarrow==16.1.0
+fastparquet==2024.5.0
+joblib==1.4.2
+pyod==2.0.2
+# TabPFN to be added in a later pass (requires torch). Left out to keep this pass lightweight.

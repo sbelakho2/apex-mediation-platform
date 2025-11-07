@@ -1006,3 +1006,56 @@ Next (iOS, immediate)
 Notes / next steps
 - Consider documenting waivers for legacy networks (MoPub, AerServ, AdTapsy) and keep the ≥12 coverage with modern networks (Chartboost, Vungle, Pangle, etc.).
 - Proceed with Android StrictMode sample app + CI smoke gate and iOS demo target per the sprint plan.
+
+
+## 2025-11-07 — Adapter conformance: Pangle suite + Auction hedging cancellation test (big-chunk)
+- Added full offline conformance tests for Pangle to complete ≥12 modern adapters with standardized resiliency/taxonomy and observability.
+  - Evidence: backend/auction/internal/bidders/pangle_conformance_test.go
+  - Scenarios covered: 200 success, 204 → no_fill, 5xx retry→success, circuit_open after repeated 5xx, 400 no‑retry (status_400), 302 no‑retry (status_302), 200 malformed JSON → standardized "error", slow‑body timeout → timeout, and header auth assertion (X-Api-Key present).
+- Backend Auction Engine hedging polish: added a deterministic cancellation test to ensure the primary request is canceled when the hedged request returns first.
+  - Evidence: backend/auction/internal/bidding/engine_hedge_cancel_test.go
+
+Impact
+- Adapter coverage and tests: Pangle now has the same rigor as Vungle/Chartboost/etc., strengthening the path to sandbox certification (≥12 implemented adapters with offline conformance).
+- Auction reliability: Hedging implementation now has explicit cancellation coverage, reducing the risk of goroutine leaks and double-accounting.
+
+Systemwide Test Coverage Matrix updates
+- Backend — Adapters (bidders) test coverage → added pangle_conformance_test.go to the list of existing suites.
+- Backend — Auction Engine → partial completion for “Cancellation tests: losing goroutine canceled when winner returns.” (engine_hedge_cancel_test.go).
+
+Next
+- Extend golden fixtures/auth header assertions across all new adapters (Chocolate, Tapdaq, Chartboost, Vungle, Pangle).
+- Add hedging p95-derived delay specific test using a fake metrics recorder (derivation path already present in engine.go).
+
+
+## 2025-11-07 — Auction hedging: p95-derived delay test
+- Added deterministic unit test to verify hedging delay derivation from adapter p95 latency when no explicit hedge delay is set.
+  - Evidence: backend/auction/internal/bidding/engine_hedge_p95_test.go
+  - Behavior validated: when p95 is available from the in-process metrics recorder, a slow primary (200ms) is outpaced by a hedged backup (40ms), with total elapsed << 200ms.
+- Impact on Systemwide Test Coverage Matrix
+  - Section B) Backend — Auction Engine: “Hedge delay derived from adapter p95 metric when explicit delay not set” is now covered by tests.
+  - Complements prior hedging earlier-return and cancellation tests (engine_hedge_test.go, engine_hedge_cancel_test.go).
+
+
+## 2025-11-07 — ML Part 3: PyOD baseline scaffold + pipeline README (foundations)
+- Added a minimal, offline-friendly ML training scaffold to begin executing Part 3 using the datasets under ML/ML Data (handles compressed CSV/CSV.GZ/Parquet):
+  - New: docs/Internal/ML/PIPELINE_README.md — setup, usage, and safety notes for CPU-only local runs.
+  - New: ML/requirements.txt — pinned lightweight deps (pandas, numpy, scikit-learn, pyarrow/fastparquet, joblib, pyod).
+  - New: ML/scripts/train_pyod.py — scans ML/ML Data, auto-decompresses, applies basic privacy guards, selects numeric features, trains a PyOD IsolationForest baseline, and exports artifacts:
+    - models/fraud/dev/<date>/model.pkl
+    - models/fraud/dev/<date>/feature_manifest.json
+    - models/fraud/dev/<date>/trained_fraud_model.json (placeholder metrics; shadow_mode=true)
+- Why: Establishes PR1 (Foundations) to get a working end-to-end “small-sample” pipeline without external services, aligned with DataContracts and cost policy.
+- Impact on Part 3 checklist:
+  - [~] ETL (ClickHouse → Parquet) — stubbed for local file scan; formal SQL extracts still TODO.
+  - [~] Feature engineering — minimal auto-selected numeric features; parity list and engineered aggregates pending.
+  - [ ] Enrichment loaders — planned next (Tor/cloud/ASN/VPN, cached under data/enrichment/).
+  - [ ] Weak supervision — planned next (supply-chain, origin anomalies, CTIT, OMSDK consistency) with synthetic fixtures.
+  - [ ] Training pipelines — PyOD baseline in place; TabPFN supervised baseline planned (adds torch/tabpfn later).
+  - [ ] Evaluation harness — to emit real AUC/PR and threshold curves; current metrics are placeholders to keep blocking in shadow.
+- How to run (small-sample):
+  - `python ML\scripts\train_pyod.py --input "ML/ML Data" --outdir models/fraud/dev --limit 20000 --date 2025-11-07`
+- Next steps:
+  - Implement formal schema normalization to data/training/YYYY-MM-DD with schema_version metadata per DataContracts.
+  - Add enrichment loaders and weak-label functions; introduce TabPFN supervised training with time-sliced validation and calibrated probabilities.
+  - Wire a tiny CLI to score {request_id, score} for shadow-mode analysis and add unit tests/golden snapshots.
