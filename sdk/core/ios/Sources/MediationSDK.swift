@@ -16,6 +16,19 @@ public final class MediationSDK {
 
     private init() {}
 
+    // MARK: - Debug/Diagnostics accessors (read-only)
+    /// Current appId set during initialize(), if any.
+    public func currentAppId() -> String? {
+        return config?.appId
+    }
+    /// Current placement identifiers from the last loaded remote config.
+    public func currentPlacementIds() -> [String] {
+        if let cfg = remoteConfig {
+            return cfg.placements.map { $0.placementId }
+        }
+        return []
+    }
+
     /// Initialize the mediation SDK.
     /// - Parameters:
     ///   - appId: Application identifier provisioned in the Rival Apex console.

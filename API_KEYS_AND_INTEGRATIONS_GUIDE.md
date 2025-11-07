@@ -845,3 +845,47 @@ Operational notes:
 - All new adapters adhere to the normalized NoBid taxonomy: timeout, network_error, status_XXX, no_fill, circuit_open, error.
 - Offline conformance tests for these adapters live in backend/auction/internal/bidders/adapter_conformance_test.go
 - Production/sandbox credentials and endpoint validation occur in FT phase per DEVELOPMENT_ROADMAP.md
+
+
+### Chocolate Platform — Development placeholders
+Purpose: Enable S2S bidding via placeholder adapter for offline conformance and dev.
+
+Required fields (dev/local):
+- CHOCOLATE_APP_ID — application identifier
+- CHOCOLATE_API_KEY — API key (mask in logs; do not commit)
+
+Adapter wiring (Go backend): backend/auction/internal/bidders/chocolate.go
+- Supports test_endpoint override for offline tests
+- Standardized resiliency and taxonomy; circuit breaker enabled; metrics/tracing/debugger hooks
+
+Configuration example (dev):
+```
+CHOCOLATE_APP_ID=your_app_id
+CHOCOLATE_API_KEY=your_api_key
+```
+
+Notes:
+- Do not paste secrets into code or docs. Use environment variables.
+- Sandbox/official endpoints to be configured during FT phase.
+
+### Tapdaq — Development placeholders
+Purpose: Enable S2S bidding via placeholder adapter for offline conformance and dev.
+
+Required fields (dev/local):
+- TAPDAQ_APP_ID — application identifier
+- TAPDAQ_API_KEY — API key (mask in logs; do not commit)
+
+Adapter wiring (Go backend): backend/auction/internal/bidders/tapdaq.go
+- Supports test_endpoint override for offline tests
+- Standardized resiliency and taxonomy; circuit breaker enabled; metrics/tracing/debugger hooks
+
+Configuration example (dev):
+```
+TAPDAQ_APP_ID=your_app_id
+TAPDAQ_API_KEY=your_api_key
+```
+
+Operational notes:
+- Adheres to normalized NoBid taxonomy: timeout, network_error, status_XXX, no_fill, circuit_open, error.
+- Offline conformance tests for these adapters live in backend/auction/internal/bidders/chocolate_tapdaq_conformance_test.go
+- Production/sandbox credentials and endpoint validation occur in FT phase per DEVELOPMENT_ROADMAP.md

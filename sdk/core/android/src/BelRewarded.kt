@@ -26,7 +26,14 @@ object BelRewarded {
         val placement = lastPlacement ?: return false
         val sdk = MediationSDK.getInstance()
         val ad: Ad = sdk.consumeCachedAd(placement) ?: return false
+        // Start OM session (video/rewarded assumed)
+        try {
+            com.rivalapexmediation.sdk.measurement.OmSdkRegistry.controller.startVideoSession(
+                activity, placement, ad.networkName, durationSec = null
+            )
+        } catch (_: Throwable) {}
         ad.show(activity) // Placeholder: real rewarded flow handled by creative/ad renderer
+        try { com.rivalapexmediation.sdk.measurement.OmSdkRegistry.controller.endSession(placement) } catch (_: Throwable) {}
         return true
     }
 

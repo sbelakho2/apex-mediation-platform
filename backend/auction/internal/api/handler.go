@@ -154,6 +154,41 @@ func (h *Handlers) GetAdapterSLO(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// GetObservabilitySnapshot aggregates SLO status with optional last-N debugger events for a placement.
+// Route: GET /v1/metrics/overview?placement_id=&n=
+func (h *Handlers) GetObservabilitySnapshot(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	placementID := q.Get("placement_id")
+	n := 50
+	if ns := q.Get("n"); ns != "" {
+		if v, err := strconv.Atoi(ns); err == nil && v > 0 {
+			if v > 200 {
+				v = 200
+			}
+			n = v
+		}
+	}
+	status1h := bidders.EvaluateSLO(1 * time.Hour)
+	status24h := bidders.EvaluateSLO(24 * time.Hour)
+	var events []bidders.DebugEvent
+	if placementID != "" {
+		events = bidders.GetLastDebugEvents(placementID, n)
+	}
+	respondJSON(w, http.StatusOK, map[string]any{
+		"success": true,
+		"data": map[string]any{
+			"slo": map[string]any{
+				"window_1h":  status1h,
+				"window_24h": status24h,
+			},
+			"debugger": map[string]any{
+				"placement_id": placementID,
+				"events":       events,
+			},
+		},
+	})
+}
+
 // Helper functions
 
 func respondJSON(w http.ResponseWriter, statusCode int, data interface{}) {

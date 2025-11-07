@@ -1,6 +1,6 @@
 # Development TODO Checklist (Phased, Check‑off)
 
-Last updated: 2025-11-06
+Last updated: 2025-11-07
 Owner: Platform Engineering
 
 Source of truth for tasks:
@@ -88,20 +88,83 @@ Acceptance:
 - [x] Debugger usable on dev; sensitive fields redacted
   - Evidence: Website Debugger page (website/src/app/dashboard/observability/debugger/page.tsx); API /v1/debug/mediation; redaction tests backend/auction/internal/bidders/debugger_test.go
 
-3) ML Fraud — Shadow Mode and Data Pipeline bring‑up
+3) ML Fraud — Shadow Mode and Data Pipeline bring‑up 
 - [x] Enforce shadow mode unless model meets go/no‑go metrics (code safety in place)
   - [x] Unit tests: backend/fraud/internal/ml/fraud_ml_test.go verifies degenerate metrics force shadow mode and healthy model respects override
-- [ ] ETL: extract last 30 days events from ClickHouse into training parquet
-- [ ] Enrichment: AbuseIPDB, Tor, cloud IP ranges, UA parsing (uap‑core) cached locally
-- [ ] Weak supervision label functions from rules + honeypots
-- [ ] Training: baseline logistic + GBM; calibration (Platt/isotonic)
-- [ ] Evaluation harness with ROC/PR curves and metric export into trained_fraud_model.json
-- [ ] Online shadow evaluation: score distribution monitoring + drift checks
+
+- [ ] Data contracts and schemas (training + scoring)
+  - [ ] Define Feature/Label schemas for training parquet (clicks, impressions, conversions, device, network, auction, OMSDK)
+  - [ ] Document data contracts in docs/Internal/ML/DataContracts.md (PII rules, retention, redaction)
+  - [ ] Add schema versioning and backward‑compat guidance (SemVer; include in parquet metadata)
+
+- [ ] ETL (ClickHouse → Parquet; last 30 days, rolling)
+  - [ ] SQL extracts for core tables (impressions, clicks, installs/postbacks, auctions)
+  - [ ] Join logic for CTIT (click→install), device/user agent, IP/ASN, placement/network
+  - [ ] Partitioning: by event_date/hour; write Parquet to data/training/YYYY‑MM‑DD
+  - [ ] Deduplication rules (per request_id / impression_id / click_id)
+  - [ ] Privacy guard: drop direct identifiers; hash stable IDs; truncate IP (/24) & UA normalization
+  - [ ] Add ETL dry‑run + unit tests (golden queries, row counts, null checks)
+
+- [ ] Enrichment (cached locally; no external calls at runtime)
+  - [ ] IP intelligence: AbuseIPDB exports ingest (CSV), Tor exit list, cloud IP ranges (AWS/GCP/Azure) → local Bloom/Trie
+  - [ ] ASN/Geo lookup via offline MaxMind‑like free DB (or ip2asn datasets)
+  - [ ] VPN/DC list ingestion (FireHOL, X4BNet, az0/vpn_ip) with weekly refresh
+  - [ ] User‑Agent parsing using uap‑core or fast regex maps (cache results)
+  - [ ] Maintain enrichment cache snapshots under data/enrichment with versioned manifests
+
+- [ ] Weak supervision label functions (silver labels)
+  - [ ] Supply‑chain validity: app‑ads.txt/sellers.json crawler/corpus join → unauthorized seller flag
+  - [ ] Network origin anomalies: DC/VPN/Tor + mobile UA mismatch; timezone/geo/carrier conflicts
+  - [ ] CTIT heuristics: ultra‑short spikes (injection), ultra‑long tails (spamming) per partner/placement
+  - [ ] OMSDK/viewability inconsistencies (stacked/hidden patterns) where available
+  - [ ] Synthetic scenarios based on case studies (e.g., VASTFLUX motifs) to stress models
+  - [ ] Label quality report: coverage, conflict rates, per‑rule precision proxy
+
+- [ ] Feature engineering
+  - [ ] Aggregates: per IP/ASN/device/placement rolling rates (click/impression/install), entropy, burstiness
+  - [ ] Temporal features: hour‑of‑day, day‑of‑week, CTIT histograms, recency counts
+  - [ ] Supply‑chain/auction features: schain depth, reseller flags, adapter mix
+  - [ ] OMSDK/engagement features: viewable time, interactions (if present)
+  - [ ] Train/serve parity list (only include features available at score time)
+
+- [ ] Training pipelines (reproducible; pinned versions)
+  - [ ] Baselines: Logistic Regression + Gradient Boosted Trees (e.g., XGBoost/LightGBM) with class weighting
+  - [ ] Calibration: Platt scaling + isotonic; export calibrated probability
+  - [ ] Cross‑validation: time‑sliced CV (train on weeks 1‑3, validate on week 4), repeat across windows
+  - [ ] Hyperparameter sweeps (budgeted) with early stopping; log artifacts/metrics
+
+- [ ] Evaluation harness + reports
+  - [ ] Metrics: ROC AUC, PR AUC, precision@recall (≥0.9), recall@precision (≥0.8), KS, lift charts
+  - [ ] Cost curve analysis under business priors (false positive budget)
+  - [ ] Stability across time slices and partners; subgroup fairness checks (regions/devices)
+  - [ ] Export metrics into trained_fraud_model.json (schema: thresholds, aucs, confusion matrices)
+  - [ ] Generate HTML/Markdown report per run under docs/Internal/ML/Reports/
+
+- [ ] Model packaging & registry
+  - [ ] Serialize model (JSON/ONNX/PMML or native GBM text) + feature manifest + schema version
+  - [ ] Store under models/fraud/<version>/ with symlink latest; include metrics file
+  - [ ] Integrity hash and signature (optional) to prevent corruption
+
+- [ ] Shadow scoring (online; no blocking)
+  - [ ] Emit scores to analytics (ClickHouse) with request_id + timestamp; no decisions
+  - [ ] Monitor score distributions weekly (drift/shift), PSI/JS divergence
+  - [ ] Correlate shadow scores with weak labels and post‑hoc outcomes; alert on drift
+  - [ ] Admin/Planner snapshot includes shadow histograms and drift stats
+
+- [ ] Gating & promotion rules (safety)
+  - [ ] Keep blocking OFF unless go/no‑go targets are met for 4 consecutive weekly windows
+  - [ ] Threshold selection playbook: choose threshold meeting Precision ≥ 0.8 at Recall ≥ 0.9 on latest validation
+  - [ ] Planner proposes threshold via PR; human approval required
+
+- [ ] Automation & scheduling
+  - [ ] Nightly job: ETL → Enrichment refresh → Feature build → Train → Evaluate → Publish artifacts
+  - [ ] Cost safeguards: cap compute/time; skip train if data unchanged materially
+  - [ ] Unit/integration tests for each stage; deterministic seeds; small sample mode for CI
 
 Acceptance:
-- [ ] Offline: AUC ≥ 0.85; Precision ≥ 0.8 at Recall ≥ 0.9 on time‑sliced validation
-- [ ] Online: stable score distributions; shadow correlation with weak labels
-- [ ] Model artifact includes metrics; blocking remains shadow until targets met
+- [ ] Offline (validation): AUC ≥ 0.85; Precision ≥ 0.8 at Recall ≥ 0.9 on time‑sliced validation; stability across slices
+- [ ] Online (shadow): stable score distributions; positive correlation with weak labels; drift < threshold for 4 weeks
+- [ ] Artifacts: trained_fraud_model.json includes full metrics and thresholds; model/feature manifests versioned; blocking remains shadow until targets met
 
 4) Security/Privacy early guardrails
 - [ ] Consent propagation verified (GDPR/CCPA/ATT fields) in adapters and SDK events
@@ -164,8 +227,8 @@ P2 — Scale out, Reconciliation, Analytics (12–20 weeks)
   - [ ] AdTapsy — STATUS: legacy; consider compatibility shim or documented waiver
   - [ ] AppMediation — STATUS: new adapter required (confirm current API/vendor)
   - [x] Admost — STATUS: exists (backend/auction/internal/bidders/admost.go); offline conformance tests in bidders/adapter_conformance_test.go
-  - [ ] Chocolate Platform — STATUS: new adapter required (confirm current API/vendor)
-  - [ ] Tapdaq — STATUS: new adapter required (confirm current API/vendor)
+  - [x] Chocolate Platform — STATUS: exists (backend/auction/internal/bidders/chocolate.go); offline conformance tests in bidders/chocolate_tapdaq_conformance_test.go
+  - [x] Tapdaq — STATUS: exists (backend/auction/internal/bidders/tapdaq.go); offline conformance tests in bidders/chocolate_tapdaq_conformance_test.go
   
   Acceptance for each network:
   - [ ] Adapter implemented (RequestBid/GetName/GetTimeout), standardized resiliency (retry+jitter, circuit breaker), and NoBid taxonomy
@@ -564,3 +627,305 @@ Impact on plan
   - blank placementId within placements map → config rejected, placement not loaded
 - Impact: Improves resilience against bad/rolled-back configs and protects integrators; no runtime changes.
 - Next: StrictMode sample app + CI smoke gate; Android manifest/network security checks in Integration Validator.
+
+
+## 2025-11-07 — Android SDK: AuctionClient network reliability tests
+- Added JVM tests to harden S2S AuctionClient behavior for network and retry edge cases.
+  - Evidence: sdk/core/android/src/test/network/AuctionClientNetworkTests.kt
+  - Cases covered:
+    - Induced network I/O failure → maps to network_error (or timeout depending on timing).
+    - Two consecutive 500 responses → single retry exhausted, surfaces status_500; exactly two requests made.
+    - HTTP 429 (rate limited) → non-retry, maps to status_429.
+- Impact: Improves reliability and taxonomy guarantees without changing production code; complements existing success/no_fill/4xx/5xx/timeout and facade Robolectric tests.
+- Next: proceed with StrictMode sample app + CI smoke gate to enforce zero main-thread I/O.
+
+
+## 2025-11-07 — Android SDK: Integration validator polish (incremental)
+- Enhanced validateIntegration task messaging and kept strict size budget checks (warn > 450KB, fail > 500KB). Class count enumeration skipped to avoid Gradle env issues.
+  - Evidence: sdk/core/android/build.gradle (validateIntegration)
+- Added developer hint to verify INTERNET permission and cleartext Network Security Config when using http:// dev endpoints.
+
+Impact
+- Improves DX and CI signals for footprint and dependency hygiene with zero runtime impact.
+
+Next
+- Implement StrictMode sample app + CI smoke gate to enforce zero main-thread I/O from SDK codepaths.
+- Continue iOS demo target + Quickstart; expand consent/taxonomy tests.
+- Adapter expansion toward ≥12 (Chocolate Platform, Tapdaq) with offline conformance tests.
+
+
+## 2025-11-07 — iOS SDK: In-app Debug Panel (Mediation Debugger MVP)
+- Added a minimal in-app Debug Panel for iOS to mirror Android’s DebugPanel and improve developer experience and parity.
+  - Evidence: sdks/ios/Sources/Debug/DebugPanel.swift
+  - Behavior: Presents a simple UIAlert with SDK info and a Copy action (safe to ship; redaction handled in Android; iOS panel currently shows basic fields and is expandable).
+- Impact: Advances SDK parity and world-class DX goals (built-in debugging tools). No runtime dependencies added; safe for release builds.
+- Next steps:
+  - Expose selected state from MediationSDK to populate panel (appId, placements, consent snapshot) in a privacy-safe way.
+  - Add iOS Quickstart guide including DebugPanel usage and consent examples.
+  - Add a tiny demo target for CI smoke (no network calls by default; uses mocked endpoints).
+
+
+
+## 2025-11-07 — IronSource parity and surpass plan (coding-first, operator-light)
+Goal: Ensure the platform is at least on par with ironSource (LevelPlay) across reliability, coverage, SDK DX, observability, and fraud safety — and surpass it by offering lower cost-to-run (≤ $500/mo), higher transparency (built-in debugger + SLOs), and autonomy (self-improving loop), with one operator able to run it in < 2 hours/week.
+
+KPIs vs. ironSource (targets to meet or beat)
+- [ ] Adapter coverage: ≥ 12 certified adapters (LevelPlay advertises broad coverage) — our goal: ≥ 12 with offline conformance, then FT certification. Current: 10 implemented (incl. AdMob, Meta, Unity, AppLovin, ironSource, Fyber, Appodeal, Admost, Chocolate, Tapdaq). Evidence: backend/auction/internal/bidders/*; tests in bidders/*_test.go
+- [ ] SDK reliability (Android): ANR attributable to SDK < 0.02%; crash-free session ≥ 99.9% (guarded by StrictMode CI + thread model). Evidence (in progress): Robolectric main-thread tests; StrictMode smoke app pending.
+- [ ] SDK size (Android): core AAR ≤ 500 KB (warning > 450 KB). Evidence: build.gradle size guard + validator.
+- [ ] Time-to-first-impression (TTFI) for sample app: < 30 minutes integration and < 1 day from repo clone → first successful ad (mocked). Evidence: Quickstart + mock endpoints; sample apps pending.
+- [ ] Observability: p50/p95/p99 latencies per adapter, error/fill rates, 7-day time-series + SLO badges, mediation debugger events. Evidence: metrics_rollup.go, metrics_timeseries.go, slo.go, Admin APIs + Website pages.
+- [ ] Fraud model: blocking stays shadow until AUC ≥ 0.85 AND Precision ≥ 0.8 at Recall ≥ 0.9 for 4 consecutive weeks. Evidence: fraud_ml_test.go safety; ETL/training plan in Part 3.
+- [ ] Cost to operate: ≤ $500/month including LLM; autonomy PRs limited by policy; weekly operator time < 2h. Evidence: COST_BUDGET_POLICY.md; autonomy section; snapshot endpoints.
+
+IronSource parity checklist (what publishers expect) — Android/iOS/Unity SDKs
+- Initialization & threading
+  - [x] Idempotent initialize; safe from Application.onCreate (Android). Evidence: MediationSDK.initialize()
+  - [x] Zero I/O on main thread (guarded by architecture + tests; StrictMode CI gate pending). Evidence: controllers/tests; next: StrictMode sample app.
+  - [x] Main-thread delivery for callbacks; UI-safe facades. Evidence: Robolectric tests (MainThreadCallbackTest, FacadeApis*).
+- Error taxonomy & transparency
+  - [x] Normalized taxonomy (timeout, status_XXX, no_fill, network_error, error) with mapping to public AdError. Evidence: AuctionClient + facade tests.
+  - [x] Built-in Mediation Debugger (Android+iOS MVP) with redaction and Copy diagnostics. Evidence: sdk/core/android/src/debug/DebugPanel.kt; sdks/ios/Sources/Debug/DebugPanel.swift
+- OTA config safety
+  - [x] Signed config (Ed25519) verification, schema validation, staged rollout buckets, kill-switch. Evidence: ConfigManager + tests, Rollout.
+- Privacy & consent
+  - [x] Explicit consent API; IAB helpers (opt-in); consent matrix tests (Android) and propagation tests (iOS). Evidence files listed above.
+- OM SDK
+  - [x] Hook points via OmSdkController; default no-op; facades call start/end sessions. Evidence: measurement/*.
+- Test mode & developer ergonomics
+  - [x] Test device registration; test mode flags in S2S metadata; clear logging hints. Evidence: BelAds.setTestMode/registerTestDevice; AuctionClient metadata.
+  - [x] Small, stable public APIs: BelInterstitial/BelRewarded/BelAppOpen (+ Banner MVP). Evidence: facade files.
+  - [ ] Sample apps (Android/iOS) with StrictMode smoke and mocked endpoints. Evidence: pending.
+
+Server-side parity and surpass items
+- Reliability & speed
+  - [x] Standardized adapter resiliency (retry+jitter, CB), hedged requests feature flag, partial aggregation under deadlines. Evidence: commons.go, engine.go + tests.
+  - [x] Offline conformance tests per adapter: 200/204/5xx retry/circuit, 4xx no-retry, malformed JSON → error. Evidence: bidders tests.
+  - [x] Observability: metrics snapshot + percentiles + time-series + SLOs; mediation debugger API. Evidence: metrics_*.go, slo.go, admin handlers.
+- Surpass ironSource on transparency & autonomy
+  - [x] Website dashboards and debugger viewer; CORS-enabled Admin APIs. Evidence: website/* observability pages; main.go CORS.
+  - [~] Autonomous planner/executor under cost caps creating PRs; redacted weekly snapshot. Evidence: AUTO section; wiring TBD.
+
+Operator-light targets (1 person, < 2h/week)
+- [ ] One-click daily health snapshot (Adapters up, SLO status, debugger tail, shadow fraud stats) exported and attached to planner PR. Acceptance: PR every week with <= $ cost per policy.
+- [ ] Runbook “single-operator” checklist documented and linked from Console. Acceptance: docs/runbooks/OPERATOR_CHECKLIST.md with 15-min daily and 45-min weekly routines.
+
+Acceptance — “At least ironSource, better on transparency/cost/autonomy”
+- [ ] SDKs pass StrictMode CI (no main-thread I/O); façade APIs proven on main thread; size ≤ 500 KB; sample app runs green in CI.
+- [ ] ≥ 12 adapters implemented with offline conformance; pass hedging/partial aggregation tests; Admin Observability and Debugger pages show 7-day trends; SLO badges OK/WARN logic works.
+- [ ] ML fraud remains shadow until targets met; planner includes shadow histograms and drift metrics weekly.
+- [ ] Operating cost ≤ $500/month and weekly operator effort < 2h (documented in planner PR report).
+
+Status snapshot (today)
+- SDK Android: [~] — robust S2S, lifecycle controllers, caching/readiness, consent matrix tests, OTA safety (signatures + schema), Robolectric DX tests, validator, Dokka. Pending: StrictMode sample + CI, sample app.
+- SDK iOS: [~] — S2S path + taxonomy mapping + consent propagation tests; Debug Panel MVP. Pending: demo target + Quickstart; more tests.
+- Adapters: [~] — 10 implemented and tested offline; remaining modern networks TBD to reach ≥ 12.
+- Observability: [x] — snapshot + time-series + SLOs + Website pages.
+- ML Part 3: [~] plan expanded with DataContracts; ETL/enrichment/training harness pending implementation.
+- Autonomy & budget: [~] docs/policy exist; snapshot exporter + PR bot pending.
+
+Next 1–2 week sprint (big chunk execution)
+- StrictMode & sample apps
+  - [ ] Android: Sample app module with StrictMode penaltyDeath in debug; CI job “sdk-android-strictmode-smoke” fails on violations; demo uses MockWebServer or local endpoints.
+  - [ ] iOS: Tiny demo target with mocked endpoints; Quickstart page; unit/UI smoke.
+- Adapter coverage to ≥ 12
+  - [ ] Implement 2 modern adapters (e.g., Mintegral, Chartboost OR Pangle/Vungle as replacements for legacy MoPub/AerServ/AdTapsy) with offline conformance tests and docs updates.
+- Website & Observability polish
+  - [ ] Lighthouse/a11y CI gate: Perf ≥ 90, A11y ≥ 95, BP ≥ 95, SEO ≥ 90 for key pages; fix regressions.
+  - [ ] Observability snapshot endpoint: single JSON that aggregates /v1/metrics/slo + last‑N debugger pointers for planner.
+- Autonomy scaffolding
+  - [ ] Planner snapshot producer (redacted) and weekly PR creation with links to metrics + TODO diffs; budget metering hooked.
+- ML Part 3 — first ETL slice (offline)
+  - [ ] Implement ClickHouse → Parquet daily extract for impressions/clicks (schemas per DataContracts) with unit tests and small sample CI mode; write to data/training/.
+  - [ ] Enrichment loaders: Tor exit list + AWS/GCP/Azure ranges into data/enrichment with version manifests; unit tests.
+
+Traceability
+- ironSource parity mapping lives here and is cross-referenced from docs/Internal/COMPETITIVE_GAP_ANALYSIS.md and DEVELOPMENT_ROADMAP.md.
+
+
+## 2025-11-07 — SDKs: iOS Quickstart + Debug Panel enrichment (big-chunk)
+- Added customer-facing iOS Quickstart guide covering init, consent, facades, debug panel, error taxonomy, and local testing.
+  - Evidence: docs/Customer-Facing/SDKs/IOS_QUICKSTART.md
+- Enriched iOS in-app Debug Panel to display current appId and placement IDs by exposing read-only accessors on the SDK.
+  - Evidence: sdks/ios/Sources/MediationSDK.swift (currentAppId/currentPlacementIds), sdks/ios/Sources/Debug/DebugPanel.swift (uses accessors)
+- This advances the world-class SDK blueprint on DX and transparency; complements Android Quickstart and Debug Panel.
+- Next (tracked in Part 1/SDKs section):
+  - iOS demo target with mocked endpoints and Quickstart link in repo README.
+  - Extend iOS consent/taxonomy tests and add main-queue callback assertions.
+  - Android StrictMode sample app + CI smoke gate; keep size ≤ 500KB.
+
+
+## 2025-11-07 — Android SDK: StrictMode smoke test (Robolectric)
+- Added a StrictMode smoke test to ensure SDK init + load flows do not perform network/disk I/O on the main thread.
+  - Evidence: sdk/core/android/src/test/dx/StrictModeSmokeTest.kt
+  - Behavior: Enables StrictMode penaltyDeath and exercises BelAds.initialize + BelInterstitial.load with MockWebServer (204 no_fill). If main-thread I/O occurs, the test crashes/fails.
+- Impact: Progress toward Part 2/SDK DX acceptance (zero ANRs) and IronSource-parity goal for ANR safety. No runtime code changes.
+- Next: Add a sample app module and CI task to run a StrictMode smoke on device/emulator; wire validator checks for INTERNET permission and cleartext policy hints.
+
+
+
+## 2025-11-07 — Adapter expansion: Chartboost added + offline conformance tests
+- Implemented Chartboost server-side adapter with standardized resiliency (retry + jitter), shared Clock-enabled CircuitBreaker, and normalized NoBid taxonomy; emits metrics/tracing/debugger events.
+  - Evidence: backend/auction/internal/bidders/chartboost.go
+- Added full offline conformance tests mirroring other adapters: 200 success, 204 no_fill, 5xx retry→success, circuit_open after repeated 5xx, 400 no-retry (status_400), 200 malformed JSON → standardized "error".
+  - Evidence: backend/auction/internal/bidders/chartboost_conformance_test.go
+- Impact: Moves adapter coverage toward ≥12 without external creds; keeps to <$500/mo principle and coding-first approach.
+- Next: add one more modern adapter (e.g., Mintegral or Pangle/Vungle) with the same pattern to hit ≥12; update API_KEYS_AND_INTEGRATIONS_GUIDE.md accordingly; ensure Website "Networks & Adapters" page reflects new adapters (mocked).
+
+
+
+## 2025-11-07 — Systemwide Test Coverage Matrix (Sandbox Readiness)
+
+Goal
+- Provide an explicit, checkable map of tests that already exist vs. tests to add, across all major components, so we can reach “sandbox-ready” confidence with full-system coverage.
+- This complements Parts 1–3 and Website/FT sections by making tests first-class acceptance criteria.
+
+How to run test suites (local/CI)
+- Backend (Go):
+  - [ ] Unit + adapter conformance: go test ./backend/auction/internal/bidders -count=1
+  - [ ] Auction engine: go test ./backend/auction/internal/bidding -count=1
+  - [ ] API handlers: go test ./backend/auction/internal/api -count=1
+- Android SDK (Gradle):
+  - [ ] JVM + Robolectric: ./gradlew :sdk:core:android:test --no-daemon
+  - [ ] Size/validator/docs tasks: ./gradlew :sdk:core:android:assembleRelease :sdk:core:android:validateIntegration :sdk:core:android:generateApiDocs
+- iOS SDK (SwiftPM):
+  - [ ] Unit tests: (cd sdks/ios && swift test)
+- Website (Next.js):
+  - [ ] Unit/component tests (to be added): npm test --workspaces
+  - [ ] Lighthouse/a11y CI (to be added): npm run ci:lighthouse --workspaces
+
+Legend for this section
+- [x] Test exists (evidence path listed)
+- [~] Test partially exists or stub created
+- [ ] Test to write
+
+A) Backend — Adapters (bidders) test coverage
+- Existing (evidence):
+  - [x] Standard resiliency + taxonomy mapping tests (success, 204→no_fill, 5xx retry→success, circuit_open, 4xx no‑retry, malformed JSON → error)
+    - bidders/adapter_conformance_test.go (AdMob, Meta, Unity, AppLovin, ironSource)
+    - bidders/chocolate_tapdaq_conformance_test.go (Chocolate, Tapdaq)
+    - bidders/chartboost_conformance_test.go (Chartboost)
+  - [x] Resiliency primitives & taxonomy
+    - bidders/commons_test.go (IsTransient/MapErrorToNoBid)
+    - bidders/circuitbreaker_test.go (Clock‑based CB tests)
+- Missing / to add:
+  - [ ] Golden request/response fixtures per adapter (JSON files) to pin schema; load in tests to avoid inline maps.
+  - [ ] Auth/header tests per adapter (e.g., X-Api-Key/Bearer), including redaction in logs (masking already shared in helpers).
+  - [ ] 3xx handling test (treat as error, no retry) — ensure taxonomy = status_3xx.
+  - [ ] Slow‑body read leading to timeout maps to timeout (simulate with ResponseWriter flush + sleep).
+  - [ ] Metrics/tracing/debugger emission assertions in conformance tests (lightweight counters via test recorder/tracer/debugger).
+
+Acceptance (adapters):
+- [ ] Each adapter has golden fixtures and passes extended conformance (incl. 3xx and slow body timeout).
+- [ ] Auth/header assertions verified; masking confirmed in logs (unit snapshot acceptable).
+
+B) Backend — Auction Engine
+- Existing:
+  - [x] Hedged requests earlier return: backend/auction/internal/bidding/engine_hedge_test.go
+  - [x] Partial aggregation + deadline adherence: engine_hedge_test.go, engine_timeout_test.go
+- Missing / to add:
+  - [ ] Hedge delay derived from adapter p95 metric when explicit delay not set — unit test with fake metrics recorder.
+  - [ ] Cancellation tests: losing goroutine canceled when winner returns; ensure no bid is double‑counted.
+  - [ ] Context deadline propagation down to adapter requester; late responses ignored.
+  - [ ] Partial aggregation edge cases: 0 bidders; all timeouts; mix of CB‑open and success.
+  - [ ] Race/leak check (go test -race) scenario for concurrent auctions (document command in CI).
+
+Acceptance (auction):
+- [ ] All above cases green under -race; hedging and partial aggregation remain compliant with TimeoutMS.
+
+C) Backend — Admin APIs & Observability
+- Existing:
+  - [x] Time‑series aggregator + SLO evaluator tests: bidders/metrics_timeseries_test.go, bidders/slo_test.go
+  - [x] Metrics snapshot tested via recorder: bidders/metrics_rollup_test.go
+  - [x] Debugger ring buffer + redaction tests: bidders/debugger_test.go
+- Missing / to add:
+  - [ ] Handler tests via httptest for:
+    - GET /v1/metrics/adapters
+    - GET /v1/metrics/adapters/timeseries?days=7
+    - GET /v1/metrics/slo
+    - GET /v1/debug/mediation?placement_id=&n=
+    - GET /v1/metrics/overview (SLO + debugger aggregation)
+  - [ ] CORS preflight test path (OPTIONS) for the above routes.
+
+Acceptance (Admin APIs):
+- [ ] All handlers validated with happy path + simple error/param cases; CORS OPTIONS returns 204.
+
+D) Website (Dashboard)
+- Existing:
+  - [x] Pages: Observability Overview, Adapter Metrics, Mediation Debugger; API client auctionApi.ts
+- Missing / to add:
+  - [ ] Component tests (React Testing Library) for each page verifying data render and empty/error states.
+  - [ ] API client error handling tests (HTTP 500, bad JSON).
+  - [ ] Lighthouse CI with budgets: Perf ≥ 90, A11y ≥ 95, Best Practices ≥ 95, SEO ≥ 90 for key routes.
+  - [ ] Axe-core a11y tests with 0 critical violations.
+
+Acceptance (Website):
+- [ ] Component tests green; Lighthouse/a11y thresholds met in CI.
+
+E) Android SDK
+- Existing (evidence):
+  - [x] Auction client unit tests (success/no_fill/4xx/5xx retry/timeout, malformed winner): sdk/core/android/src/test/network/*.kt
+  - [x] Consent matrix & IAB storage tests: sdk/core/android/src/test/consent/*.kt
+  - [x] Lifecycle controllers + state machines (Interstitial/Rewarded): sdk/core/android/src/test/interstitial/*.kt, /test/rewarded/*.kt
+  - [x] Main‑thread delivery (Robolectric): sdk/core/android/src/test/dx/MainThreadCallbackTest.kt
+  - [x] Facade E2E (Interstitial/Rewarded/AppOpen): sdk/core/android/src/test/dx/*Facade*.kt
+  - [x] StrictMode smoke (no main‑thread I/O): sdk/core/android/src/test/dx/StrictModeSmokeTest.kt
+  - [x] OTA safety: signature verification tests, schema validation tests, kill‑switch test: sdk/core/android/src/test/config/*.kt, /test/dx/KillSwitchTest.kt
+  - [x] Logging redaction tests: sdk/core/android/src/test/logging/RedactorTest.kt
+- Missing / to add:
+  - [ ] Sample app module (mock endpoints) + device/emulator StrictMode smoke job in CI.
+  - [ ] Integration Validator functional test: run task and assert warnings/errors for a synthetic app manifest/network config.
+  - [ ] OM SDK hooks: no‑op safety test and injected controller invocation test on show() paths (mock OmSdkController).
+  - [ ] Banner attach/detach Robolectric test (placeholder render in test mode; UI thread assertions).
+  - [ ] ProGuard/R8 mapping sanity (consumer-rules presence already checked; add a shrinking test in CI sample app to ensure no NoSuchMethodError).
+
+Acceptance (Android):
+- [ ] Device/emulator StrictMode smoke green; OM hooks invoked on show(); Banner tests green; integration validator covered in CI.
+
+F) iOS SDK
+- Existing:
+  - [x] Taxonomy tests (success/no_fill/400/timeout/malformed): sdks/ios/Tests/ApexMediationTests/ApexMediationTests.swift
+  - [x] Consent propagation into metadata: sdks/ios/Tests/ApexMediationTests/ConsentPropagationTests.swift
+  - [x] Debug Panel MVP and accessors for appId/placements (manual validation for now)
+- Missing / to add:
+  - [ ] Main‑queue callback assertions for BelInterstitial/BelRewarded load completion.
+  - [ ] Config signature verification + schema validation parity tests (mirror Android behavior; allow bypass in test mode).
+  - [ ] Demo app target with mocked endpoints; UI smoke test (XCTest) verifying load(no_fill) path does not crash and callbacks occur on main.
+  - [ ] Error taxonomy suite coverage for status_429, status_5xx retry policy (if implemented in client; otherwise confirm server.)
+  - [ ] OM SDK hook scaffolding parity (no‑op safety) and simple invocation tests once hooks exposed.
+
+Acceptance (iOS):
+- [ ] Unit + UI smoke tests green; main‑queue guarantees verified; config authenticity validated; demo app runs in CI.
+
+G) ML Fraud — Part 3 (from DataContracts & ML_TRAINING)
+- Existing:
+  - [x] Shadow‑mode gating tests (safety): backend/fraud/internal/ml/fraud_ml_test.go
+  - [x] DataContracts spec doc: docs/Internal/ML/DataContracts.md
+- Missing / to add (unit/integration):
+  - [ ] ETL: query builders + parquet writers with golden snapshots; small‑sample CI mode that writes to data/training/yyyy‑mm‑dd.
+  - [ ] Enrichment loaders: Tor exit list, cloud IP ranges, ASN DB; checksum + version manifest tests under data/enrichment/.
+  - [ ] Weak supervision: label functions unit tests (coverage, conflict rates computed on synthetic data).
+  - [ ] Feature parity checks: ensure only serve‑time‑derivable features included; unit test that blocks forbidden fields (raw IP, IDFA/GAID, raw UA).
+  - [ ] Training harness determinism: given fixed seed and small sample, metrics stable within epsilon; artifact writer includes schema_version and manifests.
+  - [ ] Evaluation harness: precision/recall @ thresholds; export trained_fraud_model.json; unit test validates schema.
+
+Acceptance (ML):
+- [ ] CI small‑sample pipeline green; artifacts written with manifests; gating policy wired to stay in shadow until acceptance.
+
+H) Autonomy & Budget (Planner/Executor) — tests to add
+- Missing / to add:
+  - [ ] Planner snapshot producer unit tests (redaction, schema of snapshot).
+  - [ ] Budget metering tests (thresholds 50/75/90/100%) — ensure degradation actions trigger.
+  - [ ] Dry‑run PR generator test that stages changes to this checklist and ROADMAP with fake evidence links.
+
+Acceptance (Autonomy):
+- [ ] Weekly planner PR with passing CI by default in dry‑run; no secret leakage in snapshots.
+
+Global Sandbox‑Readiness Gate (must be true before FT)
+- [ ] All test suites above green in CI (backend Go, Android JVM/Robolectric, iOS SwiftPM, Website unit + Lighthouse/a11y).
+- [ ] ≥ 12 adapters implemented and passing extended conformance (incl. golden fixtures and auth tests).
+- [ ] Website pre‑FT pages present with mocks and pass Lighthouse/a11y budgets.
+- [ ] SDK Android: device/emulator StrictMode smoke green; size ≤ 500 KB; OM hooks covered; validator task in CI.
+- [ ] SDK iOS: demo app smoke green; main‑queue guarantees; config authenticity tests.
+- [ ] ML: small‑sample ETL/enrichment/tests green; shadow‑mode remains ON.
+- [ ] Operator runbook updated with “Sandbox Test Day” checklist.

@@ -76,6 +76,8 @@ func main() {
 	router.HandleFunc("/v1/metrics/adapters/timeseries", handlers.GetAdapterMetricsTimeSeries).Methods("GET", "OPTIONS")
 	// SLO status
 	router.HandleFunc("/v1/metrics/slo", handlers.GetAdapterSLO).Methods("GET", "OPTIONS")
+	// Observability snapshot (SLO + optional last-N debugger events)
+	router.HandleFunc("/v1/metrics/overview", handlers.GetObservabilitySnapshot).Methods("GET", "OPTIONS")
 
 	// HTTP server
 	srv := &http.Server{

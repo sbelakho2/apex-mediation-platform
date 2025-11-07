@@ -25,8 +25,16 @@ object BelInterstitial {
         val placement = lastPlacement ?: return false
         val sdk = MediationSDK.getInstance()
         val ad: Ad = sdk.consumeCachedAd(placement) ?: return false
+        // Start OM display session (no-op by default)
+        try {
+            com.rivalapexmediation.sdk.measurement.OmSdkRegistry.controller.startDisplaySession(
+                activity, placement, ad.networkName, "interstitial"
+            )
+        } catch (_: Throwable) {}
         // Delegate to ad rendering (placeholder for now)
         ad.show(activity)
+        // End OM session immediately in this MVP (real renderers should manage lifecycle)
+        try { com.rivalapexmediation.sdk.measurement.OmSdkRegistry.controller.endSession(placement) } catch (_: Throwable) {}
         return true
     }
 

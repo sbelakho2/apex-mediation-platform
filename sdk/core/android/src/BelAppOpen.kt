@@ -28,7 +28,14 @@ object BelAppOpen {
         if (ad.adType != AdType.APP_OPEN && ad.adType != AdType.INTERSTITIAL) {
             // Fallback to interstitial rendering path for now
         }
+        // OM display session for app open
+        try {
+            com.rivalapexmediation.sdk.measurement.OmSdkRegistry.controller.startDisplaySession(
+                activity, placement, ad.networkName, "app_open"
+            )
+        } catch (_: Throwable) {}
         ad.show(activity)
+        try { com.rivalapexmediation.sdk.measurement.OmSdkRegistry.controller.endSession(placement) } catch (_: Throwable) {}
         return true
     }
 

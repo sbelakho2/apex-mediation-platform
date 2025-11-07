@@ -223,7 +223,11 @@ class MediationSDK private constructor(
 
                 // Get placement configuration
                 val placementConfig = configManager.getPlacementConfig(placement)
-                    ?: throw IllegalArgumentException("Unknown placement: $placement")
+                if (placementConfig == null) {
+                    telemetry.recordError("invalid_placement", IllegalArgumentException("Unknown placement: $placement"))
+                    postToMainThread { callback.onError(AdError.INVALID_PLACEMENT, "Unknown placement: $placement") }
+                    return@execute
+                }
 
                 // 1) Try S2S auction first (competitive path). Falls back to adapters on no_fill.
                 try {

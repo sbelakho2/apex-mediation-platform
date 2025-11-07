@@ -158,7 +158,31 @@ com.rivalapexmediation.sdk.BelBanner.detach(container)
 Notes:
 - This MVP banner render uses an off-main-thread load and main-thread WebView render without JavaScript. Production banners will add auto-refresh and lifecycle handling.
 
-## 11) In-app Debug Panel
+## 11) OM SDK (Open Measurement) — optional hooks
+If you include the IAB OM SDK in your app and want to start measurement sessions when ads show, provide an OmSdkController implementation and inject it:
+
+```kotlin
+class MyOmController : com.rivalapexmediation.sdk.measurement.OmSdkController {
+    override fun startDisplaySession(activity: Activity, placementId: String, networkName: String, creativeType: String?) {
+        // TODO: start OMID display session
+    }
+    override fun startVideoSession(activity: Activity, placementId: String, networkName: String, durationSec: Int?) {
+        // TODO: start OMID video session
+    }
+    override fun endSession(placementId: String) {
+        // TODO: end OMID session
+    }
+}
+
+// At initialization time (e.g., after BelAds.initialize)
+BelAds.setOmSdkController(MyOmController())
+```
+
+Notes:
+- The default controller is a safe no-op; integrating OM is optional.
+- Our public show() paths for Interstitial, Rewarded, and App Open will call start/end session.
+
+## 12) In-app Debug Panel
 Use the built-in debug panel to inspect SDK state (app id, placements, consent, test mode) and recent actions.
 
 ```kotlin

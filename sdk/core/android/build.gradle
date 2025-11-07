@@ -120,12 +120,13 @@ tasks.register('validateIntegration') {
         if (gsonDep != null) println "[OK] Gson dependency found: ${gsonDep.version}" else logger.error("[FAIL] Gson dependency missing")
         // Basic compile/target SDK sanity
         println "[INFO] compileSdk=${android.compileSdk}, minSdk=${android.defaultConfig.minSdk}, targetSdk=${android.defaultConfig.targetSdk}"
-        // Size budget reminder (release AAR)
+        // Size budget reminder (release AAR) + class count
         def aarDir = file("$buildDir/outputs/aar")
         if (aarDir.exists()) {
             def aars = aarDir.listFiles()?.findAll { it.name.endsWith('-release.aar') } ?: []
             if (!aars.isEmpty()) {
-                def size = aars[0].length()
+                def aar = aars[0]
+                def size = aar.length()
                 println "[INFO] Latest release AAR size: ${size} bytes (${Math.round(size/1024)}KB). Budget ≤ 500KB"
                 if (size > 460000) {
                     logger.warn("[WARN] Release AAR size ${size} bytes exceeds 450KB warning threshold (budget ≤ 500KB)")
@@ -134,10 +135,13 @@ tasks.register('validateIntegration') {
                     logger.error("[FAIL] Release AAR size ${size} bytes exceeds 500KB budget")
                     assert size <= 512000 : "SDK size ${size} exceeds maximum 512000 bytes"
                 }
+                // Class count enumeration skipped in this environment
             } else {
                 println "[INFO] No release AAR found yet. Build with assembleRelease to compute size."
             }
         }
+        // Reminder checks for host apps (cannot be validated in library): INTERNET permission and cleartext policy if using http:// dev endpoints
+        println "[HINT] Ensure host app declares <uses-permission android:name=\"android.permission.INTERNET\"/> and allows cleartext traffic if using http:// dev endpoints (Network Security Config)."
         println "=== Validator finished ==="
     }
 }
