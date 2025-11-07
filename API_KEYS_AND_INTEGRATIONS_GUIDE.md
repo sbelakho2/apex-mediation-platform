@@ -889,3 +889,48 @@ Operational notes:
 - Adheres to normalized NoBid taxonomy: timeout, network_error, status_XXX, no_fill, circuit_open, error.
 - Offline conformance tests for these adapters live in backend/auction/internal/bidders/chocolate_tapdaq_conformance_test.go
 - Production/sandbox credentials and endpoint validation occur in FT phase per DEVELOPMENT_ROADMAP.md
+
+
+### Vungle — Development placeholders
+Purpose: Enable S2S bidding via placeholder adapter for offline conformance and dev.
+
+Required fields (dev/local):
+- VUNGLE_APP_ID — application identifier
+- VUNGLE_API_KEY — API key or bearer token (mask in logs; do not commit)
+
+Adapter wiring (Go backend): backend/auction/internal/bidders/vungle.go
+- Supports test_endpoint override for offline tests
+- Standardized resiliency and taxonomy; CircuitBreaker enabled; metrics/tracing/debugger hooks
+
+Configuration example (dev):
+```
+VUNGLE_APP_ID=your_app_id
+VUNGLE_API_KEY=your_api_key
+```
+
+Notes:
+- Do not paste secrets into code or docs. Use environment variables.
+- Offline conformance tests live in backend/auction/internal/bidders/vungle_conformance_test.go
+- Sandbox/official endpoints to be configured during FT phase.
+
+### Pangle — Development placeholders
+Purpose: Enable S2S bidding via placeholder adapter for offline conformance and dev.
+
+Required fields (dev/local):
+- PANGLE_APP_ID — application identifier
+- PANGLE_API_KEY — API key (mask in logs; do not commit)
+
+Adapter wiring (Go backend): backend/auction/internal/bidders/pangle.go
+- Supports test_endpoint override for offline tests
+- Standardized resiliency and taxonomy; CircuitBreaker enabled; metrics/tracing/debugger hooks
+
+Configuration example (dev):
+```
+PANGLE_APP_ID=your_app_id
+PANGLE_API_KEY=your_api_key
+```
+
+Operational notes:
+- Adheres to normalized NoBid taxonomy: timeout, network_error, status_XXX, no_fill, circuit_open, error.
+- Conformance tests to mirror Vungle’s suite; implemented adapter compiles and follows shared patterns.
+- Production/sandbox credentials and endpoint validation occur in FT phase per DEVELOPMENT_ROADMAP.md

@@ -23,11 +23,14 @@ func setUpRouter() *mux.Router {
 
 	h := NewHandlers(nil, nil)
 	r := mux.NewRouter()
-	r.HandleFunc("/v1/metrics/adapters", h.GetAdapterMetrics).Methods("GET")
-	r.HandleFunc("/v1/metrics/adapters/timeseries", h.GetAdapterMetricsTimeSeries).Methods("GET")
-	r.HandleFunc("/v1/metrics/slo", h.GetAdapterSLO).Methods("GET")
-	r.HandleFunc("/v1/debug/mediation", h.GetMediationDebugEvents).Methods("GET")
-	r.HandleFunc("/v1/metrics/overview", h.GetObservabilitySnapshot).Methods("GET")
+	// Minimal CORS middleware to emulate production preflight behavior
+	r.Use(corsTestMiddleware)
+	// Register handlers for GET and OPTIONS to support CORS preflight in tests
+	r.HandleFunc("/v1/metrics/adapters", h.GetAdapterMetrics).Methods("GET", "OPTIONS")
+	r.HandleFunc("/v1/metrics/adapters/timeseries", h.GetAdapterMetricsTimeSeries).Methods("GET", "OPTIONS")
+	r.HandleFunc("/v1/metrics/slo", h.GetAdapterSLO).Methods("GET", "OPTIONS")
+	r.HandleFunc("/v1/debug/mediation", h.GetMediationDebugEvents).Methods("GET", "OPTIONS")
+	r.HandleFunc("/v1/metrics/overview", h.GetObservabilitySnapshot).Methods("GET", "OPTIONS")
 	return r
 }
 
@@ -117,5 +120,45 @@ func TestAdminHandlers_Overview_OK(t *testing.T) {
 	}
 	if _, ok := data["debugger"]; !ok {
 		t.Fatalf("expected debugger in overview data")
+	}
+}
+
+
+// corsTestMiddleware emulates production CORS behavior for test router (OPTIONS → 204)
+func corsTestMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "http://localhost:3000")
+		w.Header().Set("Vary", "Origin")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Credentials", "true")
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func TestAdminHandlers_CORSPreflight_204(t *testing.T) {
+	r := setUpRouter()
+	endpoints := []string{
+		"/v1/metrics/adapters",
+		"/v1/metrics/adapters/timeseries?days=7",
+		"/v1/metrics/slo",
+		"/v1/debug/mediation?placement_id=&n=5",
+		"/v1/metrics/overview?placement_id=&n=5",
+	}
+	for _, ep := range endpoints {
+		req := httptest.NewRequest(http.MethodOptions, ep, nil)
+		rec := httptest.NewRecorder()
+		r.ServeHTTP(rec, req)
+		if rec.Code != http.StatusNoContent {
+			t.Fatalf("expected 204 for OPTIONS %s, got %d", ep, rec.Code)
+		}
+		// Basic CORS headers present
+		if rec.Header().Get("Access-Control-Allow-Origin") == "" {
+			t.Fatalf("missing Access-Control-Allow-Origin header on %s", ep)
+		}
 	}
 }

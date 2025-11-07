@@ -1128,3 +1128,82 @@ func TestAdmost_MalformedJSON_NoBidError(t *testing.T) {
         t.Fatalf("expected standardized 'error', got %s", resp.NoBidReason)
     }
 }
+
+
+func TestAppLovin_302_NoRetry_andStatusReason(t *testing.T) {
+	t := t
+	var calls int32
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&calls, 1)
+		w.Header().Set("Location", "http://example.com")
+		w.WriteHeader(http.StatusFound) // 302
+	}))
+	defer ts.Close()
+
+	adapter := NewAppLovinAdapter("sdk-abc")
+	req := BidRequest{RequestID: "req-applovin-302", Metadata: map[string]string{"applovin_ad_unit_id": "unit-1", "test_endpoint": ts.URL}}
+	resp, _ := adapter.RequestBid(context.Background(), req)
+	if !resp.NoBid || resp.NoBidReason != "status_302" {
+		t.Fatalf("expected status_302, got noBid=%v reason=%s", resp.NoBid, resp.NoBidReason)
+	}
+	if atomic.LoadInt32(&calls) != 1 {
+		t.Fatalf("expected exactly 1 call (no retry on 3xx), got %d", calls)
+	}
+}
+
+func TestAppLovin_SlowBodyTimeout_MapsToTimeout(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		if f, ok := w.(http.Flusher); ok { f.Flush() }
+		time.Sleep(200 * time.Millisecond)
+		_, _ = w.Write([]byte(`{"ad":{"cpm":1.0}}`))
+	}))
+	defer ts.Close()
+	adapter := NewAppLovinAdapter("sdk-abc")
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	req := BidRequest{RequestID: "req-applovin-slow", Metadata: map[string]string{"applovin_ad_unit_id": "unit-1", "test_endpoint": ts.URL}}
+	resp, _ := adapter.RequestBid(ctx, req)
+	if !resp.NoBid || resp.NoBidReason != NoBidTimeout {
+		t.Fatalf("expected timeout, got noBid=%v reason=%s", resp.NoBid, resp.NoBidReason)
+	}
+}
+
+func TestChartboost_302_NoRetry_andStatusReason(t *testing.T) {
+	var calls int32
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&calls, 1)
+		w.Header().Set("Location", "http://example.com")
+		w.WriteHeader(http.StatusFound)
+	}))
+	defer ts.Close()
+	ad := NewChartboostAdapter("app", "key")
+	req := BidRequest{RequestID: "req-cb-302", Metadata: map[string]string{"test_endpoint": ts.URL}}
+	resp, _ := ad.RequestBid(context.Background(), req)
+	if !resp.NoBid || resp.NoBidReason != "status_302" {
+		t.Fatalf("expected status_302, got %s", resp.NoBidReason)
+	}
+	if atomic.LoadInt32(&calls) != 1 {
+		t.Fatalf("expected exactly 1 call (no retry on 3xx), got %d", calls)
+	}
+}
+
+func TestChartboost_SlowBodyTimeout_MapsToTimeout(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		if f, ok := w.(http.Flusher); ok { f.Flush() }
+		time.Sleep(200 * time.Millisecond)
+		_, _ = w.Write([]byte(`{"ad":{"cpm":1.0}}`))
+	}))
+	defer ts.Close()
+	ad := NewChartboostAdapter("app", "key")
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	req := BidRequest{RequestID: "req-cb-slow", Metadata: map[string]string{"test_endpoint": ts.URL}}
+	resp, _ := ad.RequestBid(ctx, req)
+	if !resp.NoBid || resp.NoBidReason != NoBidTimeout {
+		t.Fatalf("expected timeout, got %s", resp.NoBidReason)
+	}
+}
