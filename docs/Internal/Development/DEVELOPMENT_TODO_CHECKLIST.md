@@ -929,3 +929,36 @@ Global Sandbox‑Readiness Gate (must be true before FT)
 - [ ] SDK iOS: demo app smoke green; main‑queue guarantees; config authenticity tests.
 - [ ] ML: small‑sample ETL/enrichment/tests green; shadow‑mode remains ON.
 - [ ] Operator runbook updated with “Sandbox Test Day” checklist.
+
+
+## 2025-11-07 — SDKs big-chunk: Android OM hooks + Banner tests, docs updates
+- Android SDK: Added Robolectric tests to guarantee OM SDK hook invocation on show() paths and Banner attach/detach behavior.
+  - Evidence:
+    - sdk/core/android/src/test/dx/OmSdkHooksTest.kt — asserts BelInterstitial.show calls OmSdkController.startDisplaySession/endSession and BelRewarded.show calls startVideoSession/endSession.
+    - sdk/core/android/src/test/dx/BannerAttachDetachTest.kt — verifies BelBanner.attach renders a safe placeholder in test mode when no banner creative is cached and detach clears the container.
+- Documentation: Updated acceptance in Systemwide Test Coverage Matrix (Android section) to include OM hooks and Banner tests. Quickstart to reference OM hooks and banner placeholder behavior.
+
+Impact
+- Strengthens world‑class SDK DX and measurement readiness: show() paths now have test coverage for OM SDK hooks and banner UI behavior.
+- Purely offline, no runtime behavior changes, preserving ≤ $500/month operating cap.
+
+Next (iOS, immediate)
+- Add main‑queue callback assertions for BelInterstitial/BelRewarded.load and extend taxonomy tests for status_429/status_5xx.
+- Enrich iOS Debug Panel to display a redacted consent snapshot once exposed; update IOS_QUICKSTART.md accordingly.
+
+
+## 2025-11-07 — Backend Admin API handler tests (observability)
+- Added httptest-based unit tests for read-only Admin API endpoints to strengthen Part 2 coverage and the Systemwide Test Coverage Matrix ahead of sandbox:
+  - Evidence: backend/auction/internal/api/handler_test.go
+  - Endpoints validated (happy path):
+    - GET /v1/metrics/adapters
+    - GET /v1/metrics/adapters/timeseries?days=7
+    - GET /v1/metrics/slo
+    - GET /v1/debug/mediation?placement_id=&n=
+    - GET /v1/metrics/overview?placement_id=&n=
+- Notes:
+  - Tests wire in-memory Debugger, RollingMetricsRecorder, and TimeSeriesAggregator (short windows) to avoid external deps.
+  - CORS preflight (OPTIONS) tests to be added when router is wrapped with corsMiddleware in test setup.
+- Impact:
+  - Advances Website/Observability readiness and fulfills part of Section C) Backend — Admin APIs & Observability in the Test Coverage Matrix.
+  - No runtime behavior changes; fully offline and fast.
