@@ -92,10 +92,11 @@ Acceptance:
 - [x] Enforce shadow mode unless model meets go/no‑go metrics (code safety in place)
   - [x] Unit tests: backend/fraud/internal/ml/fraud_ml_test.go verifies degenerate metrics force shadow mode and healthy model respects override
 
-- [ ] Data contracts and schemas (training + scoring)
-  - [ ] Define Feature/Label schemas for training parquet (clicks, impressions, conversions, device, network, auction, OMSDK)
-  - [ ] Document data contracts in docs/Internal/ML/DataContracts.md (PII rules, retention, redaction)
-  - [ ] Add schema versioning and backward‑compat guidance (SemVer; include in parquet metadata)
+- [x] Data contracts and schemas (training + scoring)
+  - [x] Define Feature/Label schemas for training parquet (clicks, impressions, conversions, device, network, auction, OMSDK)
+  - [x] Document data contracts in docs/Internal/ML/DataContracts.md (PII rules, retention, redaction)
+  - [x] Add schema versioning and backward‑compat guidance (SemVer; include in parquet metadata)
+    - Evidence: docs/Internal/ML/DataContracts.md (2025-11-08 update; includes privacy, retention, versioning, metadata payload example)
 
 - [ ] ETL (ClickHouse → Parquet; last 30 days, rolling)
   - [ ] SQL extracts for core tables (impressions, clicks, installs/postbacks, auctions)
