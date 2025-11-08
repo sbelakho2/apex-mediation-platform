@@ -1,0 +1,9 @@
+# Extended requirements when GPU/PyTorch is available (optional during development)
+# Pin cautiously; prefer CPU-only unless explicitly training TabPFN on hardware with GPU.
+-r requirements.txt
+
+# PyTorch (choose appropriate index for your platform/CUDA; default CPU wheels below)
+torch==2.4.1
+
+# TabPFN (depends on torch)
+tabpfn==0.1.10

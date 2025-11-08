@@ -128,7 +128,7 @@ tasks.register('validateIntegration') {
                 def aar = aars[0]
                 def size = aar.length()
                 println "[INFO] Latest release AAR size: ${size} bytes (${Math.round(size/1024)}KB). Budget ≤ 500KB"
-                if (size > 460000) {
+                if (size > 460800) {
                     logger.warn("[WARN] Release AAR size ${size} bytes exceeds 450KB warning threshold (budget ≤ 500KB)")
                 }
                 if (size > 512000) {

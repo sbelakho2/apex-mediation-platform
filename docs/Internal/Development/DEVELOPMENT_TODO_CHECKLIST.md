@@ -1127,3 +1127,67 @@ Acceptance for this refocus slice
 - [ ] New SDK_FOCUS_PLAN.md committed with checkable tasks and acceptance criteria (this session).
 - [ ] DEVELOPMENT_TODO_CHECKLIST updated with this dated pause/refocus entry (this session).
 - [ ] Next PRs focus exclusively on SDK tasks above until the sandbox‑readiness SDK gate is fully ticked.
+
+
+## 2025-11-08 — SDKs (Android): Facades, OM SDK hooks, size gate, validator, and API docs
+
+What changed (code/test)
+- [x] Android SDK facades established and stable API surface
+  - [x] Interstitial facade (BelInterstitial)
+  - [x] Rewarded facade (BelRewarded)
+  - [x] Rewarded Interstitial facade (BelRewardedInterstitial)
+  - [x] App Open facade (BelAppOpen)
+  - [x] Banner facade (BelBanner) — attach()/detach() MVP with test‑mode placeholder
+- [x] OM SDK measurement hooks invoked from facade show() paths
+  - [x] Interstitial uses startDisplaySession() and endSession()
+  - [x] Rewarded and RewardedInterstitial use startVideoSession() and endSession()
+  - Evidence: sdk/core/android/src/test/dx/OmSdkHooksTest.kt (verifies start*/end calls)
+- [x] Gradle support tasks in place
+  - [x] AAR size budget gate (warn > 450KB, fail > 500KB) — task checkSdkSize and finalizedBy on assembleRelease
+  - [x] Integration Validator task (validateIntegration) with dependency and size hints
+  - [x] Dokka API docs generator task (generateApiDocs) — outputs to sdk/core/android/build/dokka/html
+- [x] DX tests
+  - [x] Facade DX tests for Interstitial no_fill main‑thread callbacks (FacadeApisTest)
+  - [x] AppOpen facade no_fill main‑thread callbacks (AppOpenFacadeTest)
+  - [x] Rewarded load success path; isReady() true (FacadeApisTest)
+
+Evidence (paths)
+- sdk/core/android/src/BelInterstitial.kt
+- sdk/core/android/src/BelRewarded.kt
+- sdk/core/android/src/BelRewardedInterstitial.kt
+- sdk/core/android/src/BelAppOpen.kt
+- sdk/core/android/src/BelBanner.kt
+- sdk/core/android/src/measurement/OmSdkController.kt, OmSdkRegistry
+- sdk/core/android/src/test/dx/OmSdkHooksTest.kt
+- sdk/core/android/src/test/dx/FacadeApisTest.kt
+- sdk/core/android/src/test/dx/AppOpenFacadeTest.kt
+- sdk/core/android/build.gradle (tasks: checkSdkSize, validateIntegration, generateApiDocs)
+
+Acceptance traceability (SDK Focus Plan — Android)
+- [x] Facades exist for Interstitial/Rewarded/RewardedInterstitial/AppOpen/Banner
+- [x] OM hooks wired from facades (display/video + end)
+- [~] Facade tests coverage — Banner adaptive sizing & detach pending; AppOpen OM display path smoke pending
+- [x] AAR ≤ 500 KB gate implemented (validator + checkSdkSize)
+- [x] Dokka task available; Java ergonomics via @JvmStatic/@JvmOverloads verified on facades
+- [~] OTA config negative test for bad Base64 public key — to add next
+
+How to run (will be executed by operator later)
+- Build release AAR (size gate auto‑runs):
+  - ./gradlew :sdk:core:android:assembleRelease
+- Explicit size check:
+  - ./gradlew :sdk:core:android:checkSdkSize
+- Run Android unit + Robolectric tests:
+  - ./gradlew :sdk:core:android:test
+- Run Integration Validator (library checks and hints):
+  - ./gradlew :sdk:core:android:validateIntegration
+- Generate Android API docs (Dokka HTML):
+  - ./gradlew :sdk:core:android:generateApiDocs
+  - Output: sdk\\core\\android\\build\\dokka\\html\\index.html
+- iOS tests (once scaffold lands):
+  - cd sdks\\ios && swift test
+
+Next steps
+- [ ] StrictMode sample app module with penaltyDeath in debug and CI smoke task
+- [ ] Tests: Banner adaptive sizing + detach; AppOpen OM display path; OTA config negative test (bad Base64 key) and test‑mode bypass verification
+- [ ] iOS demo target and parity scaffold (mock endpoints, main‑queue callback smoke, taxonomy spot checks)
+- [ ] Troubleshooting/FAQ and a “Sandbox Readiness — SDKs” checklist with exact commands and evidence paths

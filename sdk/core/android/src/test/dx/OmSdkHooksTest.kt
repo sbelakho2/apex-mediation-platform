@@ -184,4 +184,58 @@ class OmSdkHooksTest {
         val hasEnd = calls.any { it.type == "end" && it.placement == placementId }
         assertTrue("Expected endSession call", hasEnd)
     }
+
+    @Test
+    fun rewardedInterstitial_show_invokesOmVideoSession() {
+        val baseUrl = server.url("/").toString().trimEnd('/')
+        val placementId = "pl_omsdk_rwi"
+        // Serve config then auction winner
+        server.enqueue(MockResponse().setResponseCode(200).setBody(configBody(placementId)))
+        val winner = mapOf(
+            "winner" to mapOf(
+                "adapter_name" to "admob",
+                "cpm" to 0.9,
+                "currency" to "USD",
+                "creative_id" to "cr_rwi",
+                "ad_markup" to "<div>rewarded_interstitial</div>"
+            )
+        )
+        server.enqueue(MockResponse().setResponseCode(200).setBody(Gson().toJson(winner)))
+
+        val cfg = SDKConfig(
+            appId = "app-1",
+            testMode = true,
+            logLevel = LogLevel.DEBUG,
+            telemetryEnabled = false,
+            configEndpoint = baseUrl,
+            auctionEndpoint = baseUrl
+        )
+        BelAds.initialize(appContext, "app-1", cfg)
+
+        data class Call(val type: String, val placement: String)
+        val calls = mutableListOf<Call>()
+        OmSdkRegistry.setController(object : OmSdkController {
+            override fun startDisplaySession(activity: Activity, placementId: String, networkName: String, creativeType: String?) {
+                calls.add(Call("startDisplay", placementId))
+            }
+            override fun startVideoSession(activity: Activity, placementId: String, networkName: String, durationSec: Int?) {
+                calls.add(Call("startVideo", placementId))
+            }
+            override fun endSession(placementId: String) { calls.add(Call("end", placementId)) }
+        })
+
+        var loaded = false
+        BelRewardedInterstitial.load(appContext, placementId, object : AdLoadCallback {
+            override fun onAdLoaded(ad: com.rivalapexmediation.sdk.models.Ad) { loaded = true }
+            override fun onError(error: AdError, message: String) { }
+        })
+        val activity = Robolectric.buildActivity(android.app.Activity::class.java).setup().get()
+        val shown = BelRewardedInterstitial.show(activity)
+        assertTrue(shown)
+        assertTrue(calls.isNotEmpty())
+        val hasVideo = calls.any { it.type == "startVideo" && it.placement == placementId }
+        assertTrue("Expected startVideoSession call", hasVideo)
+        val hasEnd = calls.any { it.type == "end" && it.placement == placementId }
+        assertTrue("Expected endSession call", hasEnd)
+    }
 }
