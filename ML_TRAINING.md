@@ -6,8 +6,6 @@ Kaggle
 Kaggle
 +2
 
-iPinYou RTB logs — Public RTB auction/impression/click/conversion logs. No native fraud labels, but perfect to learn normal market dynamics and to generate weak labels via rules (see Section C).
-contest.ipinyou.com
 +2
 wnzhang.net
 +2

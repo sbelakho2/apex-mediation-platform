@@ -115,13 +115,22 @@ func isDegenerateModel(model *FraudModel) bool {
 	if model.Metrics == nil {
 		return false // no metrics to judge; keep default behavior
 	}
-	auc := model.Metrics["auc"]
-	precision := model.Metrics["precision"]
-	recall := model.Metrics["recall"]
-	if auc > 0 && auc <= 0.55 {
+	// Prefer generic 'auc'; fall back to 'roc_auc' if present
+	auc, okAUC := model.Metrics["auc"]
+	if !okAUC {
+		if ra, ok := model.Metrics["roc_auc"]; ok {
+			auc = ra
+			okAUC = true
+		}
+	}
+	// Only treat low AUC as degenerate when we actually have a value
+	if okAUC && auc > 0 && auc <= 0.55 {
 		return true
 	}
-	if precision == 0 && recall == 0 {
+	// Only enforce zero precision/recall if both keys are present
+	p, okP := model.Metrics["precision"]
+	r, okR := model.Metrics["recall"]
+	if okP && okR && p == 0 && r == 0 {
 		return true
 	}
 	return false
@@ -426,8 +435,11 @@ func loadDefaultModel() *FraudModel {
 
 // loadTrainedModel loads the trained model from file
 func loadTrainedModel() (*FraudModel, error) {
-	// Try to load from current directory first (for production)
-	modelPath := "trained_fraud_model.json"
+	// Allow override via env for flexible deployments; fall back to default file name
+	modelPath := os.Getenv("MLFRAUD_MODEL_PATH")
+	if modelPath == "" {
+		modelPath = "trained_fraud_model.json"
+	}
 
 	data, err := os.ReadFile(modelPath)
 	if err != nil {

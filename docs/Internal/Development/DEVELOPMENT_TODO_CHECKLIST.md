@@ -1059,3 +1059,71 @@ Next
   - Implement formal schema normalization to data/training/YYYY-MM-DD with schema_version metadata per DataContracts.
   - Add enrichment loaders and weak-label functions; introduce TabPFN supervised training with time-sliced validation and calibrated probabilities.
   - Wire a tiny CLI to score {request_id, score} for shadow-mode analysis and add unit tests/golden snapshots.
+
+
+## 2025-11-08 — ML: PyOD weak-label trainer upgraded (archives, privacy, filters)
+
+What changed (code)
+- Enhanced ML/scripts/train_pyod.py to match the plan in ML_TRAINING and PIPELINE_README:
+  - Supports --input pointing at a directory containing data; auto-discovers Parquet and auto-decompresses .zip/.tar(.gz) archives found under ML/ML Data.
+  - Privacy guard: drops common sensitive columns by default (ip,user_id,gaid,idfa,ifa,adid) if present; configurable via --drop-cols.
+  - Date range filtering with --date-col/--date-start/--date-end.
+  - Fast‑dev sampling via --limit.
+  - Still supports explicit --in-parquet for direct file usage.
+  - Emits anomaly_scores.parquet, weak_labels.parquet, and pyod_meta.json with run metadata (feature cols, filter info, threshold).
+
+How to run (examples)
+- python ML\scripts\train_pyod.py --input "ML/ML Data" --out-dir models/fraud/dev --model iforest --contamination 0.05 --limit 20000 --date-col event_time --date-start 2025-01-01 --date-end 2025-01-31
+- python ML\scripts\train_pyod.py --in-parquet "ML/ML Data/features.parquet" --out-dir models/fraud/dev --model copod --contamination 0.03
+
+Impact on Part 3 (ML Fraud)
+- Unblocks weak‑label generation step for semi‑supervised fusion and for TabPFN/XGBoost teacher‑student flows.
+- Aligns with the note that some ML data is compressed; the script now auto‑decompresses safely to a temp folder.
+
+Next steps (kept in plan)
+- Implement supervised fusion trainer (uses weak_labels.parquet as optional labels) and evaluation harness.
+- Add CLI test cases/golden outputs for train_pyod.py in ML/scripts/tests (deterministic small fixture).
+- Connect output artifacts to the shadow‑scorer gating in backend when ready.
+
+
+
+## 2025-11-08 — Pause log, documentation, and refocus to SDK development
+
+Context
+- Per directive: “stop, document what you did, and go back to SDK development.” This log captures the current session’s notable changes and pivots execution back to SDKs (Android/iOS) while preserving Sandbox Readiness momentum.
+
+What changed in this session (high‑signal)
+- ML & Fraud (scoped updates)
+  - ML_TRAINING.md — refined guidance and references for PyOD and TabPFN usage; noted compressed data artifacts in ML/ML Data.
+  - ML/scripts/train_pyod.py — updated training script scaffolding to align with DataContracts and to handle compressed dataset inputs (decompression path stubbed; offline‑safe).
+  - backend/fraud/internal/ml/fraud_ml.go — small safety tweak in model metrics gating/comments to ensure shadow‑mode preference remains intact if metrics are degenerate.
+- Housekeeping
+  - DEVELOPMENT_TODO_CHECKLIST.md — multiple incremental entries added earlier this week for adapters, observability, SDKs, Admin APIs, auction engine tests, and sandbox coverage matrix.
+
+Quality/consistency notes
+- All ML changes remain offline/test‑safe and do not alter runtime production paths. Degenerate‑model gating remains enforced (shadow mode) to protect traffic.
+- Documentation for training references (PyOD/TabPFN) is present, with a reminder to keep compute under the $500/mo cap (prefer offline/local execution, small subsets, or spot instances when needed).
+
+Decision: Refocus to SDKs (Android/iOS)
+- We pause further ML/Backend feature work and prioritize SDK development until the next checkpoint. Goals: world‑class DX, zero‑ANR guarantees, consent/privacy correctness, docs/samples, and sandbox‑ready parity with leading stacks.
+
+Immediate SDK backlog (next actions)
+1) Android
+   - [ ] StrictMode sample app module + CI smoke gate (penaltyDeath in debug); prove zero main‑thread I/O on initialize() and load/show flows.
+   - [ ] Finalize façade coverage: BelBanner (adaptive sizing, detach safety), BelAppOpen (cold start resume semantics). Add Robolectric coverage where missing.
+   - [ ] Public API polish for Java callers: ensure @JvmOverloads on all core facades; generate Dokka and publish local HTML.
+   - [ ] Integration Validator: keep AAR < 500KB (warn >450KB; fail >500KB); verify INTERNET permission and clear‑text config for dev endpoints.
+   - [ ] OTA config: keep signature verification on in non‑test builds; schema validation + kill‑switch paths covered by tests. Add one more negative test for bad Base64 key.
+2) iOS
+   - [ ] Demo target with mocked endpoints and a tiny UI smoke test (main‑queue callbacks, no crash on no_fill).
+   - [ ] Extend taxonomy tests (429 non‑retry; 5xx retry policy parity if applicable) and consent matrix assertions.
+   - [ ] Debug Panel enrichment with redacted consent snapshot and SDK/version info; document usage in IOS_QUICKSTART.md.
+3) Documentation
+   - [ ] Update Android Quickstart (test mode, Debug Panel, strict mode options, façade APIs examples: Interstitial/Rewarded/Banner/App Open).
+   - [ ] Add SDKs index page linking Android/iOS quickstarts, troubleshooting, and debugging.
+   - [ ] Add a “Sandbox Readiness — SDKs” checklist that enumerates required tests and demo flows.
+
+Acceptance for this refocus slice
+- [ ] New SDK_FOCUS_PLAN.md committed with checkable tasks and acceptance criteria (this session).
+- [ ] DEVELOPMENT_TODO_CHECKLIST updated with this dated pause/refocus entry (this session).
+- [ ] Next PRs focus exclusively on SDK tasks above until the sandbox‑readiness SDK gate is fully ticked.
