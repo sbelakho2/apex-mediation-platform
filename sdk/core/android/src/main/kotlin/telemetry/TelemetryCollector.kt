@@ -1,9 +1,10 @@
 package com.rivalapexmediation.sdk.telemetry
 
 import android.content.Context
-import com.rivalapexmediation.sdk.models.TelemetryEvent
-import com.rivalapexmediation.sdk.models.EventType
+import com.rivalapexmediation.sdk.BuildConfig
 import com.rivalapexmediation.sdk.SDKConfig
+import com.rivalapexmediation.sdk.models.EventType
+import com.rivalapexmediation.sdk.models.TelemetryEvent
 import com.google.gson.Gson
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -204,7 +205,7 @@ class TelemetryCollector(
     private fun sendEvents(events: List<TelemetryEvent>) {
         val payload = mapOf(
             "app_id" to config.appId,
-            "sdk_version" to BuildConfig.VERSION_NAME,
+            "sdk_version" to BuildConfig.SDK_VERSION,
             "platform" to "android",
             "events" to events
         )
@@ -216,7 +217,7 @@ class TelemetryCollector(
             .url("${config.configEndpoint}/v1/telemetry")
             .post(compressed.toRequestBody("application/json".toMediaType()))
             .addHeader("Content-Encoding", "gzip")
-            .addHeader("User-Agent", "RivalApexMediation-Android/${BuildConfig.VERSION_NAME}")
+            .addHeader("User-Agent", "RivalApexMediation-Android/${BuildConfig.SDK_VERSION}")
             .build()
         
         val response = httpClient.newCall(request).execute()

@@ -23,7 +23,7 @@ object BelAds {
     /** Optional: inject an OM SDK controller implementation for measurement (no-op by default). */
     @JvmStatic
     fun setOmSdkController(controller: com.rivalapexmediation.sdk.measurement.OmSdkController) {
-        com.rivalapexmediation.sdk.measurement.OmSdkRegistry.setController(controller)
+        com.rivalapexmediation.sdk.measurement.OmSdkRegistry.controller = controller
     }
 
     /** Runtime toggle for test mode; affects S2S auction metadata and logging hints. */

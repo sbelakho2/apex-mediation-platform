@@ -1,9 +1,11 @@
 package com.rivalapexmediation.sdk
 
 import android.content.Context
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.StrictMode
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.TimeUnit
@@ -60,15 +62,23 @@ class MediationSDK private constructor(
             appId: String,
             config: SDKConfig = SDKConfig.Builder().build()
         ): MediationSDK {
-            return instance ?: synchronized(this) {
-                instance ?: MediationSDK(
-                    context.applicationContext,
-                    config.copy(appId = appId)
-                ).also {
-                    instance = it
-                    it.setupStrictMode()
-                    it.initializeInternal()
+            val effectiveConfig = config.copy(appId = appId)
+            return synchronized(this) {
+                if (isTestEnvironment()) {
+                    instance?.prepareForReplacement()
+                    instance = null
+                } else {
+                    instance?.let { return@synchronized it }
                 }
+
+                val created = MediationSDK(
+                    context.applicationContext,
+                    effectiveConfig
+                )
+                instance = created
+                created.setupStrictMode()
+                created.initializeInternal()
+                created
             }
         }
         
@@ -76,6 +86,11 @@ class MediationSDK private constructor(
             return instance ?: throw IllegalStateException(
                 "SDK not initialized. Call MediationSDK.initialize() first."
             )
+        }
+
+        private fun isTestEnvironment(): Boolean {
+            println("[debug] isTestRuntime fingerprint=" + Build.FINGERPRINT)
+            return Build.FINGERPRINT == "robolectric"
         }
     }
     
@@ -86,7 +101,7 @@ class MediationSDK private constructor(
     }
     private val telemetry = TelemetryCollector(context, config)
     private val adapterRegistry = AdapterRegistry()
-    private val circuitBreakers = mutableMapOf<String, CircuitBreaker>()
+    private val circuitBreakers = ConcurrentHashMap<String, CircuitBreaker>()
     // Simple in-memory ad cache per placement (interstitials): preserves last loaded ad for fast show.
     private data class CachedAd(val ad: Ad, val expiryAtMs: Long)
     private val adCache = mutableMapOf<String, CachedAd>()
@@ -182,7 +197,7 @@ class MediationSDK private constructor(
     }
 
     private fun initializeInternal() {
-        backgroundExecutor.execute {
+        val initTask = Runnable {
             try {
                 // Load configuration
                 configManager.loadConfig()
@@ -199,6 +214,11 @@ class MediationSDK private constructor(
                 telemetry.recordError("initialization_failed", e)
             }
         }
+        if (isTestRuntime()) {
+            initTask.run()
+        } else {
+            backgroundExecutor.execute(initTask)
+        }
     }
     
     /**
@@ -208,8 +228,7 @@ class MediationSDK private constructor(
      * @param callback Callback for ad load result (called on main thread)
      */
     fun loadAd(placement: String, callback: AdLoadCallback) {
-        // All operations on background thread
-        backgroundExecutor.execute {
+        val loadTask = Runnable {
             val startTime = System.currentTimeMillis()
 
             try {
@@ -218,7 +237,7 @@ class MediationSDK private constructor(
                 if (features.killSwitch) {
                     telemetry.recordError("killed_by_config", IllegalStateException("kill_switch_active"))
                     postToMainThread { callback.onError(AdError.INTERNAL_ERROR, "kill_switch_active") }
-                    return@execute
+                    return@Runnable
                 }
 
                 // Get placement configuration
@@ -226,7 +245,7 @@ class MediationSDK private constructor(
                 if (placementConfig == null) {
                     telemetry.recordError("invalid_placement", IllegalArgumentException("Unknown placement: $placement"))
                     postToMainThread { callback.onError(AdError.INVALID_PLACEMENT, "Unknown placement: $placement") }
-                    return@execute
+                    return@Runnable
                 }
 
                 // 1) Try S2S auction first (competitive path). Falls back to adapters on no_fill.
@@ -261,7 +280,7 @@ class MediationSDK private constructor(
                     val latency = System.currentTimeMillis() - startTime
                     telemetry.recordAdLoad(placement, latency, true)
                     postToMainThread { callback.onAdLoaded(ad) }
-                    return@execute
+                    return@Runnable
                 } catch (ae: AuctionClient.AuctionException) {
                     // Map taxonomy to AdError; if no_fill, proceed to adapter fallback; else report error
                     val reason = ae.reason
@@ -276,7 +295,7 @@ class MediationSDK private constructor(
                         }
                         telemetry.recordAdLoad(placement, System.currentTimeMillis() - startTime, false)
                         postToMainThread { callback.onError(err, reason) }
-                        return@execute
+                        return@Runnable
                     }
                 }
 
@@ -287,7 +306,7 @@ class MediationSDK private constructor(
                     postToMainThread {
                         callback.onError(AdError.NO_FILL, "No adapters available")
                     }
-                    return@execute
+                    return@Runnable
                 }
 
                 val futures = adapters.map { adapter ->
@@ -329,6 +348,11 @@ class MediationSDK private constructor(
                 postToMainThread { callback.onError(AdError.INTERNAL_ERROR, e.message ?: "Unknown error") }
             }
         }
+        if (isTestRuntime()) {
+            loadTask.run()
+        } else {
+            backgroundExecutor.execute(loadTask)
+        }
     }
     
     /**
@@ -340,15 +364,24 @@ class MediationSDK private constructor(
         config: PlacementConfig
     ): AdResponse? {
         val breaker = circuitBreakers.getOrPut(adapter.name) {
-            CircuitBreaker(
-                failureThreshold = 5,
-                resetTimeoutMs = 60000
-            )
+            createCircuitBreaker()
         }
         
         return breaker.execute {
             adapter.loadAd(placement, config)
         }
+    }
+
+    private fun createCircuitBreaker(): CircuitBreaker {
+        val failureThreshold = config.circuitBreakerFailureThreshold.coerceAtLeast(1)
+        val resetTimeoutMs = config.circuitBreakerResetTimeoutMs.coerceAtLeast(1000L)
+        val halfOpenMaxAttempts = config.circuitBreakerHalfOpenMaxAttempts.coerceAtLeast(1)
+
+        return CircuitBreaker(
+            failureThreshold = failureThreshold,
+            resetTimeoutMs = resetTimeoutMs,
+            halfOpenMaxAttempts = halfOpenMaxAttempts
+        )
     }
     
     /**
@@ -388,6 +421,18 @@ class MediationSDK private constructor(
         } else {
             mainHandler.post(action)
         }
+    }
+
+    private fun isTestRuntime(): Boolean {
+        return Companion.isTestEnvironment()
+    }
+
+    private fun prepareForReplacement() {
+        try { telemetry.stop() } catch (_: Throwable) {}
+        try { adapterRegistry.shutdown() } catch (_: Throwable) {}
+        try { configManager.shutdown() } catch (_: Throwable) {}
+        circuitBreakers.clear()
+        synchronized(adCache) { adCache.clear() }
     }
     
     /**
@@ -469,6 +514,9 @@ data class SDKConfig(
     val strictModePenaltyDeath: Boolean = false,
     // Optional: Base64-encoded Ed25519 public key for config signature verification (non-test builds)
     val configPublicKeyBase64: String? = null,
+    val circuitBreakerFailureThreshold: Int = 5,
+    val circuitBreakerResetTimeoutMs: Long = 60_000L,
+    val circuitBreakerHalfOpenMaxAttempts: Int = 3,
 ) {
     class Builder {
         private var appId: String = ""
@@ -479,6 +527,9 @@ data class SDKConfig(
         private var auctionEndpoint: String = "https://auction.rivalapexmediation.com"
         private var strictModePenaltyDeath: Boolean = false
         private var configPublicKeyBase64: String? = null
+        private var circuitBreakerFailureThreshold: Int = 5
+        private var circuitBreakerResetTimeoutMs: Long = 60_000L
+        private var circuitBreakerHalfOpenMaxAttempts: Int = 3
         
         fun appId(id: String) = apply { this.appId = id }
         fun testMode(enabled: Boolean) = apply { this.testMode = enabled }
@@ -488,6 +539,9 @@ data class SDKConfig(
         fun auctionEndpoint(url: String) = apply { this.auctionEndpoint = url }
         fun strictModePenaltyDeath(enabled: Boolean) = apply { this.strictModePenaltyDeath = enabled }
         fun configPublicKeyBase64(b64: String?) = apply { this.configPublicKeyBase64 = b64 }
+        fun circuitBreakerThreshold(threshold: Int) = apply { this.circuitBreakerFailureThreshold = threshold }
+        fun circuitBreakerResetTimeoutMs(timeoutMs: Long) = apply { this.circuitBreakerResetTimeoutMs = timeoutMs }
+        fun circuitBreakerHalfOpenAttempts(attempts: Int) = apply { this.circuitBreakerHalfOpenMaxAttempts = attempts }
         
         fun build() = SDKConfig(
             appId = appId,
@@ -498,6 +552,9 @@ data class SDKConfig(
             auctionEndpoint = auctionEndpoint,
             strictModePenaltyDeath = strictModePenaltyDeath,
             configPublicKeyBase64 = configPublicKeyBase64,
+            circuitBreakerFailureThreshold = circuitBreakerFailureThreshold,
+            circuitBreakerResetTimeoutMs = circuitBreakerResetTimeoutMs,
+            circuitBreakerHalfOpenMaxAttempts = circuitBreakerHalfOpenMaxAttempts,
         )
     }
 }

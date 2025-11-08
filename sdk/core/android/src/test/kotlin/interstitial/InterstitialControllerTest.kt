@@ -3,7 +3,7 @@ package com.rivalapexmediation.sdk.interstitial
 import com.rivalapexmediation.sdk.models.Ad
 import com.rivalapexmediation.sdk.models.AdType
 import com.rivalapexmediation.sdk.models.Creative
-import com.rivalapexmediation.sdk.models.AdError
+import com.rivalapexmediation.sdk.AdError
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancel

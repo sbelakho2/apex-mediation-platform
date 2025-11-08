@@ -6,7 +6,10 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-private class DummyAdapter(override val name: String = "dummy") : AdAdapter {
+private class DummyAdapter(
+    override val name: String = "dummy",
+    override val version: String = "1.0.0"
+) : AdAdapter {
     override fun isAvailable(): Boolean = true
     var destroyed = false
     override fun loadAd(placement: String, config: PlacementConfig): AdResponse? {

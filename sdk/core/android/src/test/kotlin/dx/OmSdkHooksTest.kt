@@ -98,7 +98,7 @@ class OmSdkHooksTest {
         // Install a test OM controller to capture calls
         data class Call(val type: String, val placement: String)
         val calls = mutableListOf<Call>()
-        OmSdkRegistry.setController(object : OmSdkController {
+        OmSdkRegistry.controller = object : OmSdkController {
             override fun startDisplaySession(activity: Activity, placementId: String, networkName: String, creativeType: String?) {
                 calls.add(Call("startDisplay", placementId))
             }
@@ -108,7 +108,7 @@ class OmSdkHooksTest {
             override fun endSession(placementId: String) {
                 calls.add(Call("end", placementId))
             }
-        })
+    }
 
         // Load then show
         var loaded = false
@@ -159,7 +159,7 @@ class OmSdkHooksTest {
 
         data class Call(val type: String, val placement: String)
         val calls = mutableListOf<Call>()
-        OmSdkRegistry.setController(object : OmSdkController {
+        OmSdkRegistry.controller = object : OmSdkController {
             override fun startDisplaySession(activity: Activity, placementId: String, networkName: String, creativeType: String?) {
                 calls.add(Call("startDisplay", placementId))
             }
@@ -167,7 +167,7 @@ class OmSdkHooksTest {
                 calls.add(Call("startVideo", placementId))
             }
             override fun endSession(placementId: String) { calls.add(Call("end", placementId)) }
-        })
+        }
 
         var loaded = false
         BelRewarded.load(appContext, placementId, object : AdLoadCallback {
@@ -214,7 +214,7 @@ class OmSdkHooksTest {
 
         data class Call(val type: String, val placement: String)
         val calls = mutableListOf<Call>()
-        OmSdkRegistry.setController(object : OmSdkController {
+        OmSdkRegistry.controller = object : OmSdkController {
             override fun startDisplaySession(activity: Activity, placementId: String, networkName: String, creativeType: String?) {
                 calls.add(Call("startDisplay", placementId))
             }
@@ -222,7 +222,7 @@ class OmSdkHooksTest {
                 calls.add(Call("startVideo", placementId))
             }
             override fun endSession(placementId: String) { calls.add(Call("end", placementId)) }
-        })
+        }
 
         var loaded = false
         BelRewardedInterstitial.load(appContext, placementId, object : AdLoadCallback {

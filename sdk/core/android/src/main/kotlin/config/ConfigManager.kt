@@ -2,8 +2,9 @@ package com.rivalapexmediation.sdk.config
 
 import android.content.Context
 import android.content.SharedPreferences
-import com.rivalapexmediation.sdk.models.*
+import com.rivalapexmediation.sdk.BuildConfig
 import com.rivalapexmediation.sdk.SDKConfig
+import com.rivalapexmediation.sdk.models.*
 import com.google.gson.Gson
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -115,7 +116,7 @@ class ConfigManager(
         
         val request = Request.Builder()
             .url(url)
-            .addHeader("User-Agent", "RivalApexMediation-Android/${BuildConfig.VERSION_NAME}")
+            .addHeader("User-Agent", "RivalApexMediation-Android/${BuildConfig.SDK_VERSION}")
             .addHeader("X-App-ID", sdkConfig.appId)
             .build()
         

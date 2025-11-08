@@ -6,10 +6,6 @@ package com.rivalapexmediation.sdk.measurement
  */
 object OmSdkRegistry {
     @Volatile
-    var controller: OmSdkController = NoOpOmSdkController()
-
     @JvmStatic
-    fun setController(c: OmSdkController) {
-        controller = c
-    }
+    var controller: OmSdkController = NoOpOmSdkController()
 }

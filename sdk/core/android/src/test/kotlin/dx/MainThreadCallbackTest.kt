@@ -6,7 +6,7 @@ import com.rivalapexmediation.sdk.rewarded.RewardedController
 import com.rivalapexmediation.sdk.models.Ad
 import com.rivalapexmediation.sdk.models.AdType
 import com.rivalapexmediation.sdk.models.Creative
-import com.rivalapexmediation.sdk.models.AdError
+import com.rivalapexmediation.sdk.AdError
 import android.os.Handler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -40,7 +40,9 @@ class MainThreadCallbackTest {
         var loadedOnMain = false
         var errorCalled = false
         val cb = InterstitialController.Callbacks(
-            onLoaded = { loadedOnMain = (Looper.myLooper() == Looper.getMainLooper()) },
+            onLoaded = {
+                loadedOnMain = (Looper.myLooper() == Looper.getMainLooper())
+            },
             onError = { _: AdError, _: String -> errorCalled = true }
         )
         // Start load on background

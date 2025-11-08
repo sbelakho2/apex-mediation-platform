@@ -3,7 +3,7 @@ package com.rivalapexmediation.sdk.rewarded
 import com.rivalapexmediation.sdk.models.Ad
 import com.rivalapexmediation.sdk.models.AdType
 import com.rivalapexmediation.sdk.models.Creative
-import com.rivalapexmediation.sdk.models.AdError
+import com.rivalapexmediation.sdk.AdError
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.*

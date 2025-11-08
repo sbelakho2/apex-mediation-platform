@@ -1,21 +1,23 @@
 package com.rivalapexmediation.sdk.rewarded
 
+import com.rivalapexmediation.sdk.AdError
 import com.rivalapexmediation.sdk.models.Ad
-import com.rivalapexmediation.sdk.models.AdError
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.CoroutineStart
 
 /**
  * Rewarded lifecycle controller mirroring InterstitialController with a reward callback.
  * States: Idle -> Loading -> Loaded -> Showing -> Closed -> Idle
  */
 class RewardedController(
-    private val mainDispatcher: kotlinx.coroutines.CoroutineDispatcher = Dispatchers.Main
+    private val mainDispatcher: CoroutineDispatcher = Dispatchers.Main
 ) {
     enum class State { Idle, Loading, Loaded, Showing, Closed }
 
@@ -46,16 +48,16 @@ class RewardedController(
             stateRef.set(State.Loading)
             inFlightCallbackFired.set(false)
         }
-        val job = scope.launch(Dispatchers.IO) {
+        val job = scope.launch(start = CoroutineStart.UNDISPATCHED) {
             try {
                 val ad = loader.invoke()
                 currentAdRef.set(ad)
                 stateRef.set(State.Loaded)
-                fireOnce { withContext(mainDispatcher) { cb.onLoaded(ad) } }
+                deliverOnMain { cb.onLoaded(ad) }
             } catch (t: Throwable) {
                 currentAdRef.set(null)
                 stateRef.set(State.Idle)
-                fireOnce { withContext(mainDispatcher) { cb.onError(mapToAdError(t), t.message ?: "load_failed") } }
+                deliverOnMain { cb.onError(mapToAdError(t), t.message ?: "load_failed") }
             }
         }
         loadJob = job
@@ -82,9 +84,9 @@ class RewardedController(
         inFlightCallbackFired.set(true)
     }
 
-    private fun fireOnce(block: suspend () -> Unit) {
+    private suspend fun deliverOnMain(block: suspend () -> Unit) {
         if (inFlightCallbackFired.compareAndSet(false, true)) {
-            kotlinx.coroutines.CoroutineScope(Dispatchers.Default).launch { block() }
+            withContext(mainDispatcher) { block() }
         }
     }
 

@@ -4,8 +4,8 @@ package com.rivalapexmediation.sdk.logging
  * Pure-JVM redaction utilities (no Android dependencies) so we can unit-test easily.
  */
 object Redactor {
-    private val apiKeyHeaderRegex = Regex("(?i)x-api-key[:=]\\s*([A-Za-z0-9_\n\r\-]{4,})")
-    private val kvSecretRegex = Regex("(?i)(api[_-]?key|secret|token)=([A-Za-z0-9\-_.]{6,})")
+    private val apiKeyHeaderRegex = Regex("(?i)x-api-key[:=]\\s*([A-Za-z0-9_\\n\\r\\-]{4,})")
+    private val kvSecretRegex = Regex("(?i)(api[_-]?key|secret|token)=([A-Za-z0-9\\-_.]{6,})")
 
     fun redactSecrets(input: String?): String {
         if (input == null) return ""

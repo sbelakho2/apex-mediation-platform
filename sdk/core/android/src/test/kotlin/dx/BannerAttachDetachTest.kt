@@ -1,7 +1,7 @@
 package com.rivalapexmediation.sdk.dx
 
 import android.content.Context
-import android.view.FrameLayout
+import android.widget.FrameLayout
 import androidx.test.core.app.ApplicationProvider
 import com.google.gson.Gson
 import com.rivalapexmediation.sdk.*

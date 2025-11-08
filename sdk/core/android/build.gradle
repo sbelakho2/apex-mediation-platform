@@ -17,6 +17,7 @@ android {
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         consumerProguardFiles "consumer-rules.pro"
+        buildConfigField "String", "SDK_VERSION", "\"${versionName}\""
     }
 
     buildTypes {
@@ -40,6 +41,26 @@ android {
         freeCompilerArgs += [
             '-opt-in=kotlin.RequiresOptIn'
         ]
+    }
+
+    sourceSets {
+        getByName('main') {
+            java.setSrcDirs([])
+            kotlin.setSrcDirs(['src/main/kotlin'])
+            manifest.srcFile('src/main/AndroidManifest.xml')
+        }
+        getByName('test') {
+            java.setSrcDirs(['src/test/java'])
+            kotlin.setSrcDirs(['src/test/kotlin'])
+        }
+        getByName('androidTest') {
+            java.setSrcDirs(['src/androidTest/java'])
+            kotlin.setSrcDirs(['src/androidTest/kotlin'])
+        }
+    }
+
+    buildFeatures {
+        buildConfig true
     }
 
     publishing {
@@ -96,7 +117,7 @@ tasks.register('checkSdkSize') {
     }
 }
 
-tasks.named('assembleRelease').configure {
+tasks.matching { it.name == 'assembleRelease' }.configureEach {
     finalizedBy 'checkSdkSize'
 }
 

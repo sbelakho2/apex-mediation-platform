@@ -124,7 +124,8 @@ Automatic fault tolerance per adapter:
 ```kotlin
 val config = SDKConfig.Builder()
     .circuitBreakerThreshold(5)  // Fail after 5 errors
-    .circuitBreakerTimeout(60000) // Reset after 60s
+    .circuitBreakerResetTimeoutMs(60000) // Reset after 60s
+    .circuitBreakerHalfOpenAttempts(2) // Require 2 successes to close
     .build()
 ```
 

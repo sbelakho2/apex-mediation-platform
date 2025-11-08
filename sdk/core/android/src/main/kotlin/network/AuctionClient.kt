@@ -30,7 +30,7 @@ class AuctionClient(
         .build()
 
     private fun buildUserAgent(): String {
-        val sdkVersion = try { com.rivalapexmediation.sdk.BuildConfig.VERSION_NAME } catch (_: Throwable) { "0.0.0" }
+    val sdkVersion = try { com.rivalapexmediation.sdk.BuildConfig.SDK_VERSION } catch (_: Throwable) { "0.0.0" }
         val osVer = "Android ${Build.VERSION.RELEASE ?: "unknown"}"
         val device = "${Build.MANUFACTURER ?: ""} ${Build.MODEL ?: ""}".trim()
         return "RivalApexMediation-Android/$sdkVersion ($osVer; $device)"
