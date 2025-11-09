@@ -13,13 +13,13 @@ CREATE TABLE IF NOT EXISTS email_queue (
     retries INTEGER DEFAULT 0,
     max_retries INTEGER DEFAULT 3,
     priority INTEGER DEFAULT 5, -- 1-10, lower = higher priority
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    
-    INDEX idx_email_queue_status (status),
-    INDEX idx_email_queue_scheduled (scheduled_for),
-    INDEX idx_email_queue_customer (customer_id),
-    INDEX idx_email_queue_template (template_name)
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE INDEX IF NOT EXISTS idx_email_queue_status ON email_queue (status);
+CREATE INDEX IF NOT EXISTS idx_email_queue_scheduled ON email_queue (scheduled_for);
+CREATE INDEX IF NOT EXISTS idx_email_queue_customer ON email_queue (customer_id);
+CREATE INDEX IF NOT EXISTS idx_email_queue_template ON email_queue (template_name);
 
 CREATE TABLE IF NOT EXISTS email_templates (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -33,12 +33,12 @@ CREATE TABLE IF NOT EXISTS email_templates (
     personalization_vars TEXT[], -- ['first_name', 'company_name', 'usage_stats']
     active BOOLEAN DEFAULT true,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    
-    INDEX idx_email_templates_name (template_name),
-    INDEX idx_email_templates_category (category),
-    INDEX idx_email_templates_active (active)
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE INDEX IF NOT EXISTS idx_email_templates_name ON email_templates (template_name);
+CREATE INDEX IF NOT EXISTS idx_email_templates_category ON email_templates (category);
+CREATE INDEX IF NOT EXISTS idx_email_templates_active ON email_templates (active);
 
 CREATE TABLE IF NOT EXISTS email_delivery_events (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -47,12 +47,12 @@ CREATE TABLE IF NOT EXISTS email_delivery_events (
         'sent', 'delivered', 'opened', 'clicked', 'bounced', 'complained', 'unsubscribed'
     )),
     event_timestamp TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    metadata JSONB DEFAULT '{}',
-    
-    INDEX idx_email_delivery_queue (email_queue_id),
-    INDEX idx_email_delivery_type (event_type),
-    INDEX idx_email_delivery_timestamp (event_timestamp)
+    metadata JSONB DEFAULT '{}'
 );
+
+CREATE INDEX IF NOT EXISTS idx_email_delivery_queue ON email_delivery_events (email_queue_id);
+CREATE INDEX IF NOT EXISTS idx_email_delivery_type ON email_delivery_events (event_type);
+CREATE INDEX IF NOT EXISTS idx_email_delivery_timestamp ON email_delivery_events (event_timestamp);
 
 CREATE TABLE IF NOT EXISTS email_ab_tests (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -72,20 +72,20 @@ CREATE TABLE IF NOT EXISTS email_ab_tests (
     end_date DATE,
     confidence_level DECIMAL(3,2),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    
-    INDEX idx_email_ab_test_name (test_name),
-    INDEX idx_email_ab_test_status (status),
     UNIQUE (test_name, template_name)
 );
+
+CREATE INDEX IF NOT EXISTS idx_email_ab_test_name ON email_ab_tests (test_name);
+CREATE INDEX IF NOT EXISTS idx_email_ab_test_status ON email_ab_tests (status);
 
 CREATE TABLE IF NOT EXISTS email_unsubscribes (
     customer_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
     unsubscribed_from TEXT[] DEFAULT '{}', -- ['marketing', 'lifecycle', 'product_updates']
     unsubscribe_reason TEXT,
-    unsubscribed_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    
-    INDEX idx_email_unsub_date (unsubscribed_at)
+    unsubscribed_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE INDEX IF NOT EXISTS idx_email_unsub_date ON email_unsubscribes (unsubscribed_at);
 
 COMMENT ON TABLE email_queue IS 'Outbound email queue processed every minute by EmailAutomationService';
 COMMENT ON TABLE email_templates IS 'Email templates with personalization variables for lifecycle emails';

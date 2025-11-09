@@ -179,4 +179,72 @@ class ConfigSignatureTest {
         val pl = mgr.getPlacementConfig("pl1")
         assertNotNull(pl)
     }
+
+    @Test
+    fun invalid_public_key_base64_rejects_config_in_production_builds() {
+        val kpg = KeyPairGenerator.getInstance("Ed25519")
+        val kp = kpg.generateKeyPair()
+
+        val configId = "cfg-invalid-key"
+        val version = 3L
+        val timestamp = 987654321L
+        val message = signingMessage(configId, version, timestamp)
+        val sig = Signature.getInstance("Ed25519")
+        sig.initSign(kp.private)
+        sig.update(message)
+        val signatureB64 = Base64.getEncoder().encodeToString(sig.sign())
+
+        val body = baseConfigJson(configId, version, timestamp, signatureB64)
+        server.enqueue(MockResponse().setResponseCode(200).setBody(body))
+
+        val baseUrl = server.url("/").toString().trimEnd('/')
+        val sdkCfg = SDKConfig(
+            appId = "app-2",
+            testMode = false,
+            telemetryEnabled = false,
+            configEndpoint = baseUrl,
+            auctionEndpoint = "http://localhost"
+        )
+        val context = mockContext(mockPrefs())
+
+        val invalidKeyBytes = ByteArray(0)
+        val mgr = ConfigManager(context, sdkCfg, client = null, configPublicKey = invalidKeyBytes)
+        mgr.loadConfig()
+        val pl = mgr.getPlacementConfig("pl1")
+        assertNull(pl)
+    }
+
+    @Test
+    fun test_mode_bypasses_signature_even_with_invalid_public_key() {
+        val kpg = KeyPairGenerator.getInstance("Ed25519")
+        val kp = kpg.generateKeyPair()
+
+        val configId = "cfg-invalid-key-test-mode"
+        val version = 4L
+        val timestamp = 111222333L
+        val message = signingMessage(configId, version, timestamp)
+        val sig = Signature.getInstance("Ed25519")
+        sig.initSign(kp.private)
+        sig.update(message)
+        val signatureB64 = Base64.getEncoder().encodeToString(sig.sign())
+
+        val body = baseConfigJson(configId, version, timestamp, signatureB64)
+        server.enqueue(MockResponse().setResponseCode(200).setBody(body))
+
+        val baseUrl = server.url("/").toString().trimEnd('/')
+        val sdkCfg = SDKConfig(
+            appId = "app-3",
+            testMode = true,
+            telemetryEnabled = false,
+            configEndpoint = baseUrl,
+            auctionEndpoint = "http://localhost"
+        )
+        val context = mockContext(mockPrefs())
+
+        val invalidKeyBytes = ByteArray(0)
+        val mgr = ConfigManager(context, sdkCfg, client = null, configPublicKey = invalidKeyBytes)
+        mgr.loadConfig()
+        val pl = mgr.getPlacementConfig("pl1")
+        assertNotNull(pl)
+    }
 }

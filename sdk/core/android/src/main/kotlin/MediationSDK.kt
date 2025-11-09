@@ -57,6 +57,8 @@ class MediationSDK private constructor(
         /**
          * Initialize the SDK (must be called from Application.onCreate())
          */
+        @JvmStatic
+        @JvmOverloads
         fun initialize(
             context: Context,
             appId: String,
@@ -503,7 +505,7 @@ class MediationSDK private constructor(
 /**
  * SDK Configuration
  */
-data class SDKConfig(
+data class SDKConfig @JvmOverloads constructor(
     val appId: String = "",
     val testMode: Boolean = false,
     val logLevel: LogLevel = LogLevel.INFO,

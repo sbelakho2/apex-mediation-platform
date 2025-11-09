@@ -102,7 +102,7 @@ class RedisClient {
   /**
    * Get value from cache
    */
-  async get<T = any>(key: string): Promise<T | null> {
+  async get<T = unknown>(key: string): Promise<T | null> {
     if (!this.client || !this.isConnected) {
       logger.warn('Redis not connected, skipping cache get', { key });
       return null;
@@ -123,7 +123,7 @@ class RedisClient {
   /**
    * Set value in cache with optional TTL (in seconds)
    */
-  async set(key: string, value: any, ttl?: number): Promise<boolean> {
+  async set(key: string, value: unknown, ttl?: number): Promise<boolean> {
     if (!this.client || !this.isConnected) {
       logger.warn('Redis not connected, skipping cache set', { key });
       return false;

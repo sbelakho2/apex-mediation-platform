@@ -1,11 +1,19 @@
 import request from 'supertest';
-import { Application } from 'express';
+import type { Application, NextFunction, Request, Response } from 'express';
 import type { ExportJob, DataWarehouseSync } from '../../services/dataExportService';
+
+type AuthenticatedTestRequest = Request & {
+  user?: {
+    publisherId: string;
+    userId: string;
+    email: string;
+  };
+};
 
 // Mock authentication middleware BEFORE importing routes
 jest.mock('../../middleware/auth', () => ({
-  authenticate: jest.fn((req: any, _res: any, next: any) => {
-    req.user = { publisherId: 'pub-123', userId: 'user-123' };
+  authenticate: jest.fn((req: AuthenticatedTestRequest, _res: Response, next: NextFunction) => {
+    req.user = { publisherId: 'pub-123', userId: 'user-123', email: 'test@example.com' };
     next();
   }),
 }));

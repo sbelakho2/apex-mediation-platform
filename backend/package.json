@@ -20,7 +20,8 @@
     "migrate:production": "infisical run --env=production -- node scripts/runMigrations.js",
     "seed:testdata": "node scripts/seedTestData.js",
     "clickhouse:init": "ts-node scripts/initClickHouseSchema.ts",
-    "secrets:migrate": "node scripts/migrate-secrets-to-infisical.js"
+    "secrets:migrate": "node scripts/migrate-secrets-to-infisical.js",
+    "enrichment:refresh": "ts-node scripts/refreshEnrichmentCache.ts"
   },
   "keywords": [
     "ad-mediation",

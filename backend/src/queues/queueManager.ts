@@ -6,7 +6,6 @@
  */
 
 import { Queue, Worker, QueueEvents, Job } from 'bullmq';
-import { redis } from '../utils/redis';
 import logger from '../utils/logger';
 
 // Queue configuration
@@ -56,7 +55,7 @@ export interface DataExportJob {
   format: 'csv' | 'json';
   startDate: string;
   endDate: string;
-  filters?: Record<string, any>;
+  filters?: Record<string, unknown>;
 }
 
 export interface ReportGenerationJob {
@@ -145,7 +144,7 @@ class QueueManager {
   /**
    * Add a job to a queue
    */
-  async addJob<T = any>(
+  async addJob<T = unknown>(
     queueName: QueueName,
     jobName: string,
     data: T,
@@ -190,9 +189,9 @@ class QueueManager {
   /**
    * Register a worker for a queue
    */
-  registerWorker<T = any>(
+  registerWorker<T = unknown>(
     queueName: QueueName,
-    processor: (job: Job<T>) => Promise<any>,
+    processor: (job: Job<T>) => Promise<unknown>,
     options?: {
       concurrency?: number;
       limiter?: {
@@ -241,7 +240,7 @@ class QueueManager {
   /**
    * Schedule a recurring job
    */
-  async scheduleRecurringJob<T = any>(
+  async scheduleRecurringJob<T = unknown>(
     queueName: QueueName,
     jobName: string,
     data: T,

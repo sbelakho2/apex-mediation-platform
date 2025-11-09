@@ -13,7 +13,6 @@ object BelAppOpen {
     @Volatile private var lastPlacement: String? = null
 
     @JvmStatic
-    @JvmOverloads
     fun load(context: Context, placementId: String, listener: AdLoadCallback) {
         lastPlacement = placementId
         MediationSDK.getInstance().loadAd(placementId, listener)

@@ -7,6 +7,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { gzipSync } from 'zlib';
 // import { Readable } from 'stream';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { Storage } from '@google-cloud/storage';
@@ -14,6 +15,55 @@ import { BigQuery } from '@google-cloud/bigquery';
 import logger from '../utils/logger';
 import { executeQuery } from '../utils/clickhouse';
 import * as dataExportRepository from '../repositories/dataExportRepository';
+
+type ExportRowPrimitive = string | number | boolean | Date | null;
+type ExportRow = Record<string, ExportRowPrimitive>;
+
+type ImpressionsExportRow = ExportRow & {
+  date: string;
+  publisher_id: string;
+  app_id: string;
+  adapter_name: string;
+  ad_format: string;
+  country: string;
+  impressions: number;
+  revenue: number;
+  avg_latency: number;
+};
+
+type RevenueExportRow = ExportRow & {
+  date: string;
+  publisher_id: string;
+  app_id: string;
+  adapter_name: string;
+  ad_format: string;
+  country: string;
+  revenue: number;
+  impressions: number;
+  ecpm: number;
+};
+
+type FraudEventExportRow = ExportRow & {
+  date: string;
+  publisher_id: string;
+  fraud_type: string;
+  risk_level: string;
+  events: number;
+  blocked_revenue: number;
+};
+
+type TelemetryExportRow = ExportRow & {
+  date: string;
+  publisher_id: string;
+  app_id: string;
+  sdk_version: string;
+  os: string;
+  device_type: string;
+  sessions: number;
+  avg_session_duration: number;
+  anr_count: number;
+  crash_count: number;
+};
 
 export interface ExportJob {
   id: string;
@@ -171,7 +221,7 @@ export class DataExportService {
   /**
    * Fetch data from ClickHouse for export
    */
-  private async fetchDataForExport(job: ExportJob): Promise<any[]> {
+  private async fetchDataForExport(job: ExportJob): Promise<ExportRow[]> {
     try {
       const startDate = job.startDate.toISOString().split('T')[0];
       const endDate = job.endDate.toISOString().split('T')[0];
@@ -276,8 +326,20 @@ export class DataExportService {
           throw new Error(`Unknown data type: ${job.dataType}`);
       }
 
-      const result = await executeQuery<any>(query);
-      return result;
+      switch (job.dataType) {
+        case 'impressions':
+          return executeQuery<ImpressionsExportRow>(query);
+        case 'revenue':
+          return executeQuery<RevenueExportRow>(query);
+        case 'fraud_events':
+          return executeQuery<FraudEventExportRow>(query);
+        case 'telemetry':
+          return executeQuery<TelemetryExportRow>(query);
+        case 'all':
+          return executeQuery<ExportRow>(query);
+      }
+
+      throw new Error(`Unhandled export data type: ${job.dataType}`);
     } catch (error) {
       logger.error('Failed to fetch export data', { error, jobId: job.id });
       throw error;
@@ -289,7 +351,7 @@ export class DataExportService {
    */
   private async generateExportFile(
     job: ExportJob,
-    data: any[],
+  data: ExportRow[],
     config: ExportConfig
   ): Promise<string> {
     try {
@@ -323,7 +385,7 @@ export class DataExportService {
   /**
    * Generate CSV file
    */
-  private async generateCSV(filePath: string, data: any[], compress: boolean): Promise<void> {
+  private async generateCSV(filePath: string, data: ExportRow[], compress: boolean): Promise<void> {
     try {
       if (data.length === 0) {
         throw new Error('No data to export');
@@ -338,8 +400,18 @@ export class DataExportService {
       for (const row of data) {
         const values = headers.map((header) => {
           const value = row[header];
-          if (value === null || value === undefined) return '';
-          if (typeof value === 'string') return `"${value.replace(/"/g, '""')}"`;
+          if (value === null || value === undefined) {
+            return '';
+          }
+
+          if (value instanceof Date) {
+            return value.toISOString();
+          }
+
+          if (typeof value === 'string') {
+            return `"${value.replace(/"/g, '""')}"`;
+          }
+
           return value;
         });
         csv += values.join(',') + '\n';
@@ -347,8 +419,7 @@ export class DataExportService {
 
       // Write to file
       if (compress) {
-        const zlib = require('zlib');
-        const compressed = zlib.gzipSync(csv);
+        const compressed = gzipSync(csv);
         fs.writeFileSync(filePath, compressed);
       } else {
         fs.writeFileSync(filePath, csv);
@@ -364,13 +435,12 @@ export class DataExportService {
   /**
    * Generate JSON file
    */
-  private async generateJSON(filePath: string, data: any[], compress: boolean): Promise<void> {
+  private async generateJSON(filePath: string, data: ExportRow[], compress: boolean): Promise<void> {
     try {
       const json = JSON.stringify(data, null, 2);
 
       if (compress) {
-        const zlib = require('zlib');
-        const compressed = zlib.gzipSync(json);
+        const compressed = gzipSync(json);
         fs.writeFileSync(filePath, compressed);
       } else {
         fs.writeFileSync(filePath, json);
@@ -386,7 +456,7 @@ export class DataExportService {
   /**
    * Generate Parquet file
    */
-  private async generateParquet(filePath: string, data: any[]): Promise<void> {
+  private async generateParquet(filePath: string, data: ExportRow[]): Promise<void> {
     try {
       if (data.length === 0) {
         throw new Error('No data to export');
@@ -396,7 +466,7 @@ export class DataExportService {
       const { ParquetSchema, ParquetWriter } = await import('parquetjs-lite');
 
       const first = data[0];
-      const schemaDef: Record<string, any> = {};
+  const schemaDef: Record<string, { type: string; optional: boolean }> = {};
       Object.keys(first).forEach((key) => {
         const val = first[key];
         if (typeof val === 'number') {
@@ -496,7 +566,7 @@ export class DataExportService {
   ): Promise<void> {
     try {
       const bq = new BigQuery();
-      const metadata: any = {};
+  const metadata: Record<string, unknown> = {};
       if (filePath.endsWith('.csv') || filePath.endsWith('.csv.gz')) {
         metadata.sourceFormat = 'CSV';
         metadata.autodetect = true;

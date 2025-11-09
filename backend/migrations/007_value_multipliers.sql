@@ -1,6 +1,11 @@
 -- Migration 007: Value Multipliers System
 -- Tracks revenue multipliers from network effects, premium features, marketplace, white-label partnerships
 
+ALTER TABLE users
+ADD COLUMN IF NOT EXISTS role VARCHAR(50) NOT NULL DEFAULT 'customer';
+
+CREATE INDEX IF NOT EXISTS idx_users_role ON users (role);
+
 CREATE TABLE IF NOT EXISTS value_multipliers (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     customer_id UUID REFERENCES users(id) ON DELETE CASCADE,
@@ -19,13 +24,13 @@ CREATE TABLE IF NOT EXISTS value_multipliers (
     deactivated_at TIMESTAMP WITH TIME ZONE,
     metadata JSONB DEFAULT '{}',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    
-    INDEX idx_value_multipliers_customer (customer_id),
-    INDEX idx_value_multipliers_type (multiplier_type),
-    INDEX idx_value_multipliers_active (is_active),
-    INDEX idx_value_multipliers_activated (activated_at)
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE INDEX IF NOT EXISTS idx_value_multipliers_customer ON value_multipliers (customer_id);
+CREATE INDEX IF NOT EXISTS idx_value_multipliers_type ON value_multipliers (multiplier_type);
+CREATE INDEX IF NOT EXISTS idx_value_multipliers_active ON value_multipliers (is_active);
+CREATE INDEX IF NOT EXISTS idx_value_multipliers_activated ON value_multipliers (activated_at);
 
 -- Network effect bonus tracking (platform-wide)
 CREATE TABLE IF NOT EXISTS network_effect_milestones (
@@ -34,10 +39,10 @@ CREATE TABLE IF NOT EXISTS network_effect_milestones (
     bonus_ecpm_percent INTEGER NOT NULL,
     unlocked_at TIMESTAMP WITH TIME ZONE,
     is_unlocked BOOLEAN DEFAULT false,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    
-    INDEX idx_network_effect_unlocked (is_unlocked)
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE INDEX IF NOT EXISTS idx_network_effect_unlocked ON network_effect_milestones (is_unlocked);
 
 -- Insert default milestones
 INSERT INTO network_effect_milestones (milestone_impressions, bonus_ecpm_percent) VALUES
@@ -54,10 +59,10 @@ CREATE TABLE IF NOT EXISTS ml_waterfall_optimizations (
     customers_impacted INTEGER NOT NULL DEFAULT 0,
     avg_ecpm_improvement_percent DECIMAL(5,2) NOT NULL DEFAULT 0,
     optimization_details JSONB DEFAULT '{}',
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    
-    INDEX idx_ml_waterfall_date (optimization_date)
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE INDEX IF NOT EXISTS idx_ml_waterfall_date ON ml_waterfall_optimizations (optimization_date);
 
 -- Premium feature subscriptions (consolidated)
 CREATE TABLE IF NOT EXISTS premium_feature_subscriptions (
@@ -70,13 +75,12 @@ CREATE TABLE IF NOT EXISTS premium_feature_subscriptions (
     status VARCHAR(20) DEFAULT 'active' CHECK (status IN ('active', 'trial', 'cancelled', 'expired')),
     stripe_subscription_id VARCHAR(255),
     trial_end_date TIMESTAMP WITH TIME ZONE,
-    
-    INDEX idx_premium_feature_customer (customer_id),
-    INDEX idx_premium_feature_status (status),
-    INDEX idx_premium_feature_name (feature_name),
-    
     UNIQUE (customer_id, feature_name)
 );
+
+CREATE INDEX IF NOT EXISTS idx_premium_feature_customer ON premium_feature_subscriptions (customer_id);
+CREATE INDEX IF NOT EXISTS idx_premium_feature_status ON premium_feature_subscriptions (status);
+CREATE INDEX IF NOT EXISTS idx_premium_feature_name ON premium_feature_subscriptions (feature_name);
 
 -- Marketplace data product subscribers
 CREATE TABLE IF NOT EXISTS marketplace_data_subscriptions (
@@ -90,11 +94,11 @@ CREATE TABLE IF NOT EXISTS marketplace_data_subscriptions (
     status VARCHAR(20) DEFAULT 'active' CHECK (status IN ('active', 'cancelled', 'suspended')),
     api_key_hash VARCHAR(255),
     monthly_api_call_limit INTEGER DEFAULT 10000,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    
-    INDEX idx_marketplace_subscriber (subscriber_email),
-    INDEX idx_marketplace_status (status)
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE INDEX IF NOT EXISTS idx_marketplace_subscriber ON marketplace_data_subscriptions (subscriber_email);
+CREATE INDEX IF NOT EXISTS idx_marketplace_status ON marketplace_data_subscriptions (status);
 
 -- White-label partnership tracking
 CREATE TABLE IF NOT EXISTS white_label_partnerships (
@@ -109,11 +113,11 @@ CREATE TABLE IF NOT EXISTS white_label_partnerships (
     status VARCHAR(20) DEFAULT 'active' CHECK (status IN ('active', 'paused', 'terminated')),
     contract_details JSONB DEFAULT '{}',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    
-    INDEX idx_white_label_status (status),
-    INDEX idx_white_label_partner (partner_email)
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE INDEX IF NOT EXISTS idx_white_label_status ON white_label_partnerships (status);
+CREATE INDEX IF NOT EXISTS idx_white_label_partner ON white_label_partnerships (partner_email);
 
 -- Value multiplier revenue tracking (aggregated view)
 CREATE OR REPLACE VIEW value_multiplier_revenue AS

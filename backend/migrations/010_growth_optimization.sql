@@ -12,12 +12,12 @@ CREATE TABLE IF NOT EXISTS waterfall_configs (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     last_optimized_at TIMESTAMP WITH TIME ZONE,
-    optimization_score DECIMAL(5,2), -- 0-100 score
-    
-    INDEX idx_waterfall_customer (customer_id),
-    INDEX idx_waterfall_placement (placement_id),
-    INDEX idx_waterfall_active (active)
+    optimization_score DECIMAL(5,2) -- 0-100 score
 );
+
+CREATE INDEX IF NOT EXISTS idx_waterfall_customer ON waterfall_configs (customer_id);
+CREATE INDEX IF NOT EXISTS idx_waterfall_placement ON waterfall_configs (placement_id);
+CREATE INDEX IF NOT EXISTS idx_waterfall_active ON waterfall_configs (active);
 
 CREATE TABLE IF NOT EXISTS marketplace_products (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -30,11 +30,11 @@ CREATE TABLE IF NOT EXISTS marketplace_products (
     min_sample_size INTEGER DEFAULT 100,
     active BOOLEAN DEFAULT true,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    
-    INDEX idx_marketplace_products_category (category),
-    INDEX idx_marketplace_products_active (active)
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE INDEX IF NOT EXISTS idx_marketplace_products_category ON marketplace_products (category);
+CREATE INDEX IF NOT EXISTS idx_marketplace_products_active ON marketplace_products (active);
 
 CREATE TABLE IF NOT EXISTS white_label_opportunities (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -49,12 +49,12 @@ CREATE TABLE IF NOT EXISTS white_label_opportunities (
     rejection_reason TEXT,
     partnership_details JSONB DEFAULT '{}',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    
-    INDEX idx_white_label_customer (customer_id),
-    INDEX idx_white_label_status (status),
-    INDEX idx_white_label_score (opportunity_score)
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE INDEX IF NOT EXISTS idx_white_label_customer ON white_label_opportunities (customer_id);
+CREATE INDEX IF NOT EXISTS idx_white_label_status ON white_label_opportunities (status);
+CREATE INDEX IF NOT EXISTS idx_white_label_score ON white_label_opportunities (opportunity_score);
 
 CREATE TABLE IF NOT EXISTS pricing_recommendations (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -70,12 +70,12 @@ CREATE TABLE IF NOT EXISTS pricing_recommendations (
     implemented_at TIMESTAMP WITH TIME ZONE,
     actual_impact_revenue_cents INTEGER,
     actual_impact_customers INTEGER,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    
-    INDEX idx_pricing_recommendations_type (recommendation_type),
-    INDEX idx_pricing_recommendations_status (status),
-    INDEX idx_pricing_recommendations_confidence (confidence_score)
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE INDEX IF NOT EXISTS idx_pricing_recommendations_type ON pricing_recommendations (recommendation_type);
+CREATE INDEX IF NOT EXISTS idx_pricing_recommendations_status ON pricing_recommendations (status);
+CREATE INDEX IF NOT EXISTS idx_pricing_recommendations_confidence ON pricing_recommendations (confidence_score);
 
 CREATE TABLE IF NOT EXISTS upsell_opportunities (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -90,13 +90,13 @@ CREATE TABLE IF NOT EXISTS upsell_opportunities (
     proposed_at TIMESTAMP WITH TIME ZONE,
     response_at TIMESTAMP WITH TIME ZONE,
     expires_at TIMESTAMP WITH TIME ZONE,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    
-    INDEX idx_upsell_customer (customer_id),
-    INDEX idx_upsell_type (opportunity_type),
-    INDEX idx_upsell_status (status),
-    INDEX idx_upsell_likelihood (likelihood)
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE INDEX IF NOT EXISTS idx_upsell_customer ON upsell_opportunities (customer_id);
+CREATE INDEX IF NOT EXISTS idx_upsell_type ON upsell_opportunities (opportunity_type);
+CREATE INDEX IF NOT EXISTS idx_upsell_status ON upsell_opportunities (status);
+CREATE INDEX IF NOT EXISTS idx_upsell_likelihood ON upsell_opportunities (likelihood);
 
 CREATE TABLE IF NOT EXISTS infrastructure_events (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -107,13 +107,13 @@ CREATE TABLE IF NOT EXISTS infrastructure_events (
     metadata JSONB DEFAULT '{}',
     resolved BOOLEAN DEFAULT false,
     resolved_at TIMESTAMP WITH TIME ZONE,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    
-    INDEX idx_infra_events_type (event_type),
-    INDEX idx_infra_events_severity (severity),
-    INDEX idx_infra_events_resolved (resolved),
-    INDEX idx_infra_events_created (created_at)
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE INDEX IF NOT EXISTS idx_infra_events_type ON infrastructure_events (event_type);
+CREATE INDEX IF NOT EXISTS idx_infra_events_severity ON infrastructure_events (severity);
+CREATE INDEX IF NOT EXISTS idx_infra_events_resolved ON infrastructure_events (resolved);
+CREATE INDEX IF NOT EXISTS idx_infra_events_created ON infrastructure_events (created_at);
 
 CREATE TABLE IF NOT EXISTS feature_flags (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -125,11 +125,11 @@ CREATE TABLE IF NOT EXISTS feature_flags (
     target_plans TEXT[], -- Specific plan types
     metadata JSONB DEFAULT '{}',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    
-    INDEX idx_feature_flags_name (flag_name),
-    INDEX idx_feature_flags_enabled (enabled)
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE INDEX IF NOT EXISTS idx_feature_flags_name ON feature_flags (flag_name);
+CREATE INDEX IF NOT EXISTS idx_feature_flags_enabled ON feature_flags (enabled);
 
 CREATE TABLE IF NOT EXISTS customer_segments (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -142,21 +142,22 @@ CREATE TABLE IF NOT EXISTS customer_segments (
     last_calculated_at TIMESTAMP WITH TIME ZONE,
     active BOOLEAN DEFAULT true,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    
-    INDEX idx_customer_segments_name (segment_name),
-    INDEX idx_customer_segments_active (active)
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE INDEX IF NOT EXISTS idx_customer_segments_name ON customer_segments (segment_name);
+CREATE INDEX IF NOT EXISTS idx_customer_segments_active ON customer_segments (active);
 
 CREATE TABLE IF NOT EXISTS segment_memberships (
     customer_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     segment_id UUID NOT NULL REFERENCES customer_segments(id) ON DELETE CASCADE,
     assigned_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     
-    PRIMARY KEY (customer_id, segment_id),
-    INDEX idx_segment_memberships_customer (customer_id),
-    INDEX idx_segment_memberships_segment (segment_id)
+    PRIMARY KEY (customer_id, segment_id)
 );
+
+CREATE INDEX IF NOT EXISTS idx_segment_memberships_customer ON segment_memberships (customer_id);
+CREATE INDEX IF NOT EXISTS idx_segment_memberships_segment ON segment_memberships (segment_id);
 
 -- Revenue optimization dashboard view
 CREATE OR REPLACE VIEW revenue_optimization_dashboard AS

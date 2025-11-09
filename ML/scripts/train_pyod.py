@@ -5,7 +5,7 @@ import shutil
 import tempfile
 import tarfile
 import zipfile
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 import numpy as np
@@ -13,8 +13,13 @@ import pandas as pd
 from pyod.models.iforest import IForest
 from pyod.models.copod import COPOD
 
-# Train unsupervised anomaly detectors to generate weak labels from features.parquet
-# Outputs: anomaly_scores.parquet and weak_labels.parquet (with columns: score, label_weak)
+# Train unsupervised anomaly detectors to generate weak labels from features.parquet.
+# Outputs follow OUTPUT_SCHEMAS below to keep parquet consumers stable.
+
+OUTPUT_SCHEMAS = {
+    "anomaly_scores": ["score", "label_weak"],
+    "weak_labels": ["label_weak"],
+}
 
 
 def _maybe_extract_archives(input_path: Path) -> Path:
@@ -61,22 +66,26 @@ def _find_parquet(base: Path) -> Path | None:
     return None
 
 
-def main():
+def build_arg_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser()
     ap.add_argument("--in-parquet", required=False, help="Path to features.parquet from prepare_data.py")
     ap.add_argument("--input", required=False, help="Directory containing data (archives allowed) or a parquet file")
     ap.add_argument("--out-dir", required=False, default=None)
-    ap.add_argument("--model", default="iforest", choices=["iforest", "copod"]) 
+    ap.add_argument("--model", default="iforest", choices=["iforest", "copod"])
     ap.add_argument("--contamination", type=float, default=0.05, help="Expected fraud rate for weak labels")
     ap.add_argument("--limit", type=int, default=0, help="Optional row cap for fast dev runs")
     ap.add_argument("--drop-cols", default="ip,user_id,gaid,idfa,ifa,adid", help="Comma-separated columns to drop for privacy if present")
     ap.add_argument("--date-col", default=None, help="Optional datetime column name for filtering")
     ap.add_argument("--date-start", default=None, help="Inclusive start date (YYYY-MM-DD)")
     ap.add_argument("--date-end", default=None, help="Inclusive end date (YYYY-MM-DD)")
-    args = ap.parse_args()
+    return ap
+
+
+def run(cli_args: list[str] | None = None) -> Path:
+    args = build_arg_parser().parse_args(cli_args)
 
     if args.out_dir is None:
-        args.out_dir = os.path.join("models", "fraud", "dev", datetime.utcnow().strftime("%Y%m%d"))
+        args.out_dir = os.path.join("models", "fraud", "dev", datetime.now(UTC).strftime("%Y%m%d"))
     os.makedirs(args.out_dir, exist_ok=True)
 
     # Resolve input parquet
@@ -143,14 +152,18 @@ def main():
         "score": scores,
         "label_weak": label_weak,
     })
+    out_scores = out_scores[OUTPUT_SCHEMAS["anomaly_scores"]]
     out_scores_path = os.path.join(args.out_dir, "anomaly_scores.parquet")
     out_scores.to_parquet(out_scores_path, index=False)
 
     # Also write a lightweight weak labels parquet for downstream supervised training
-    pd.DataFrame({"label_weak": label_weak}).to_parquet(os.path.join(args.out_dir, "weak_labels.parquet"), index=False)
+    pd.DataFrame({"label_weak": label_weak}, columns=OUTPUT_SCHEMAS["weak_labels"]).to_parquet(
+        os.path.join(args.out_dir, "weak_labels.parquet"),
+        index=False,
+    )
 
     meta = {
-        "generated_at": datetime.utcnow().isoformat() + "Z",
+        "generated_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
         "model": args.model,
         "contamination": args.contamination,
         "input": str(parquet_path.resolve()),
@@ -164,12 +177,14 @@ def main():
         },
         "limit": args.limit,
         "dropped_cols": [c for c in drop_cols if c],
+        "schemas": OUTPUT_SCHEMAS,
     }
     with open(os.path.join(args.out_dir, "pyod_meta.json"), "w", encoding="utf-8") as fh:
         json.dump(meta, fh, indent=2)
 
     print("Wrote:", out_scores_path)
+    return Path(args.out_dir)
 
 
 if __name__ == "__main__":
-    main()
+    run()

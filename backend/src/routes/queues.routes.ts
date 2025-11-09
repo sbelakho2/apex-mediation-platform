@@ -17,7 +17,7 @@ const router = Router();
  */
 router.get('/metrics', authenticate, async (req: Request, res: Response) => {
   try {
-    const metrics: Record<string, any> = {};
+  const metrics: Record<string, unknown> = {};
 
     for (const queueName of Object.values(QueueName)) {
       const queueMetrics = await queueManager.getQueueMetrics(queueName);

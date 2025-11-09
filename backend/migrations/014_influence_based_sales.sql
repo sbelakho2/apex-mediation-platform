@@ -41,10 +41,75 @@ CREATE TABLE IF NOT EXISTS customer_journey_stages (
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX IF NOT EXISTS idx_journey_stages_customer ON customer_journey_stages(customer_id);
-CREATE INDEX IF NOT EXISTS idx_journey_stages_stage ON customer_journey_stages(current_stage);
-CREATE INDEX IF NOT EXISTS idx_journey_stages_next_touchpoint ON customer_journey_stages(next_touchpoint_at);
-CREATE INDEX IF NOT EXISTS idx_journey_stages_probability ON customer_journey_stages(conversion_probability);
+ALTER TABLE customer_journey_stages
+  ADD COLUMN IF NOT EXISTS id UUID DEFAULT gen_random_uuid();
+
+ALTER TABLE customer_journey_stages
+  ADD COLUMN IF NOT EXISTS campaign_id UUID;
+
+ALTER TABLE customer_journey_stages
+  ADD COLUMN IF NOT EXISTS days_in_stage INTEGER DEFAULT 0;
+
+ALTER TABLE customer_journey_stages
+  ADD COLUMN IF NOT EXISTS milestone_count INTEGER DEFAULT 0;
+
+ALTER TABLE customer_journey_stages
+  ADD COLUMN IF NOT EXISTS engagement_score INTEGER DEFAULT 0;
+
+ALTER TABLE customer_journey_stages
+  ADD COLUMN IF NOT EXISTS conversion_probability DECIMAL(5,2) DEFAULT 0.00;
+
+ALTER TABLE customer_journey_stages
+  ADD COLUMN IF NOT EXISTS next_touchpoint_at TIMESTAMP;
+
+ALTER TABLE customer_journey_stages
+  ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT '{}';
+
+ALTER TABLE customer_journey_stages
+  ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+
+ALTER TABLE customer_journey_stages
+  ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+
+ALTER TABLE customer_journey_stages
+  ALTER COLUMN id SET DEFAULT gen_random_uuid();
+
+UPDATE customer_journey_stages
+SET days_in_stage = COALESCE(days_in_stage, stage_duration_days)
+WHERE stage_duration_days IS NOT NULL
+  AND (days_in_stage IS NULL OR days_in_stage = 0);
+
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'customer_journey_stages' AND column_name = 'customer_id'
+  ) THEN
+    CREATE INDEX IF NOT EXISTS idx_journey_stages_customer ON customer_journey_stages(customer_id);
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'customer_journey_stages' AND column_name = 'current_stage'
+  ) THEN
+    CREATE INDEX IF NOT EXISTS idx_journey_stages_stage ON customer_journey_stages(current_stage);
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'customer_journey_stages' AND column_name = 'next_touchpoint_at'
+  ) THEN
+    CREATE INDEX IF NOT EXISTS idx_journey_stages_next_touchpoint ON customer_journey_stages(next_touchpoint_at);
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'customer_journey_stages' AND column_name = 'conversion_probability'
+  ) THEN
+    CREATE INDEX IF NOT EXISTS idx_journey_stages_probability ON customer_journey_stages(conversion_probability);
+  END IF;
+END;
+$$;
 
 -- ============================================================================
 -- TOUCHPOINTS & INFLUENCE TACTICS
@@ -369,9 +434,81 @@ CREATE TABLE IF NOT EXISTS customer_segments (
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX IF NOT EXISTS idx_segments_customer ON customer_segments(customer_id);
-CREATE INDEX IF NOT EXISTS idx_segments_category ON customer_segments(app_category);
-CREATE INDEX IF NOT EXISTS idx_segments_engagement ON customer_segments(engagement_level);
+ALTER TABLE customer_segments
+  ADD COLUMN IF NOT EXISTS id UUID DEFAULT gen_random_uuid();
+
+ALTER TABLE customer_segments
+  ADD COLUMN IF NOT EXISTS customer_id UUID;
+
+ALTER TABLE customer_segments
+  ADD COLUMN IF NOT EXISTS app_category VARCHAR(100);
+
+ALTER TABLE customer_segments
+  ADD COLUMN IF NOT EXISTS company_size VARCHAR(50);
+
+ALTER TABLE customer_segments
+  ADD COLUMN IF NOT EXISTS geography VARCHAR(100);
+
+ALTER TABLE customer_segments
+  ADD COLUMN IF NOT EXISTS tech_stack VARCHAR(100);
+
+ALTER TABLE customer_segments
+  ADD COLUMN IF NOT EXISTS engagement_level VARCHAR(50);
+
+ALTER TABLE customer_segments
+  ADD COLUMN IF NOT EXISTS price_sensitivity VARCHAR(50);
+
+ALTER TABLE customer_segments
+  ADD COLUMN IF NOT EXISTS decision_making_style VARCHAR(50);
+
+ALTER TABLE customer_segments
+  ADD COLUMN IF NOT EXISTS most_effective_principle VARCHAR(50);
+
+ALTER TABLE customer_segments
+  ADD COLUMN IF NOT EXISTS principle_preferences JSONB;
+
+ALTER TABLE customer_segments
+  ADD COLUMN IF NOT EXISTS preferred_channel VARCHAR(50);
+
+ALTER TABLE customer_segments
+  ADD COLUMN IF NOT EXISTS optimal_send_time TIME;
+
+ALTER TABLE customer_segments
+  ADD COLUMN IF NOT EXISTS message_frequency VARCHAR(50);
+
+ALTER TABLE customer_segments
+  ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+
+ALTER TABLE customer_segments
+  ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+
+ALTER TABLE customer_segments
+  ALTER COLUMN id SET DEFAULT gen_random_uuid();
+
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'customer_segments' AND column_name = 'customer_id'
+  ) THEN
+    CREATE INDEX IF NOT EXISTS idx_segments_customer ON customer_segments(customer_id);
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'customer_segments' AND column_name = 'app_category'
+  ) THEN
+    CREATE INDEX IF NOT EXISTS idx_segments_category ON customer_segments(app_category);
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'customer_segments' AND column_name = 'engagement_level'
+  ) THEN
+    CREATE INDEX IF NOT EXISTS idx_segments_engagement ON customer_segments(engagement_level);
+  END IF;
+END;
+$$;
 
 -- ============================================================================
 -- ANALYTICS VIEWS

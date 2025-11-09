@@ -49,7 +49,7 @@ export interface GPPString {
 export interface GPPSection {
   sectionId: number;
   sectionName: string;
-  data: Record<string, any>;
+  data: Record<string, unknown>;
 }
 
 export const GPP_SECTION_IDS = {
@@ -416,15 +416,14 @@ export class ConsentManagementService {
   async storeConsent(userId: string, consent: Partial<UserConsent>): Promise<void> {
     try {
       // Parse consent strings
-      let tcfData: TCFv2ConsentString | null = null;
-      let gppData: GPPString | null = null;
+  let tcfData: TCFv2ConsentString | null = null;
 
       if (consent.consentString) {
         tcfData = TCFv2Parser.parse(consent.consentString);
       }
 
       if (consent.gppString) {
-        gppData = GPPParser.parse(consent.gppString);
+        GPPParser.parse(consent.gppString);
       }
 
       // Extract purposes and vendors from TCF

@@ -1,0 +1,26 @@
+{
+  "version": "v1",
+  "updatedAt": "2025-11-09T00:00:00Z",
+  "counts": {
+    "abuse": 2,
+    "tor": 2,
+    "cloudProviders": [
+      {
+        "provider": "aws",
+        "prefixes": 2
+      },
+      {
+        "provider": "gcp",
+        "prefixes": 1
+      },
+      {
+        "provider": "azure",
+        "prefixes": 1
+      }
+    ],
+    "vpn": 2,
+    "asn": 2,
+    "userAgentPatterns": 3
+  },
+  "generatedAt": "2025-11-09T09:52:33.575Z"
+}

@@ -10,12 +10,12 @@ CREATE TABLE IF NOT EXISTS system_metrics (
     threshold_value DECIMAL(12,4),
     trend VARCHAR(20) DEFAULT 'stable' CHECK (trend IN ('improving', 'stable', 'degrading')),
     recorded_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    metadata JSONB DEFAULT '{}',
-    
-    INDEX idx_system_metrics_name (metric_name),
-    INDEX idx_system_metrics_severity (severity),
-    INDEX idx_system_metrics_recorded (recorded_at)
+    metadata JSONB DEFAULT '{}'
 );
+
+CREATE INDEX IF NOT EXISTS idx_system_metrics_name ON system_metrics (metric_name);
+CREATE INDEX IF NOT EXISTS idx_system_metrics_severity ON system_metrics (severity);
+CREATE INDEX IF NOT EXISTS idx_system_metrics_recorded ON system_metrics (recorded_at);
 
 CREATE TABLE IF NOT EXISTS optimization_queue (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -32,13 +32,13 @@ CREATE TABLE IF NOT EXISTS optimization_queue (
     metrics_after JSONB DEFAULT '{}',
     rollback_available BOOLEAN DEFAULT true,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    
-    INDEX idx_optimization_status (approval_status),
-    INDEX idx_optimization_confidence (confidence_score),
-    INDEX idx_optimization_auto_applied (auto_applied),
-    INDEX idx_optimization_created (created_at)
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE INDEX IF NOT EXISTS idx_optimization_status ON optimization_queue (approval_status);
+CREATE INDEX IF NOT EXISTS idx_optimization_confidence ON optimization_queue (confidence_score);
+CREATE INDEX IF NOT EXISTS idx_optimization_auto_applied ON optimization_queue (auto_applied);
+CREATE INDEX IF NOT EXISTS idx_optimization_created ON optimization_queue (created_at);
 
 CREATE TABLE IF NOT EXISTS incidents (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -55,13 +55,13 @@ CREATE TABLE IF NOT EXISTS incidents (
     status VARCHAR(20) DEFAULT 'open' CHECK (status IN ('open', 'investigating', 'resolved', 'false_positive')),
     metrics_at_detection JSONB DEFAULT '{}',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    
-    INDEX idx_incidents_status (status),
-    INDEX idx_incidents_severity (severity),
-    INDEX idx_incidents_detected (detected_at),
-    INDEX idx_incidents_service (affected_service)
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE INDEX IF NOT EXISTS idx_incidents_status ON incidents (status);
+CREATE INDEX IF NOT EXISTS idx_incidents_severity ON incidents (severity);
+CREATE INDEX IF NOT EXISTS idx_incidents_detected ON incidents (detected_at);
+CREATE INDEX IF NOT EXISTS idx_incidents_service ON incidents (affected_service);
 
 CREATE TABLE IF NOT EXISTS evolution_log (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -76,13 +76,13 @@ CREATE TABLE IF NOT EXISTS evolution_log (
     rollback_id UUID REFERENCES evolution_log(id),
     rolled_back BOOLEAN DEFAULT false,
     rolled_back_at TIMESTAMP WITH TIME ZONE,
-    applied_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    
-    INDEX idx_evolution_type (change_type),
-    INDEX idx_evolution_success (success),
-    INDEX idx_evolution_applied (applied_at),
-    INDEX idx_evolution_rollback (rollback_id)
+    applied_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE INDEX IF NOT EXISTS idx_evolution_type ON evolution_log (change_type);
+CREATE INDEX IF NOT EXISTS idx_evolution_success ON evolution_log (success);
+CREATE INDEX IF NOT EXISTS idx_evolution_applied ON evolution_log (applied_at);
+CREATE INDEX IF NOT EXISTS idx_evolution_rollback ON evolution_log (rollback_id);
 
 CREATE TABLE IF NOT EXISTS predictive_alerts (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -95,12 +95,12 @@ CREATE TABLE IF NOT EXISTS predictive_alerts (
     status VARCHAR(20) DEFAULT 'active' CHECK (status IN ('active', 'dismissed', 'actioned', 'false_positive')),
     actioned_at TIMESTAMP WITH TIME ZONE,
     action_taken TEXT,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    
-    INDEX idx_predictive_status (status),
-    INDEX idx_predictive_date (predicted_date),
-    INDEX idx_predictive_severity (severity)
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE INDEX IF NOT EXISTS idx_predictive_status ON predictive_alerts (status);
+CREATE INDEX IF NOT EXISTS idx_predictive_date ON predictive_alerts (predicted_date);
+CREATE INDEX IF NOT EXISTS idx_predictive_severity ON predictive_alerts (severity);
 
 CREATE TABLE IF NOT EXISTS infrastructure_scaling_events (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -114,12 +114,12 @@ CREATE TABLE IF NOT EXISTS infrastructure_scaling_events (
     actual_cost_impact_cents INTEGER,
     success BOOLEAN NOT NULL,
     error_message TEXT,
-    scaled_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    
-    INDEX idx_scaling_resource (resource_type),
-    INDEX idx_scaling_action (action),
-    INDEX idx_scaling_scaled (scaled_at)
+    scaled_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE INDEX IF NOT EXISTS idx_scaling_resource ON infrastructure_scaling_events (resource_type);
+CREATE INDEX IF NOT EXISTS idx_scaling_action ON infrastructure_scaling_events (action);
+CREATE INDEX IF NOT EXISTS idx_scaling_scaled ON infrastructure_scaling_events (scaled_at);
 
 CREATE TABLE IF NOT EXISTS ai_learning_history (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -129,12 +129,12 @@ CREATE TABLE IF NOT EXISTS ai_learning_history (
     sample_size INTEGER NOT NULL,
     confidence_improved_by DECIMAL(5,2) DEFAULT 0,
     model_version VARCHAR(50),
-    learned_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    
-    INDEX idx_ai_learning_area (learning_area),
-    INDEX idx_ai_learning_success (success_rate),
-    INDEX idx_ai_learning_learned (learned_at)
+    learned_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE INDEX IF NOT EXISTS idx_ai_learning_area ON ai_learning_history (learning_area);
+CREATE INDEX IF NOT EXISTS idx_ai_learning_success ON ai_learning_history (success_rate);
+CREATE INDEX IF NOT EXISTS idx_ai_learning_learned ON ai_learning_history (learned_at);
 
 CREATE TABLE IF NOT EXISTS capacity_forecasts (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -145,12 +145,12 @@ CREATE TABLE IF NOT EXISTS capacity_forecasts (
     capacity_utilization_percent DECIMAL(5,2) NOT NULL,
     recommendation TEXT NOT NULL,
     confidence_score DECIMAL(3,2) NOT NULL CHECK (confidence_score BETWEEN 0 AND 1),
-    forecasted_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    
-    INDEX idx_capacity_resource (resource_type),
-    INDEX idx_capacity_date (forecast_date),
-    INDEX idx_capacity_utilization (capacity_utilization_percent)
+    forecasted_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE INDEX IF NOT EXISTS idx_capacity_resource ON capacity_forecasts (resource_type);
+CREATE INDEX IF NOT EXISTS idx_capacity_date ON capacity_forecasts (forecast_date);
+CREATE INDEX IF NOT EXISTS idx_capacity_utilization ON capacity_forecasts (capacity_utilization_percent);
 
 CREATE TABLE IF NOT EXISTS system_health_snapshots (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -162,11 +162,11 @@ CREATE TABLE IF NOT EXISTS system_health_snapshots (
     customer_health_distribution JSONB DEFAULT '{}',
     revenue_health JSONB DEFAULT '{}',
     infrastructure_health JSONB DEFAULT '{}',
-    snapshot_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    
-    INDEX idx_health_score (overall_health_score),
-    INDEX idx_health_snapshot (snapshot_at)
+    snapshot_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE INDEX IF NOT EXISTS idx_health_score ON system_health_snapshots (overall_health_score);
+CREATE INDEX IF NOT EXISTS idx_health_snapshot ON system_health_snapshots (snapshot_at);
 
 -- Real-time system health dashboard view
 CREATE OR REPLACE VIEW system_health_dashboard AS

@@ -111,7 +111,7 @@ export class ThompsonSamplingService {
     const d = shape - 1 / 3;
     const c = 1 / Math.sqrt(9 * d);
 
-    while (true) {
+    for (;;) {
       let x, v;
       do {
         x = this.normalRandom();
@@ -264,7 +264,7 @@ export class ThompsonSamplingService {
   async getExperimentStats(): Promise<ThompsonSamplingStats[]> {
     const stats: ThompsonSamplingStats[] = [];
 
-    for (const [key, experiment] of this.experiments.entries()) {
+  for (const [, experiment] of this.experiments.entries()) {
       // Find best performing candidate
       let bestFloor = experiment.candidates[0].price;
       let bestSuccessRate = 0;

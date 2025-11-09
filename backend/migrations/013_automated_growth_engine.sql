@@ -15,13 +15,13 @@ CREATE TABLE IF NOT EXISTS customer_health_scores (
     usage_score INTEGER DEFAULT 0,
     engagement_score INTEGER DEFAULT 0,
     payment_health_score INTEGER DEFAULT 0,
-    support_score INTEGER DEFAULT 0,
-    
-    INDEX idx_customer_health_risk (churn_risk),
-    INDEX idx_customer_health_score (health_score),
-    INDEX idx_customer_health_intervention (intervention_recommended),
-    INDEX idx_customer_health_calculated (calculated_at)
+    support_score INTEGER DEFAULT 0
 );
+
+CREATE INDEX IF NOT EXISTS idx_customer_health_risk ON customer_health_scores (churn_risk);
+CREATE INDEX IF NOT EXISTS idx_customer_health_score ON customer_health_scores (health_score);
+CREATE INDEX IF NOT EXISTS idx_customer_health_intervention ON customer_health_scores (intervention_recommended);
+CREATE INDEX IF NOT EXISTS idx_customer_health_calculated ON customer_health_scores (calculated_at);
 
 CREATE TABLE IF NOT EXISTS churn_predictions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -33,12 +33,12 @@ CREATE TABLE IF NOT EXISTS churn_predictions (
     recommended_interventions JSONB DEFAULT '[]',
     prediction_accuracy DECIMAL(3,2), -- Filled after churn date passes
     model_version VARCHAR(50),
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    
-    INDEX idx_churn_customer (customer_id),
-    INDEX idx_churn_predicted_date (predicted_churn_date),
-    INDEX idx_churn_confidence (confidence_score)
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE INDEX IF NOT EXISTS idx_churn_customer ON churn_predictions (customer_id);
+CREATE INDEX IF NOT EXISTS idx_churn_predicted_date ON churn_predictions (predicted_churn_date);
+CREATE INDEX IF NOT EXISTS idx_churn_confidence ON churn_predictions (confidence_score);
 
 CREATE TABLE IF NOT EXISTS churn_interventions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -59,13 +59,13 @@ CREATE TABLE IF NOT EXISTS churn_interventions (
     response_date TIMESTAMP WITH TIME ZONE,
     success BOOLEAN,
     churn_prevented BOOLEAN,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    
-    INDEX idx_churn_intervention_customer (customer_id),
-    INDEX idx_churn_intervention_type (intervention_type),
-    INDEX idx_churn_intervention_status (status),
-    INDEX idx_churn_intervention_success (success)
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE INDEX IF NOT EXISTS idx_churn_intervention_customer ON churn_interventions (customer_id);
+CREATE INDEX IF NOT EXISTS idx_churn_intervention_type ON churn_interventions (intervention_type);
+CREATE INDEX IF NOT EXISTS idx_churn_intervention_status ON churn_interventions (status);
+CREATE INDEX IF NOT EXISTS idx_churn_intervention_success ON churn_interventions (success);
 
 CREATE TABLE IF NOT EXISTS growth_opportunities (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -86,13 +86,13 @@ CREATE TABLE IF NOT EXISTS growth_opportunities (
     actioned_at TIMESTAMP WITH TIME ZONE,
     converted_at TIMESTAMP WITH TIME ZONE,
     actual_value_cents INTEGER,
-    opportunity_details JSONB DEFAULT '{}',
-    
-    INDEX idx_growth_customer (customer_id),
-    INDEX idx_growth_type (opportunity_type),
-    INDEX idx_growth_status (status),
-    INDEX idx_growth_likelihood (likelihood)
+    opportunity_details JSONB DEFAULT '{}'
 );
+
+CREATE INDEX IF NOT EXISTS idx_growth_customer ON growth_opportunities (customer_id);
+CREATE INDEX IF NOT EXISTS idx_growth_type ON growth_opportunities (opportunity_type);
+CREATE INDEX IF NOT EXISTS idx_growth_status ON growth_opportunities (status);
+CREATE INDEX IF NOT EXISTS idx_growth_likelihood ON growth_opportunities (likelihood);
 
 CREATE TABLE IF NOT EXISTS customer_journey_stages (
     customer_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
@@ -112,11 +112,11 @@ CREATE TABLE IF NOT EXISTS customer_journey_stages (
     next_best_action TEXT,
     personalization_data JSONB DEFAULT '{}',
     milestone_progress JSONB DEFAULT '{}',
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    
-    INDEX idx_journey_stage (current_stage),
-    INDEX idx_journey_entered (stage_entered_at)
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE INDEX IF NOT EXISTS idx_journey_stage ON customer_journey_stages (current_stage);
+CREATE INDEX IF NOT EXISTS idx_journey_entered ON customer_journey_stages (stage_entered_at);
 
 CREATE TABLE IF NOT EXISTS onboarding_experiments (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -136,10 +136,11 @@ CREATE TABLE IF NOT EXISTS onboarding_experiments (
     experiment_config JSONB DEFAULT '{}',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     
-    INDEX idx_onboarding_exp_status (status),
-    INDEX idx_onboarding_exp_name (experiment_name),
     UNIQUE (experiment_name, variant_name)
 );
+
+CREATE INDEX IF NOT EXISTS idx_onboarding_exp_status ON onboarding_experiments (status);
+CREATE INDEX IF NOT EXISTS idx_onboarding_exp_name ON onboarding_experiments (experiment_name);
 
 CREATE TABLE IF NOT EXISTS customer_experiment_assignments (
     customer_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -148,9 +149,10 @@ CREATE TABLE IF NOT EXISTS customer_experiment_assignments (
     activated BOOLEAN DEFAULT false,
     activated_at TIMESTAMP WITH TIME ZONE,
     
-    PRIMARY KEY (customer_id, experiment_id),
-    INDEX idx_experiment_assignment_customer (customer_id)
+    PRIMARY KEY (customer_id, experiment_id)
 );
+
+CREATE INDEX IF NOT EXISTS idx_experiment_assignment_customer ON customer_experiment_assignments (customer_id);
 
 CREATE TABLE IF NOT EXISTS success_story_captures (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -163,12 +165,12 @@ CREATE TABLE IF NOT EXISTS success_story_captures (
     testimonial_text TEXT,
     permission_to_publish BOOLEAN DEFAULT false,
     published_at TIMESTAMP WITH TIME ZONE,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    
-    INDEX idx_success_customer (customer_id),
-    INDEX idx_success_milestone (milestone_achieved),
-    INDEX idx_success_published (published_at)
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE INDEX IF NOT EXISTS idx_success_customer ON success_story_captures (customer_id);
+CREATE INDEX IF NOT EXISTS idx_success_milestone ON success_story_captures (milestone_achieved);
+CREATE INDEX IF NOT EXISTS idx_success_published ON success_story_captures (published_at);
 
 CREATE TABLE IF NOT EXISTS viral_loop_performance (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -187,10 +189,11 @@ CREATE TABLE IF NOT EXISTS viral_loop_performance (
     optimization_applied BOOLEAN DEFAULT false,
     optimization_details JSONB DEFAULT '{}',
     
-    INDEX idx_viral_loop_type (loop_type),
-    INDEX idx_viral_loop_date (date),
     UNIQUE (loop_type, date)
 );
+
+CREATE INDEX IF NOT EXISTS idx_viral_loop_type ON viral_loop_performance (loop_type);
+CREATE INDEX IF NOT EXISTS idx_viral_loop_date ON viral_loop_performance (date);
 
 -- Growth metrics dashboard view
 CREATE OR REPLACE VIEW growth_metrics_dashboard AS

@@ -17,6 +17,7 @@ This document defines the authoritative schemas, privacy guarantees, and version
 	- `pii_dropped`, `pii_retained_hash`, `pii_retained_truncated`
 	- `enrichment_snapshots` (map of feed → snapshot date)
 - Pipeline code validates that parquet key-value metadata also embed `schema_version` to guard against mismatches.
+- `ML/scripts/etl_clickhouse.py` enforces the salt requirement via `--hash-salt` / `ML_HASH_SALT`, hashes identifiers client-side, and writes the metadata payload per run.
 
 Example metadata payload:
 ```json

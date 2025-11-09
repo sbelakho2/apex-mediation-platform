@@ -66,6 +66,7 @@ Cost & safety
 
 Deliverables
 - Passing test suites (Android/iOS), generated API docs, updated Quickstarts, SDKs index, and Sandbox Readiness checklist boxes checked.
+- Operator checklist: docs/Customer-Facing/SDKs/SANDBOX_READINESS.md (linked from SDKs index)
 
 Ownership & cadence
 - Primary executor: autonomy/engineering bot + single operator review

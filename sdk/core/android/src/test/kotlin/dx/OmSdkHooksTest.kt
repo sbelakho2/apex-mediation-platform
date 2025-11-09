@@ -26,6 +26,24 @@ class OmSdkHooksTest {
     private lateinit var server: MockWebServer
     private lateinit var appContext: Context
 
+    private data class Call(val type: String, val placement: String, val creativeType: String? = null)
+
+    private fun installOmController(calls: MutableList<Call>) {
+        OmSdkRegistry.controller = object : OmSdkController {
+            override fun startDisplaySession(activity: Activity, placementId: String, networkName: String, creativeType: String?) {
+                calls.add(Call("startDisplay", placementId, creativeType))
+            }
+
+            override fun startVideoSession(activity: Activity, placementId: String, networkName: String, durationSec: Int?) {
+                calls.add(Call("startVideo", placementId))
+            }
+
+            override fun endSession(placementId: String) {
+                calls.add(Call("end", placementId))
+            }
+        }
+    }
+
     @Before
     fun setup() {
         server = MockWebServer()
@@ -38,14 +56,14 @@ class OmSdkHooksTest {
         try { server.shutdown() } catch (_: Throwable) {}
     }
 
-    private fun configBody(placementId: String): String {
+    private fun configBody(placementId: String, adType: String = "INTERSTITIAL"): String {
         val body = mapOf(
             "configId" to "cfg-omsdk",
             "version" to 1,
             "placements" to mapOf(
                 placementId to mapOf(
                     "placementId" to placementId,
-                    "adType" to "INTERSTITIAL",
+                    "adType" to adType,
                     "enabledNetworks" to emptyList<String>(),
                     "timeoutMs" to 500,
                     "maxWaitMs" to 1000,
@@ -96,19 +114,8 @@ class OmSdkHooksTest {
         BelAds.initialize(appContext, "app-1", cfg)
 
         // Install a test OM controller to capture calls
-        data class Call(val type: String, val placement: String)
         val calls = mutableListOf<Call>()
-        OmSdkRegistry.controller = object : OmSdkController {
-            override fun startDisplaySession(activity: Activity, placementId: String, networkName: String, creativeType: String?) {
-                calls.add(Call("startDisplay", placementId))
-            }
-            override fun startVideoSession(activity: Activity, placementId: String, networkName: String, durationSec: Int?) {
-                calls.add(Call("startVideo", placementId))
-            }
-            override fun endSession(placementId: String) {
-                calls.add(Call("end", placementId))
-            }
-    }
+        installOmController(calls)
 
         // Load then show
         var loaded = false
@@ -157,17 +164,8 @@ class OmSdkHooksTest {
         )
         BelAds.initialize(appContext, "app-1", cfg)
 
-        data class Call(val type: String, val placement: String)
         val calls = mutableListOf<Call>()
-        OmSdkRegistry.controller = object : OmSdkController {
-            override fun startDisplaySession(activity: Activity, placementId: String, networkName: String, creativeType: String?) {
-                calls.add(Call("startDisplay", placementId))
-            }
-            override fun startVideoSession(activity: Activity, placementId: String, networkName: String, durationSec: Int?) {
-                calls.add(Call("startVideo", placementId))
-            }
-            override fun endSession(placementId: String) { calls.add(Call("end", placementId)) }
-        }
+        installOmController(calls)
 
         var loaded = false
         BelRewarded.load(appContext, placementId, object : AdLoadCallback {
@@ -212,17 +210,8 @@ class OmSdkHooksTest {
         )
         BelAds.initialize(appContext, "app-1", cfg)
 
-        data class Call(val type: String, val placement: String)
         val calls = mutableListOf<Call>()
-        OmSdkRegistry.controller = object : OmSdkController {
-            override fun startDisplaySession(activity: Activity, placementId: String, networkName: String, creativeType: String?) {
-                calls.add(Call("startDisplay", placementId))
-            }
-            override fun startVideoSession(activity: Activity, placementId: String, networkName: String, durationSec: Int?) {
-                calls.add(Call("startVideo", placementId))
-            }
-            override fun endSession(placementId: String) { calls.add(Call("end", placementId)) }
-        }
+        installOmController(calls)
 
         var loaded = false
         BelRewardedInterstitial.load(appContext, placementId, object : AdLoadCallback {
@@ -235,6 +224,50 @@ class OmSdkHooksTest {
         assertTrue(calls.isNotEmpty())
         val hasVideo = calls.any { it.type == "startVideo" && it.placement == placementId }
         assertTrue("Expected startVideoSession call", hasVideo)
+        val hasEnd = calls.any { it.type == "end" && it.placement == placementId }
+        assertTrue("Expected endSession call", hasEnd)
+    }
+
+    @Test
+    fun appOpen_show_invokesOmDisplaySession() {
+        val baseUrl = server.url("/").toString().trimEnd('/')
+        val placementId = "pl_omsdk_appopen"
+        server.enqueue(MockResponse().setResponseCode(200).setBody(configBody(placementId, adType = "APP_OPEN")))
+        val winner = mapOf(
+            "winner" to mapOf(
+                "adapter_name" to "admob",
+                "cpm" to 1.1,
+                "currency" to "USD",
+                "creative_id" to "cr_appopen",
+                "ad_markup" to "<div>appopen</div>"
+            )
+        )
+        server.enqueue(MockResponse().setResponseCode(200).setBody(Gson().toJson(winner)))
+
+        val cfg = SDKConfig(
+            appId = "app-1",
+            testMode = true,
+            logLevel = LogLevel.DEBUG,
+            telemetryEnabled = false,
+            configEndpoint = baseUrl,
+            auctionEndpoint = baseUrl
+        )
+        BelAds.initialize(appContext, "app-1", cfg)
+
+        val calls = mutableListOf<Call>()
+        installOmController(calls)
+
+        BelAppOpen.load(appContext, placementId, object : AdLoadCallback {
+            override fun onAdLoaded(ad: com.rivalapexmediation.sdk.models.Ad) { }
+            override fun onError(error: AdError, message: String) { }
+        })
+        val activity = Robolectric.buildActivity(android.app.Activity::class.java).setup().get()
+        val shown = BelAppOpen.show(activity)
+        assertTrue(shown)
+        assertTrue("Expected OM hooks", calls.isNotEmpty())
+        val start = calls.firstOrNull { it.type == "startDisplay" && it.placement == placementId }
+        assertTrue("Expected startDisplaySession", start != null)
+        assertEquals("app_open", start?.creativeType)
         val hasEnd = calls.any { it.type == "end" && it.placement == placementId }
         assertTrue("Expected endSession call", hasEnd)
     }

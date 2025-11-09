@@ -13,6 +13,22 @@ import clickhouse from '../../utils/clickhouse';
 import pool from '../../utils/postgres';
 import { DataExportJob } from '../queueManager';
 
+type AnalyticsExportRow = {
+  date: string;
+  publisher_id: string;
+  app_id: string;
+  ad_unit_id: string;
+  adapter_id: string;
+  country: string;
+  impressions: number;
+  filled_impressions: number;
+  clicks: number;
+  revenue: number;
+  ctr: number;
+  fill_rate: number;
+  ecpm: number;
+};
+
 /**
  * Process data export job
  */
@@ -69,8 +85,8 @@ async function fetchExportData(
   publisherId: string,
   startDate: string,
   endDate: string,
-  filters?: Record<string, any>
-): Promise<any[]> {
+  _filters?: Record<string, unknown>
+): Promise<AnalyticsExportRow[]> {
   const query = `
     SELECT
       toDate(i.timestamp) as date,
@@ -134,7 +150,7 @@ async function fetchExportData(
     ORDER BY date DESC, impressions DESC
   `;
 
-  const result = await clickhouse.executeQuery<any>(query, {
+  const result = await clickhouse.executeQuery<AnalyticsExportRow>(query, {
     publisherId,
     startDate,
     endDate,
@@ -153,7 +169,7 @@ async function fetchExportData(
  */
 async function generateExportFile(
   jobId: string,
-  data: any[],
+  data: AnalyticsExportRow[],
   format: 'csv' | 'json'
 ): Promise<string> {
   const exportDir = process.env.EXPORT_DIR || join(process.cwd(), 'exports');
@@ -173,7 +189,7 @@ async function generateExportFile(
 /**
  * Generate CSV file
  */
-async function generateCsvFile(filePath: string, data: any[]): Promise<void> {
+async function generateCsvFile(filePath: string, data: AnalyticsExportRow[]): Promise<void> {
   return new Promise((resolve, reject) => {
     const writeStream = createWriteStream(filePath);
     const csvStream = formatCsv({ headers: true });
@@ -191,7 +207,7 @@ async function generateCsvFile(filePath: string, data: any[]): Promise<void> {
 /**
  * Generate JSON file
  */
-async function generateJsonFile(filePath: string, data: any[]): Promise<void> {
+async function generateJsonFile(filePath: string, data: AnalyticsExportRow[]): Promise<void> {
   return new Promise((resolve, reject) => {
     const writeStream = createWriteStream(filePath);
 

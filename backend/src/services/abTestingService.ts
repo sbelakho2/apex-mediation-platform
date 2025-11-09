@@ -8,13 +8,51 @@
 import logger from '../utils/logger';
 import { query } from '../utils/postgres';
 
+type JsonObject = Record<string, unknown>;
+
+interface ExperimentRow {
+  id: string;
+  name: string;
+  description: string | null;
+  type: Experiment['type'];
+  status: Experiment['status'];
+  start_date: Date | null;
+  end_date: Date | null;
+  publisher_id: string;
+  target_sample_size: number | string;
+  confidence_level: number | string;
+  created_at: Date;
+  updated_at: Date;
+}
+
+interface VariantRow {
+  id: string;
+  experiment_id: string;
+  name: string;
+  traffic_allocation: number | string;
+  configuration: JsonObject | string | null;
+  created_at: Date;
+  updated_at: Date;
+}
+
+interface VariantMetricsRow {
+  impressions: number | string | null;
+  revenue: number | string | null;
+  clicks: number | string | null;
+  conversions: number | string | null;
+}
+
+interface VariantNameRow {
+  name: string | null;
+}
+
 export interface Experiment {
   id: string;
   name: string;
   description: string;
   type: 'floor_price' | 'adapter_priority' | 'placement_optimization' | 'waterfall_order';
   status: 'draft' | 'running' | 'paused' | 'completed';
-  startDate: Date;
+  startDate?: Date;
   endDate?: Date;
   publisherId: string;
   variants: ExperimentVariant[];
@@ -29,7 +67,7 @@ export interface ExperimentVariant {
   experimentId: string;
   name: string;
   trafficAllocation: number; // 0-100 percentage
-  configuration: Record<string, any>;
+  configuration: JsonObject;
   metrics: VariantMetrics;
 }
 
@@ -83,7 +121,7 @@ export class ABTestingService {
     variants: Array<{
       name: string;
       trafficAllocation: number;
-      configuration: Record<string, any>;
+      configuration: JsonObject;
     }>;
     targetSampleSize: number;
     confidenceLevel: number;
@@ -143,50 +181,50 @@ export class ABTestingService {
    */
   async getExperiment(experimentId: string): Promise<Experiment> {
     try {
-      const experimentResult = await query<any>(
+      const experimentResult = await query<ExperimentRow>(
         `SELECT * FROM ab_experiments WHERE id = $1`,
         [experimentId]
       );
 
-      if (experimentResult.rows.length === 0) {
+      const experimentRow = experimentResult.rows[0];
+
+      if (!experimentRow) {
         throw new Error('Experiment not found');
       }
 
-      const exp = experimentResult.rows[0];
-
-      const variantsResult = await query<any>(
+      const variantsResult = await query<VariantRow>(
         `SELECT * FROM ab_variants WHERE experiment_id = $1 ORDER BY created_at`,
         [experimentId]
       );
 
       const variants = await Promise.all(
-        variantsResult.rows.map(async (v: any) => {
-          const metrics = await this.getVariantMetrics(v.id);
+        variantsResult.rows.map(async (variantRow) => {
+          const metrics = await this.getVariantMetrics(variantRow.id);
           return {
-            id: v.id,
-            experimentId: v.experiment_id,
-            name: v.name,
-            trafficAllocation: parseFloat(v.traffic_allocation),
-            configuration: v.configuration,
+            id: variantRow.id,
+            experimentId: variantRow.experiment_id,
+            name: variantRow.name,
+            trafficAllocation: this.toNumber(variantRow.traffic_allocation),
+            configuration: this.parseJsonField(variantRow.configuration),
             metrics,
           };
         })
       );
 
       return {
-        id: exp.id,
-        name: exp.name,
-        description: exp.description,
-        type: exp.type,
-        status: exp.status,
-        startDate: exp.start_date,
-        endDate: exp.end_date,
-        publisherId: exp.publisher_id,
+        id: experimentRow.id,
+        name: experimentRow.name,
+        description: experimentRow.description ?? '',
+        type: experimentRow.type,
+        status: experimentRow.status,
+        startDate: experimentRow.start_date ? new Date(experimentRow.start_date) : undefined,
+        endDate: experimentRow.end_date ? new Date(experimentRow.end_date) : undefined,
+        publisherId: experimentRow.publisher_id,
         variants,
-        targetSampleSize: exp.target_sample_size,
-        confidenceLevel: parseFloat(exp.confidence_level),
-        createdAt: exp.created_at,
-        updatedAt: exp.updated_at,
+        targetSampleSize: this.toNumber(experimentRow.target_sample_size),
+        confidenceLevel: this.toNumber(experimentRow.confidence_level),
+        createdAt: new Date(experimentRow.created_at),
+        updatedAt: new Date(experimentRow.updated_at),
       };
     } catch (error) {
       logger.error('Failed to get experiment', { error, experimentId });
@@ -240,7 +278,7 @@ export class ABTestingService {
     variantId: string;
     eventType: 'impression' | 'click' | 'conversion';
     revenue?: number;
-    metadata?: Record<string, any>;
+    metadata?: JsonObject;
   }): Promise<void> {
     try {
       await query(
@@ -262,12 +300,51 @@ export class ABTestingService {
     }
   }
 
+  private parseJsonField(value: unknown): JsonObject {
+    if (value === null || value === undefined) {
+      return {};
+    }
+
+    if (typeof value === 'string') {
+      try {
+        const parsed = JSON.parse(value);
+        return this.isPlainObject(parsed) ? parsed : {};
+      } catch (error) {
+        logger.warn('Failed to parse JSON configuration', { error });
+        return {};
+      }
+    }
+
+    if (this.isPlainObject(value)) {
+      return value as JsonObject;
+    }
+
+    return {};
+  }
+
+  private isPlainObject(value: unknown): value is JsonObject {
+    return typeof value === 'object' && value !== null && !Array.isArray(value);
+  }
+
+  private toNumber(value: number | string | null | undefined): number {
+    if (typeof value === 'number') {
+      return Number.isFinite(value) ? value : 0;
+    }
+
+    if (typeof value === 'string') {
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? parsed : 0;
+    }
+
+    return 0;
+  }
+
   /**
    * Get variant metrics
    */
   private async getVariantMetrics(variantId: string): Promise<VariantMetrics> {
     try {
-      const result = await query<any>(
+      const result = await query<VariantMetricsRow>(
         `SELECT
            COUNT(CASE WHEN event_type = 'impression' THEN 1 END) as impressions,
            SUM(revenue) as revenue,
@@ -278,11 +355,17 @@ export class ABTestingService {
         [variantId]
       );
 
-      const row = result.rows[0];
-      const impressions = parseInt(row.impressions) || 0;
-      const revenue = parseFloat(row.revenue) || 0;
-      const clicks = parseInt(row.clicks) || 0;
-      const conversions = parseInt(row.conversions) || 0;
+      const row = result.rows[0] ?? {
+        impressions: 0,
+        revenue: 0,
+        clicks: 0,
+        conversions: 0,
+      };
+
+      const impressions = this.toNumber(row.impressions);
+      const revenue = this.toNumber(row.revenue);
+      const clicks = this.toNumber(row.clicks);
+      const conversions = this.toNumber(row.conversions);
 
       return {
         impressions,
@@ -401,13 +484,13 @@ export class ABTestingService {
         mean + marginOfError,
       ];
 
-      const variant = await query<any>(
+      const variant = await query<VariantNameRow>(
         `SELECT name FROM ab_variants WHERE id = $1`,
         [variantId]
       );
 
       return {
-        variant: variant.rows[0]?.name || 'Unknown',
+        variant: variant.rows[0]?.name ?? 'Unknown',
         mean,
         standardError,
         confidenceInterval,
@@ -503,7 +586,7 @@ export class ABTestingService {
     const d = shape - 1 / 3;
     const c = 1 / Math.sqrt(9 * d);
 
-    while (true) {
+    for (;;) {
       let x, v;
       do {
         x = this.sampleNormal(0, 1);
@@ -563,7 +646,7 @@ export class ABTestingService {
   /**
    * Beta cumulative distribution function (approximation)
    */
-  private betaCDF(x: number, a: number, b: number): number {
+  private betaCDF(x: number, _a: number, _b: number): number {
     // Simplified approximation
     if (x <= 0) return 0;
     if (x >= 1) return 1;

@@ -5,8 +5,23 @@
  * Uses: IP geolocation + Payment method country + App store country
  */
 
+import { promises as dns } from 'dns';
 import { Reader } from '@maxmind/geoip2-node';
 import { Pool } from 'pg';
+import { enrichmentService as sharedEnrichmentService, EnrichmentService as EnrichmentServiceType } from './enrichment/enrichmentService';
+
+type GeoIpReader = {
+  city(ip: string): Promise<{ country?: { isoCode?: string | null } }>;
+  asn(ip: string): Promise<{ autonomousSystemOrganization?: string | null }>;
+};
+
+type DnsReverseLookup = (ip: string) => Promise<string[]>;
+
+interface VPNProxyDetectionServiceOptions {
+  geoipReader?: GeoIpReader;
+  enrichmentService?: EnrichmentServiceType;
+  dnsReverseLookup?: DnsReverseLookup;
+}
 
 interface CountryValidationResult {
   is_valid: boolean;
@@ -26,13 +41,52 @@ interface GeographicDiscountRequest {
   app_store_country?: string; // From iOS/Android purchase
 }
 
-export class VPNProxyDetectionService {
-  private geoipReader: Reader | null = null;
-  private pool: Pool;
+interface CountryValidationLogEntry {
+  customer_id: string;
+  ip_country: string | null;
+  payment_country: string | null;
+  app_store_country: string | null;
+  detected_country: string | null;
+  confidence_score: number;
+  risk_level: 'low' | 'medium' | 'high';
+  is_valid: boolean;
+  reasons: string[];
+  created_at: Date;
+}
 
-  constructor(pool: Pool) {
+const parseReasons = (value: unknown): string[] => {
+  if (Array.isArray(value) && value.every((entry) => typeof entry === 'string')) {
+    return value as string[];
+  }
+
+  if (typeof value === 'string' && value.trim().length > 0) {
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed.filter((entry) => typeof entry === 'string') : [];
+    } catch (error) {
+      console.warn('[VPNDetection] Failed to parse validation reasons JSON', { error });
+    }
+  }
+
+  return [];
+};
+
+export class VPNProxyDetectionService {
+  private geoipReader: GeoIpReader | null = null;
+  private pool: Pool;
+  private enrichmentService: EnrichmentServiceType;
+  private readonly dnsReverse: DnsReverseLookup;
+
+  constructor(pool: Pool, options?: VPNProxyDetectionServiceOptions) {
     this.pool = pool;
-    this.initializeGeoIP();
+    this.enrichmentService = options?.enrichmentService ?? sharedEnrichmentService;
+    this.dnsReverse = options?.dnsReverseLookup ?? dns.reverse;
+
+    if (options?.geoipReader) {
+      this.geoipReader = options.geoipReader;
+    } else {
+      void this.initializeGeoIP();
+    }
   }
 
   /**
@@ -41,8 +95,8 @@ export class VPNProxyDetectionService {
    */
   private async initializeGeoIP(): Promise<void> {
     try {
-      const geoipPath = process.env.GEOIP_DATABASE_PATH || '/opt/geoip/GeoLite2-Country.mmdb';
-      this.geoipReader = await Reader.open(geoipPath);
+  const geoipPath = process.env.GEOIP_DATABASE_PATH || '/opt/geoip/GeoLite2-Country.mmdb';
+  this.geoipReader = (await Reader.open(geoipPath)) as unknown as GeoIpReader;
       console.log('[VPNDetection] GeoIP database loaded successfully');
     } catch (error) {
       console.error('[VPNDetection] Failed to load GeoIP database:', error);
@@ -185,7 +239,7 @@ export class VPNProxyDetectionService {
 
     try {
       // MaxMind GeoIP2 API uses city() which includes country
-      const response = await (this.geoipReader as any).city(ip_address);
+  const response = await this.geoipReader.city(ip_address);
       return response.country?.isoCode || null;
     } catch (error) {
       console.error(`[VPNDetection] Failed to lookup IP ${ip_address}:`, error);
@@ -224,45 +278,50 @@ export class VPNProxyDetectionService {
     is_vpn: boolean;
     reason: string;
   }> {
-    // Check if IP is from known hosting provider
     const hosting_providers = [
-      'amazon', 'aws', 'google', 'azure', 'digitalocean', 'linode', 
+      'amazon', 'aws', 'google', 'azure', 'digitalocean', 'linode',
       'vultr', 'ovh', 'hetzner', 'cloudflare'
     ];
 
+    const signals: string[] = [];
+    let isVpn = false;
+
+    const enrichmentSignals = await this.collectEnrichmentSignals(ip_address);
+    if (enrichmentSignals.signals.length > 0) {
+      signals.push(...enrichmentSignals.signals);
+      if (enrichmentSignals.isVpn) {
+        isVpn = true;
+      }
+    }
+
     try {
-      // Reverse DNS lookup
-      const dns = require('dns').promises;
-      const hostnames = await dns.reverse(ip_address);
-      
+      const hostnames = await this.dnsReverse(ip_address);
+
       if (hostnames && hostnames.length > 0) {
         const hostname = hostnames[0].toLowerCase();
-        
-        // Check for VPN keywords
+
         if (hostname.includes('vpn') || hostname.includes('proxy') || hostname.includes('tor')) {
-          return { is_vpn: true, reason: `Reverse DNS contains VPN/proxy indicator: ${hostname}` };
+          signals.push(`Reverse DNS contains VPN/proxy indicator: ${hostname}`);
+          isVpn = true;
         }
 
-        // Check for hosting provider
         for (const provider of hosting_providers) {
           if (hostname.includes(provider)) {
-            return { is_vpn: true, reason: `IP hosted by ${provider} (likely VPN/proxy)` };
+            signals.push(`IP hosted by ${provider} (likely VPN/proxy)`);
+            isVpn = true;
+            break;
           }
         }
       }
     } catch (error) {
-      // Reverse DNS lookup failed (common for residential IPs)
       console.debug(`[VPNDetection] Reverse DNS failed for ${ip_address}:`, error);
     }
 
-    // Check against known VPN IP ranges (would need external database)
-    // For now, use ASN lookup via GeoIP
     if (this.geoipReader) {
       try {
-        const response = await (this.geoipReader as any).asn(ip_address);
+        const response = await this.geoipReader.asn(ip_address);
         const asn_org = response.autonomousSystemOrganization?.toLowerCase() || '';
-        
-        // Known VPN providers
+
         const vpn_providers = [
           'nordvpn', 'expressvpn', 'surfshark', 'cyberghost', 'pia',
           'mullvad', 'protonvpn', 'privatevpn', 'ipvanish', 'vyprvpn'
@@ -270,7 +329,9 @@ export class VPNProxyDetectionService {
 
         for (const provider of vpn_providers) {
           if (asn_org.includes(provider)) {
-            return { is_vpn: true, reason: `ASN belongs to VPN provider: ${provider}` };
+            signals.push(`ASN belongs to VPN provider: ${provider}`);
+            isVpn = true;
+            break;
           }
         }
       } catch (error) {
@@ -278,7 +339,55 @@ export class VPNProxyDetectionService {
       }
     }
 
-    return { is_vpn: false, reason: 'No VPN/proxy indicators detected' };
+    if (!isVpn && signals.length === 0) {
+      return { is_vpn: false, reason: 'No VPN/proxy indicators detected' };
+    }
+
+    return { is_vpn: isVpn, reason: signals.join('; ') };
+  }
+
+  private async collectEnrichmentSignals(ipAddress: string): Promise<{ isVpn: boolean; signals: string[] }> {
+    try {
+      await this.enrichmentService.initialize();
+      const result = this.enrichmentService.lookupIp(ipAddress);
+
+      const signals: string[] = [];
+      let isVpn = false;
+
+      if (result.isTorExitNode) {
+        signals.push('Listed as Tor exit node');
+        isVpn = true;
+      }
+
+      if (result.vpnMatches.length > 0) {
+        signals.push(`Found in VPN/DC datasets: ${result.vpnMatches.join(', ')}`);
+        isVpn = true;
+      }
+
+      if (result.cloudProviders.length > 0) {
+        const providers = Array.from(new Set(result.cloudProviders)).join(', ');
+        signals.push(`Hosted on cloud provider: ${providers}`);
+        isVpn = true;
+      }
+
+      if (result.abuseMatches.length > 0) {
+        const categories = Array.from(new Set(result.abuseMatches
+          .map((match) => match.category)
+          .filter((category) => category.length > 0)));
+        const categoryText = categories.length > 0 ? ` (${categories.join(', ')})` : '';
+        signals.push(`Abuse intelligence matches${categoryText}`);
+      }
+
+      if (result.asn?.organization) {
+        const asnLabel = result.asn.asn > 0 ? `AS${result.asn.asn}` : 'ASN';
+        signals.push(`Autonomous system: ${result.asn.organization} (${asnLabel})`);
+      }
+
+      return { isVpn, signals };
+    } catch (error) {
+      console.warn(`[VPNDetection] Failed to load enrichment signals for ${ipAddress}`, { error });
+      return { isVpn: false, signals: [] };
+    }
   }
 
   /**
@@ -318,8 +427,19 @@ export class VPNProxyDetectionService {
   /**
    * Get validation history for customer
    */
-  async getValidationHistory(customer_id: string): Promise<any[]> {
-    const result = await this.pool.query(`
+  async getValidationHistory(customer_id: string): Promise<CountryValidationLogEntry[]> {
+    const result = await this.pool.query<{ 
+      customer_id: string;
+      ip_country: string | null;
+      payment_country: string | null;
+      app_store_country: string | null;
+      detected_country: string | null;
+      confidence_score: number | string;
+      risk_level: 'low' | 'medium' | 'high';
+      is_valid: boolean;
+      reasons: unknown;
+      created_at: Date;
+    }>(`
       SELECT *
       FROM country_validation_log
       WHERE customer_id = $1
@@ -327,6 +447,17 @@ export class VPNProxyDetectionService {
       LIMIT 10
     `, [customer_id]);
 
-    return result.rows;
+    return result.rows.map((row) => ({
+      customer_id: row.customer_id,
+      ip_country: row.ip_country,
+      payment_country: row.payment_country,
+      app_store_country: row.app_store_country,
+      detected_country: row.detected_country,
+      confidence_score: Number(row.confidence_score),
+      risk_level: row.risk_level,
+      is_valid: row.is_valid,
+      reasons: parseReasons(row.reasons),
+      created_at: row.created_at,
+    }));
   }
 }

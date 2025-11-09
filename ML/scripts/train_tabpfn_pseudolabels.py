@@ -5,7 +5,7 @@ import shutil
 import tarfile
 import tempfile
 import zipfile
-from datetime import datetime
+from datetime import UTC, datetime
 
 import numpy as np
 import pandas as pd
@@ -87,7 +87,7 @@ def main():
     args = ap.parse_args()
 
     if args.out_dir is None:
-        args.out_dir = os.path.join("models", "fraud", "dev", datetime.utcnow().strftime("%Y%m%d"))
+        args.out_dir = os.path.join("models", "fraud", "dev", datetime.now(UTC).strftime("%Y%m%d"))
     os.makedirs(args.out_dir, exist_ok=True)
 
     # Resolve input parquet
@@ -161,7 +161,7 @@ def main():
     out.to_parquet(out_path, index=False)
 
     meta = {
-        "generated_at": datetime.utcnow().isoformat() + "Z",
+        "generated_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
         "model": "tabpfn",
         "contamination": float(args.contamination),
         "input": os.path.abspath(parquet_path),

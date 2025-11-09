@@ -14,31 +14,110 @@ import { format } from 'date-fns';
 import ExcelJS from 'exceljs';
 import { Pool } from 'pg';
 
-interface TransactionLogEntry {
+type NumericLike = number | string | null;
+type QueryRow = Record<string, unknown>;
+
+const toNumber = (value: NumericLike): number => {
+  if (typeof value === 'number') {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  return 0;
+};
+
+const toStringValue = (value: unknown): string => {
+  if (typeof value === 'string') {
+    return value;
+  }
+
+  if (value === null || value === undefined) {
+    return '';
+  }
+
+  return String(value);
+};
+
+const toNullableString = (value: unknown): string | null => {
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  return toStringValue(value);
+};
+
+const toBoolean = (value: unknown): boolean => {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+
+  if (typeof value === 'number') {
+    return value !== 0;
+  }
+
+  if (typeof value === 'string') {
+    return value.toLowerCase() === 'true';
+  }
+
+  return false;
+};
+
+const toDateOrNull = (value: unknown): Date | null => {
+  if (value instanceof Date) {
+    return value;
+  }
+
+  if (typeof value === 'string' || typeof value === 'number') {
+    const parsed = new Date(value);
+    if (!Number.isNaN(parsed.getTime())) {
+      return parsed;
+    }
+  }
+
+  return null;
+};
+
+interface TransactionLogRow {
   transaction_id: string;
   transaction_type: string;
   category: string;
-  amount_eur_cents: number;
-  vat_amount_cents: number;
-  customer_email?: string;
-  vendor_name?: string;
-  transaction_date: Date;
-  description: string;
-  payment_method?: string;
-  payment_processor_id?: string;
+  amount_eur: number;
+  currency_code: string;
+  amount_eur_converted: number;
+  vat_rate: number;
+  vat_amount_eur: number;
+  vat_reverse_charge: boolean;
+  customer_email: string | null;
+  customer_company: string | null;
+  vendor_name: string | null;
+  counterparty_country_code: string | null;
+  counterparty_vat_number: string | null;
+  payment_method: string | null;
+  payment_processor_id: string | null;
+  net_amount_eur: number;
+  transaction_date: Date | null;
+  accounting_period: string;
+  description: string | null;
+  document_url: string | null;
 }
 
-interface VATReportSummary {
-  fiscal_year: number;
-  quarter: number;
-  vat_collected_eur: number;
-  vat_paid_eur: number;
-  vat_payable_eur: number;
-  reverse_charge_transactions: number;
+interface VatReportRow {
+  accounting_period: string;
+  transaction_type: string;
+  category: string;
+  total_amount_eur: number;
+  total_vat_eur: number;
+  transaction_count: number;
+  unique_customers: number;
+  vat_reverse_charge: boolean;
+  counterparty_country_code: string | null;
 }
 
-interface AnnualPnLStatement {
-  fiscal_year: number;
+interface AnnualPnLRow {
   total_revenue_eur: number;
   cogs_eur: number;
   gross_profit_eur: number;
@@ -47,13 +126,90 @@ interface AnnualPnLStatement {
   profit_margin_percent: number;
 }
 
-interface CashFlowStatement {
-  fiscal_year: number;
+interface CashFlowRow {
   accounting_period: string;
   cash_from_operations_eur: number;
   cash_for_operations_eur: number;
+  cash_from_investing_eur: number;
+  cash_from_financing_eur: number;
   net_cash_flow_eur: number;
 }
+
+interface CustomerRevenueRow {
+  email: string;
+  company_name: string | null;
+  year: number;
+  month: number;
+  total_revenue_eur: number;
+  total_vat_eur: number;
+  transaction_count: number;
+  avg_transaction_eur: number;
+}
+
+const mapTransactionLogRow = (row: QueryRow): TransactionLogRow => ({
+  transaction_id: toStringValue(row['transaction_id']),
+  transaction_type: toStringValue(row['transaction_type']),
+  category: toStringValue(row['category']),
+  amount_eur: toNumber(row['amount_eur'] as NumericLike),
+  currency_code: toStringValue(row['currency_code']),
+  amount_eur_converted: toNumber(row['amount_eur_converted'] as NumericLike),
+  vat_rate: toNumber(row['vat_rate'] as NumericLike),
+  vat_amount_eur: toNumber(row['vat_amount_eur'] as NumericLike),
+  vat_reverse_charge: toBoolean(row['vat_reverse_charge']),
+  customer_email: toNullableString(row['customer_email']),
+  customer_company: toNullableString(row['customer_company']),
+  vendor_name: toNullableString(row['vendor_name']),
+  counterparty_country_code: toNullableString(row['counterparty_country_code']),
+  counterparty_vat_number: toNullableString(row['counterparty_vat_number']),
+  payment_method: toNullableString(row['payment_method']),
+  payment_processor_id: toNullableString(row['payment_processor_id']),
+  net_amount_eur: toNumber(row['net_amount_eur'] as NumericLike),
+  transaction_date: toDateOrNull(row['transaction_date']),
+  accounting_period: toStringValue(row['accounting_period']),
+  description: toNullableString(row['description']),
+  document_url: toNullableString(row['document_url']),
+});
+
+const mapVatReportRow = (row: QueryRow): VatReportRow => ({
+  accounting_period: toStringValue(row['accounting_period']),
+  transaction_type: toStringValue(row['transaction_type']),
+  category: toStringValue(row['category']),
+  total_amount_eur: toNumber(row['total_amount_eur'] as NumericLike),
+  total_vat_eur: toNumber(row['total_vat_eur'] as NumericLike),
+  transaction_count: Number(row['transaction_count'] ?? 0),
+  unique_customers: Number(row['unique_customers'] ?? 0),
+  vat_reverse_charge: toBoolean(row['vat_reverse_charge']),
+  counterparty_country_code: toNullableString(row['counterparty_country_code']),
+});
+
+const mapAnnualPnLRow = (row: QueryRow): AnnualPnLRow => ({
+  total_revenue_eur: toNumber(row['total_revenue_eur'] as NumericLike),
+  cogs_eur: toNumber(row['cogs_eur'] as NumericLike),
+  gross_profit_eur: toNumber(row['gross_profit_eur'] as NumericLike),
+  operating_expenses_eur: toNumber(row['operating_expenses_eur'] as NumericLike),
+  net_profit_eur: toNumber(row['net_profit_eur'] as NumericLike),
+  profit_margin_percent: toNumber(row['profit_margin_percent'] as NumericLike),
+});
+
+const mapCashFlowRow = (row: QueryRow): CashFlowRow => ({
+  accounting_period: toStringValue(row['accounting_period']),
+  cash_from_operations_eur: toNumber(row['cash_from_operations_eur'] as NumericLike),
+  cash_for_operations_eur: toNumber(row['cash_for_operations_eur'] as NumericLike),
+  cash_from_investing_eur: toNumber(row['cash_from_investing_eur'] as NumericLike),
+  cash_from_financing_eur: toNumber(row['cash_from_financing_eur'] as NumericLike),
+  net_cash_flow_eur: toNumber(row['net_cash_flow_eur'] as NumericLike),
+});
+
+const mapCustomerRevenueRow = (row: QueryRow): CustomerRevenueRow => ({
+  email: toStringValue(row['email']),
+  company_name: toNullableString(row['company_name']),
+  year: Number(row['year'] ?? 0),
+  month: Number(row['month'] ?? 0),
+  total_revenue_eur: toNumber(row['total_revenue_eur'] as NumericLike),
+  total_vat_eur: toNumber(row['total_vat_eur'] as NumericLike),
+  transaction_count: Number(row['transaction_count'] ?? 0),
+  avg_transaction_eur: toNumber(row['avg_transaction_eur'] as NumericLike),
+});
 
 export class FinancialReportingService {
   constructor(private pool: Pool) {}
@@ -93,7 +249,8 @@ export class FinancialReportingService {
       ORDER BY tl.transaction_date, tl.created_at
     `;
 
-    const result = await this.pool.query(query, [fiscalYear]);
+  const result = await this.pool.query(query, [fiscalYear]);
+  const rows = result.rows.map(row => mapTransactionLogRow(row as QueryRow));
 
     const workbook = new ExcelJS.Workbook();
     const worksheet = workbook.addWorksheet(`Transactions ${fiscalYear}`);
@@ -132,10 +289,29 @@ export class FinancialReportingService {
     };
 
     // Add data
-    result.rows.forEach((row: any) => {
+    rows.forEach(row => {
       worksheet.addRow({
-        ...row,
-        transaction_date: format(new Date(row.transaction_date), 'yyyy-MM-dd'),
+        transaction_id: row.transaction_id,
+        transaction_date: row.transaction_date ? format(row.transaction_date, 'yyyy-MM-dd') : '',
+        accounting_period: row.accounting_period,
+        transaction_type: row.transaction_type,
+        category: row.category,
+        description: row.description,
+        customer_email: row.customer_email,
+        customer_company: row.customer_company,
+        vendor_name: row.vendor_name,
+        amount_eur_converted: row.amount_eur_converted,
+        currency_code: row.currency_code,
+        amount_eur: row.amount_eur,
+        vat_rate: row.vat_rate,
+        vat_amount_eur: row.vat_amount_eur,
+        vat_reverse_charge: row.vat_reverse_charge ? 'Yes' : 'No',
+        net_amount_eur: row.net_amount_eur,
+        payment_method: row.payment_method,
+        payment_processor_id: row.payment_processor_id,
+        counterparty_country_code: row.counterparty_country_code,
+        counterparty_vat_number: row.counterparty_vat_number,
+        document_url: row.document_url,
       });
     });
 
@@ -152,13 +328,16 @@ export class FinancialReportingService {
     worksheet.getCell(`A${lastRow}`).value = 'TOTALS:';
     worksheet.getCell(`A${lastRow}`).font = { bold: true };
 
-    const totalRevenue = result.rows
-      .filter((r: any) => ['revenue', 'subscription_charge', 'usage_charge'].includes(r.transaction_type))
-      .reduce((sum: number, r: any) => sum + parseFloat(r.amount_eur_converted || 0), 0);
+    const revenueTypes = new Set(['revenue', 'subscription_charge', 'usage_charge']);
+    const expenseTypes = new Set(['expense', 'payment_sent']);
 
-    const totalExpenses = result.rows
-      .filter((r: any) => ['expense', 'payment_sent'].includes(r.transaction_type))
-      .reduce((sum: number, r: any) => sum + parseFloat(r.amount_eur_converted || 0), 0);
+    const totalRevenue = rows
+      .filter(r => revenueTypes.has(r.transaction_type))
+      .reduce((sum, r) => sum + r.amount_eur_converted, 0);
+
+    const totalExpenses = rows
+      .filter(r => expenseTypes.has(r.transaction_type))
+      .reduce((sum, r) => sum + r.amount_eur_converted, 0);
 
     worksheet.getCell(`J${lastRow}`).value = totalRevenue - totalExpenses;
     worksheet.getCell(`J${lastRow}`).font = { bold: true };
@@ -193,6 +372,7 @@ export class FinancialReportingService {
     `;
 
     const result = await this.pool.query(query, [fiscalYear, quarter]);
+    const rows = result.rows.map(row => mapVatReportRow(row as QueryRow));
 
     const workbook = new ExcelJS.Workbook();
     const worksheet = workbook.addWorksheet(`VAT Q${quarter} ${fiscalYear}`);
@@ -218,13 +398,16 @@ export class FinancialReportingService {
     worksheet.getCell('A8').value = 'VAT Paid (Purchases):';
     worksheet.getCell('A9').value = 'VAT Payable to e-MTA:';
 
-    const vatCollected = result.rows
-      .filter((r: any) => ['revenue', 'subscription_charge', 'usage_charge'].includes(r.transaction_type))
-      .reduce((sum: number, r: any) => sum + parseFloat(r.total_vat_eur || 0), 0);
+    const revenueTypes = new Set(['revenue', 'subscription_charge', 'usage_charge']);
+    const expenseTypes = new Set(['expense', 'payment_sent']);
 
-    const vatPaid = result.rows
-      .filter((r: any) => ['expense', 'payment_sent'].includes(r.transaction_type))
-      .reduce((sum: number, r: any) => sum + parseFloat(r.total_vat_eur || 0), 0);
+    const vatCollected = rows
+      .filter(r => revenueTypes.has(r.transaction_type))
+      .reduce((sum, r) => sum + r.total_vat_eur, 0);
+
+    const vatPaid = rows
+      .filter(r => expenseTypes.has(r.transaction_type))
+      .reduce((sum, r) => sum + r.total_vat_eur, 0);
 
     worksheet.getCell('B7').value = vatCollected;
     worksheet.getCell('B7').numFmt = '#,##0.00 €';
@@ -245,13 +428,13 @@ export class FinancialReportingService {
     ];
     worksheet.getRow(detailsStartRow).font = { bold: true };
 
-    result.rows.forEach((row: any, index: number) => {
+    rows.forEach((row, index) => {
       worksheet.getRow(detailsStartRow + 1 + index).values = [
         row.accounting_period,
         row.transaction_type,
         row.category,
-        parseFloat(row.total_amount_eur),
-        parseFloat(row.total_vat_eur),
+        row.total_amount_eur,
+        row.total_vat_eur,
         row.transaction_count,
         row.unique_customers,
         row.vat_reverse_charge ? 'Yes' : 'No',
@@ -274,7 +457,7 @@ export class FinancialReportingService {
       throw new Error(`No data found for fiscal year ${fiscalYear}`);
     }
 
-    const data = result.rows[0];
+    const data = mapAnnualPnLRow(result.rows[0] as QueryRow);
 
     const workbook = new ExcelJS.Workbook();
     const worksheet = workbook.addWorksheet(`P&L ${fiscalYear}`);
@@ -290,7 +473,7 @@ export class FinancialReportingService {
     worksheet.getCell('A4').value = `Generated: ${format(new Date(), 'yyyy-MM-dd HH:mm')}`;
 
     // P&L Statement
-    const rows = [
+    const statementRows = [
       { label: '', value: '', bold: true },
       { label: 'REVENUE', value: '', bold: true },
       { label: 'Total Revenue', value: data.total_revenue_eur },
@@ -308,12 +491,12 @@ export class FinancialReportingService {
       { label: 'PROFIT MARGIN', value: `${data.profit_margin_percent}%`, bold: true },
     ];
 
-    rows.forEach((row, index) => {
+    statementRows.forEach((row, index) => {
       const rowNum = 6 + index;
       worksheet.getCell(`A${rowNum}`).value = row.label;
 
       if (row.value !== '') {
-        worksheet.getCell(`C${rowNum}`).value = typeof row.value === 'number' ? row.value : row.value;
+        worksheet.getCell(`C${rowNum}`).value = row.value;
         if (typeof row.value === 'number') {
           worksheet.getCell(`C${rowNum}`).numFmt = '#,##0.00 €';
         }
@@ -345,6 +528,7 @@ export class FinancialReportingService {
   async exportCashFlowStatement(fiscalYear: number): Promise<Buffer> {
     const query = `SELECT * FROM cash_flow_statement WHERE fiscal_year = $1 ORDER BY accounting_period`;
     const result = await this.pool.query(query, [fiscalYear]);
+    const rows = result.rows.map(row => mapCashFlowRow(row as QueryRow));
 
     const workbook = new ExcelJS.Workbook();
     const worksheet = workbook.addWorksheet(`Cash Flow ${fiscalYear}`);
@@ -363,14 +547,14 @@ export class FinancialReportingService {
     ];
     worksheet.getRow(headerRow).font = { bold: true };
 
-    result.rows.forEach((row: any, index: number) => {
+  rows.forEach((row, index) => {
       worksheet.getRow(headerRow + 1 + index).values = [
         row.accounting_period,
-        parseFloat(row.cash_from_operations_eur),
-        parseFloat(row.cash_for_operations_eur),
-        parseFloat(row.cash_from_investing_eur),
-        parseFloat(row.cash_from_financing_eur),
-        parseFloat(row.net_cash_flow_eur),
+        row.cash_from_operations_eur,
+        row.cash_for_operations_eur,
+        row.cash_from_investing_eur,
+        row.cash_from_financing_eur,
+        row.net_cash_flow_eur,
       ];
     });
 
@@ -393,6 +577,7 @@ export class FinancialReportingService {
       ORDER BY total_revenue_eur DESC
     `;
     const result = await this.pool.query(query, [fiscalYear]);
+  const rows = result.rows.map(row => mapCustomerRevenueRow(row as QueryRow));
 
     const workbook = new ExcelJS.Workbook();
     const worksheet = workbook.addWorksheet(`Customer Revenue ${fiscalYear}`);
@@ -410,7 +595,7 @@ export class FinancialReportingService {
 
     worksheet.getRow(1).font = { bold: true };
 
-    result.rows.forEach((row: any) => {
+    rows.forEach(row => {
       worksheet.addRow(row);
     });
 

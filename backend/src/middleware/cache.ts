@@ -24,7 +24,7 @@ function generateCacheKey(req: Request, options?: CacheOptions): string {
   const path = req.path;
   const method = req.method;
   
-  let keyParts = [`cache:${method}:${path}:${publisherId}`];
+  const keyParts = [`cache:${method}:${path}:${publisherId}`];
   
   // Add vary-by parameters
   if (options?.varyBy) {
@@ -48,8 +48,19 @@ function generateCacheKey(req: Request, options?: CacheOptions): string {
 /**
  * Get nested property from object using dot notation
  */
-function getNestedProperty(obj: any, path: string): any {
-  return path.split('.').reduce((current, key) => current?.[key], obj);
+function getNestedProperty<T>(obj: T, path: string): unknown {
+  return path.split('.').reduce<unknown>((current, key) => {
+    if (current === undefined || current === null || typeof current !== 'object') {
+      return undefined;
+    }
+
+    if (Array.isArray(current)) {
+      const index = Number(key);
+      return Number.isNaN(index) ? undefined : current[index];
+    }
+
+    return (current as Record<string, unknown>)[key];
+  }, obj as unknown);
 }
 
 /**
@@ -109,7 +120,7 @@ export function cache(options: CacheOptions = {}): (req: Request, res: Response,
       // Intercept res.json to cache the response
       const originalJson = res.json.bind(res);
       
-      res.json = function(data: any) {
+      res.json = function json<T>(data: T) {
         // Only cache successful responses
         if (res.statusCode >= 200 && res.statusCode < 300) {
           const ttl = options.ttl || 300; // Default 5 minutes
@@ -119,7 +130,7 @@ export function cache(options: CacheOptions = {}): (req: Request, res: Response,
         }
         
         return originalJson(data);
-      };
+      } as typeof res.json;
 
       next();
     } catch (error) {
@@ -142,7 +153,7 @@ export function invalidateCache(pattern: string | ((req: Request) => string)): (
     // Store original send function
     const originalSend = res.send.bind(res);
     
-    res.send = function(data: any) {
+    res.send = function send<T>(data: T) {
       // Only invalidate on successful mutations (2xx status codes)
       if (res.statusCode >= 200 && res.statusCode < 300) {
         const invalidationPattern = typeof pattern === 'function' 
@@ -159,7 +170,7 @@ export function invalidateCache(pattern: string | ((req: Request) => string)): (
       }
       
       return originalSend(data);
-    };
+    } as typeof res.send;
     
     next();
   };

@@ -14,13 +14,13 @@ CREATE TABLE IF NOT EXISTS dunning_attempts (
     currency VARCHAR(3) DEFAULT 'USD',
     email_sent BOOLEAN DEFAULT false,
     next_attempt_at TIMESTAMP WITH TIME ZONE,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    
-    INDEX idx_dunning_customer (customer_id),
-    INDEX idx_dunning_payment_failure (payment_failure_id),
-    INDEX idx_dunning_scheduled (scheduled_for),
-    INDEX idx_dunning_attempted (attempted_at)
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE INDEX IF NOT EXISTS idx_dunning_customer ON dunning_attempts (customer_id);
+CREATE INDEX IF NOT EXISTS idx_dunning_payment_failure ON dunning_attempts (payment_failure_id);
+CREATE INDEX IF NOT EXISTS idx_dunning_scheduled ON dunning_attempts (scheduled_for);
+CREATE INDEX IF NOT EXISTS idx_dunning_attempted ON dunning_attempts (attempted_at);
 
 CREATE TABLE IF NOT EXISTS invoices (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -40,14 +40,14 @@ CREATE TABLE IF NOT EXISTS invoices (
     line_items JSONB NOT NULL, -- [{description, quantity, unit_price_cents, total_cents}]
     notes TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    
-    INDEX idx_invoices_customer (customer_id),
-    INDEX idx_invoices_number (invoice_number),
-    INDEX idx_invoices_status (status),
-    INDEX idx_invoices_date (invoice_date),
-    INDEX idx_invoices_stripe (stripe_invoice_id)
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE INDEX IF NOT EXISTS idx_invoices_customer ON invoices (customer_id);
+CREATE INDEX IF NOT EXISTS idx_invoices_number ON invoices (invoice_number);
+CREATE INDEX IF NOT EXISTS idx_invoices_status ON invoices (status);
+CREATE INDEX IF NOT EXISTS idx_invoices_date ON invoices (invoice_date);
+CREATE INDEX IF NOT EXISTS idx_invoices_stripe ON invoices (stripe_invoice_id);
 
 CREATE TABLE IF NOT EXISTS vat_reports (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -66,11 +66,11 @@ CREATE TABLE IF NOT EXISTS vat_reports (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     
-    INDEX idx_vat_reports_quarter (report_quarter, report_year),
-    INDEX idx_vat_reports_status (status),
-    
     UNIQUE (report_quarter, report_year)
 );
+
+CREATE INDEX IF NOT EXISTS idx_vat_reports_quarter ON vat_reports (report_quarter, report_year);
+CREATE INDEX IF NOT EXISTS idx_vat_reports_status ON vat_reports (status);
 
 CREATE TABLE IF NOT EXISTS payment_reconciliations (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -86,12 +86,12 @@ CREATE TABLE IF NOT EXISTS payment_reconciliations (
     provider_transaction_ids TEXT[],
     internal_transaction_ids UUID[],
     reconciliation_details JSONB DEFAULT '{}',
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    
-    INDEX idx_payment_reconciliations_date (reconciliation_date),
-    INDEX idx_payment_reconciliations_provider (payment_provider),
-    INDEX idx_payment_reconciliations_reconciled (reconciled)
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE INDEX IF NOT EXISTS idx_payment_reconciliations_date ON payment_reconciliations (reconciliation_date);
+CREATE INDEX IF NOT EXISTS idx_payment_reconciliations_provider ON payment_reconciliations (payment_provider);
+CREATE INDEX IF NOT EXISTS idx_payment_reconciliations_reconciled ON payment_reconciliations (reconciled);
 
 CREATE TABLE IF NOT EXISTS refunds (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -107,13 +107,13 @@ CREATE TABLE IF NOT EXISTS refunds (
     failure_reason TEXT,
     requested_by VARCHAR(255),
     approved_by VARCHAR(255),
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    
-    INDEX idx_refunds_customer (customer_id),
-    INDEX idx_refunds_invoice (invoice_id),
-    INDEX idx_refunds_status (status),
-    INDEX idx_refunds_created (created_at)
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE INDEX IF NOT EXISTS idx_refunds_customer ON refunds (customer_id);
+CREATE INDEX IF NOT EXISTS idx_refunds_invoice ON refunds (invoice_id);
+CREATE INDEX IF NOT EXISTS idx_refunds_status ON refunds (status);
+CREATE INDEX IF NOT EXISTS idx_refunds_created ON refunds (created_at);
 
 CREATE TABLE IF NOT EXISTS credits (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -128,13 +128,13 @@ CREATE TABLE IF NOT EXISTS credits (
     applied_at TIMESTAMP WITH TIME ZONE,
     revoked_at TIMESTAMP WITH TIME ZONE,
     revoke_reason TEXT,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    
-    INDEX idx_credits_customer (customer_id),
-    INDEX idx_credits_type (credit_type),
-    INDEX idx_credits_status (status),
-    INDEX idx_credits_expires (expires_at)
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE INDEX IF NOT EXISTS idx_credits_customer ON credits (customer_id);
+CREATE INDEX IF NOT EXISTS idx_credits_type ON credits (credit_type);
+CREATE INDEX IF NOT EXISTS idx_credits_status ON credits (status);
+CREATE INDEX IF NOT EXISTS idx_credits_expires ON credits (expires_at);
 
 CREATE TABLE IF NOT EXISTS double_entry_ledger (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -149,13 +149,13 @@ CREATE TABLE IF NOT EXISTS double_entry_ledger (
     reference_id UUID,
     description TEXT NOT NULL,
     metadata JSONB DEFAULT '{}',
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    
-    INDEX idx_ledger_date (transaction_date),
-    INDEX idx_ledger_type (transaction_type),
-    INDEX idx_ledger_customer (customer_id),
-    INDEX idx_ledger_reference (reference_type, reference_id)
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE INDEX IF NOT EXISTS idx_ledger_date ON double_entry_ledger (transaction_date);
+CREATE INDEX IF NOT EXISTS idx_ledger_type ON double_entry_ledger (transaction_type);
+CREATE INDEX IF NOT EXISTS idx_ledger_customer ON double_entry_ledger (customer_id);
+CREATE INDEX IF NOT EXISTS idx_ledger_reference ON double_entry_ledger (reference_type, reference_id);
 
 CREATE TABLE IF NOT EXISTS estonian_annual_reports (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -169,11 +169,11 @@ CREATE TABLE IF NOT EXISTS estonian_annual_reports (
     registry_reference_number VARCHAR(100),
     report_data JSONB DEFAULT '{}',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    
-    INDEX idx_annual_reports_year (report_year),
-    INDEX idx_annual_reports_status (status)
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE INDEX IF NOT EXISTS idx_annual_reports_year ON estonian_annual_reports (report_year);
+CREATE INDEX IF NOT EXISTS idx_annual_reports_status ON estonian_annual_reports (status);
 
 CREATE TABLE IF NOT EXISTS expense_categories (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -184,11 +184,11 @@ CREATE TABLE IF NOT EXISTS expense_categories (
     estonian_tax_code VARCHAR(20),
     description TEXT,
     active BOOLEAN DEFAULT true,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    
-    INDEX idx_expense_categories_parent (parent_category_id),
-    INDEX idx_expense_categories_active (active)
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE INDEX IF NOT EXISTS idx_expense_categories_parent ON expense_categories (parent_category_id);
+CREATE INDEX IF NOT EXISTS idx_expense_categories_active ON expense_categories (active);
 
 CREATE TABLE IF NOT EXISTS expenses (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -205,13 +205,13 @@ CREATE TABLE IF NOT EXISTS expenses (
     approved_by VARCHAR(255),
     approved_at TIMESTAMP WITH TIME ZONE,
     notes TEXT,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    
-    INDEX idx_expenses_date (expense_date),
-    INDEX idx_expenses_category (category_id),
-    INDEX idx_expenses_vendor (vendor_name),
-    INDEX idx_expenses_approved (approved)
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE INDEX IF NOT EXISTS idx_expenses_date ON expenses (expense_date);
+CREATE INDEX IF NOT EXISTS idx_expenses_category ON expenses (category_id);
+CREATE INDEX IF NOT EXISTS idx_expenses_vendor ON expenses (vendor_name);
+CREATE INDEX IF NOT EXISTS idx_expenses_approved ON expenses (approved);
 
 -- Financial dashboard view
 CREATE OR REPLACE VIEW financial_dashboard AS

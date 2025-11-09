@@ -1,11 +1,10 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 declare module 'parquetjs-lite' {
   export class ParquetSchema {
-    constructor(def: Record<string, any>);
+    constructor(def: Record<string, unknown>);
   }
   export class ParquetWriter {
-    static openFile(schema: any, filePath: string): Promise<ParquetWriter>;
-    appendRow(row: any): Promise<void>;
+    static openFile(schema: unknown, filePath: string): Promise<ParquetWriter>;
+    appendRow(row: Record<string, unknown>): Promise<void>;
     close(): Promise<void>;
   }
 }

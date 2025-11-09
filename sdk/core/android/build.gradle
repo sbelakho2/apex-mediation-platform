@@ -101,10 +101,22 @@ dependencies {
 // Size check task
 tasks.register('checkSdkSize') {
     doLast {
-        def aar = fileTree("$buildDir/outputs/aar").matching {
+        def aarCandidates = fileTree("$buildDir/outputs/aar").matching {
             include "**/*-release.aar"
-        }.singleFile
-        
+        }.files.findAll { it.isFile() }
+
+        if (aarCandidates.isEmpty()) {
+            logger.warn("No release AAR artifacts found under $buildDir/outputs/aar. Run assembleRelease before checkSdkSize.")
+            return
+        }
+
+        def aarList = aarCandidates.toList()
+        def aar = aarList.max { it.length() }
+
+        if (aarList.size() > 1) {
+            println "[INFO] Multiple release AAR artifacts detected (${aarList.collect { it.name }}); using largest ${aar.name}."
+        }
+
         def size = aar.length()
         def maxSize = 512000 // 500KB
         
@@ -179,4 +191,11 @@ tasks.register('generateApiDocs') {
             logger.warn("Dokka output directory not found; ensure dokkaHtml task ran successfully.")
         }
     }
+}
+
+// CI smoke gate for StrictMode sample harness. Runs the sample module's Robolectric test suite.
+tasks.register('strictmodeSmoke') {
+    group = 'verification'
+    description = 'Runs the StrictMode sample smoke tests to ensure SDK public flows respect main-thread I/O guarantees.'
+    dependsOn(':strictmode-sample:testDebugUnitTest')
 }

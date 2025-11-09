@@ -726,6 +726,8 @@ export const getDashboardData = async (
       reportingService.getAnomalies(publisherId, 24),
     ]);
 
+    const sloValues = Object.values(slos);
+
     res.json({
       success: true,
       data: {
@@ -744,8 +746,8 @@ export const getDashboardData = async (
           crashRate: qualityMetrics.crashRate,
         },
         slos: {
-          breached: Object.values(slos).filter((s: any) => s.status === 'breached').length,
-          atRisk: Object.values(slos).filter((s: any) => s.status === 'at-risk').length,
+          breached: sloValues.filter(slo => slo.status === 'breached').length,
+          atRisk: sloValues.filter(slo => slo.status === 'at-risk').length,
         },
         alerts: {
           critical: alerts.filter(a => a.severity === 'critical').length,

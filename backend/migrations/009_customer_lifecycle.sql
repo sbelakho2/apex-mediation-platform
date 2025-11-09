@@ -8,13 +8,13 @@ CREATE TABLE IF NOT EXISTS events (
     customer_id UUID REFERENCES users(id) ON DELETE CASCADE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     processed BOOLEAN DEFAULT false,
-    processed_at TIMESTAMP WITH TIME ZONE,
-    
-    INDEX idx_events_type (event_type),
-    INDEX idx_events_customer (customer_id),
-    INDEX idx_events_created (created_at),
-    INDEX idx_events_processed (processed)
+    processed_at TIMESTAMP WITH TIME ZONE
 );
+
+CREATE INDEX IF NOT EXISTS idx_events_type ON events (event_type);
+CREATE INDEX IF NOT EXISTS idx_events_customer ON events (customer_id);
+CREATE INDEX IF NOT EXISTS idx_events_created ON events (created_at);
+CREATE INDEX IF NOT EXISTS idx_events_processed ON events (processed);
 
 CREATE TABLE IF NOT EXISTS customer_milestones (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -26,12 +26,12 @@ CREATE TABLE IF NOT EXISTS customer_milestones (
     email_sent BOOLEAN DEFAULT false,
     data JSONB DEFAULT '{}',
     
-    INDEX idx_customer_milestones_customer (customer_id),
-    INDEX idx_customer_milestones_type (milestone_type),
-    INDEX idx_customer_milestones_achieved (achieved_at),
-    
     UNIQUE (customer_id, milestone_type)
 );
+
+CREATE INDEX IF NOT EXISTS idx_customer_milestones_customer ON customer_milestones (customer_id);
+CREATE INDEX IF NOT EXISTS idx_customer_milestones_type ON customer_milestones (milestone_type);
+CREATE INDEX IF NOT EXISTS idx_customer_milestones_achieved ON customer_milestones (achieved_at);
 
 CREATE TABLE IF NOT EXISTS usage_records (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -44,11 +44,11 @@ CREATE TABLE IF NOT EXISTS usage_records (
     bandwidth_bytes BIGINT DEFAULT 0,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     
-    INDEX idx_usage_customer (customer_id),
-    INDEX idx_usage_date (record_date),
-    
     UNIQUE (customer_id, record_date)
 );
+
+CREATE INDEX IF NOT EXISTS idx_usage_customer ON usage_records (customer_id);
+CREATE INDEX IF NOT EXISTS idx_usage_date ON usage_records (record_date);
 
 CREATE TABLE IF NOT EXISTS usage_events (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -58,13 +58,13 @@ CREATE TABLE IF NOT EXISTS usage_events (
     event_metadata JSONB DEFAULT '{}',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     stripe_synced BOOLEAN DEFAULT false,
-    stripe_synced_at TIMESTAMP WITH TIME ZONE,
-    
-    INDEX idx_usage_events_customer (customer_id),
-    INDEX idx_usage_events_name (event_name),
-    INDEX idx_usage_events_created (created_at),
-    INDEX idx_usage_events_synced (stripe_synced)
+    stripe_synced_at TIMESTAMP WITH TIME ZONE
 );
+
+CREATE INDEX IF NOT EXISTS idx_usage_events_customer ON usage_events (customer_id);
+CREATE INDEX IF NOT EXISTS idx_usage_events_name ON usage_events (event_name);
+CREATE INDEX IF NOT EXISTS idx_usage_events_created ON usage_events (created_at);
+CREATE INDEX IF NOT EXISTS idx_usage_events_synced ON usage_events (stripe_synced);
 
 CREATE TABLE IF NOT EXISTS analytics_views (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -74,12 +74,12 @@ CREATE TABLE IF NOT EXISTS analytics_views (
     view_count INTEGER DEFAULT 1,
     total_time_seconds INTEGER DEFAULT 0,
     
-    INDEX idx_analytics_views_customer (customer_id),
-    INDEX idx_analytics_views_date (view_date),
-    INDEX idx_analytics_views_page (dashboard_page),
-    
     UNIQUE (customer_id, view_date, dashboard_page)
 );
+
+CREATE INDEX IF NOT EXISTS idx_analytics_views_customer ON analytics_views (customer_id);
+CREATE INDEX IF NOT EXISTS idx_analytics_views_date ON analytics_views (view_date);
+CREATE INDEX IF NOT EXISTS idx_analytics_views_page ON analytics_views (dashboard_page);
 
 CREATE TABLE IF NOT EXISTS api_logs (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -93,13 +93,13 @@ CREATE TABLE IF NOT EXISTS api_logs (
     ip_address INET,
     user_agent TEXT,
     error_message TEXT,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    
-    INDEX idx_api_logs_user (user_id),
-    INDEX idx_api_logs_endpoint (endpoint),
-    INDEX idx_api_logs_status (status_code),
-    INDEX idx_api_logs_created (created_at)
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE INDEX IF NOT EXISTS idx_api_logs_user ON api_logs (user_id);
+CREATE INDEX IF NOT EXISTS idx_api_logs_endpoint ON api_logs (endpoint);
+CREATE INDEX IF NOT EXISTS idx_api_logs_status ON api_logs (status_code);
+CREATE INDEX IF NOT EXISTS idx_api_logs_created ON api_logs (created_at);
 
 CREATE TABLE IF NOT EXISTS sdk_events (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -111,13 +111,13 @@ CREATE TABLE IF NOT EXISTS sdk_events (
     device_model VARCHAR(100),
     os_version VARCHAR(50),
     event_metadata JSONB DEFAULT '{}',
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    
-    INDEX idx_sdk_events_customer (customer_id),
-    INDEX idx_sdk_events_type (event_type),
-    INDEX idx_sdk_events_platform (platform),
-    INDEX idx_sdk_events_created (created_at)
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE INDEX IF NOT EXISTS idx_sdk_events_customer ON sdk_events (customer_id);
+CREATE INDEX IF NOT EXISTS idx_sdk_events_type ON sdk_events (event_type);
+CREATE INDEX IF NOT EXISTS idx_sdk_events_platform ON sdk_events (platform);
+CREATE INDEX IF NOT EXISTS idx_sdk_events_created ON sdk_events (created_at);
 
 CREATE TABLE IF NOT EXISTS support_tickets (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -132,13 +132,13 @@ CREATE TABLE IF NOT EXISTS support_tickets (
     customer_satisfaction_score INTEGER CHECK (customer_satisfaction_score BETWEEN 1 AND 5),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     resolved_at TIMESTAMP WITH TIME ZONE,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    
-    INDEX idx_support_tickets_customer (customer_id),
-    INDEX idx_support_tickets_status (status),
-    INDEX idx_support_tickets_priority (priority),
-    INDEX idx_support_tickets_created (created_at)
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE INDEX IF NOT EXISTS idx_support_tickets_customer ON support_tickets (customer_id);
+CREATE INDEX IF NOT EXISTS idx_support_tickets_status ON support_tickets (status);
+CREATE INDEX IF NOT EXISTS idx_support_tickets_priority ON support_tickets (priority);
+CREATE INDEX IF NOT EXISTS idx_support_tickets_created ON support_tickets (created_at);
 
 CREATE TABLE IF NOT EXISTS subscriptions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -157,12 +157,12 @@ CREATE TABLE IF NOT EXISTS subscriptions (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     
-    INDEX idx_subscriptions_customer (customer_id),
-    INDEX idx_subscriptions_status (status),
-    INDEX idx_subscriptions_stripe (stripe_subscription_id),
-    
     UNIQUE (customer_id)
 );
+
+CREATE INDEX IF NOT EXISTS idx_subscriptions_customer ON subscriptions (customer_id);
+CREATE INDEX IF NOT EXISTS idx_subscriptions_status ON subscriptions (status);
+CREATE INDEX IF NOT EXISTS idx_subscriptions_stripe ON subscriptions (stripe_subscription_id);
 
 CREATE TABLE IF NOT EXISTS payment_failures (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -176,12 +176,12 @@ CREATE TABLE IF NOT EXISTS payment_failures (
     next_retry_at TIMESTAMP WITH TIME ZONE,
     resolved BOOLEAN DEFAULT false,
     resolved_at TIMESTAMP WITH TIME ZONE,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    
-    INDEX idx_payment_failures_customer (customer_id),
-    INDEX idx_payment_failures_resolved (resolved),
-    INDEX idx_payment_failures_created (created_at)
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE INDEX IF NOT EXISTS idx_payment_failures_customer ON payment_failures (customer_id);
+CREATE INDEX IF NOT EXISTS idx_payment_failures_resolved ON payment_failures (resolved);
+CREATE INDEX IF NOT EXISTS idx_payment_failures_created ON payment_failures (created_at);
 
 -- Aggregate view for customer activity dashboard
 CREATE OR REPLACE VIEW customer_activity_summary AS

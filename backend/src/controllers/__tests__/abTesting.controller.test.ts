@@ -1,11 +1,18 @@
 import request from 'supertest';
-import { Application } from 'express';
-import type { Experiment, ExperimentVariant, SignificanceTest } from '../../services/abTestingService';
+import type { Application, NextFunction, Request, Response } from 'express';
+import type { Experiment, SignificanceTest } from '../../services/abTestingService';
+
+type AuthenticatedTestRequest = Request & {
+  user?: {
+    publisherId: string;
+    userId: string;
+  };
+};
 
 // Mock authentication middleware BEFORE importing routes
 jest.mock('../../middleware/auth', () => ({
-  authenticate: jest.fn((req: any, _res: any, next: any) => {
-    req.user = { publisherId: 'pub-123', userId: 'user-123' };
+  authenticate: jest.fn((req: AuthenticatedTestRequest, _res: Response, next: NextFunction) => {
+    req.user = { publisherId: 'pub-123', userId: 'user-123', email: 'test@example.com' };
     next();
   }),
 }));
@@ -21,6 +28,22 @@ describe('A/B Testing Controller', () => {
   let app: Application;
   const mockToken = 'Bearer mock-jwt-token';
   const mockPublisherId = 'pub-123';
+
+  const buildExperiment = (overrides: Partial<Experiment> = {}): Experiment => ({
+    id: overrides.id ?? 'exp-123',
+    name: overrides.name ?? 'Floor Price Test',
+    description: overrides.description ?? 'Test floor price optimization',
+    type: overrides.type ?? 'floor_price',
+    status: overrides.status ?? 'draft',
+    startDate: overrides.startDate,
+    endDate: overrides.endDate,
+    publisherId: overrides.publisherId ?? mockPublisherId,
+    variants: overrides.variants ?? [],
+    targetSampleSize: overrides.targetSampleSize ?? 1000,
+    confidenceLevel: overrides.confidenceLevel ?? 0.95,
+    createdAt: overrides.createdAt ?? new Date('2024-01-01T00:00:00Z'),
+    updatedAt: overrides.updatedAt ?? new Date('2024-01-01T00:00:00Z'),
+  });
 
   beforeAll(() => {
     app = createTestApp();
@@ -146,11 +169,9 @@ describe('A/B Testing Controller', () => {
     });
 
     it('should return 403 for experiment from different publisher', async () => {
-      mockAbTestingService.getExperiment.mockResolvedValue({
-        id: 'exp-123',
-        publisherId: 'different-pub',
-        variants: [],
-      } as any);
+      mockAbTestingService.getExperiment.mockResolvedValue(
+        buildExperiment({ publisherId: 'different-pub', variants: [] })
+      );
 
       await request(app)
         .get('/api/v1/ab-testing/experiments/exp-123')
@@ -161,13 +182,9 @@ describe('A/B Testing Controller', () => {
 
   describe('POST /api/v1/ab-testing/experiments/:experimentId/start', () => {
     it('should start an experiment', async () => {
-      const mockExperiment = {
-        id: 'exp-123',
-        publisherId: mockPublisherId,
-        status: 'draft' as const,
-      };
+      const mockExperiment = buildExperiment({ status: 'draft' });
 
-      mockAbTestingService.getExperiment.mockResolvedValue(mockExperiment as any);
+      mockAbTestingService.getExperiment.mockResolvedValue(mockExperiment);
       mockAbTestingService.startExperiment.mockResolvedValue();
 
       const response = await request(app)
@@ -218,10 +235,9 @@ describe('A/B Testing Controller', () => {
         recommendation: 'winner',
       };
 
-      mockAbTestingService.getExperiment.mockResolvedValue({
-        id: 'exp-123',
-        publisherId: mockPublisherId,
-      } as any);
+      mockAbTestingService.getExperiment.mockResolvedValue(
+        buildExperiment({ publisherId: mockPublisherId })
+      );
       mockAbTestingService.testSignificance.mockResolvedValue(mockResult);
 
       const response = await request(app)
@@ -246,10 +262,9 @@ describe('A/B Testing Controller', () => {
         explorationBonus: 0.1,
       };
 
-      mockAbTestingService.getExperiment.mockResolvedValue({
-        id: 'exp-123',
-        publisherId: mockPublisherId,
-      } as any);
+      mockAbTestingService.getExperiment.mockResolvedValue(
+        buildExperiment({ publisherId: mockPublisherId })
+      );
       mockAbTestingService.getBanditRecommendation.mockResolvedValue(mockRecommendation);
 
       const response = await request(app)

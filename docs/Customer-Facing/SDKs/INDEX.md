@@ -21,6 +21,7 @@ Debugging and Tools
   - Mediation Debugger events: GET /v1/debug/mediation?placement_id=&n=
 
 Sandbox Readiness — SDKs
+- See the full checklist: docs/Customer-Facing/SDKs/SANDBOX_READINESS.md
 - Run all SDK tests locally before certification:
   - Android: `./gradlew :sdk:core:android:test`
   - iOS: `cd sdks/ios && swift test`

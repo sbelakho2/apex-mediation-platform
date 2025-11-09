@@ -11,12 +11,12 @@ CREATE TABLE IF NOT EXISTS referral_codes (
     max_uses INTEGER DEFAULT 1,
     times_used INTEGER DEFAULT 0,
     reward_amount_cents INTEGER DEFAULT 50000, -- $500 default
-    status VARCHAR(20) DEFAULT 'active' CHECK (status IN ('active', 'expired', 'disabled')),
-    
-    INDEX idx_referral_codes_customer (customer_id),
-    INDEX idx_referral_codes_code (code),
-    INDEX idx_referral_codes_status (status)
+    status VARCHAR(20) DEFAULT 'active' CHECK (status IN ('active', 'expired', 'disabled'))
 );
+
+CREATE INDEX IF NOT EXISTS idx_referral_codes_customer ON referral_codes (customer_id);
+CREATE INDEX IF NOT EXISTS idx_referral_codes_code ON referral_codes (code);
+CREATE INDEX IF NOT EXISTS idx_referral_codes_status ON referral_codes (status);
 
 CREATE TABLE IF NOT EXISTS referral_rewards (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -29,13 +29,13 @@ CREATE TABLE IF NOT EXISTS referral_rewards (
     revoked_at TIMESTAMP WITH TIME ZONE,
     revoke_reason TEXT,
     
-    INDEX idx_referral_rewards_referrer (referrer_id),
-    INDEX idx_referral_rewards_referred (referred_id),
-    INDEX idx_referral_rewards_status (status),
-    
     -- Prevent duplicate rewards for same referral
     UNIQUE (referrer_id, referred_id)
 );
+
+CREATE INDEX IF NOT EXISTS idx_referral_rewards_referrer ON referral_rewards (referrer_id);
+CREATE INDEX IF NOT EXISTS idx_referral_rewards_referred ON referral_rewards (referred_id);
+CREATE INDEX IF NOT EXISTS idx_referral_rewards_status ON referral_rewards (status);
 
 -- Geographic expansion tracking
 CREATE TABLE IF NOT EXISTS geographic_expansions (
@@ -50,13 +50,13 @@ CREATE TABLE IF NOT EXISTS geographic_expansions (
     discounted_take_rate INTEGER DEFAULT 5,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     
-    INDEX idx_geographic_expansions_customer (customer_id),
-    INDEX idx_geographic_expansions_country (country_code),
-    INDEX idx_geographic_expansions_first (is_first_in_country),
-    
     -- One discount per customer per country
     UNIQUE (customer_id, country_code)
 );
+
+CREATE INDEX IF NOT EXISTS idx_geographic_expansions_customer ON geographic_expansions (customer_id);
+CREATE INDEX IF NOT EXISTS idx_geographic_expansions_country ON geographic_expansions (country_code);
+CREATE INDEX IF NOT EXISTS idx_geographic_expansions_first ON geographic_expansions (is_first_in_country);
 
 -- Premium feature subscriptions
 CREATE TABLE IF NOT EXISTS premium_features (
@@ -66,10 +66,10 @@ CREATE TABLE IF NOT EXISTS premium_features (
     price_cents_monthly INTEGER NOT NULL,
     eligibility_criteria JSONB, -- e.g., {"min_impressions": 10000000, "min_countries": 10}
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    is_active BOOLEAN DEFAULT true,
-    
-    INDEX idx_premium_features_active (is_active)
+    is_active BOOLEAN DEFAULT true
 );
+
+CREATE INDEX IF NOT EXISTS idx_premium_features_active ON premium_features (is_active);
 
 CREATE TABLE IF NOT EXISTS customer_premium_features (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -80,13 +80,13 @@ CREATE TABLE IF NOT EXISTS customer_premium_features (
     status VARCHAR(20) DEFAULT 'active' CHECK (status IN ('active', 'cancelled', 'expired')),
     stripe_subscription_id VARCHAR(255),
     
-    INDEX idx_customer_premium_features_customer (customer_id),
-    INDEX idx_customer_premium_features_feature (feature_id),
-    INDEX idx_customer_premium_features_status (status),
-    
     -- One subscription per customer per feature
     UNIQUE (customer_id, feature_id, status)
 );
+
+CREATE INDEX IF NOT EXISTS idx_customer_premium_features_customer ON customer_premium_features (customer_id);
+CREATE INDEX IF NOT EXISTS idx_customer_premium_features_feature ON customer_premium_features (feature_id);
+CREATE INDEX IF NOT EXISTS idx_customer_premium_features_status ON customer_premium_features (status);
 
 -- Network effect bonuses
 CREATE TABLE IF NOT EXISTS network_effect_bonuses (
@@ -98,11 +98,11 @@ CREATE TABLE IF NOT EXISTS network_effect_bonuses (
     current_value BIGINT DEFAULT 0,
     is_active BOOLEAN DEFAULT false,
     
-    INDEX idx_network_effect_bonuses_type (milestone_type),
-    INDEX idx_network_effect_bonuses_active (is_active),
-    
     UNIQUE (milestone_type)
 );
+
+CREATE INDEX IF NOT EXISTS idx_network_effect_bonuses_type ON network_effect_bonuses (milestone_type);
+CREATE INDEX IF NOT EXISTS idx_network_effect_bonuses_active ON network_effect_bonuses (is_active);
 
 -- Volume deals with ad networks
 CREATE TABLE IF NOT EXISTS volume_deals (
@@ -114,12 +114,12 @@ CREATE TABLE IF NOT EXISTS volume_deals (
     deal_start_date TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     deal_end_date TIMESTAMP WITH TIME ZONE,
     auto_negotiated BOOLEAN DEFAULT true,
-    status VARCHAR(20) DEFAULT 'active' CHECK (status IN ('active', 'pending', 'expired')),
-    
-    INDEX idx_volume_deals_network (ad_network),
-    INDEX idx_volume_deals_status (status),
-    INDEX idx_volume_deals_tier (volume_tier)
+    status VARCHAR(20) DEFAULT 'active' CHECK (status IN ('active', 'pending', 'expired'))
 );
+
+CREATE INDEX IF NOT EXISTS idx_volume_deals_network ON volume_deals (ad_network);
+CREATE INDEX IF NOT EXISTS idx_volume_deals_status ON volume_deals (status);
+CREATE INDEX IF NOT EXISTS idx_volume_deals_tier ON volume_deals (volume_tier);
 
 -- Case study eligibility tracking
 CREATE TABLE IF NOT EXISTS case_study_candidates (
@@ -132,12 +132,12 @@ CREATE TABLE IF NOT EXISTS case_study_candidates (
     accepted_at TIMESTAMP WITH TIME ZONE,
     published_at TIMESTAMP WITH TIME ZONE,
     status VARCHAR(20) DEFAULT 'pending' CHECK (status IN ('pending', 'invited', 'accepted', 'declined', 'published')),
-    case_study_url TEXT,
-    
-    INDEX idx_case_study_candidates_customer (customer_id),
-    INDEX idx_case_study_candidates_status (status),
-    INDEX idx_case_study_candidates_eligible (eligible)
+    case_study_url TEXT
 );
+
+CREATE INDEX IF NOT EXISTS idx_case_study_candidates_customer ON case_study_candidates (customer_id);
+CREATE INDEX IF NOT EXISTS idx_case_study_candidates_status ON case_study_candidates (status);
+CREATE INDEX IF NOT EXISTS idx_case_study_candidates_eligible ON case_study_candidates (eligible);
 
 -- Testimonial requests
 CREATE TABLE IF NOT EXISTS testimonial_requests (
@@ -151,12 +151,12 @@ CREATE TABLE IF NOT EXISTS testimonial_requests (
     rating INTEGER CHECK (rating >= 1 AND rating <= 5),
     can_publish BOOLEAN DEFAULT false,
     published_at TIMESTAMP WITH TIME ZONE,
-    status VARCHAR(20) DEFAULT 'requested' CHECK (status IN ('requested', 'responded', 'declined', 'published')),
-    
-    INDEX idx_testimonial_requests_customer (customer_id),
-    INDEX idx_testimonial_requests_status (status),
-    INDEX idx_testimonial_requests_nps (nps_score)
+    status VARCHAR(20) DEFAULT 'requested' CHECK (status IN ('requested', 'responded', 'declined', 'published'))
 );
+
+CREATE INDEX IF NOT EXISTS idx_testimonial_requests_customer ON testimonial_requests (customer_id);
+CREATE INDEX IF NOT EXISTS idx_testimonial_requests_status ON testimonial_requests (status);
+CREATE INDEX IF NOT EXISTS idx_testimonial_requests_nps ON testimonial_requests (nps_score);
 
 -- Community contribution tracking
 CREATE TABLE IF NOT EXISTS community_contributions (
@@ -166,12 +166,12 @@ CREATE TABLE IF NOT EXISTS community_contributions (
     contribution_url TEXT,
     contribution_date TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     points_awarded INTEGER DEFAULT 1,
-    badge_earned VARCHAR(100),
-    
-    INDEX idx_community_contributions_customer (customer_id),
-    INDEX idx_community_contributions_type (contribution_type),
-    INDEX idx_community_contributions_date (contribution_date)
+    badge_earned VARCHAR(100)
 );
+
+CREATE INDEX IF NOT EXISTS idx_community_contributions_customer ON community_contributions (customer_id);
+CREATE INDEX IF NOT EXISTS idx_community_contributions_type ON community_contributions (contribution_type);
+CREATE INDEX IF NOT EXISTS idx_community_contributions_date ON community_contributions (contribution_date);
 
 -- ML model optimization tracking
 CREATE TABLE IF NOT EXISTS ml_model_optimizations (
@@ -183,12 +183,12 @@ CREATE TABLE IF NOT EXISTS ml_model_optimizations (
     new_accuracy DECIMAL(5,4),
     improvement_percent DECIMAL(5,2),
     deployed_at TIMESTAMP WITH TIME ZONE,
-    status VARCHAR(20) DEFAULT 'trained' CHECK (status IN ('trained', 'testing', 'deployed', 'rolled_back')),
-    
-    INDEX idx_ml_model_optimizations_type (model_type),
-    INDEX idx_ml_model_optimizations_date (optimization_date),
-    INDEX idx_ml_model_optimizations_status (status)
+    status VARCHAR(20) DEFAULT 'trained' CHECK (status IN ('trained', 'testing', 'deployed', 'rolled_back'))
 );
+
+CREATE INDEX IF NOT EXISTS idx_ml_model_optimizations_type ON ml_model_optimizations (model_type);
+CREATE INDEX IF NOT EXISTS idx_ml_model_optimizations_date ON ml_model_optimizations (optimization_date);
+CREATE INDEX IF NOT EXISTS idx_ml_model_optimizations_status ON ml_model_optimizations (status);
 
 -- Marketplace data subscriptions
 CREATE TABLE IF NOT EXISTS marketplace_subscriptions (
@@ -200,12 +200,12 @@ CREATE TABLE IF NOT EXISTS marketplace_subscriptions (
     cancelled_at TIMESTAMP WITH TIME ZONE,
     status VARCHAR(20) DEFAULT 'active' CHECK (status IN ('active', 'cancelled', 'suspended')),
     api_key_hash TEXT,
-    monthly_api_calls INTEGER DEFAULT 0,
-    
-    INDEX idx_marketplace_subscriptions_company (subscriber_company),
-    INDEX idx_marketplace_subscriptions_status (status),
-    INDEX idx_marketplace_subscriptions_type (subscription_type)
+    monthly_api_calls INTEGER DEFAULT 0
 );
+
+CREATE INDEX IF NOT EXISTS idx_marketplace_subscriptions_company ON marketplace_subscriptions (subscriber_company);
+CREATE INDEX IF NOT EXISTS idx_marketplace_subscriptions_status ON marketplace_subscriptions (status);
+CREATE INDEX IF NOT EXISTS idx_marketplace_subscriptions_type ON marketplace_subscriptions (subscription_type);
 
 -- System health checks
 CREATE TABLE IF NOT EXISTS system_health_checks (
@@ -222,11 +222,11 @@ CREATE TABLE IF NOT EXISTS system_health_checks (
     unhealthy_customers INTEGER DEFAULT 0,
     checks_passed INTEGER DEFAULT 0,
     checks_failed INTEGER DEFAULT 0,
-    issues JSONB, -- Detailed list of any issues detected
-    
-    INDEX idx_system_health_checks_date (check_date),
-    INDEX idx_system_health_checks_score (health_score)
+    issues JSONB -- Detailed list of any issues detected
 );
+
+CREATE INDEX IF NOT EXISTS idx_system_health_checks_date ON system_health_checks (check_date);
+CREATE INDEX IF NOT EXISTS idx_system_health_checks_score ON system_health_checks (health_score);
 
 -- Insert default premium features
 INSERT INTO premium_features (name, description, price_cents_monthly, eligibility_criteria) VALUES

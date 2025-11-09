@@ -769,7 +769,7 @@ export class QualityMonitoringService {
   /**
    * Get recommended action for SLO breach
    */
-  private getRecommendedAction(metric: string, slo: SLOStatus): string {
+  private getRecommendedAction(metric: string, _slo: SLOStatus): string {
     const actions: Record<string, string> = {
       availability: 'Check adapter health and enable waterfall fallback',
       latency: 'Review adapter timeouts and enable circuit breakers',

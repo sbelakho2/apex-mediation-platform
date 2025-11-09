@@ -7,7 +7,7 @@
 import { Job } from 'bullmq';
 import logger from '../../utils/logger';
 import clickhouse from '../../utils/clickhouse';
-import { redis, cacheKeys } from '../../utils/redis';
+import { redis } from '../../utils/redis';
 import { AnalyticsAggregationJob } from '../queueManager';
 
 /**
@@ -71,7 +71,7 @@ async function aggregateImpressions(
   publisherId: string,
   startDate: string,
   endDate: string,
-  granularity: string
+  _granularity: string
 ): Promise<void> {
   const query = `
     INSERT INTO analytics.impressions_aggregated
@@ -108,7 +108,7 @@ async function aggregateClicks(
   publisherId: string,
   startDate: string,
   endDate: string,
-  granularity: string
+  _granularity: string
 ): Promise<void> {
   const query = `
     INSERT INTO analytics.clicks_aggregated
@@ -144,7 +144,7 @@ async function aggregateRevenue(
   publisherId: string,
   startDate: string,
   endDate: string,
-  granularity: string
+  _granularity: string
 ): Promise<void> {
   const query = `
     INSERT INTO analytics.revenue_aggregated
@@ -183,7 +183,7 @@ async function calculateMetrics(
   publisherId: string,
   startDate: string,
   endDate: string,
-  granularity: string
+  _granularity: string
 ): Promise<void> {
   // Calculate CTR, fill rate, eCPM, etc.
   const query = `

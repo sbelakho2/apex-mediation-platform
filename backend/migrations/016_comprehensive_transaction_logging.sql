@@ -35,7 +35,7 @@ CREATE TABLE IF NOT EXISTS transaction_log (
   vat_reverse_charge BOOLEAN DEFAULT FALSE, -- EU B2B reverse charge
   
   -- Parties Involved
-  customer_id UUID REFERENCES customers(id),
+  customer_id UUID REFERENCES users(id),
   vendor_name VARCHAR(255), -- For expenses (Stripe, AWS, Cloudflare, etc.)
   counterparty_country_code VARCHAR(2), -- For VAT/cross-border compliance
   counterparty_vat_number VARCHAR(50), -- EU VAT validation
@@ -223,12 +223,11 @@ FROM transaction_log
 WHERE is_deleted = FALSE
 GROUP BY fiscal_year, accounting_period;
 
--- Customer Revenue Report
 CREATE OR REPLACE VIEW customer_revenue_report AS
 SELECT
   c.id AS customer_id,
   c.email,
-  c.company_name,
+  p.company_name AS publisher_company_name,
   EXTRACT(YEAR FROM tl.transaction_date) AS year,
   EXTRACT(MONTH FROM tl.transaction_date) AS month,
   SUM(tl.amount_eur_cents) / 100.0 AS total_revenue_eur,
@@ -236,10 +235,11 @@ SELECT
   COUNT(*) AS transaction_count,
   AVG(tl.amount_eur_cents) / 100.0 AS avg_transaction_eur
 FROM transaction_log tl
-JOIN customers c ON tl.customer_id = c.id
+JOIN users c ON tl.customer_id = c.id
+JOIN publishers p ON c.publisher_id = p.id
 WHERE tl.transaction_type IN ('revenue', 'subscription_charge', 'usage_charge')
   AND tl.is_deleted = FALSE
-GROUP BY c.id, c.email, c.company_name, EXTRACT(YEAR FROM tl.transaction_date), EXTRACT(MONTH FROM tl.transaction_date);
+GROUP BY c.id, c.email, p.company_name, EXTRACT(YEAR FROM tl.transaction_date), EXTRACT(MONTH FROM tl.transaction_date);
 
 -- =====================================================================
 -- FUNCTIONS FOR TRANSACTION LOGGING

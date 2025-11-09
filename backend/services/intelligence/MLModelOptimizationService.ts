@@ -2,8 +2,17 @@
 // Automated ML model training and deployment
 // Optimizes waterfall ordering, fraud detection, and eCPM prediction
 
+import { promises as fs, createReadStream } from 'node:fs';
+import path from 'node:path';
+import readline from 'node:readline';
 import { Pool } from 'pg';
 import OpenAI from 'openai';
+import weakSupervisionService from '../../src/services/fraud/weakSupervision/WeakSupervisionService';
+import type {
+  LabelQualityReport,
+  WeakSupervisionContext,
+  WeakSupervisionResult,
+} from '../../src/services/fraud/weakSupervision/types';
 
 interface ModelMetrics {
   accuracy: number;
@@ -53,6 +62,8 @@ export class MLModelOptimizationService {
 
     // 4. Churn prediction model
     results.push(await this.optimizeChurnPredictionModel());
+
+    await this.generateWeakSupervisionReport();
 
     console.log(`[MLOptimization] Optimization complete. ${results.filter(r => r.should_deploy).length}/${results.length} models improved`);
     
@@ -398,6 +409,195 @@ export class MLModelOptimizationService {
       status,
       shouldDeploy ? new Date() : null
     ]);
+  }
+
+  private async generateWeakSupervisionReport(): Promise<void> {
+    try {
+      const sources = await this.resolveWeakSupervisionContextSources();
+      if (sources.length === 0) {
+        console.log('[MLOptimization] Weak supervision: no nightly context sources located; skipping report generation.');
+        return;
+      }
+
+      const maxContexts = Number(process.env.WEAK_SUPERVISION_MAX_CONTEXTS ?? '5000');
+      const { contexts, truncated } = await this.loadWeakSupervisionContexts(sources, maxContexts);
+
+      if (contexts.length === 0) {
+        console.log('[MLOptimization] Weak supervision: context sources contained no events; skipping report generation.');
+        return;
+      }
+
+      await weakSupervisionService.initialize();
+      const { results, report } = await weakSupervisionService.evaluateBatch(contexts);
+
+      const outputDir = await this.persistWeakSupervisionArtifacts(report, results, sources, {
+        truncated,
+        maxContexts,
+      });
+
+      const coverageSummary = Object.entries(report.coverage)
+        .map(([fn, value]) => `${fn}: ${(value * 100).toFixed(1)}%`)
+        .join(', ');
+      console.log(
+        `[MLOptimization] Weak supervision coverage -> ${coverageSummary || 'no fraud coverage recorded'}; conflict rate ${(report.conflictRate * 100).toFixed(2)}%`
+      );
+      console.log(`[MLOptimization] Weak supervision report written to ${outputDir}${truncated ? ' (truncated)' : ''}.`);
+    } catch (error) {
+      console.error('[MLOptimization] Weak supervision report generation failed:', error);
+    }
+  }
+
+  private async resolveWeakSupervisionContextSources(): Promise<string[]> {
+    const resolved = new Set<string>();
+    const examine = async (candidate: string, options?: { suppressWarning?: boolean }): Promise<void> => {
+      const absolute = path.isAbsolute(candidate) ? candidate : path.resolve(process.cwd(), candidate);
+      try {
+        const stats = await fs.stat(absolute);
+        if (stats.isDirectory()) {
+          const entries = await fs.readdir(absolute);
+          const jsonlFiles = entries
+            .filter((name) => name.toLowerCase().endsWith('.jsonl'))
+            .sort();
+          if (jsonlFiles.length > 0) {
+            resolved.add(path.join(absolute, jsonlFiles[jsonlFiles.length - 1]!));
+          }
+        } else if (stats.isFile()) {
+          resolved.add(absolute);
+        }
+      } catch {
+        if (!options?.suppressWarning) {
+          console.warn(`[MLOptimization] Weak supervision context source not found: ${absolute}`);
+        }
+      }
+    };
+
+    const configured = process.env.WEAK_SUPERVISION_CONTEXT_PATH;
+    if (configured) {
+      const candidates = configured
+        .split(',')
+        .map((value) => value.trim())
+        .filter((value) => value.length > 0);
+      for (const candidate of candidates) {
+        await examine(candidate);
+      }
+    }
+
+    if (resolved.size === 0) {
+      const defaultDir = path.resolve(process.cwd(), '..', 'data', 'weak-supervision', 'context-samples');
+      await examine(defaultDir, { suppressWarning: true });
+    }
+
+    return Array.from(resolved);
+  }
+
+  private async loadWeakSupervisionContexts(
+    sources: string[],
+    maxContexts: number
+  ): Promise<{ contexts: WeakSupervisionContext[]; truncated: boolean }> {
+    const contexts: WeakSupervisionContext[] = [];
+    let truncated = false;
+
+    for (const source of sources) {
+      const stream = createReadStream(source, { encoding: 'utf8' });
+      const rl = readline.createInterface({ input: stream, crlfDelay: Infinity });
+
+      try {
+        for await (const line of rl) {
+          const trimmed = line.trim();
+          if (trimmed.length === 0) {
+            continue;
+          }
+
+          try {
+            const parsed = JSON.parse(trimmed) as WeakSupervisionContext;
+            contexts.push(parsed);
+          } catch (parseError) {
+            const message = parseError instanceof Error ? parseError.message : String(parseError);
+            console.warn(`[MLOptimization] Skipping malformed weak supervision context from ${source}: ${message}`);
+          }
+
+          if (contexts.length >= maxContexts) {
+            truncated = true;
+            break;
+          }
+        }
+      } finally {
+        rl.close();
+        stream.destroy();
+      }
+
+      if (contexts.length >= maxContexts) {
+        break;
+      }
+    }
+
+    return { contexts, truncated };
+  }
+
+  private resolveWeakSupervisionReportDir(): string {
+    const configured = process.env.WEAK_SUPERVISION_REPORT_DIR;
+    if (configured && configured.length > 0) {
+      return path.isAbsolute(configured) ? configured : path.resolve(process.cwd(), configured);
+    }
+    return path.resolve(process.cwd(), '..', 'models', 'fraud', 'dev');
+  }
+
+  private async persistWeakSupervisionArtifacts(
+    report: LabelQualityReport,
+    results: WeakSupervisionResult[],
+    sources: string[],
+    options: { truncated: boolean; maxContexts: number }
+  ): Promise<string> {
+    const dateStamp = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    const baseDir = this.resolveWeakSupervisionReportDir();
+    const outputDir = path.join(baseDir, dateStamp, 'weak_supervision');
+    await fs.mkdir(outputDir, { recursive: true });
+
+    const generatedAt = new Date().toISOString();
+
+    const summary = {
+      generatedAt,
+      sources,
+      truncated: options.truncated,
+      maxContextsEvaluated: options.maxContexts,
+      totalEventsEvaluated: report.totalEvents,
+      coverage: report.coverage,
+      conflictRate: report.conflictRate,
+      precisionProxy: report.precisionProxy,
+    };
+
+    await fs.writeFile(path.join(outputDir, 'quality_report.json'), JSON.stringify(summary, null, 2), 'utf8');
+
+    const flagged = results
+      .map((result) => ({
+        eventId: result.context.eventId,
+        timestamp: result.context.timestamp,
+        partnerId: result.context.partnerId,
+        placementId: result.context.placementId,
+        fraudOutcomes: result.outcomes.filter((outcome) => outcome.label === 'fraud'),
+      }))
+      .filter((entry) => entry.fraudOutcomes.length > 0);
+
+    const flaggedSummary = {
+      generatedAt,
+      totalFlaggedEvents: flagged.length,
+      sample: flagged.slice(0, 25),
+    };
+
+    await fs.writeFile(path.join(outputDir, 'flagged_events.json'), JSON.stringify(flaggedSummary, null, 2), 'utf8');
+
+    const manifest = {
+      version: 1,
+      generatedAt,
+      files: {
+        report: 'quality_report.json',
+        flaggedSample: 'flagged_events.json',
+      },
+    };
+
+    await fs.writeFile(path.join(outputDir, 'manifest.json'), JSON.stringify(manifest, null, 2), 'utf8');
+
+    return outputDir;
   }
 
   /**

@@ -11,9 +11,23 @@ import { valueMultiplierService } from '../services/monetization/ValueMultiplier
 import { selfEvolvingSystemService } from '../services/automation/SelfEvolvingSystemService';
 import { automatedGrowthEngine } from '../services/automation/AutomatedGrowthEngine';
 import { influenceBasedSalesService } from '../services/sales/InfluenceBasedSalesService';
+
+/**
+ * 04:15 - Enrichment cache refresh (daily)
+ */
+cron.schedule('15 4 * * *', async () => {
+  try {
+    console.log('[Cron] Refreshing enrichment datasets...');
+    await enrichmentService.initialize(undefined, { force: true });
+    console.log('[Cron] Enrichment datasets refreshed');
+  } catch (error) {
+    console.error('[Cron] Failed to refresh enrichment datasets:', error);
+  }
+});
 import { referralSystemService } from '../services/growth/ReferralSystemService';
 import { mlModelOptimizationService } from '../services/intelligence/MLModelOptimizationService';
 import { comprehensiveAutomationService } from '../services/automation/ComprehensiveAutomationService';
+import { enrichmentService } from '../src/services/enrichment/enrichmentService';
 
 console.log('[Cron] Starting ApexMediation cron jobs...');
 console.log('[Cron] 🤖 ZERO-TOUCH AUTOMATION ENABLED');

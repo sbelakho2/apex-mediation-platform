@@ -1,0 +1,25 @@
+{
+  "version": "v1",
+  "updatedAt": "2025-11-09T00:00:00Z",
+  "sources": {
+    "ipIntelligence": {
+      "abuseCsv": "ip-intelligence/abuseipdb.csv",
+      "torExitList": "ip-intelligence/tor-exit-nodes.txt",
+      "cloudProviders": [
+        { "provider": "aws", "path": "ip-intelligence/cloud/aws.txt" },
+        { "provider": "gcp", "path": "ip-intelligence/cloud/gcp.txt" },
+        { "provider": "azure", "path": "ip-intelligence/cloud/azure.txt" }
+      ]
+    },
+    "asnGeo": {
+      "csv": "asn-geo/asn-geo-lite.csv"
+    },
+    "vpnDc": [
+      { "name": "firehol", "path": "vpn-dc/firehol.txt" },
+      { "name": "x4bnet", "path": "vpn-dc/x4bnet.txt" }
+    ],
+    "userAgents": {
+      "patterns": "user-agents/patterns.json"
+    }
+  }
+}

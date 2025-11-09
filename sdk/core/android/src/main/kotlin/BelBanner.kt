@@ -2,15 +2,16 @@ package com.rivalapexmediation.sdk
 
 import android.content.Context
 import android.graphics.Color
+import android.os.Handler
 import android.os.Looper
 import android.view.Gravity
-import android.view.View
 import android.view.ViewGroup
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.widget.FrameLayout
 import android.widget.TextView
 import com.rivalapexmediation.sdk.models.Creative
+import kotlin.math.roundToInt
 
 /**
  * Simple, stable public API for Banners.
@@ -23,6 +24,7 @@ import com.rivalapexmediation.sdk.models.Creative
  */
 object BelBanner {
     @Volatile private var lastPlacement: String? = null
+    private val mainHandler = Handler(Looper.getMainLooper())
 
     @JvmStatic
     fun attach(container: ViewGroup, placementId: String) {
@@ -37,13 +39,17 @@ object BelBanner {
         // Try to render cached banner creative
         if (ad?.creative is Creative.Banner) {
             val banner = ad.creative as Creative.Banner
+            val adaptiveHeight = calculateAdaptiveHeight(container, banner)
+            val layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                adaptiveHeight
+            ).apply { gravity = Gravity.CENTER }
             val webView = WebView(container.context).apply {
-                layoutParams = FrameLayout.LayoutParams(
-                    FrameLayout.LayoutParams.MATCH_PARENT,
-                    FrameLayout.LayoutParams.WRAP_CONTENT
-                )
+                this.layoutParams = layoutParams
                 settings.javaScriptEnabled = false
                 settings.cacheMode = WebSettings.LOAD_NO_CACHE
+                settings.useWideViewPort = true
+                settings.loadWithOverviewMode = true
                 setBackgroundColor(Color.TRANSPARENT)
                 loadDataWithBaseURL(null, banner.markupHtml, "text/html", "UTF-8", null)
             }
@@ -75,7 +81,20 @@ object BelBanner {
         if (Looper.myLooper() == Looper.getMainLooper()) {
             container.removeAllViews()
         } else {
-            container.post { container.removeAllViews() }
+            mainHandler.post { container.removeAllViews() }
         }
+    }
+
+    private fun calculateAdaptiveHeight(container: ViewGroup, creative: Creative.Banner): Int {
+        if (creative.width <= 0 || creative.height <= 0) {
+            return FrameLayout.LayoutParams.WRAP_CONTENT
+        }
+        val widthCandidates = listOfNotNull(
+            container.width.takeIf { it > 0 },
+            container.layoutParams?.width?.takeIf { it > 0 },
+        )
+        val targetWidth = (widthCandidates.firstOrNull()
+            ?: container.context.resources.displayMetrics.widthPixels).coerceAtLeast(1)
+        return (targetWidth * creative.height / creative.width.toFloat()).roundToInt().coerceAtLeast(1)
     }
 }

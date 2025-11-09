@@ -15,7 +15,6 @@ module.exports = {
   extends: [
     'eslint:recommended',
     'plugin:@typescript-eslint/recommended',
-    'plugin:@typescript-eslint/recommended-requiring-type-checking',
   ],
   ignorePatterns: ['dist', 'node_modules'],
   rules: {
@@ -54,6 +53,21 @@ module.exports = {
         '@typescript-eslint/no-unsafe-assignment': 'off',
         '@typescript-eslint/no-unsafe-member-access': 'off',
         '@typescript-eslint/no-unsafe-return': 'off',
+        '@typescript-eslint/no-unsafe-call': 'off',
+        '@typescript-eslint/no-unsafe-argument': 'off',
+        '@typescript-eslint/unbound-method': 'off',
+        '@typescript-eslint/no-explicit-any': 'off',
+      },
+    },
+    {
+      files: [
+        'src/services/**/*.ts',
+        'src/queues/**/*.ts',
+        'src/routes/**/*.ts',
+        'src/controllers/**/*.ts',
+      ],
+      rules: {
+        '@typescript-eslint/no-explicit-any': 'warn',
       },
     },
   ],

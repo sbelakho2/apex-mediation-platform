@@ -4,7 +4,7 @@ import os
 import gzip
 import bz2
 import lzma
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Dict, Any, Iterable
 
 import pandas as pd
@@ -92,7 +92,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--input-dir", default=os.path.join("ML", "ML Data"))
     ap.add_argument("--glob", default="*.jsonl*")
-    ap.add_argument("--out-dir", default=os.path.join("models", "fraud", "dev", datetime.utcnow().strftime("%Y%m%d")))
+    ap.add_argument("--out-dir", default=os.path.join("models", "fraud", "dev", datetime.now(UTC).strftime("%Y%m%d")))
     args = ap.parse_args()
 
     os.makedirs(args.out_dir, exist_ok=True)
@@ -123,7 +123,7 @@ def main():
     df.to_parquet(out_parquet, index=False)
 
     manifest = {
-        "generated_at": datetime.utcnow().isoformat() + "Z",
+        "generated_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
         "rows": int(df.shape[0]),
         "columns": list(df.columns),
         "feature_columns": FEATURE_COLUMNS,
