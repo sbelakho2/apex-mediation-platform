@@ -1,13 +1,13 @@
 import argparse
+import gzip
 import json
 import math
 import os
+import zipfile
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Iterable, Iterator, List, Optional
-
-import zipfile
 
 import pandas as pd
 
@@ -56,7 +56,11 @@ def _iter_criteo_chunks(path: Path, chunk_rows: int) -> Iterator[pd.DataFrame]:
 
 def _iter_avazu_chunks(path: Path, chunk_rows: int, *, member: str) -> Iterator[pd.DataFrame]:
     with zipfile.ZipFile(path, "r") as archive:
-        with archive.open(member) as handle:
+        with archive.open(member) as raw_handle:
+            if member.endswith(".gz"):
+                handle = gzip.open(raw_handle, "rt")
+            else:
+                handle = raw_handle
             reader = pd.read_csv(
                 handle,
                 chunksize=chunk_rows,
