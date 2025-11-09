@@ -19,6 +19,47 @@ Legend
 - [~] In progress
 - [x] Done
 
+## Current Priority Checklist (as of 2025-11-09 15:46)
+
+P0 — SDKs, Transparency, Reliability
+- Android SDK
+  - [x] Facades: Interstitial, Rewarded, RewardedInterstitial, AppOpen, Banner — stable APIs and tests
+  - [x] OM SDK hooks invoked from show() (display/video + end) — tests in OmSdkHooksTest
+  - [x] AAR size budget gate and Integration Validator wired; Dokka docs task available
+  - [~] StrictMode sample + CI smoke (penaltyDeath) — sample introduced; finalize CI smoke and gate
+  - [x] OTA config negative test (bad Base64 key) with test-mode bypass — ConfigSignatureTest
+  - [x] Banner adaptive sizing + detach tests; AppOpen OM display smoke
+  - [ ] @JvmOverloads audit across public Kotlin APIs for Java ergonomics
+- iOS SDK
+  - [x] Taxonomy coverage (429/5xx) and main-queue callback assertion (unit tests)
+  - [ ] Demo target with mocked endpoints + UI smoke (main-queue, no_fill)
+  - [ ] Config signature + schema validation parity; allow bypass in test mode
+  - [ ] Debug Panel enrichment (redacted consent snapshot, SDK/version) and Quickstart update
+- Transparency (Killer Feature #1)
+  - [x] ClickHouse append-only schemas + Transparency API (list/detail/summary; publisher-scoped; feature-flagged)
+  - [ ] Writer/signature path with per-publisher sampling (Ed25519 signatures)
+  - [ ] Console Transparency views and verification guide/CLI
+- Backend Observability
+  - [ ] Admin API CORS OPTIONS preflight tests
+- ML Fraud (Foundations)
+  - [~] Small-sample PyOD pipeline scaffold (archives, privacy guards, date filters)
+  - [ ] Enrichment loaders (Tor/cloud/ASN/VPN) with cached manifests and tests
+  - [ ] Weak supervision label functions + evaluation harness with golden outputs
+
+P1 — Adapter Expansion and Parity
+- [x] ≥12 modern adapters implemented with standardized resiliency/taxonomy (incl. Vungle, Pangle)
+- [ ] Conformance test parity across all new adapters (where missing) and golden fixtures
+
+P2 — Website/Console & Billing
+- [ ] Transparency UI (list/detail/summary) and links from Console
+- [ ] Billing ingest + reconciliation MVP (APIs + mock PDF export)
+
+Global Sandbox‑Readiness Gate
+- [ ] All suites green in CI (backend, Android, iOS, website/a11y)
+- [ ] SDK Android: device/emulator StrictMode smoke; size ≤ 500 KB; OM hooks; validator in CI
+- [ ] SDK iOS: demo app smoke; main‑queue guarantees; config authenticity tests
+- [ ] ML: small‑sample ETL/enrichment/tests green; shadow‑mode ON
+
 P0 — Reliability, Adapters, Observability, ML Safety (0–6 weeks)
 
 1) Adapter resiliency and conformance
@@ -1058,6 +1099,8 @@ Global Sandbox‑Readiness Gate (must be true before FT)
 - [ ] Operator runbook updated with “Sandbox Test Day” checklist.
 
 
+## Changelog
+
 ## 2025-11-07 — SDKs big-chunk: Android OM hooks + Banner tests, docs updates
 - Android SDK: Added Robolectric tests to guarantee OM SDK hook invocation on show() paths and Banner attach/detach behavior.
   - Evidence:
@@ -1548,3 +1591,87 @@ Impact on plan
 - Backend schema migrations 001–016 now apply cleanly on Postgres 16, clearing the blocker called out in the prior entry.
 - Integration suites run end-to-end without custom JWT env setup, enabling repeatable CI runs once Redis is available.
 - Pre-commit automation now runs backend lint plus unit tests (with `SKIP_DB_SETUP=true`), enabling Windows contributors to verify the rejuvenated lint gate locally.
+
+## 2025-11-09 — Killer Features Plan & Transparency MVP (ClickHouse-backed)
+
+Summary
+- New plan created to implement Killer Features: Auction Transparency, Cross-Ecosystem Unification, One-Click Safe Migration, Financial UX Edge, and Automated Sales Engine.
+- Implemented ClickHouse-backed Transparency API (MVP) with append-only schemas and publisher-scoped endpoints.
+
+What changed (code)
+- Backend (ClickHouse schemas)
+  - Added append-only tables:
+    - auctions (MergeTree, daily partition, TTL 180d)
+    - auction_candidates (child table, TTL 180d)
+    - transparency_signer_keys (key registry)
+  - File: backend/src/utils/clickhouse.schema.ts (CREATE_AUCTIONS_TABLE, CREATE_AUCTION_CANDIDATES_TABLE, CREATE_TRANSPARENCY_SIGNER_KEYS_TABLE); included in allSchemas and init script.
+- Backend (API)
+  - New endpoints (publisher-scoped, JWT required; feature-flagged via TRANSPARENCY_API_ENABLED):
+    - GET /api/v1/transparency/auctions
+    - GET /api/v1/transparency/auctions/{auction_id}
+    - GET /api/v1/transparency/summary/auctions?group_by=publisher|placement|geo|surface
+  - Files:
+    - backend/src/controllers/transparency.controller.ts
+    - backend/src/routes/transparency.routes.ts
+    - backend/src/routes/index.ts (mounted under /transparency)
+- Docs (customer-facing)
+  - Added API reference page: docs/Customer-Facing/API-Reference/TRANSPARENCY_API.md
+
+System analysis (current state)
+- Strengths
+  - Auction engine and adapter suites are strong; ClickHouse utilities exist and now host transparency tables.
+  - Website/Console already consumes metrics; can extend to Transparency UI with minimal lift.
+  - SDK focus (Android/iOS) continues; can populate unified impression model without breaking public APIs.
+- Gaps / Next steps
+  - Writer path: instrument auction engine to emit auction logs into ClickHouse with per-publisher sampling and Ed25519 signatures.
+  - Key management: populate transparency_signer_keys and expose operational runbook for rotation.
+  - UI: Add console views for Transparency (list/detail/summary) and link verification guide.
+  - Cross-ecosystem unification: publish JSON schema v1 and add mappers in Auction Service.
+  - Migration Orchestrator: config store + evaluator + auto-rollback audit trail.
+  - Billing Engine MVP: CSV/manual ingest, matching joins against auctions/impressions.
+  - Sales Engine: lead-intel, lead-score, sales-orchestrator with persuasion_policy.json.
+
+How to run (operator)
+- Initialize ClickHouse schemas:
+  - cd backend && npm run clickhouse:init
+- Start API:
+  - cd backend && npm run dev
+- Enable Transparency endpoints:
+  - Set env: TRANSPARENCY_API_ENABLED=true
+- Query examples (requires JWT with publisherId):
+  - GET http://localhost:4000/api/v1/transparency/auctions?from=2025-11-01&to=2025-11-09
+  - GET http://localhost:4000/api/v1/transparency/auctions/{auction_uuid}
+  - GET http://localhost:4000/api/v1/transparency/summary/auctions?group_by=placement&from=2025-11-01&to=2025-11-09
+
+Acceptance (this slice)
+- [x] ClickHouse schemas for auctions/candidates/keys created by init script.
+- [x] Transparency API stubs implemented and mounted; RBAC scoping enforced; pagination present.
+- [ ] Writer path emits auctions with signatures (feature-flagged) — NEXT.
+- [ ] Console Transparency views — NEXT.
+
+Plan deltas (added under Killer Features)
+1) Radical Auction Transparency (MVP → v1)
+   - [x] CH schemas + API read endpoints (this PR)
+   - [ ] Writer/signature + sampling per publisher
+   - [ ] Docs: verification CLI + no-self-preference query examples
+2) Cross‑Ecosystem Unification
+   - [ ] JSON schema v1 + mappers in Auction Service
+   - [ ] SDKs populate unified model fields
+3) One‑Click Safe Migration
+   - [ ] Migration Orchestrator service + console slider + auto-rollback
+4) Financial UX Edge
+   - [ ] Billing ingest (CSV/manual), matching, summary APIs, PDF export
+5) Automated Sales Engine
+   - [ ] lead‑intel, lead‑score, sales‑orchestrator with persuasion_policy.json; in‑product nudges
+
+Evidence
+- Code:
+  - backend/src/utils/clickhouse.schema.ts
+  - backend/src/controllers/transparency.controller.ts
+  - backend/src/routes/transparency.routes.ts
+  - backend/src/routes/index.ts
+- Docs:
+  - docs/Customer-Facing/API-Reference/TRANSPARENCY_API.md
+
+Notes
+- All changes are offline/testable locally; writer/signing path is feature-flagged and will be enabled in subsequent PR.

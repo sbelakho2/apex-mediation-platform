@@ -13,6 +13,7 @@ import consentRoutes from './consent.routes';
 import abTestingRoutes from './abTesting.routes';
 import dataExportRoutes from './dataExport.routes';
 import queuesRoutes from './queues.routes';
+import transparencyRoutes from './transparency.routes';
 
 const router = Router();
 
@@ -32,5 +33,6 @@ router.use('/ab-testing', abTestingRoutes);
 router.use('/data-export', dataExportRoutes);
 router.use('/queues', queuesRoutes);
 router.use('/data-export', dataExportRoutes);
+router.use('/transparency', transparencyRoutes);
 
 export default router;

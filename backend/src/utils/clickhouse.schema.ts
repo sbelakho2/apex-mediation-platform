@@ -189,6 +189,67 @@ ALTER TABLE impressions ADD INDEX idx_adapter (adapter_id) TYPE bloom_filter GRA
 ALTER TABLE revenue_events ADD INDEX idx_adapter (adapter_id) TYPE bloom_filter GRANULARITY 4;
 `;
 
+// Transparency: Auctions log tables (append-only)
+export const CREATE_AUCTIONS_TABLE = `
+CREATE TABLE IF NOT EXISTS auctions (
+  auction_id UUID,
+  timestamp DateTime64(3),
+  publisher_id String,
+  app_or_site_id String,
+  placement_id String,
+  surface_type Enum8('mobile_app' = 1, 'web' = 2, 'ctv' = 3),
+  device_os LowCardinality(String),
+  device_geo FixedString(2),
+  att_status LowCardinality(String),
+  tc_string_sha256 FixedString(64),
+  winner_source LowCardinality(String),
+  winner_bid_ecpm Decimal64(6),
+  winner_gross_price Decimal64(9),
+  winner_currency FixedString(3),
+  winner_reason LowCardinality(String),
+  aletheia_fee_bp UInt16,
+  effective_publisher_share Float64,
+  integrity_algo LowCardinality(String),
+  integrity_key_id LowCardinality(String),
+  integrity_signature String,
+  created_date Date MATERIALIZED toDate(timestamp)
+) ENGINE = MergeTree()
+PARTITION BY toYYYYMM(timestamp)
+ORDER BY (publisher_id, timestamp, placement_id)
+TTL timestamp + INTERVAL 180 DAY
+SETTINGS index_granularity = 8192;
+`;
+
+export const CREATE_AUCTION_CANDIDATES_TABLE = `
+CREATE TABLE IF NOT EXISTS auction_candidates (
+  auction_id UUID,
+  timestamp DateTime64(3),
+  source LowCardinality(String),
+  bid_ecpm Decimal64(6),
+  currency FixedString(3),
+  response_time_ms UInt32,
+  status LowCardinality(String),
+  metadata_hash FixedString(64),
+  created_date Date MATERIALIZED toDate(timestamp)
+) ENGINE = MergeTree()
+PARTITION BY toYYYYMM(timestamp)
+ORDER BY (auction_id, source)
+TTL timestamp + INTERVAL 180 DAY
+SETTINGS index_granularity = 8192;
+`;
+
+export const CREATE_TRANSPARENCY_SIGNER_KEYS_TABLE = `
+CREATE TABLE IF NOT EXISTS transparency_signer_keys (
+  key_id String,
+  algo LowCardinality(String), -- e.g., ed25519, hmac
+  public_key_base64 String,
+  created_at DateTime,
+  rotated_at Nullable(DateTime),
+  active UInt8
+) ENGINE = MergeTree()
+ORDER BY key_id;
+`;
+
 export const allSchemas = [
   CREATE_IMPRESSIONS_TABLE,
   CREATE_CLICKS_TABLE,
@@ -197,4 +258,8 @@ export const allSchemas = [
   CREATE_BID_LANDSCAPE_TABLE,
   CREATE_HOURLY_REVENUE_VIEW,
   CREATE_DAILY_STATS_VIEW,
+  CREATE_AUCTIONS_TABLE,
+  CREATE_AUCTION_CANDIDATES_TABLE,
+  CREATE_TRANSPARENCY_SIGNER_KEYS_TABLE,
+  CREATE_INDEXES,
 ];
