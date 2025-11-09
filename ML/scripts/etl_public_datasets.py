@@ -1,15 +1,16 @@
 import argparse
 import gzip
+import io
 import json
 import math
 import os
 import zipfile
-from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Iterable, Iterator, List, Optional
+from typing import Dict, Iterable, Iterator, List, Tuple
 
 import pandas as pd
+from tqdm.auto import tqdm
 
 CRITEO_INT_COLS = [f"I{i}" for i in range(1, 14)]
 CRITEO_CAT_COLS = [f"C{i}" for i in range(1, 27)]
@@ -30,17 +31,6 @@ TALKINGDATA_COLUMNS = AVAZU_COLUMNS
 
 DEFAULT_EVENT_TIME_START = datetime(2025, 1, 1, tzinfo=UTC)
 
-
-@dataclass
-class DatasetSpec:
-    name: str
-    pattern: str
-    is_zip: bool
-    base_dt: datetime
-    timezone: Optional[str] = None
-    day_stride_seconds: int = 24 * 3600
-
-
 def _iter_criteo_chunks(path: Path, chunk_rows: int) -> Iterator[pd.DataFrame]:
     reader = pd.read_csv(
         path,
@@ -50,8 +40,11 @@ def _iter_criteo_chunks(path: Path, chunk_rows: int) -> Iterator[pd.DataFrame]:
         dtype={col: "float32" for col in CRITEO_INT_COLS},
         iterator=True,
     )
-    for chunk in reader:
-        yield chunk
+    try:
+        for chunk in reader:
+            yield chunk
+    except EOFError:
+        print(f"Warning: truncated gzip detected in {path}; remaining rows skipped")
 
 
 def _iter_avazu_chunks(path: Path, chunk_rows: int, *, member: str) -> Iterator[pd.DataFrame]:
@@ -60,23 +53,29 @@ def _iter_avazu_chunks(path: Path, chunk_rows: int, *, member: str) -> Iterator[
             if member.endswith(".gz"):
                 handle = gzip.open(raw_handle, "rt")
             else:
-                handle = raw_handle
-            reader = pd.read_csv(
-                handle,
-                chunksize=chunk_rows,
-                dtype={
-                    "ip": "int64",
-                    "app": "int16",
-                    "device": "int16",
-                    "os": "int16",
-                    "channel": "int16",
-                    "is_attributed": "int8",
-                },
-                parse_dates=["click_time", "attributed_time"],
-                iterator=True,
-            )
-            for chunk in reader:
-                yield chunk
+                handle = io.TextIOWrapper(raw_handle)
+            try:
+                reader = pd.read_csv(
+                    handle,
+                    chunksize=chunk_rows,
+                    dtype={
+                        "ip": "int64",
+                        "app": "int16",
+                        "device": "int16",
+                        "os": "int16",
+                        "channel": "int16",
+                        "is_attributed": "int8",
+                    },
+                    parse_dates=["click_time", "attributed_time"],
+                    iterator=True,
+                )
+                try:
+                    for chunk in reader:
+                        yield chunk
+                except EOFError:
+                    print(f"Warning: truncated member detected in {path}::{member}; remaining rows skipped")
+            finally:
+                handle.close()
 
 
 def _generate_event_times(base_dt: datetime, start_index: int, count: int, stride_seconds: int) -> pd.Series:
@@ -149,7 +148,7 @@ def _process_dataset(
     chunk_rows: int,
     base_dt: datetime,
     stride_seconds: int,
-) -> List[str]:
+) -> Tuple[List[str], Dict[str, int]]:
     files = sorted(root.glob(pattern))
     if not files:
         raise SystemExit(f"No files matched pattern {pattern} under {root}")
@@ -159,7 +158,10 @@ def _process_dataset(
     global_row_offset = 0
     part = 0
 
-    for file_path in files:
+    rows_written = 0
+    chunk_count = 0
+
+    for file_path in tqdm(files, desc=f"{dataset} files", unit="file"):
         if dataset == "criteo":
             chunks = _iter_criteo_chunks(file_path, chunk_rows)
         elif dataset == "avazu":
@@ -169,7 +171,7 @@ def _process_dataset(
         else:
             raise ValueError(dataset)
 
-        for chunk in chunks:
+        for chunk in tqdm(chunks, desc=f"{file_path.name} chunks", unit="chunk", leave=False):
             normalized = _normalize_schema(
                 chunk,
                 dataset=dataset,
@@ -181,9 +183,12 @@ def _process_dataset(
             normalized.to_parquet(out_path, index=False)
             written.append(str(out_path))
             part += 1
-            global_row_offset += len(chunk)
+            rows = len(chunk)
+            global_row_offset += rows
+            rows_written += rows
+            chunk_count += 1
 
-    return written
+    return written, {"row_count": rows_written, "chunk_count": chunk_count}
 
 
 def main() -> None:
@@ -203,10 +208,11 @@ def main() -> None:
     out_root = Path(args.output)
     out_root.mkdir(parents=True, exist_ok=True)
 
-    manifests = {}
+    manifests: Dict[str, Dict[str, object]] = {}
+    dataset_stats: List[Dict[str, object]] = []
 
     if "criteo" in args.datasets:
-        written = _process_dataset(
+        written, stats = _process_dataset(
             root / "Criteo",
             "day_*.gz",
             "criteo",
@@ -215,10 +221,11 @@ def main() -> None:
             base_dt=DEFAULT_EVENT_TIME_START,
             stride_seconds=1,
         )
-        manifests["criteo"] = written
+        manifests["criteo"] = {"files": written, **stats}
+        dataset_stats.append({"dataset": "criteo", **stats})
 
     if "avazu" in args.datasets:
-        written = _process_dataset(
+        written, stats = _process_dataset(
             root,
             "avazu-ctr-prediction.zip",
             "avazu",
@@ -227,10 +234,11 @@ def main() -> None:
             base_dt=DEFAULT_EVENT_TIME_START + timedelta(days=30),
             stride_seconds=1,
         )
-        manifests["avazu"] = written
+        manifests["avazu"] = {"files": written, **stats}
+        dataset_stats.append({"dataset": "avazu", **stats})
 
     if "talkingdata" in args.datasets:
-        written = _process_dataset(
+        written, stats = _process_dataset(
             root,
             "talkingdata-adtracking-fraud-detection.zip",
             "talkingdata",
@@ -239,7 +247,15 @@ def main() -> None:
             base_dt=DEFAULT_EVENT_TIME_START + timedelta(days=60),
             stride_seconds=1,
         )
-        manifests["talkingdata"] = written
+        manifests["talkingdata"] = {"files": written, **stats}
+        dataset_stats.append({"dataset": "talkingdata", **stats})
+
+    if dataset_stats:
+        print("Dataset write summary:")
+        for entry in dataset_stats:
+            print(
+                f" - {entry['dataset']}: {entry['row_count']:,} rows across {entry['chunk_count']} chunks"
+            )
 
     manifest_path = out_root / "public_datasets_manifest.json"
     with open(manifest_path, "w", encoding="utf-8") as handle:

@@ -164,6 +164,8 @@ Acceptance:
     - Evidence: ML/scripts/evaluate_model.py (`_evaluate_arrays` persists extended_metrics/gating/stability)
   - [x] Generate HTML/Markdown report per run under docs/Internal/ML/Reports/
     - Evidence: ML/scripts/evaluate_model.py (`_write_markdown` → docs/Internal/ML/Reports/)
+- [x] GPU pipeline prototype streams public datasets and trains gradient boosted model
+  - Evidence: ML/scripts/etl_public_datasets.py + feature_engineering_dask.py + train_gbm_gpu.py + nightly_pipeline_gpu.py
 
 - [x] Model packaging & registry
   - [x] Serialize model (JSON/ONNX/PMML or native GBM text) + feature manifest + schema version
