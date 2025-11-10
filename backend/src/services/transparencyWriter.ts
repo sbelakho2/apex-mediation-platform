@@ -1,10 +1,14 @@
 import type { KeyObject } from 'crypto';
 import * as crypto from 'crypto';
+import type { Counter as PromCounterType, Gauge as PromGaugeType } from 'prom-client';
+import { Counter as PromCounter, Gauge as PromGauge } from 'prom-client';
+import { promRegister } from '../utils/prometheus';
 import { getClickHouseClient } from '../utils/clickhouse';
 import type { OpenRTBBidRequest, Bid } from '../types/openrtb.types';
 import { DeviceType, NoBidReason } from '../types/openrtb.types';
 import type { AuctionResult } from './openrtbEngine';
 import { canonicalizeForSignature, canonicalString } from './transparency/canonicalizer';
+export { canonicalizeForSignature } from './transparency/canonicalizer';
 import logger from '../utils/logger';
 
 export type ClickHouseInsertArgs = {
@@ -65,6 +69,58 @@ type TransparencyPayload = {
 const DEFAULT_TC_HASH = '0'.repeat(64);
 const DEFAULT_SAMPLE_BPS = 250; // 2.5%
 const DEFAULT_FEE_BP = 150; // 1.5%
+const DEFAULT_RETRY_ATTEMPTS = 3;
+const DEFAULT_RETRY_MIN_DELAY_MS = 50;
+const DEFAULT_RETRY_MAX_DELAY_MS = 250;
+const DEFAULT_BREAKER_THRESHOLD = 5;
+const DEFAULT_BREAKER_COOLDOWN_MS = 60_000;
+const TRANSIENT_ERROR_CODES = new Set(['ECONNRESET', 'ETIMEDOUT', 'EPIPE', 'ECONNREFUSED']);
+
+type CounterKey =
+  | 'writes_attempted'
+  | 'writes_succeeded'
+  | 'writes_failed'
+  | 'sampled'
+  | 'unsampled'
+  | 'breaker_skipped';
+
+const METRIC_PREFIX = 'transparency_writer';
+
+function createPromCounter(name: string, help: string): PromCounterType<string> | undefined {
+  try {
+    const metricName = `${METRIC_PREFIX}_${name}_total`;
+    const existing = promRegister.getSingleMetric(metricName) as PromCounterType<string> | undefined;
+    if (existing) {
+      return existing;
+    }
+    return new PromCounter({
+      name: metricName,
+      help,
+      registers: [promRegister],
+    });
+  } catch (error) {
+    logger.warn('TransparencyWriter: failed to register Prometheus counter', { name, error });
+    return undefined;
+  }
+}
+
+function createPromGauge(name: string, help: string): PromGaugeType<string> | undefined {
+  try {
+    const metricName = `${METRIC_PREFIX}_${name}`;
+    const existing = promRegister.getSingleMetric(metricName) as PromGaugeType<string> | undefined;
+    if (existing) {
+      return existing;
+    }
+    return new PromGauge({
+      name: metricName,
+      help,
+      registers: [promRegister],
+    });
+  } catch (error) {
+    logger.warn('TransparencyWriter: failed to register Prometheus gauge', { name, error });
+    return undefined;
+  }
+}
 
 
 export function buildTransparencySignaturePayload(
@@ -99,6 +155,13 @@ interface TransparencyWriterOptions {
   keyId?: string;
   aletheiaFeeBp?: number;
   featureEnabled?: boolean;
+  retryAttempts?: number;
+  retryMinDelayMs?: number;
+  retryMaxDelayMs?: number;
+  breakerThreshold?: number;
+  breakerCooldownMs?: number;
+  nowProvider?: () => number;
+  randomProvider?: () => number;
 }
 
 export class TransparencyWriter {
@@ -108,6 +171,7 @@ export class TransparencyWriter {
     writes_failed: 0,
     sampled: 0,
     unsampled: 0,
+    breaker_skipped: 0,
   };
   private readonly client: ClickHouseClient | null;
   private readonly samplingBps: number;
@@ -117,8 +181,24 @@ export class TransparencyWriter {
   private readonly enabled: boolean;
   private readonly aletheiaFeeBp: number;
   private readonly publisherShare: number;
+  private readonly retryAttempts: number;
+  private readonly retryMinDelayMs: number;
+  private readonly retryMaxDelayMs: number;
+  private readonly breakerThreshold: number;
+  private readonly breakerCooldownMs: number;
+  private readonly now: () => number;
+  private readonly random: () => number;
+  private consecutiveFailures = 0;
+  private breakerOpenUntil: number | null = null;
+  private breakerOpenLogged = false;
+  private breakerClosedLogged = true;
   private warnedMissingKey = false;
   private warnedNoClient = false;
+  private readonly promCounters: Partial<Record<CounterKey, PromCounterType<string>>>;
+  private readonly promGauges: {
+    breakerOpen?: PromGaugeType<string>;
+    failureStreak?: PromGaugeType<string>;
+  };
 
   constructor(options: TransparencyWriterOptions) {
     this.client = options.client ?? null; // Optional: injected for tests; runtime path uses getClickHouseClient()
@@ -130,6 +210,29 @@ export class TransparencyWriter {
     this.enabled = Boolean(this.featureEnabled && this.privateKey && this.samplingBps > 0);
     this.aletheiaFeeBp = Math.max(0, options.aletheiaFeeBp ?? DEFAULT_FEE_BP);
     this.publisherShare = Math.max(0, Math.min(1, 1 - this.aletheiaFeeBp / 10000));
+    this.retryAttempts = Math.max(0, Math.floor(options.retryAttempts ?? DEFAULT_RETRY_ATTEMPTS));
+    const minDelay = Math.max(0, Math.floor(options.retryMinDelayMs ?? DEFAULT_RETRY_MIN_DELAY_MS));
+    const maxDelay = Math.max(minDelay, Math.floor(options.retryMaxDelayMs ?? DEFAULT_RETRY_MAX_DELAY_MS));
+    this.retryMinDelayMs = minDelay;
+    this.retryMaxDelayMs = maxDelay;
+    this.breakerThreshold = Math.max(0, Math.floor(options.breakerThreshold ?? DEFAULT_BREAKER_THRESHOLD));
+    this.breakerCooldownMs = Math.max(0, Math.floor(options.breakerCooldownMs ?? DEFAULT_BREAKER_COOLDOWN_MS));
+    this.now = options.nowProvider ?? (() => Date.now());
+    this.random = options.randomProvider ?? Math.random;
+    this.promCounters = {
+      writes_attempted: createPromCounter('writes_attempted', 'Total transparency write attempts'),
+      writes_succeeded: createPromCounter('writes_succeeded', 'Successful transparency write operations'),
+      writes_failed: createPromCounter('writes_failed', 'Failed transparency write operations'),
+      sampled: createPromCounter('sampled', 'Auctions selected for transparency sampling'),
+      unsampled: createPromCounter('unsampled', 'Auctions skipped from transparency sampling'),
+      breaker_skipped: createPromCounter('breaker_skipped', 'Auctions skipped due to transparency breaker cooldown'),
+    };
+    this.promGauges = {
+      breakerOpen: createPromGauge('breaker_open', '1 when the transparency breaker is open, otherwise 0'),
+      failureStreak: createPromGauge('failure_streak', 'Current transparency write consecutive failure streak'),
+    };
+    this.promGauges.breakerOpen?.set(0);
+    this.promGauges.failureStreak?.set(0);
   }
 
   private getClient(): ClickHouseClient | null {
@@ -150,9 +253,11 @@ export class TransparencyWriter {
     result: AuctionResult,
     observedAt: Date = new Date()
   ): Promise<void> {
-    // Feature disabled or missing key/sampling -> treat as unsampled and return
+    const now = this.now();
+    this.refreshBreakerState(now);
+
     if (!this.enabled) {
-      this.counters.unsampled++;
+      this.incrementCounter('unsampled');
       return;
     }
 
@@ -162,69 +267,232 @@ export class TransparencyWriter {
         logger.warn('TransparencyWriter: ClickHouse client not available; transparency disabled');
         this.warnedNoClient = true;
       }
-      // Not counted as an attempted write since we cannot connect to CH
       return;
     }
 
     const publisherId = this.extractPublisherId(request);
     if (!publisherId) {
-      // Cannot scope sampling without publisher
-      this.counters.unsampled++;
+      this.incrementCounter('unsampled');
       return;
     }
 
     if (!this.shouldSample(publisherId, request.id)) {
-      this.counters.unsampled++;
+      this.incrementCounter('unsampled');
       return;
     }
 
-    this.counters.sampled++;
-    this.counters.writes_attempted++;
+    if (this.shouldSkipDueToBreaker(now)) {
+      return;
+    }
+
+    this.incrementCounter('sampled');
+    this.incrementCounter('writes_attempted');
+
+    const timestampIso = observedAt.toISOString();
+    const auctionRow = this.buildAuctionRow(request, result, publisherId, timestampIso);
+    const candidateRows = this.buildCandidateRows(request, result, timestampIso);
+    const payload = buildTransparencySignaturePayload(auctionRow, candidateRows, this.samplingBps);
+    const signature = this.signPayload(payload);
+
+    if (!signature) {
+      if (!this.warnedMissingKey) {
+        logger.warn('TransparencyWriter: signature could not be produced; skipping auction write');
+        this.warnedMissingKey = true;
+      }
+      this.incrementCounter('writes_failed');
+      return;
+    }
+
+    auctionRow.integrity_signature = signature;
 
     try {
-      const timestampIso = observedAt.toISOString();
-      const auctionRow = this.buildAuctionRow(request, result, publisherId, timestampIso);
-      const candidateRows = this.buildCandidateRows(request, result, timestampIso);
-      const payload = buildTransparencySignaturePayload(auctionRow, candidateRows, this.samplingBps);
-      const signature = this.signPayload(payload);
+      await this.insertWithRetry(() =>
+        client.insert({
+          table: 'auctions',
+          values: [auctionRow],
+          format: 'JSONEachRow',
+        })
+      );
+    } catch (error) {
+      this.recordFailure(error, request.id, 'auctions');
+      return;
+    }
 
-      if (!signature) {
-        if (!this.warnedMissingKey) {
-          logger.warn('TransparencyWriter: signature could not be produced; skipping auction write');
-          this.warnedMissingKey = true;
-        }
-        this.counters.writes_failed++;
+    if (candidateRows.length > 0) {
+      try {
+        await this.insertWithRetry(() =>
+          client.insert({
+            table: 'auction_candidates',
+            values: candidateRows,
+            format: 'JSONEachRow',
+          })
+        );
+      } catch (error) {
+        this.recordFailure(error, request.id, 'candidates', { partial: true });
         return;
       }
-
-      auctionRow.integrity_signature = signature;
-
-      await client.insert({
-        table: 'auctions',
-        values: [auctionRow],
-        format: 'JSONEachRow',
-      });
-
-      if (candidateRows.length > 0) {
-        await client.insert({
-          table: 'auction_candidates',
-          values: candidateRows,
-          format: 'JSONEachRow',
-        });
-      }
-
-      this.counters.writes_succeeded++;
-    } catch (error) {
-      this.counters.writes_failed++;
-      logger.error('TransparencyWriter: failed to persist auction sample', {
-        error,
-        requestId: request.id,
-      });
     }
+
+    this.recordSuccess();
   }
 
   public getMetrics() {
-    return { ...this.counters };
+    const now = this.now();
+    this.refreshBreakerState(now);
+    const breakerOpen = this.breakerOpenUntil !== null && now < this.breakerOpenUntil;
+    const cooldownRemaining = breakerOpen && this.breakerOpenUntil ? Math.max(0, this.breakerOpenUntil - now) : 0;
+    return {
+      ...this.counters,
+      breaker_open: breakerOpen,
+      failure_streak: this.consecutiveFailures,
+      breaker_cooldown_remaining_ms: breakerOpen ? cooldownRemaining : 0,
+    };
+  }
+
+  private incrementCounter(key: CounterKey): void {
+    this.counters[key]++;
+    this.promCounters[key]?.inc();
+  }
+
+  private refreshBreakerState(now: number): void {
+    if (this.breakerOpenUntil && now >= this.breakerOpenUntil) {
+      this.closeBreaker();
+    }
+  }
+
+  private shouldSkipDueToBreaker(now: number): boolean {
+    if (!this.breakerOpenUntil) {
+      return false;
+    }
+    if (now < this.breakerOpenUntil) {
+      this.incrementCounter('breaker_skipped');
+      this.promGauges.breakerOpen?.set(1);
+      return true;
+    }
+    this.closeBreaker();
+    return false;
+  }
+
+  private openBreaker(now: number): void {
+    if (this.breakerThreshold <= 0) {
+      return;
+    }
+
+    this.breakerOpenUntil = now + this.breakerCooldownMs;
+    if (!this.breakerOpenLogged) {
+      logger.warn('TransparencyWriter: breaker opened after consecutive failures', {
+        failures: this.consecutiveFailures,
+        threshold: this.breakerThreshold,
+        cooldownMs: this.breakerCooldownMs,
+      });
+      this.breakerOpenLogged = true;
+    }
+    this.breakerClosedLogged = false;
+    this.promGauges.breakerOpen?.set(1);
+  }
+
+  private closeBreaker(): void {
+    if (!this.breakerOpenUntil) {
+      return;
+    }
+
+    this.breakerOpenUntil = null;
+    this.consecutiveFailures = 0;
+    if (!this.breakerClosedLogged) {
+      logger.info('TransparencyWriter: breaker cooldown elapsed; resuming writes', {
+        cooldownMs: this.breakerCooldownMs,
+      });
+      this.breakerClosedLogged = true;
+    }
+    this.breakerOpenLogged = false;
+    this.promGauges.breakerOpen?.set(0);
+    this.promGauges.failureStreak?.set(this.consecutiveFailures);
+  }
+
+  private computeRetryDelay(): number {
+    if (this.retryMaxDelayMs <= 0) {
+      return 0;
+    }
+    if (this.retryMaxDelayMs === this.retryMinDelayMs) {
+      return this.retryMaxDelayMs;
+    }
+    const range = this.retryMaxDelayMs - this.retryMinDelayMs;
+    return this.retryMinDelayMs + Math.floor(this.random() * (range + 1));
+  }
+
+  private async insertWithRetry<T>(fn: () => Promise<T>): Promise<T> {
+    const attempts = this.retryAttempts + 1;
+    let lastError: unknown;
+    for (let attempt = 1; attempt <= attempts; attempt++) {
+      try {
+        return await fn();
+      } catch (error) {
+        lastError = error;
+        const isTransient = this.isTransientError(error);
+        if (!isTransient || attempt === attempts) {
+          throw error;
+        }
+        const delay = this.computeRetryDelay();
+        if (delay > 0) {
+          await new Promise<void>((resolve) => setTimeout(resolve, delay));
+        }
+      }
+    }
+    throw lastError ?? new Error('Unknown transparency writer error');
+  }
+
+  private isTransientError(error: unknown): boolean {
+    if (!error || typeof error !== 'object') {
+      return false;
+    }
+
+    const status = (error as { statusCode?: number; status?: number }).statusCode ?? (error as { status?: number }).status;
+    if (typeof status === 'number') {
+      if (status === 429) {
+        return true;
+      }
+      if (status >= 500 && status < 600) {
+        return true;
+      }
+    }
+
+    const code = (error as { code?: string }).code;
+    if (typeof code === 'string' && TRANSIENT_ERROR_CODES.has(code)) {
+      return true;
+    }
+
+    return false;
+  }
+
+  private recordFailure(
+    error: unknown,
+    requestId: string,
+    stage: 'auctions' | 'candidates',
+    opts: { partial?: boolean } = {}
+  ): void {
+    this.incrementCounter('writes_failed');
+    this.consecutiveFailures += 1;
+    this.promGauges.failureStreak?.set(this.consecutiveFailures);
+
+    logger.error('TransparencyWriter: failed to persist auction sample', {
+      error,
+      requestId,
+      stage,
+      partial: opts.partial ?? false,
+    });
+
+    if (this.breakerThreshold > 0 && this.consecutiveFailures >= this.breakerThreshold) {
+      this.openBreaker(this.now());
+    }
+  }
+
+  private recordSuccess(): void {
+    this.incrementCounter('writes_succeeded');
+    this.consecutiveFailures = 0;
+    this.promGauges.failureStreak?.set(0);
+    if (this.breakerOpenUntil) {
+      this.closeBreaker();
+    }
   }
 
   private buildAuctionRow(
@@ -317,7 +585,7 @@ export class TransparencyWriter {
     return {
       winner: top ? { adapterId: top.adapter.id, price: top.bid.price } : null,
       clearingPrice,
-  currency: result.response?.cur ?? 'USD',
+      currency: result.response?.cur ?? 'USD',
     };
   }
 
@@ -404,7 +672,7 @@ export class TransparencyWriter {
       return DEFAULT_TC_HASH;
     }
 
-  return crypto.createHash('sha256').update(tcString).digest('hex');
+    return crypto.createHash('sha256').update(tcString).digest('hex');
   }
 
   private buildCandidateMetadata(bid: Bid): Record<string, unknown> {
@@ -421,7 +689,7 @@ export class TransparencyWriter {
       return true;
     }
 
-  const hash = crypto.createHash('sha256').update(publisherId).update(auctionId).digest();
+    const hash = crypto.createHash('sha256').update(publisherId).update(auctionId).digest();
     const value = hash.readUInt16BE(0) % 10000;
     return value < this.samplingBps;
   }
@@ -461,8 +729,8 @@ export class TransparencyWriter {
     }
 
     try {
-  const canonical = canonicalizeForSignature(payload);
-  const signature = crypto.sign(null, Buffer.from(canonical, 'utf8'), this.privateKey);
+      const canonical = canonicalizeForSignature(payload);
+      const signature = crypto.sign(null, Buffer.from(canonical, 'utf8'), this.privateKey);
       return signature.toString('base64');
     } catch (error) {
       logger.error('TransparencyWriter: signing failed', { error });
@@ -492,5 +760,10 @@ export const transparencyWriter = new TransparencyWriter({
   privateKeySource: process.env.TRANSPARENCY_PRIVATE_KEY,
   keyId: process.env.TRANSPARENCY_KEY_ID,
   aletheiaFeeBp: Number(process.env.ALETHEIA_FEE_BP ?? DEFAULT_FEE_BP),
+  retryAttempts: Number(process.env.TRANSPARENCY_RETRY_ATTEMPTS ?? DEFAULT_RETRY_ATTEMPTS),
+  retryMinDelayMs: Number(process.env.TRANSPARENCY_RETRY_MIN_DELAY_MS ?? DEFAULT_RETRY_MIN_DELAY_MS),
+  retryMaxDelayMs: Number(process.env.TRANSPARENCY_RETRY_MAX_DELAY_MS ?? DEFAULT_RETRY_MAX_DELAY_MS),
+  breakerThreshold: Number(process.env.TRANSPARENCY_BREAKER_THRESHOLD ?? DEFAULT_BREAKER_THRESHOLD),
+  breakerCooldownMs: Number(process.env.TRANSPARENCY_BREAKER_COOLDOWN_MS ?? DEFAULT_BREAKER_COOLDOWN_MS),
   featureEnabled: /^1|true$/i.test(String(process.env.TRANSPARENCY_ENABLED ?? '1')),
 });

@@ -3,7 +3,7 @@
 **Company:** Bel Consulting OÜ  
 **System:** RivalApexMediation Automated Accounting  
 **Version:** 1.0  
-**Last Updated:** November 3, 2025
+**Last Updated:** 2025-11-03
 
 This guide provides step-by-step instructions for operating the automated accounting system on a day-to-day and quarterly basis.
 
@@ -685,5 +685,5 @@ SELECT
 ---
 
 **Document Version:** 1.0  
-**Last Updated:** November 3, 2025  
+**Last Updated:** 2025-11-03  
 **Next Review:** After first quarterly VAT filing (February 2026)

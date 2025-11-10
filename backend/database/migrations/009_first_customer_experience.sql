@@ -1,5 +1,5 @@
 -- Migration 009: First Customer Experience Features
--- Created: November 3, 2025
+-- Created: 2025-11-03
 -- Purpose: Enable enterprise-grade experience for every customer through automation
 
 -- Customer milestones tracking (usage achievements, referrals, testimonials, etc.)

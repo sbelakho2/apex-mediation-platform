@@ -1,23 +1,10 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
+import { ArrowLeft } from 'lucide-react'
 import { transparencyApi, type TransparencyAuction, type VerifyResult } from '../../../../lib/transparency'
-
-function CopyButton({ text }: { text: string }) {
-  const [copied, setCopied] = useState(false)
-  return (
-    <button
-      className="px-2 py-1 text-xs border rounded hover:bg-gray-50"
-      onClick={async () => {
-        await navigator.clipboard.writeText(text)
-        setCopied(true)
-        setTimeout(() => setCopied(false), 1500)
-      }}
-    >
-      {copied ? 'Copied' : 'Copy'}
-    </button>
-  )
-}
+import { CopyButton, VerifyBadge, Skeleton } from '../../../../components/ui'
 
 export default function TransparencyAuctionDetailPage({ params }: { params: { auction_id: string } }) {
   const { auction_id } = params
@@ -43,86 +30,229 @@ export default function TransparencyAuctionDetailPage({ params }: { params: { au
   }, [auction_id])
 
   return (
-    <div className="p-6">
-      <div className="flex items-center justify-between mb-4">
-        <h1 className="text-xl font-semibold text-gray-900">Transparency — Auction Detail</h1>
-      </div>
-      {loading && <div className="text-gray-600">Loading…</div>}
-      {error && <div className="text-red-600">{error}</div>}
-      {!loading && !error && auction && (
-        <div className="space-y-6">
-          <div className="border rounded p-4">
-            <div className="text-sm text-gray-700"><span className="font-semibold">Auction:</span> {auction.auction_id}</div>
-            <div className="text-sm text-gray-700"><span className="font-semibold">Timestamp:</span> {new Date(auction.timestamp).toLocaleString()}</div>
-            <div className="text-sm text-gray-700"><span className="font-semibold">Placement:</span> {auction.placement_id}</div>
-            <div className="text-sm text-gray-700"><span className="font-semibold">Device:</span> {auction.device_context.os}/{auction.device_context.geo}</div>
+    <div className="min-h-screen bg-gray-50">
+      <header className="bg-white border-b">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+          <div className="flex items-center gap-4 mb-2">
+            <Link 
+              href="/transparency/auctions"
+              className="inline-flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900 transition-colors"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Back to Auctions
+            </Link>
           </div>
-
-          <div className="border rounded p-4">
-            <h2 className="font-semibold mb-2">Integrity</h2>
-            {auction.integrity?.signature ? (
-              <div className="space-y-2">
-                <div className="text-sm text-gray-700"><span className="font-semibold">Key ID:</span> {auction.integrity.key_id}</div>
-                <div className="text-sm text-gray-700"><span className="font-semibold">Algo:</span> {auction.integrity.algo}</div>
-                <div className="text-sm text-gray-700 break-all">
-                  <span className="font-semibold">Signature:</span> {auction.integrity.signature}
-                  <span className="ml-2"><CopyButton text={auction.integrity.signature} /></span>
-                </div>
-                <div className="mt-3">
-                  <span
-                    className={`inline-flex items-center px-2 py-1 rounded text-xs ${verify?.status === 'pass' ? 'bg-green-100 text-green-800' : verify?.status === 'fail' ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-700'}`}
-                  >
-                    Verify: {verify?.status?.toUpperCase() || 'UNKNOWN'}
-                  </span>
-                </div>
-                {verify?.canonical && (
-                  <details className="mt-2">
-                    <summary className="cursor-pointer text-sm text-gray-700">Canonical payload</summary>
-                    <pre className="mt-2 text-xs bg-gray-50 p-2 rounded overflow-auto">{verify.canonical}</pre>
-                    <div className="mt-1"><CopyButton text={verify.canonical} /></div>
-                  </details>
-                )}
-                {verify?.reason && (
-                  <div className="text-xs text-gray-600">Reason: {verify.reason}</div>
-                )}
-              </div>
-            ) : (
-              <div className="text-sm text-gray-500">Not signed</div>
-            )}
-          </div>
-
-          <div className="border rounded p-4">
-            <h2 className="font-semibold mb-2">Candidates</h2>
-            <div className="overflow-x-auto">
-              <table className="min-w-full text-sm">
-                <thead className="bg-gray-50 text-gray-600">
-                  <tr>
-                    <th className="text-left px-3 py-2">Source</th>
-                    <th className="text-left px-3 py-2">eCPM</th>
-                    <th className="text-left px-3 py-2">Status</th>
-                    <th className="text-left px-3 py-2">Response (ms)</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {auction.candidates.map((c) => (
-                    <tr key={c.metadata_hash} className="border-t">
-                      <td className="px-3 py-2">{c.source}</td>
-                      <td className="px-3 py-2">{c.bid_ecpm.toFixed(4)} {c.currency}</td>
-                      <td className="px-3 py-2">{c.status}</td>
-                      <td className="px-3 py-2">{c.response_time_ms}</td>
-                    </tr>
-                  ))}
-                  {auction.candidates.length === 0 && (
-                    <tr>
-                      <td className="px-3 py-6 text-center text-gray-500" colSpan={4}>No candidates recorded</td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-primary-600">Transparency System</p>
+              <h1 className="text-3xl font-semibold text-gray-900 tracking-tight">Auction Detail</h1>
+              <p className="text-sm text-gray-600 mt-1">
+                Cryptographic verification and complete auction record
+              </p>
             </div>
           </div>
         </div>
-      )}
+      </header>
+
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {loading && <AuctionDetailSkeleton />}
+        
+        {!loading && error && (
+          <div className="border border-red-200 rounded-lg bg-red-50 px-4 py-3">
+            <p className="text-sm text-red-800 font-medium">Failed to load auction</p>
+            <p className="text-xs text-red-600 mt-1">{error}</p>
+          </div>
+        )}
+
+        {!loading && !error && auction && (
+          <div className="space-y-6">
+            {/* Auction Overview Card */}
+            <div className="card">
+              <h2 className="text-xl font-semibold text-gray-900 mb-4">Auction Overview</h2>
+              <dl className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <dt className="text-sm font-medium text-gray-500 mb-1">Auction ID</dt>
+                  <dd className="flex items-center gap-2">
+                    <code className="text-sm font-mono text-gray-900">{auction.auction_id}</code>
+                    <CopyButton text={auction.auction_id} variant="icon" size="sm" />
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-sm font-medium text-gray-500 mb-1">Timestamp</dt>
+                  <dd className="text-sm text-gray-900">{new Date(auction.timestamp).toLocaleString()}</dd>
+                </div>
+                <div>
+                  <dt className="text-sm font-medium text-gray-500 mb-1">Placement ID</dt>
+                  <dd className="flex items-center gap-2">
+                    <code className="text-sm font-mono text-gray-900">{auction.placement_id}</code>
+                    <CopyButton text={auction.placement_id} variant="icon" size="sm" />
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-sm font-medium text-gray-500 mb-1">Device Context</dt>
+                  <dd className="text-sm text-gray-900">
+                    <span className="font-semibold">{auction.device_context.os}</span>
+                    <span className="text-gray-400 mx-2">/</span>
+                    <span className="font-semibold">{auction.device_context.geo}</span>
+                  </dd>
+                </div>
+              </dl>
+            </div>
+
+            {/* Integrity & Verification Card */}
+            <div className="card">
+              <h2 className="text-xl font-semibold text-gray-900 mb-4">Cryptographic Verification</h2>
+              {auction.integrity?.signature ? (
+                <div className="space-y-4">
+                  <div className="flex items-start justify-between">
+                    <div className="space-y-3 flex-1">
+                      <div>
+                        <span className="text-sm font-medium text-gray-500">Signing Key</span>
+                        <div className="flex items-center gap-2 mt-1">
+                          <code className="text-sm font-mono text-gray-900">{auction.integrity.key_id}</code>
+                          <CopyButton text={auction.integrity.key_id || ''} variant="icon" size="sm" />
+                        </div>
+                      </div>
+                      <div>
+                        <span className="text-sm font-medium text-gray-500">Algorithm</span>
+                        <p className="text-sm text-gray-900 mt-1 font-mono">{auction.integrity.algo}</p>
+                      </div>
+                      <div>
+                        <span className="text-sm font-medium text-gray-500">Signature</span>
+                        <div className="flex items-start gap-2 mt-1">
+                          <code className="text-xs font-mono text-gray-900 break-all flex-1 bg-gray-50 p-2 rounded">
+                            {auction.integrity.signature}
+                          </code>
+                          <CopyButton text={auction.integrity.signature} variant="icon" size="sm" />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="pt-4 border-t">
+                    <div className="flex items-center gap-3">
+                      <span className="text-sm font-medium text-gray-500">Verification Status:</span>
+                      <VerifyBadge 
+                        auctionId={auction.auction_id}
+                        hasSigned={true}
+                        autoLoad={true}
+                      />
+                    </div>
+                    {verify?.canonical && (
+                      <details className="mt-4">
+                        <summary className="cursor-pointer text-sm font-medium text-gray-700 hover:text-gray-900">
+                          View Canonical Payload
+                        </summary>
+                        <div className="mt-3">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-xs text-gray-500">Canonical JSON used for signature</span>
+                            <CopyButton text={verify.canonical} variant="inline" size="sm" label="Copy Payload" />
+                          </div>
+                          <pre className="text-xs bg-gray-900 text-gray-100 p-4 rounded-lg overflow-auto max-h-96">
+                            {JSON.stringify(JSON.parse(verify.canonical), null, 2)}
+                          </pre>
+                        </div>
+                      </details>
+                    )}
+                    {verify?.reason && (
+                      <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                        <p className="text-sm text-amber-800">
+                          <span className="font-medium">Note: </span>{verify.reason}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-8">
+                  <p className="text-gray-500">This auction was not signed</p>
+                  <p className="text-xs text-gray-400 mt-1">
+                    Not sampled for transparency or signature missing
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Auction Candidates Card */}
+            <div className="card">
+              <h2 className="text-xl font-semibold text-gray-900 mb-4">Bid Candidates</h2>
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-sm">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="text-left px-4 py-3 text-gray-600 font-medium">Source</th>
+                      <th className="text-left px-4 py-3 text-gray-600 font-medium">eCPM</th>
+                      <th className="text-left px-4 py-3 text-gray-600 font-medium">Status</th>
+                      <th className="text-left px-4 py-3 text-gray-600 font-medium">Response Time</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {auction.candidates.map((c) => (
+                      <tr key={c.metadata_hash} className="border-t border-gray-100">
+                        <td className="px-4 py-3 text-gray-900 font-medium">{c.source}</td>
+                        <td className="px-4 py-3 text-gray-900">
+                          {c.bid_ecpm.toFixed(4)} <span className="text-gray-500">{c.currency}</span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={`inline-flex px-2 py-1 text-xs font-medium rounded ${
+                            c.status === 'bid' ? 'bg-green-100 text-green-700' :
+                            c.status === 'no_bid' ? 'bg-gray-100 text-gray-600' :
+                            'bg-red-100 text-red-700'
+                          }`}>
+                            {c.status}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-gray-600">{c.response_time_ms}ms</td>
+                      </tr>
+                    ))}
+                    {auction.candidates.length === 0 && (
+                      <tr>
+                        <td className="px-4 py-8 text-center text-gray-500" colSpan={4}>
+                          No candidates recorded for this auction
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+      </main>
+    </div>
+  )
+}
+
+function AuctionDetailSkeleton() {
+  return (
+    <div className="space-y-6">
+      {/* Overview skeleton */}
+      <div className="card">
+        <Skeleton width="w-48" height="h-6" className="mb-4" />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i}>
+              <Skeleton width="w-24" height="h-4" className="mb-2" />
+              <Skeleton width="w-full" height="h-5" />
+            </div>
+          ))}
+        </div>
+      </div>
+      
+      {/* Integrity skeleton */}
+      <div className="card">
+        <Skeleton width="w-56" height="h-6" className="mb-4" />
+        <div className="space-y-4">
+          <Skeleton width="w-full" height="h-20" />
+          <Skeleton width="w-full" height="h-16" />
+        </div>
+      </div>
+      
+      {/* Candidates skeleton */}
+      <div className="card">
+        <Skeleton width="w-32" height="h-6" className="mb-4" />
+        <Skeleton width="w-full" height="h-48" />
+      </div>
     </div>
   )
 }

@@ -84,6 +84,12 @@ function makeAuctionResult(winnerBid: Bid, response: OpenRTBBidResponse) {
   };
 }
 
+function makeClickHouseError(statusCode = 500): Error & { statusCode: number } {
+  const error = new Error(`ClickHouse ${statusCode}`) as Error & { statusCode: number };
+  error.statusCode = statusCode;
+  return error;
+}
+
 describe('TransparencyWriter', () => {
   const { privateKey } = generateKeyPairSync('ed25519');
   const privateKeyPem = privateKey.export({ type: 'pkcs8', format: 'pem' }).toString();
@@ -102,6 +108,7 @@ describe('TransparencyWriter', () => {
       privateKeySource: privateKeyPem,
       keyId: 'test-key',
       aletheiaFeeBp: 150,
+      featureEnabled: true,
     } satisfies Partial<ConstructorParameters<typeof TransparencyWriter>[0]>;
 
     const writer = new TransparencyWriter({
@@ -141,6 +148,103 @@ describe('TransparencyWriter', () => {
 
     expect(candidatesArgs.table).toBe('auction_candidates');
     expect(candidatesArgs.values).toHaveLength(2);
+  });
+
+  it('retries transient ClickHouse failures before succeeding', async () => {
+    const { writer, insertMock } = makeWriter({ retryAttempts: 2, retryMinDelayMs: 0, retryMaxDelayMs: 0 });
+    const request = makeRequest();
+    const winningBid = makeBid('alpha', 1.5);
+    const result = makeAuctionResult(winningBid, makeResponse(winningBid));
+
+    insertMock
+      .mockRejectedValueOnce(makeClickHouseError(500))
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce(undefined);
+
+    await writer.recordAuction(request, result, new Date('2025-11-09T12:00:00.000Z'));
+
+    expect(insertMock).toHaveBeenCalledTimes(3);
+    const metrics = writer.getMetrics();
+    expect(metrics.writes_attempted).toBe(1);
+    expect(metrics.writes_failed).toBe(0);
+    expect(metrics.writes_succeeded).toBe(1);
+    expect(metrics.breaker_open).toBe(false);
+    expect(metrics.failure_streak).toBe(0);
+    expect(metrics.breaker_cooldown_remaining_ms).toBe(0);
+  });
+
+  it('opens the breaker after consecutive failures and skips subsequent writes until cooldown elapses', async () => {
+    let currentTime = 0;
+    const { writer, insertMock } = makeWriter({
+      retryAttempts: 0,
+      breakerThreshold: 2,
+      breakerCooldownMs: 1000,
+      nowProvider: () => currentTime,
+    });
+
+    let failures = 0;
+    insertMock.mockImplementation(async () => {
+      if (failures < 2) {
+        failures += 1;
+        throw makeClickHouseError(500);
+      }
+    });
+
+    const request = makeRequest();
+    const result = makeAuctionResult(makeBid('alpha', 2.5), makeResponse(makeBid('alpha', 2.5)));
+
+    await writer.recordAuction(request, result, new Date('2025-11-09T12:00:00.000Z'));
+    await writer.recordAuction(request, result, new Date('2025-11-09T12:00:00.000Z'));
+
+    const metricsAfterFailures = writer.getMetrics();
+    expect(metricsAfterFailures.writes_attempted).toBe(2);
+    expect(metricsAfterFailures.writes_failed).toBe(2);
+    expect(metricsAfterFailures.breaker_open).toBe(true);
+    expect(metricsAfterFailures.failure_streak).toBe(2);
+    expect(metricsAfterFailures.breaker_cooldown_remaining_ms).toBe(1000);
+
+    const callCountBeforeSkip = insertMock.mock.calls.length;
+    await writer.recordAuction(request, result, new Date('2025-11-09T12:00:00.000Z'));
+    expect(insertMock.mock.calls.length).toBe(callCountBeforeSkip);
+
+    const metricsDuringOpen = writer.getMetrics();
+    expect(metricsDuringOpen.breaker_open).toBe(true);
+    expect(metricsDuringOpen.breaker_skipped).toBe(1);
+
+    currentTime = 1500;
+    const metricsAfterCooldown = writer.getMetrics();
+    expect(metricsAfterCooldown.breaker_open).toBe(false);
+    expect(metricsAfterCooldown.failure_streak).toBe(0);
+
+    await writer.recordAuction(request, result, new Date('2025-11-09T12:00:00.000Z'));
+    expect(insertMock.mock.calls.length).toBe(callCountBeforeSkip + 2);
+
+    const metricsAfterSuccess = writer.getMetrics();
+    expect(metricsAfterSuccess.writes_succeeded).toBe(1);
+    expect(metricsAfterSuccess.writes_failed).toBe(2);
+    expect(metricsAfterSuccess.breaker_open).toBe(false);
+    expect(metricsAfterSuccess.breaker_skipped).toBe(1);
+  });
+
+  it('records a partial write failure when candidate inserts fail but auctions succeed', async () => {
+    const { writer, insertMock } = makeWriter({ retryAttempts: 0, breakerThreshold: 10 });
+    const request = makeRequest();
+    const result = makeAuctionResult(makeBid('alpha', 2.5), makeResponse(makeBid('alpha', 2.5)));
+
+    insertMock
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(makeClickHouseError(500));
+
+    await writer.recordAuction(request, result, new Date('2025-11-09T12:00:00.000Z'));
+
+    expect(insertMock).toHaveBeenCalledTimes(2);
+    const metrics = writer.getMetrics();
+    expect(metrics.writes_attempted).toBe(1);
+    expect(metrics.writes_succeeded).toBe(0);
+    expect(metrics.writes_failed).toBe(1);
+    expect(metrics.failure_streak).toBe(1);
+    expect(metrics.breaker_open).toBe(false);
+    expect(metrics.breaker_cooldown_remaining_ms).toBe(0);
   });
 
   it('canonicalizes payload deterministically for signing', () => {

@@ -9,7 +9,7 @@ The ML fraud detection model is now **fully operational** and production-ready w
 ### Version
 - **Current Version**: v20251104-194634
 - **Model Type**: Logistic Regression with 17 features
-- **Training Date**: November 4, 2025
+- **Training Date**: 2025-11-04
 - **Status**: ✅ Production Ready
 
 ### Training Details
@@ -367,5 +367,5 @@ For model-related issues:
 ---
 
 **Status**: ✅ **PRODUCTION READY**
-**Next Review**: December 4, 2025 (monthly retraining)
+**Next Review**: 2025-12-04 (monthly retraining)
 **Owner**: ML/Fraud Detection Team

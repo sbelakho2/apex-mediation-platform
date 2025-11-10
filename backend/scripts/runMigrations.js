@@ -58,8 +58,24 @@ async function applyMigration(client, filePath, version, sql) {
   }
 }
 
+async function connectWithRetry(maxAttempts = 10, delayMs = 2000) {
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const client = await pool.connect();
+      console.log('Database connection established');
+      return client;
+    } catch (error) {
+      if (attempt === maxAttempts) {
+        throw error;
+      }
+      console.log(`Connection attempt ${attempt}/${maxAttempts} failed, retrying in ${delayMs}ms...`);
+      await new Promise(resolve => setTimeout(resolve, delayMs));
+    }
+  }
+}
+
 async function run() {
-  const client = await pool.connect();
+  const client = await connectWithRetry();
 
   try {
     await ensureMigrationsTable(client);

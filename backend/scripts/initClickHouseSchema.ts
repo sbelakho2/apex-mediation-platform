@@ -5,7 +5,7 @@
  * Usage: ts-node scripts/initClickHouseSchema.ts
  */
 
-import { initializeClickHouse, getClickHouseClient, closeClickHouse } from '../src/utils/clickhouse';
+import { createClient, ClickHouseClient } from '@clickhouse/client';
 import { allSchemas } from '../src/utils/clickhouse.schema';
 import dotenv from 'dotenv';
 
@@ -14,20 +14,37 @@ dotenv.config();
 async function initializeSchema() {
   console.log('🚀 Starting ClickHouse schema initialization...\n');
 
-  try {
-    // Initialize connection
-    await initializeClickHouse();
-    const client = getClickHouseClient();
+  let client: ClickHouseClient | null = null;
 
-    // Create database if it doesn't exist
+  try {
+    // Create database if it doesn't exist - connect without specifying database first
     const database = process.env.CLICKHOUSE_DATABASE || 'apexmediation';
     console.log(`📊 Creating database: ${database}`);
     
-    await client.command({
+    // First, create client without database to create the database itself
+    const tempClient = createClient({
+      host: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+      username: process.env.CLICKHOUSE_USER || 'default',
+      password: process.env.CLICKHOUSE_PASSWORD || '',
+      application: 'apexmediation-api-init',
+    });
+    
+    await tempClient.command({
       query: `CREATE DATABASE IF NOT EXISTS ${database}`,
     });
 
+    await tempClient.close();
+
     console.log(`✅ Database ${database} ready\n`);
+
+    // Now connect with the database specified
+    client = createClient({
+      host: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+      username: process.env.CLICKHOUSE_USER || 'default',
+      password: process.env.CLICKHOUSE_PASSWORD || '',
+      database: database,
+      application: 'apexmediation-api-init',
+    });
 
     // Execute each schema statement
     for (let i = 0; i < allSchemas.length; i++) {
@@ -74,7 +91,9 @@ async function initializeSchema() {
     console.error('\n❌ Schema initialization failed:', error);
     process.exit(1);
   } finally {
-    await closeClickHouse();
+    if (client) {
+      await client.close();
+    }
   }
 }
 

@@ -4,7 +4,7 @@ import Foundation
 public final class MediationSDK {
     public static let shared = MediationSDK()
 
-    private let sdkVersion = "1.0.0"
+    private let _sdkVersion = "1.0.0"
 
     private var config: SDKConfig?
     private var remoteConfig: SDKRemoteConfig?
@@ -27,6 +27,27 @@ public final class MediationSDK {
             return cfg.placements.map { $0.placementId }
         }
         return []
+    }
+    
+    // MARK: - Section 3.1 Debug Panel Support
+    /// SDK version for debug panel display
+    public var sdkVersion: String {
+        return _sdkVersion
+    }
+    
+    /// Test mode indicator for debug panel
+    public var isTestMode: Bool {
+        return config?.testMode ?? false
+    }
+    
+    /// Remote config version for debug panel
+    public var remoteConfigVersion: Int? {
+        return remoteConfig?.version
+    }
+    
+    /// Registered adapter count for debug panel
+    public var registeredAdapterCount: Int {
+        return adapterRegistry?.registeredCount ?? 0
     }
 
     /// Initialize the mediation SDK.
@@ -53,7 +74,7 @@ public final class MediationSDK {
         let manager = ConfigManager(config: resolvedConfig, signatureVerifier: signatureVerifier)
         let remote = try await manager.loadConfig()
 
-        let registry = AdapterRegistry(sdkVersion: sdkVersion)
+        let registry = AdapterRegistry(sdkVersion: _sdkVersion)
         configureAdapters(registry: registry, with: remote)
 
         let telemetryCollector = TelemetryCollector(config: resolvedConfig)
@@ -82,7 +103,7 @@ public final class MediationSDK {
         }
 
         guard let registry = adapterRegistry else {
-            throw SDKError.internalError
+            throw SDKError.internalError(message: "Adapter registry not initialized")
         }
 
         let adaptersInPriority = placement.adapterPriority
@@ -172,7 +193,7 @@ public final class MediationSDK {
             return cached
         }
         guard let manager = configManager else {
-            throw SDKError.internalError
+            throw SDKError.internalError(message: "Config manager not initialized")
         }
         let refreshed = try await manager.loadConfig()
         remoteConfig = refreshed
@@ -211,14 +232,20 @@ public final class MediationSDK {
     }
 }
 
-public enum SDKError: Error, LocalizedError {
+// MARK: - Section 3.3 Enhanced Error Taxonomy
+
+public enum SDKError: Error, LocalizedError, Equatable {
     case notInitialized
     case alreadyInitialized
     case invalidPlacement(String)
     case noFill
     case timeout
-    case networkError
-    case internalError
+    case networkError(underlying: String?)
+    case internalError(message: String?)
+    
+    // Section 3.3: HTTP status code errors for parity with Android
+    case status_429(message: String)
+    case status_5xx(code: Int, message: String)
 
     public var errorDescription: String? {
         switch self {
@@ -232,10 +259,57 @@ public enum SDKError: Error, LocalizedError {
             return "No ad available."
         case .timeout:
             return "Request timed out."
-        case .networkError:
+        case .networkError(let underlying):
+            if let msg = underlying {
+                return "Network error: \(msg)"
+            }
             return "Network error occurred."
-        case .internalError:
+        case .internalError(let message):
+            if let msg = message {
+                return "Internal error: \(msg)"
+            }
             return "Internal error occurred."
+        case .status_429(let message):
+            return "Rate limit exceeded (429): \(message)"
+        case .status_5xx(let code, let message):
+            return "Server error (\(code)): \(message)"
+        }
+    }
+    
+    /// Map HTTP status codes to SDK errors (Section 3.3)
+    public static func fromHTTPStatus(code: Int, message: String? = nil) -> SDKError {
+        switch code {
+        case 429:
+            return .status_429(message: message ?? "Too many requests")
+        case 500...599:
+            return .status_5xx(code: code, message: message ?? "Server error")
+        case 204:
+            return .noFill
+        default:
+            return .networkError(underlying: message ?? "HTTP \(code)")
+        }
+    }
+    
+    // Equatable conformance for testing
+    public static func == (lhs: SDKError, rhs: SDKError) -> Bool {
+        switch (lhs, rhs) {
+        case (.notInitialized, .notInitialized),
+             (.alreadyInitialized, .alreadyInitialized),
+             (.noFill, .noFill),
+             (.timeout, .timeout):
+            return true
+        case (.invalidPlacement(let lp), .invalidPlacement(let rp)):
+            return lp == rp
+        case (.networkError(let lu), .networkError(let ru)):
+            return lu == ru
+        case (.internalError(let lm), .internalError(let rm)):
+            return lm == rm
+        case (.status_429(let lm), .status_429(let rm)):
+            return lm == rm
+        case (.status_5xx(let lc, let lm), .status_5xx(let rc, let rm)):
+            return lc == rc && lm == rm
+        default:
+            return false
         }
     }
 }

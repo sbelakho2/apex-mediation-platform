@@ -11,6 +11,7 @@ import { initializeDatabase } from './utils/postgres';
 import { initializeClickHouse, checkClickHouseHealth } from './utils/clickhouse';
 import { redis } from './utils/redis';
 import { initializeQueues, shutdownQueues, queueManager } from './queues/queueInitializer';
+import { promRegister } from './utils/prometheus';
 
 // Load environment variables
 dotenv.config();
@@ -67,6 +68,18 @@ app.get('/health', async (req: Request, res: Response) => {
       queues: queuesHealthy ? 'up' : 'down',
     },
   });
+});
+
+app.get('/metrics', async (_req: Request, res: Response) => {
+  try {
+    res.set('Content-Type', promRegister.contentType);
+    res.send(await promRegister.metrics());
+  } catch (error) {
+    logger.error('Failed to generate Prometheus metrics', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    res.status(500).send('Unable to collect metrics');
+  }
 });
 
 // API routes

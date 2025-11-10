@@ -240,6 +240,6 @@ Operational procedures for production systems:
 
 ---
 
-**Last Updated**: November 4, 2025
+**Last Updated**: 2025-11-04
 **Maintained By**: ApexMediation Engineering Team
 **Questions?** Contact: dev@bel-consulting.ee

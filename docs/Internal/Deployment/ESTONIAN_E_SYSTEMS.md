@@ -1,6 +1,6 @@
 # Estonian E-Systems Integration Guide
 
-**Last Updated:** November 3, 2025  
+**Last Updated:** 2025-11-03  
 **Company:** Bel Consulting OÜ  
 **Registry Code:** 16736399  
 **VAT Number:** EE102736890
@@ -704,12 +704,12 @@ const idToken = jwt.decode(tokenResponse.data.id_token);
 
 | Date | Task |
 |------|------|
-| **Jan 20, 2026** | Q4 2025 VAT return + payment |
-| **Mar 31, 2026** | 2025 Tax return (TSD) |
-| **Apr 20, 2026** | Q1 2026 VAT return + payment |
-| **Jun 30, 2026** | 2025 Annual report |
-| **Jul 20, 2026** | Q2 2026 VAT return + payment |
-| **Oct 20, 2026** | Q3 2026 VAT return + payment |
+| **2026-01-20** | Q4 2025 VAT return + payment |
+| **2026-03-31** | 2025 Tax return (TSD) |
+| **2026-04-20** | Q1 2026 VAT return + payment |
+| **2026-06-30** | 2025 Annual report |
+| **2026-07-20** | Q2 2026 VAT return + payment |
+| **2026-10-20** | Q3 2026 VAT return + payment |
 
 ### Document Retention Requirements
 

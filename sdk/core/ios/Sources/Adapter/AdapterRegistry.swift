@@ -77,6 +77,13 @@ public final class AdapterRegistry {
         lock.unlock()
     }
     
+    /// Section 3.1: Get count of registered adapters for debug panel
+    public var registeredCount: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return adapterClasses.count
+    }
+    
     // MARK: - Adapter Management
     
     /// Get adapter instance (lazy initialization)

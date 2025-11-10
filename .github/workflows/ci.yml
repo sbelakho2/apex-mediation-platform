@@ -169,6 +169,19 @@ jobs:
           chmod +x ./gradlew
           ./gradlew --no-daemon strictmodeSmoke
 
+      - name: Generate API docs (Dokka)
+        working-directory: sdk/core/android
+        run: |
+          chmod +x ./gradlew
+          ./gradlew --no-daemon generateApiDocs
+
+      - name: Upload Dokka artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: android-sdk-api-docs
+          path: sdk/core/android/build/dokka/html
+          retention-days: 30
+
   # ML pipeline tests
   ml-test:
     runs-on: ubuntu-latest
@@ -191,7 +204,7 @@ jobs:
       - name: Run ML unit tests
         run: pytest ML/scripts/tests
 
-  # SDK tests (iOS)
+  # SDK tests (iOS) - Section 3.4
   sdk-ios-test:
     runs-on: macos-latest
     
@@ -206,9 +219,34 @@ jobs:
 
       - name: Build iOS SDK
         working-directory: sdk/core/ios
+        run: swift build
+
+      - name: Run iOS unit tests
+        working-directory: sdk/core/ios
         run: |
-          swift build
-          swift test
+          swift test --enable-code-coverage --parallel
+
+      - name: Generate code coverage report
+        working-directory: sdk/core/ios
+        run: |
+          xcrun llvm-cov export -format="lcov" \
+            .build/debug/RivalApexMediationSDKPackageTests.xctest/Contents/MacOS/RivalApexMediationSDKPackageTests \
+            -instr-profile .build/debug/codecov/default.profdata > coverage.lcov
+
+      - name: Upload iOS coverage
+        uses: codecov/codecov-action@v3
+        with:
+          files: ./sdk/core/ios/coverage.lcov
+          flags: ios-sdk
+          name: ios-sdk-coverage
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: ios-test-results
+          path: sdk/core/ios/.build/debug/*.xctest
+          retention-days: 7
 
   # Integration tests
   integration-test:

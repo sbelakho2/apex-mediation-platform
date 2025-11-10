@@ -65,6 +65,127 @@ final class SignatureVerifierTests: XCTestCase {
             XCTAssertEqual(error as? SignatureError, .malformedSignature("Invalid Base64 encoding"))
         }
     }
+
+    // MARK: - Section 3 Enhanced Coverage Tests
+
+    func testTestModeBypassWithDevKey() throws {
+        // In test mode, should use dev public key even without production key
+        let verifier = SignatureVerifier(testMode: true, productionPublicKey: nil)
+        
+        let message = "test message for dev key"
+        let testSignature = Data(repeating: 0, count: 64).base64EncodedString()
+        
+        // Should not throw noPublicKey error in test mode
+        do {
+            _ = try verifier.verifySignature(message: message, signatureBase64: testSignature)
+        } catch SignatureError.noPublicKey {
+            XCTFail("Test mode should not require production public key")
+        } catch {
+            // Other errors (like verificationFailed) are acceptable
+        }
+    }
+
+    func testInvalidSignatureLengthThrows() throws {
+        let verifier = SignatureVerifier(testMode: false, productionPublicKey: "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a")
+        let message = "test message"
+        
+        // Create signature with wrong length (32 bytes instead of 64)
+        let shortSignature = Data(repeating: 0, count: 32).base64EncodedString()
+        
+        XCTAssertThrowsError(try verifier.verifySignature(message: message, signatureBase64: shortSignature)) { error in
+            if case SignatureError.invalidSignatureLength = error as? SignatureError {
+                // expected
+            } else {
+                XCTFail("Expected invalidSignatureLength error, got \(error)")
+            }
+        }
+    }
+
+    func testMalformedPublicKeyHexThrows() throws {
+        let message = "test"
+        let signature = Data(repeating: 0, count: 64)
+        let badPublicKey = "not-valid-hex-zzz"
+        
+        let verifier = SignatureVerifier(testMode: false, productionPublicKey: badPublicKey)
+        
+        XCTAssertThrowsError(try verifier.verifyEd25519Raw(message: message.data(using: .utf8)!, signature: signature, publicKeyHex: badPublicKey)) { error in
+            if case SignatureError.malformedPublicKey = error as? SignatureError {
+                // expected
+            } else {
+                XCTFail("Expected malformedPublicKey error, got \(error)")
+            }
+        }
+    }
+
+    func testEmptySignatureThrows() throws {
+        let verifier = SignatureVerifier(testMode: false, productionPublicKey: "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a")
+        let message = "test message"
+        let emptySignature = ""
+        
+        XCTAssertThrowsError(try verifier.verifySignature(message: message, signatureBase64: emptySignature)) { error in
+            if case SignatureError.malformedSignature = error as? SignatureError {
+                // Empty string will fail base64 decoding - expected
+            } else {
+                XCTFail("Expected malformedSignature error for empty string, got \(error)")
+            }
+        }
+    }
+
+    func testCorrectLengthButInvalidContentFails() throws {
+        let privateKey = Curve25519.Signing.PrivateKey()
+        let publicKeyHex = privateKey.publicKey.rawRepresentation.hexString
+        let verifier = SignatureVerifier(testMode: false, productionPublicKey: publicKeyHex)
+        
+        let message = "test message"
+        // Create 64 bytes of garbage data (correct length but not a valid signature)
+        let invalidSignature = Data(repeating: 0xFF, count: 64).base64EncodedString()
+        
+        XCTAssertThrowsError(try verifier.verifySignature(message: message, signatureBase64: invalidSignature)) { error in
+            if case SignatureError.verificationFailed = error as? SignatureError {
+                // expected
+            } else {
+                XCTFail("Expected verificationFailed error, got \(error)")
+            }
+        }
+    }
+
+    func testProductionModeWithoutKeyThrows() throws {
+        let verifier = SignatureVerifier(testMode: false, productionPublicKey: nil)
+        let message = "test"
+        let signature = Data(repeating: 0, count: 64).base64EncodedString()
+        
+        XCTAssertThrowsError(try verifier.verifySignature(message: message, signatureBase64: signature)) { error in
+            XCTAssertEqual(error as? SignatureError, .noPublicKey)
+        }
+    }
+
+    func testValidSignatureWithWrongKeyFails() throws {
+        // Generate key pair A
+        let keyA = Curve25519.Signing.PrivateKey()
+        let publicKeyAHex = keyA.publicKey.rawRepresentation.hexString
+        
+        // Generate key pair B
+        let keyB = Curve25519.Signing.PrivateKey()
+        let publicKeyBHex = keyB.publicKey.rawRepresentation.hexString
+        
+        let message = "test message"
+        let messageData = message.data(using: .utf8)!
+        
+        // Sign with key A
+        let signatureA = try keyA.signature(for: messageData)
+        let signatureABase64 = signatureA.base64EncodedString()
+        
+        // Verify with key B (should fail)
+        let verifier = SignatureVerifier(testMode: false, productionPublicKey: publicKeyBHex)
+        
+        XCTAssertThrowsError(try verifier.verifySignature(message: message, signatureBase64: signatureABase64)) { error in
+            if case SignatureError.verificationFailed = error as? SignatureError {
+                // expected - signature is valid format but signed by wrong key
+            } else {
+                XCTFail("Expected verificationFailed error, got \(error)")
+            }
+        }
+    }
 }
 
 private extension Data {

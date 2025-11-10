@@ -245,6 +245,8 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS trigger_update_journey_stage ON customer_health_scores;
+
 CREATE TRIGGER trigger_update_journey_stage
     AFTER INSERT OR UPDATE ON customer_health_scores
     FOR EACH ROW

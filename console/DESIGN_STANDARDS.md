@@ -1,7 +1,7 @@
 # Ad Platform Console Design Standards
 
 **Version:** 1.0  
-**Last Updated:** November 1, 2025  
+**Last Updated:** 2025-11-01  
 **Theme:** Aurora Slate — Tailwind-powered modern console
 
 > Inspired by the TPS Co-Pilot "Neo-Industrial Nightfall" system while optimized for a data-dense SaaS console built with Next.js 14 and Tailwind CSS. This document is authoritative for all UI/UX decisions across the console.
@@ -163,6 +163,114 @@ All colors are defined in `tailwind.config.ts`. When extending Tailwind classes 
 - Empty states: Icon (48px) + headline + supportive text + primary/secondary CTA.
 - Error states: Red icon + message, optionally `Try again` button.
 - Tooltips: prefer inline helper text over hidden tooltips for critical information.
+
+---
+
+## 🎯 Transparency UI Patterns (Updated 2025-11-10)
+
+The Transparency system implements specialized UX patterns for cryptographic verification workflows.
+
+### VerifyBadge Component
+**Location:** `console/src/components/ui/VerifyBadge.tsx`
+
+Lazy-loading verification status badge with tooltips:
+- **PASS** (green): Signature verified successfully
+- **FAIL** (red): Signature verification failed
+- **NOT_APPLICABLE** (gray): Auction not signed or not sampled
+- **UNKNOWN_KEY** (orange): Signing key not found in registry
+- **Loading**: Shows spinner during verification
+
+Usage:
+```tsx
+<VerifyBadge 
+  auctionId="auc-123" 
+  hasSigned={true}
+  autoLoad={true}  // Auto-verify on mount
+  compact={true}   // Compact mode for table cells
+/>
+```
+
+### Copy Affordances
+**Location:** `console/src/components/ui/CopyButton.tsx`
+
+Enhanced copy button with visual feedback:
+- Checkmark icon appears on successful copy (2s duration)
+- Three variants: `default` (button), `icon` (icon-only), `inline` (text link)
+- Tooltips show copy status
+- Full keyboard accessibility
+
+Usage:
+```tsx
+<CopyButton text="auc-123" variant="icon" size="sm" />
+<CopyButton text={signature} label="Copy Signature" />
+```
+
+### Skeleton Loaders
+**Location:** `console/src/components/ui/Spinner.tsx`
+
+Content placeholders that match final structure:
+- Use gray-200 background with pulse animation
+- Match dimensions of actual content
+- Provide variants: `text`, `circular`, `rectangular`
+
+Usage:
+```tsx
+<Skeleton variant="text" width="w-32" height="h-4" />
+<Skeleton variant="circular" width="w-10" height="h-10" />
+```
+
+### Debounced Filters
+**Location:** `console/src/lib/hooks.ts`
+
+Use `useDebouncedValue` hook for search/filter inputs:
+- Default 300ms delay reduces API calls
+- Improves perceived performance
+- Prevents excessive re-renders
+
+Usage:
+```tsx
+const [search, setSearch] = useState('')
+const debouncedSearch = useDebouncedValue(search, 300)
+
+useEffect(() => {
+  // API call with debouncedSearch
+}, [debouncedSearch])
+```
+
+### Query String Persistence
+**Location:** `console/src/lib/hooks.ts`
+
+Use `useQueryParams` hook for shareable filtered views:
+- Syncs filter state with URL query parameters
+- Enables bookmarking and sharing
+- Maintains pagination state across navigation
+
+Usage:
+```tsx
+const { params, updateParams } = useQueryParams()
+
+// Read from URL
+const page = params.get('page') || '1'
+
+// Update URL
+updateParams({ page: '2', search: 'test' })
+```
+
+### Tooltip Guidelines
+**Location:** `console/src/components/ui/Tooltip.tsx`
+
+Use tooltips for contextual help on verification badges and technical fields:
+- Position automatically (top/bottom/left/right)
+- 200ms delay before showing (configurable)
+- Keyboard accessible (focus/blur events)
+- Use gray-900 background with white text
+
+Usage:
+```tsx
+<Tooltip content="This auction was verified successfully">
+  <span className="badge">PASS</span>
+</Tooltip>
+```
 
 ---
 

@@ -2337,7 +2337,7 @@ export class CustomerSuccessAutomation {
 ---
 
 **Document Version:** 1.0  
-**Last Updated:** November 3, 2025  
+**Last Updated:** 2025-11-03  
 **Next Review:** After launch (Q1 2026)  
 **Owner:** Sabel Akhoua (Bel Consulting OÜ)
 

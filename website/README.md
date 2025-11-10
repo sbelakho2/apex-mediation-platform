@@ -258,7 +258,7 @@ website/
    - Danger zone (account deletion)
 
 2. **Payment Methods Tab**
-   - Next payout: $8,934.18 on November 8, 2025
+   - Next payout: $8,934.18 on 2025-11-08
    - Payment methods: Bank Transfer (primary), PayPal
    - Payout settings: Schedule (weekly/bi-weekly/monthly), minimum threshold, currency
    - Tax information: W-9 form submitted

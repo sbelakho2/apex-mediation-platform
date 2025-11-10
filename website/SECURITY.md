@@ -1,6 +1,6 @@
 # Security Status - ApexMediation Website
 
-**Last Updated:** November 4, 2025
+**Last Updated:** 2025-11-04
 
 ---
 
@@ -160,4 +160,4 @@ npm run build
 
 ---
 
-## Next Review: November 11, 2025
+## Next Review: 2025-11-11

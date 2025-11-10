@@ -84,4 +84,166 @@ class AuctionClientNetworkTests {
             assertEquals(1, server.requestCount)
         }
     }
+
+    @Test
+    fun status400_isNotRetried_andMapsToError() {
+        val baseUrl = server.url("/").toString().trimEnd('/')
+        val client = AuctionClient(baseUrl, apiKey = "key")
+        server.enqueue(MockResponse().setResponseCode(400).setBody("bad request"))
+        try {
+            client.requestInterstitial(opts())
+            fail("expected status_400")
+        } catch (e: AuctionClient.AuctionException) {
+            assertEquals("status_400", e.reason)
+            assertEquals(1, server.requestCount) // No retry for 4xx
+        }
+    }
+
+    @Test
+    fun status404_isNotRetried() {
+        val baseUrl = server.url("/").toString().trimEnd('/')
+        val client = AuctionClient(baseUrl, apiKey = "key")
+        server.enqueue(MockResponse().setResponseCode(404).setBody("not found"))
+        try {
+            client.requestInterstitial(opts())
+            fail("expected status_404")
+        } catch (e: AuctionClient.AuctionException) {
+            assertEquals("status_404", e.reason)
+            assertEquals(1, server.requestCount)
+        }
+    }
+
+    @Test
+    fun status502_retriedOnce() {
+        val baseUrl = server.url("/").toString().trimEnd('/')
+        val client = AuctionClient(baseUrl, apiKey = "key")
+        server.enqueue(MockResponse().setResponseCode(502).setBody("bad gateway"))
+        server.enqueue(MockResponse().setResponseCode(502).setBody("still bad"))
+        try {
+            client.requestInterstitial(opts())
+            fail("expected status_502 after retries")
+        } catch (e: AuctionClient.AuctionException) {
+            assertEquals("status_502", e.reason)
+            assertEquals(2, server.requestCount) // Initial + 1 retry
+        }
+    }
+
+    @Test
+    fun status503_retriedOnce() {
+        val baseUrl = server.url("/").toString().trimEnd('/')
+        val client = AuctionClient(baseUrl, apiKey = "key")
+        server.enqueue(MockResponse().setResponseCode(503).setBody("service unavailable"))
+        server.enqueue(MockResponse().setResponseCode(503).setBody("still unavailable"))
+        try {
+            client.requestInterstitial(opts())
+            fail("expected status_503 after retries")
+        } catch (e: AuctionClient.AuctionException) {
+            assertEquals("status_503", e.reason)
+            assertEquals(2, server.requestCount)
+        }
+    }
+
+    @Test
+    fun status500_thenSuccess_succeeds() {
+        val baseUrl = server.url("/").toString().trimEnd('/')
+        val client = AuctionClient(baseUrl, apiKey = "key")
+        server.enqueue(MockResponse().setResponseCode(500).setBody("error"))
+        server.enqueue(MockResponse().setResponseCode(200).setBody("""
+            {
+                "auction_id": "test-auction",
+                "status": "success",
+                "adapter": "test-network",
+                "ecpm": 1.5,
+                "ad_markup": "<html></html>",
+                "creative_id": "creative-1"
+            }
+        """.trimIndent()))
+        
+        // Should succeed after retry
+        val result = client.requestInterstitial(opts())
+        assertEquals("test-network", result.adapter)
+        assertEquals(1.5, result.ecpm, 0.001)
+        assertEquals(2, server.requestCount) // Initial fail + retry success
+    }
+
+    @Test
+    fun malformedJson_mapsToError() {
+        val baseUrl = server.url("/").toString().trimEnd('/')
+        val client = AuctionClient(baseUrl, apiKey = "key")
+        server.enqueue(MockResponse().setResponseCode(200).setBody("not valid json {{{"))
+        try {
+            client.requestInterstitial(opts())
+            fail("expected error due to malformed JSON")
+        } catch (e: AuctionClient.AuctionException) {
+            assertEquals("error", e.reason)
+            assertEquals(1, server.requestCount) // Malformed JSON is not retried
+        }
+    }
+
+    @Test
+    fun emptyBody_mapsToError() {
+        val baseUrl = server.url("/").toString().trimEnd('/')
+        val client = AuctionClient(baseUrl, apiKey = "key")
+        server.enqueue(MockResponse().setResponseCode(200).setBody(""))
+        try {
+            client.requestInterstitial(opts())
+            fail("expected error due to empty body")
+        } catch (e: AuctionClient.AuctionException) {
+            assertEquals("error", e.reason)
+            assertEquals(1, server.requestCount)
+        }
+    }
+
+    @Test
+    fun timeout_mapsToTimeoutError() {
+        val baseUrl = server.url("/").toString().trimEnd('/')
+        val client = AuctionClient(baseUrl, apiKey = "key")
+        // Delay response beyond timeout
+        server.enqueue(MockResponse().setBodyDelay(500, TimeUnit.MILLISECONDS).setBody("{}"))
+        try {
+            client.requestInterstitial(opts(timeoutMs = 100))
+            fail("expected timeout")
+        } catch (e: AuctionClient.AuctionException) {
+            assertEquals("timeout", e.reason)
+        }
+    }
+
+    @Test
+    fun status204_noFill_mapsCorrectly() {
+        val baseUrl = server.url("/").toString().trimEnd('/')
+        val client = AuctionClient(baseUrl, apiKey = "key")
+        server.enqueue(MockResponse().setResponseCode(204))
+        try {
+            client.requestInterstitial(opts())
+            fail("expected no_fill")
+        } catch (e: AuctionClient.AuctionException) {
+            assertEquals("no_fill", e.reason)
+            assertEquals(1, server.requestCount)
+        }
+    }
+
+    @Test
+    fun successResponse_parsesCorrectly() {
+        val baseUrl = server.url("/").toString().trimEnd('/')
+        val client = AuctionClient(baseUrl, apiKey = "key")
+        server.enqueue(MockResponse().setResponseCode(200).setBody("""
+            {
+                "auction_id": "auction-123",
+                "status": "success",
+                "adapter": "admob",
+                "ecpm": 2.5,
+                "ad_markup": "<html><body>Ad</body></html>",
+                "creative_id": "creative-456"
+            }
+        """.trimIndent()))
+        
+        val result = client.requestInterstitial(opts())
+        assertEquals("auction-123", result.auctionId)
+        assertEquals("success", result.status)
+        assertEquals("admob", result.adapter)
+        assertEquals(2.5, result.ecpm, 0.001)
+        assertEquals("<html><body>Ad</body></html>", result.adMarkup)
+        assertEquals("creative-456", result.creativeId)
+        assertEquals(1, server.requestCount)
+    }
 }

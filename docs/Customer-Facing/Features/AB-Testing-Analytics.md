@@ -770,10 +770,10 @@ Day 15+:   100% rollout (if winner)
 **Keep test log:**
 ```
 Test: Header Bidding vs Waterfall
-Date: Oct 1 - Oct 14, 2025
+Date: Oct 1 - 2025-10-14
 Traffic: 50% / 50%
 Result: +13.4% revenue (header bidding wins)
-Rollout: Oct 15, 2025 (100% traffic)
+Rollout: 2025-10-15 (100% traffic)
 Impact: +$58K annual revenue
 Learnings: Header bidding superior in all metrics
 ```

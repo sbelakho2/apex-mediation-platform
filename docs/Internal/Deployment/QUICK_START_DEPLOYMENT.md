@@ -322,6 +322,6 @@ kubectl get cronjobs -n production
 
 ---
 
-**Last Updated:** November 4, 2025  
+**Last Updated:** 2025-11-04  
 **Version:** 1.0  
 **Maintained by:** Platform Engineering Team

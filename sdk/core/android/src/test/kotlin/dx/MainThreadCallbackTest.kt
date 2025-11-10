@@ -77,4 +77,92 @@ class MainThreadCallbackTest {
         assertTrue("onShown must be invoked on main thread", shownOnMain)
         assertTrue("onReward must be invoked on main thread", rewardOnMain)
     }
+
+    @Test
+    fun interstitial_onError_isDispatchedOnMainThread() {
+        val ctrl = InterstitialController() // default main dispatcher
+        var errorOnMain = false
+        var errorCode: AdError? = null
+        val cb = InterstitialController.Callbacks(
+            onLoaded = { throw AssertionError("onLoaded should not be called") },
+            onError = { err: AdError, msg: String ->
+                errorOnMain = (Looper.myLooper() == Looper.getMainLooper())
+                errorCode = err
+            }
+        )
+        // Load with a loader that throws
+        val started = ctrl.load(CoroutineScope(Dispatchers.IO), loader = { throw RuntimeException("test failure") }, cb = cb)
+        assertTrue(started)
+        // Execute queued main-thread tasks
+        Shadows.shadowOf(Looper.getMainLooper()).idle()
+        assertTrue("onError must be invoked on main thread", errorOnMain)
+        assertNotNull("Error code must be set", errorCode)
+    }
+
+    @Test
+    fun rewarded_onError_isDispatchedOnMainThread() {
+        val ctrl = RewardedController() // default main dispatcher
+        var errorOnMain = false
+        var errorCode: AdError? = null
+        val cb = RewardedController.Callbacks(
+            onLoaded = { throw AssertionError("onLoaded should not be called") },
+            onError = { err: AdError, msg: String ->
+                errorOnMain = (Looper.myLooper() == Looper.getMainLooper())
+                errorCode = err
+            },
+            onShown = { },
+            onReward = { },
+            onClosed = { }
+        )
+        // Load with a failing loader
+        val started = ctrl.load(CoroutineScope(Dispatchers.IO), loader = { throw IllegalStateException("test error") }, cb = cb)
+        assertTrue(started)
+        // Execute queued main-thread tasks
+        Shadows.shadowOf(Looper.getMainLooper()).idle()
+        assertTrue("onError must be invoked on main thread", errorOnMain)
+        assertNotNull("Error code must be set", errorCode)
+    }
+
+    @Test
+    fun interstitial_onClosed_firesOnMainThread() {
+        val ctrl = InterstitialController() // default main dispatcher
+        var closedOnMain = false
+        val cb = InterstitialController.Callbacks(
+            onLoaded = { /* no-op */ },
+            onError = { _, _ -> },
+            onShown = { },
+            onClosed = { closedOnMain = (Looper.myLooper() == Looper.getMainLooper()) }
+        )
+        // Load
+        val started = ctrl.load(CoroutineScope(Dispatchers.IO), loader = { fakeAd() }, cb = cb)
+        assertTrue(started)
+        // Let main-thread callbacks run for load
+        Shadows.shadowOf(Looper.getMainLooper()).idle()
+        // Show and close
+        val didShow = ctrl.showIfReady(cb)
+        assertTrue(didShow)
+        assertTrue("onClosed must be invoked on main thread", closedOnMain)
+    }
+
+    @Test
+    fun rewarded_onClosed_firesOnMainThread() {
+        val ctrl = RewardedController() // default main dispatcher
+        var closedOnMain = false
+        val cb = RewardedController.Callbacks(
+            onLoaded = { /* no-op */ },
+            onError = { _, _ -> },
+            onShown = { },
+            onReward = { },
+            onClosed = { closedOnMain = (Looper.myLooper() == Looper.getMainLooper()) }
+        )
+        // Load
+        val started = ctrl.load(CoroutineScope(Dispatchers.IO), loader = { fakeAd() }, cb = cb)
+        assertTrue(started)
+        // Let main-thread callbacks run for load
+        Shadows.shadowOf(Looper.getMainLooper()).idle()
+        // Show and close
+        val didShow = ctrl.showIfReady(cb)
+        assertTrue(didShow)
+        assertTrue("onClosed must be invoked on main thread", closedOnMain)
+    }
 }

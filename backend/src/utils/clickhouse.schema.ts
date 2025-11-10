@@ -33,7 +33,7 @@ CREATE TABLE IF NOT EXISTS impressions (
 ) ENGINE = MergeTree()
 PARTITION BY toYYYYMM(timestamp)
 ORDER BY (publisher_id, adapter_id, timestamp)
-TTL timestamp + INTERVAL 90 DAY  -- Keep 90 days of raw data
+TTL toDateTime(timestamp) + INTERVAL 90 DAY  -- Keep 90 days of raw data
 SETTINGS index_granularity = 8192;
 `;
 
@@ -61,7 +61,7 @@ CREATE TABLE IF NOT EXISTS bid_landscape (
 ) ENGINE = MergeTree()
 PARTITION BY toYYYYMM(timestamp)
 ORDER BY (publisher_id, timestamp, adapter_id)
-TTL timestamp + INTERVAL 180 DAY  -- Keep 180 days for analysis
+TTL toDateTime(timestamp) + INTERVAL 180 DAY  -- Keep 180 days for analysis
 SETTINGS index_granularity = 8192;
 `;
 
@@ -89,7 +89,7 @@ CREATE TABLE IF NOT EXISTS clicks (
 ) ENGINE = MergeTree()
 PARTITION BY toYYYYMM(timestamp)
 ORDER BY (publisher_id, adapter_id, timestamp)
-TTL timestamp + INTERVAL 90 DAY
+TTL toDateTime(timestamp) + INTERVAL 90 DAY
 SETTINGS index_granularity = 8192;
 `;
 
@@ -118,7 +118,7 @@ CREATE TABLE IF NOT EXISTS revenue_events (
 ) ENGINE = MergeTree()
 PARTITION BY toYYYYMM(timestamp)
 ORDER BY (publisher_id, adapter_id, timestamp)
-TTL timestamp + INTERVAL 365 DAY  -- Keep 1 year for financial records
+TTL toDateTime(timestamp) + INTERVAL 365 DAY  -- Keep 1 year for financial records
 SETTINGS index_granularity = 8192;
 `;
 
@@ -136,7 +136,7 @@ CREATE TABLE IF NOT EXISTS performance_metrics (
 ) ENGINE = MergeTree()
 PARTITION BY toYYYYMM(timestamp)
 ORDER BY (publisher_id, adapter_id, timestamp)
-TTL timestamp + INTERVAL 30 DAY
+TTL toDateTime(timestamp) + INTERVAL 30 DAY
 SETTINGS index_granularity = 8192;
 `;
 
@@ -179,14 +179,22 @@ GROUP BY date, publisher_id, app_id;
 `;
 
 // Indexes for common queries
-export const CREATE_INDEXES = `
+export const CREATE_INDEX_IMPRESSIONS_COUNTRY = `
 -- Skip index for filtering by country
-ALTER TABLE impressions ADD INDEX idx_country (country_code) TYPE set(100) GRANULARITY 4;
-ALTER TABLE revenue_events ADD INDEX idx_country (country_code) TYPE set(100) GRANULARITY 4;
+ALTER TABLE impressions ADD INDEX IF NOT EXISTS idx_country (country_code) TYPE set(100) GRANULARITY 4;
+`;
 
+export const CREATE_INDEX_REVENUE_COUNTRY = `
+ALTER TABLE revenue_events ADD INDEX IF NOT EXISTS idx_country (country_code) TYPE set(100) GRANULARITY 4;
+`;
+
+export const CREATE_INDEX_IMPRESSIONS_ADAPTER = `
 -- Skip index for adapter filtering
-ALTER TABLE impressions ADD INDEX idx_adapter (adapter_id) TYPE bloom_filter GRANULARITY 4;
-ALTER TABLE revenue_events ADD INDEX idx_adapter (adapter_id) TYPE bloom_filter GRANULARITY 4;
+ALTER TABLE impressions ADD INDEX IF NOT EXISTS idx_adapter (adapter_id) TYPE bloom_filter GRANULARITY 4;
+`;
+
+export const CREATE_INDEX_REVENUE_ADAPTER = `
+ALTER TABLE revenue_events ADD INDEX IF NOT EXISTS idx_adapter (adapter_id) TYPE bloom_filter GRANULARITY 4;
 `;
 
 // Transparency: Auctions log tables (append-only)
@@ -217,7 +225,7 @@ CREATE TABLE IF NOT EXISTS auctions (
 ) ENGINE = MergeTree()
 PARTITION BY toYYYYMM(timestamp)
 ORDER BY (publisher_id, timestamp, placement_id)
-TTL timestamp + INTERVAL 180 DAY
+TTL toDateTime(timestamp) + INTERVAL 180 DAY
 SETTINGS index_granularity = 8192;
 `;
 
@@ -235,7 +243,7 @@ CREATE TABLE IF NOT EXISTS auction_candidates (
 ) ENGINE = MergeTree()
 PARTITION BY toYYYYMM(timestamp)
 ORDER BY (auction_id, source)
-TTL timestamp + INTERVAL 180 DAY
+TTL toDateTime(timestamp) + INTERVAL 180 DAY
 SETTINGS index_granularity = 8192;
 `;
 
@@ -262,5 +270,8 @@ export const allSchemas = [
   CREATE_AUCTIONS_TABLE,
   CREATE_AUCTION_CANDIDATES_TABLE,
   CREATE_TRANSPARENCY_SIGNER_KEYS_TABLE,
-  CREATE_INDEXES,
+  CREATE_INDEX_IMPRESSIONS_COUNTRY,
+  CREATE_INDEX_REVENUE_COUNTRY,
+  CREATE_INDEX_IMPRESSIONS_ADAPTER,
+  CREATE_INDEX_REVENUE_ADAPTER,
 ];

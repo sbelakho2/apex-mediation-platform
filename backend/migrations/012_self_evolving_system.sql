@@ -202,6 +202,8 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS trigger_auto_resolve_incidents ON system_metrics;
+
 CREATE TRIGGER trigger_auto_resolve_incidents
     AFTER INSERT ON system_metrics
     FOR EACH ROW

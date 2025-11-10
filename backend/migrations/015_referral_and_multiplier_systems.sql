@@ -233,14 +233,16 @@ INSERT INTO premium_features (name, description, price_cents_monthly, eligibilit
 ('Real-Time Analytics', 'Sub-second dashboard refresh with custom queries', 5000, '{"min_dashboard_views_per_month": 150}'),
 ('Advanced Targeting', 'Geo-targeting, demographic filters, custom audiences', 15000, '{"min_countries": 10}'),
 ('Priority Support', 'Direct Slack channel, <1h response time SLA', 10000, '{"min_monthly_impressions": 50000000}'),
-('White Label', 'Custom branding, dedicated subdomain, reseller commission', 50000, '{"min_apps": 3, "min_monthly_revenue": 500000}');
+('White Label', 'Custom branding, dedicated subdomain, reseller commission', 50000, '{"min_apps": 3, "min_monthly_revenue": 500000}')
+ON CONFLICT (name) DO NOTHING;
 
 -- Insert network effect milestones
 INSERT INTO network_effect_bonuses (milestone_type, threshold_value, bonus_ecpm_percent, is_active) VALUES
 ('volume_50M', 50000000, 10, false),
 ('volume_100M', 100000000, 15, false),
 ('volume_500M', 500000000, 20, false),
-('volume_1B', 1000000000, 25, false);
+('volume_1B', 1000000000, 25, false)
+ON CONFLICT (milestone_type) DO NOTHING;
 
 -- Create helper functions
 

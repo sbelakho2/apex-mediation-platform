@@ -76,12 +76,12 @@ CREATE TABLE IF NOT EXISTS transaction_log (
 );
 
 -- Indexes for fast querying
-CREATE INDEX idx_transaction_log_type ON transaction_log(transaction_type);
-CREATE INDEX idx_transaction_log_customer ON transaction_log(customer_id);
-CREATE INDEX idx_transaction_log_date ON transaction_log(transaction_date DESC);
-CREATE INDEX idx_transaction_log_period ON transaction_log(accounting_period, fiscal_year);
-CREATE INDEX idx_transaction_log_category ON transaction_log(category);
-CREATE INDEX idx_transaction_log_payment_processor ON transaction_log(payment_processor_id);
+CREATE INDEX IF NOT EXISTS idx_transaction_log_type ON transaction_log(transaction_type);
+CREATE INDEX IF NOT EXISTS idx_transaction_log_customer ON transaction_log(customer_id);
+CREATE INDEX IF NOT EXISTS idx_transaction_log_date ON transaction_log(transaction_date DESC);
+CREATE INDEX IF NOT EXISTS idx_transaction_log_period ON transaction_log(accounting_period, fiscal_year);
+CREATE INDEX IF NOT EXISTS idx_transaction_log_category ON transaction_log(category);
+CREATE INDEX IF NOT EXISTS idx_transaction_log_payment_processor ON transaction_log(payment_processor_id);
 
 -- Prevent updates to transaction_log (immutability)
 CREATE OR REPLACE FUNCTION prevent_transaction_log_updates()
@@ -96,6 +96,8 @@ BEGIN
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS enforce_transaction_log_immutability ON transaction_log;
 
 CREATE TRIGGER enforce_transaction_log_immutability
   BEFORE UPDATE OR DELETE ON transaction_log
@@ -344,10 +346,10 @@ $$ LANGUAGE plpgsql;
 -- INDEXES FOR REPORTING PERFORMANCE
 -- =====================================================================
 
-CREATE INDEX idx_transaction_log_fiscal_year ON transaction_log(fiscal_year);
-CREATE INDEX idx_transaction_log_revenue_type ON transaction_log(transaction_type, fiscal_year) 
+CREATE INDEX IF NOT EXISTS idx_transaction_log_fiscal_year ON transaction_log(fiscal_year);
+CREATE INDEX IF NOT EXISTS idx_transaction_log_revenue_type ON transaction_log(transaction_type, fiscal_year) 
   WHERE transaction_type IN ('revenue', 'subscription_charge', 'usage_charge');
-CREATE INDEX idx_transaction_log_expense_type ON transaction_log(transaction_type, category, fiscal_year)
+CREATE INDEX IF NOT EXISTS idx_transaction_log_expense_type ON transaction_log(transaction_type, category, fiscal_year)
   WHERE transaction_type IN ('expense', 'payment_sent');
 
 -- =====================================================================

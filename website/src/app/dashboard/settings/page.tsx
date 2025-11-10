@@ -226,7 +226,7 @@ function PaymentTab() {
               Next Payout
             </h2>
             <p className="text-white text-3xl font-bold mb-1">$8,934.18</p>
-            <p className="text-white text-sm">Scheduled for Friday, November 8, 2025</p>
+            <p className="text-white text-sm">Scheduled for Friday, 2025-11-08</p>
           </div>
           <BanknotesIcon className="w-12 h-12 text-sunshine-yellow" />
         </div>
@@ -310,7 +310,7 @@ function PaymentTab() {
               W-9 Form Submitted
             </div>
             <p className="text-sm text-gray-700">
-              Your tax information is up to date. Updated on October 15, 2025
+              Your tax information is up to date. Updated on 2025-10-15
             </p>
           </div>
           <button className="px-6 py-2 text-sm font-bold text-primary-blue border-2 border-primary-blue rounded hover:bg-primary-blue hover:text-white transition-colors">

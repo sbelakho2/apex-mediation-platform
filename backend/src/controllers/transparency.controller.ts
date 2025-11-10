@@ -4,20 +4,33 @@ import { AppError } from '../middleware/errorHandler';
 import * as crypto from 'crypto';
 import { canonicalizeForSignature } from '../services/transparency/canonicalizer';
 import { transparencyWriter } from '../services/transparencyWriter';
+import { validateISODate, validateInteger, validateEnum, validateBoolean } from '../utils/validation';
+
+// Constants
+const CANONICAL_SIZE_CAP = 32 * 1024; // 32KB
+
+// Allowed values for sort and order parameters
+const ALLOWED_SORT_FIELDS = ['timestamp', 'winner_bid_ecpm', 'aletheia_fee_bp'];
+const ALLOWED_ORDER_VALUES = ['asc', 'desc'];
 
 // Helpers
-const parseDate = (value?: string): string | null => {
-  if (!value) return null;
-  const d = new Date(value);
-  if (isNaN(d.getTime())) return null;
-  return d.toISOString().replace('Z', ''); // ClickHouse DateTime64 expects no trailing Z when using toDateTime
-};
-
 const getPagination = (req: Request) => {
-  const limit = Math.min(Math.max(parseInt((req.query.limit as string) || '50', 10), 1), 500);
-  const page = Math.max(parseInt((req.query.page as string) || '1', 10), 1);
+  const limit = validateInteger(req.query.limit as string, 'limit', 50, 1, 500);
+  const page = validateInteger(req.query.page as string, 'page', 1, 1, Number.MAX_SAFE_INTEGER);
   const offset = (page - 1) * limit;
   return { limit, offset, page };
+};
+
+/**
+ * Truncate canonical string if it exceeds size cap
+ */
+const truncateCanonical = (canonical: string): { canonical: string; truncated: boolean } => {
+  if (canonical.length <= CANONICAL_SIZE_CAP) {
+    return { canonical, truncated: false };
+  }
+  
+  const truncated = canonical.substring(0, CANONICAL_SIZE_CAP);
+  return { canonical: truncated, truncated: true };
 };
 
 const ensureTransparencyEnabled = () => {
@@ -43,11 +56,15 @@ export const getAuctions = async (req: Request, res: Response, next: NextFunctio
 
     const { limit, offset, page } = getPagination(req);
 
-    const from = parseDate(req.query.from as string);
-    const to = parseDate(req.query.to as string);
+    const from = validateISODate(req.query.from as string, 'from');
+    const to = validateISODate(req.query.to as string, 'to');
     const placementId = (req.query.placement_id as string) || undefined;
     const surface = (req.query.surface as string) || undefined;
     const geo = (req.query.geo as string) || undefined;
+    
+    // Validate sort and order if provided
+    const sort = validateEnum(req.query.sort as string, 'sort', ALLOWED_SORT_FIELDS);
+    const order = validateEnum(req.query.order as string, 'order', ALLOWED_ORDER_VALUES) || 'desc';
 
     // Build WHERE conditions
     const where: string[] = ['publisher_id = {publisher_id: String}'];
@@ -56,6 +73,10 @@ export const getAuctions = async (req: Request, res: Response, next: NextFunctio
     if (placementId) where.push('placement_id = {placement_id: String}');
     if (surface) where.push('surface_type = {surface: String}');
     if (geo) where.push('device_geo = {geo: String}');
+
+    // Determine sort field and order
+    const sortField = sort || 'timestamp';
+    const sortOrder = order.toUpperCase();
 
     const baseQuery = `
       SELECT 
@@ -82,7 +103,7 @@ export const getAuctions = async (req: Request, res: Response, next: NextFunctio
         integrity_signature
       FROM auctions
       WHERE ${where.join(' AND ')}
-      ORDER BY timestamp DESC
+      ORDER BY ${sortField} ${sortOrder}
       LIMIT {limit: UInt32} OFFSET {offset: UInt32}
     `;
 
@@ -175,6 +196,13 @@ export const getAuctionById = async (req: Request, res: Response, next: NextFunc
     }
 
     const auctionId = req.params.auction_id;
+    
+    // Validate includeCanonical flag
+    const includeCanonical = validateBoolean(
+      req.query.includeCanonical as string,
+      'includeCanonical',
+      false
+    );
 
     const rows = await executeQuery<any>(
       `SELECT 
@@ -223,7 +251,7 @@ export const getAuctionById = async (req: Request, res: Response, next: NextFunc
     );
 
     const r = rows[0];
-    const payload = {
+    const payload: any = {
       auction_id: r.auction_id,
       timestamp: r.timestamp,
       publisher_id: r.publisher_id,
@@ -263,6 +291,37 @@ export const getAuctionById = async (req: Request, res: Response, next: NextFunc
       sample_bps: Number(r.sample_bps || 0),
     };
 
+    // Include canonical string if requested
+    if (includeCanonical) {
+      // Build canonical payload for signing (same structure as writer)
+      const canonicalPayload = {
+        auction: {
+          auction_id: r.auction_id,
+          publisher_id: r.publisher_id,
+          timestamp: r.timestamp,
+          winner_source: r.winner_source,
+          winner_bid_ecpm: Number(r.winner_bid_ecpm || 0),
+          winner_currency: r.winner_currency,
+          winner_reason: r.winner_reason,
+          sample_bps: Number(r.sample_bps || 0),
+        },
+        candidates: candRows.map((c: any) => ({
+          source: c.source,
+          bid_ecpm: Number(c.bid_ecpm || 0),
+          status: c.status,
+        })),
+      };
+      
+      const canonical = canonicalizeForSignature(canonicalPayload);
+      const { canonical: truncatedCanonical, truncated } = truncateCanonical(canonical);
+      
+      payload.canonical = {
+        string: truncatedCanonical,
+        truncated,
+        size_bytes: canonical.length,
+      };
+    }
+
     res.json(payload);
   } catch (err) {
     next(err);
@@ -282,8 +341,8 @@ export const getAuctionSummary = async (req: Request, res: Response, next: NextF
       throw new AppError('Forbidden: cannot access other publishers', 403);
     }
 
-    const from = parseDate(req.query.from as string);
-    const to = parseDate(req.query.to as string);
+    const from = validateISODate(req.query.from as string, 'from');
+    const to = validateISODate(req.query.to as string, 'to');
 
     const where: string[] = ['publisher_id = {publisher_id: String}'];
     if (from) where.push('timestamp >= toDateTime({from: String})');
@@ -536,11 +595,16 @@ export const verifyAuction = async (req: Request, res: Response, next: NextFunct
       return res.json({ status: 'fail', reason: 'verification_threw', key_id: keyId, algo });
     }
 
+    // Check if canonical should be included and potentially truncated
+    const { canonical: returnCanonical, truncated } = truncateCanonical(canonical);
+    
     return res.json({
       status: verified ? 'pass' : 'fail',
       key_id: keyId,
       algo,
-      canonical,
+      canonical: returnCanonical,
+      canonical_truncated: truncated,
+      canonical_size_bytes: canonical.length,
       sample_bps: Number(aRows[0].sample_bps || 0),
     });
   } catch (err) {

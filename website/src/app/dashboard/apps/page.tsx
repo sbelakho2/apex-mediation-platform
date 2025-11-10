@@ -290,7 +290,7 @@ export default function AppsPage() {
               Latest SDK Version: 4.2.1
             </h2>
             <p className="text-white text-body mb-4">
-              Released November 1, 2025 • Includes performance improvements and bug fixes
+              Released 2025-11-01 • Includes performance improvements and bug fixes
             </p>
             <ul className="space-y-2 text-sm text-white">
               <li className="flex items-start gap-2">

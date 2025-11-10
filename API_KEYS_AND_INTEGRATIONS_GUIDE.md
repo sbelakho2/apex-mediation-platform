@@ -782,7 +782,7 @@ grep NEXT_PUBLIC website/.env.local
 
 ---
 
-**Last Updated:** November 4, 2025
+**Last Updated:** 2025-11-04
 **Maintained by:** ApexMediation Team
 
 

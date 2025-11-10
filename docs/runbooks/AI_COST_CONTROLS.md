@@ -1,6 +1,6 @@
 # AI Automation Cost Control Runbook
 
-**Last Updated:** November 4, 2025  
+**Last Updated:** 2025-11-04  
 **Owner:** Platform Engineering & Finance  
 **Purpose:** Codify spend limits and alert configuration for OpenAI usage in production
 

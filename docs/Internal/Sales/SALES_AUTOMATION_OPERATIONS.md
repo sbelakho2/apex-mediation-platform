@@ -1,7 +1,7 @@
 # Sales Automation - Operations Guide
 
 **ApexMediation Self-Service Sales Automation**  
-**Last Updated:** November 3, 2025  
+**Last Updated:** 2025-11-03  
 **Status:** Production Ready
 
 ---
@@ -726,6 +726,6 @@ Before going live:
 ---
 
 **Document Version:** 1.0  
-**Last Updated:** November 3, 2025  
+**Last Updated:** 2025-11-03  
 **Maintained By:** Sabel Akhoua  
 **Next Review:** After first 100 customers

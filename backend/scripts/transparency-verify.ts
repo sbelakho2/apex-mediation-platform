@@ -48,7 +48,8 @@ interface KeysResponse {
 
 function usageAndExit(msg?: string): never {
   if (msg) console.error(`[error] ${msg}`);
-  console.error(`\nUsage:\n  npm --prefix backend run verify:transparency -- --auction <uuid> --publisher <uuid> [--api <url>] [--key <base64>] [--verbose]\n`);
+  console.error(`\nUsage:\n  npm --prefix backend run verify:transparency -- --auction <uuid> --publisher <uuid> [--api <url>] [--key <base64>] [--verbose] [--json]\n`);
+  console.error(`\nExit codes:\n  0 = verification passed\n  1 = verification failed\n  2 = usage error or invalid arguments\n`);
   process.exit(2);
 }
 
@@ -78,6 +79,7 @@ async function main() {
   const api = (args['api'] as string) || process.env.API_URL || 'http://localhost:4000/api/v1';
   const overrideKey = (args['key'] as string) || '';
   const verbose = Boolean(args['verbose']);
+  const jsonMode = Boolean(args['json']);
 
   if (!auction) return usageAndExit('Missing --auction');
   if (!publisher) return usageAndExit('Missing --publisher');
@@ -98,12 +100,22 @@ async function main() {
   const verifyResp = await axios.get(`${api}/transparency/auctions/${auction}/verify`, { headers });
   const verify = verifyResp.data as VerifyResponse;
 
-  if (verbose) {
+  if (verbose && !jsonMode) {
     console.log('[debug] server verify:', JSON.stringify(verify, null, 2));
   }
 
   if (verify.status === 'not_applicable') {
-    console.log(`NOT_APPLICABLE: ${verify.reason || 'no reason provided'}`);
+    if (jsonMode) {
+      console.log(JSON.stringify({
+        status: 'NOT_APPLICABLE',
+        auction_id: auction,
+        publisher_id: publisher,
+        reason: verify.reason || 'no reason provided',
+        server_verification: { status: verify.status, reason: verify.reason || null },
+      }, null, 2));
+    } else {
+      console.log(`NOT_APPLICABLE: ${verify.reason || 'no reason provided'}`);
+    }
     process.exit(0);
   }
 
@@ -121,7 +133,30 @@ async function main() {
   }
 
   if (!keyBase64 || !verify.key_id) {
-    console.log(verify.status.toUpperCase());
+    const finalStatus = verify.status.toUpperCase();
+    if (jsonMode) {
+      console.log(JSON.stringify({
+        status: finalStatus,
+        auction_id: auction,
+        publisher_id: publisher,
+        timestamp: detail.timestamp,
+        key_id: verify.key_id || null,
+        algo: verify.algo || null,
+        canonical: verify.canonical || null,
+        canonical_length: verify.canonical?.length || 0,
+        sample_bps: verify.sample_bps || 0,
+        server_verification: {
+          status: verify.status,
+          reason: verify.reason || null,
+        },
+        local_verification: {
+          status: 'skipped',
+          reason: !keyBase64 ? 'no key available' : 'no key_id from server',
+        },
+      }, null, 2));
+    } else {
+      console.log(finalStatus);
+    }
     process.exit(verify.status === 'pass' ? 0 : 1);
   }
 
@@ -159,13 +194,33 @@ async function main() {
         pubKey = crypto.createPublicKey(pem);
       }
     }
-  } catch (e) {
-    console.error('[error] Failed to parse public key provided');
-    console.log(verify.status.toUpperCase());
+  } catch (e: any) {
+    const errorMsg = e?.message || String(e);
+    if (jsonMode) {
+      console.log(JSON.stringify({
+        status: 'FAIL',
+        auction_id: auction,
+        publisher_id: publisher,
+        timestamp: detail.timestamp,
+        error: `Failed to parse public key: ${errorMsg}`,
+        server_verification: {
+          status: verify.status,
+          reason: verify.reason || null,
+        },
+        local_verification: {
+          status: 'error',
+          error: errorMsg,
+        },
+      }, null, 2));
+    } else {
+      console.error('[error] Failed to parse public key provided');
+      console.log(verify.status.toUpperCase());
+    }
     process.exit(verify.status === 'pass' ? 0 : 1);
   }
 
   let localPass = false;
+  let localError: string | undefined;
   try {
     localPass = crypto.verify(
       null,
@@ -173,16 +228,40 @@ async function main() {
       pubKey!,
       Buffer.from((detail.integrity?.signature as string) || '', 'base64')
     );
-  } catch (e) {
-    // ignore
-  }
-
-  if (verbose) {
-    console.log(`[debug] local verification: ${localPass ? 'PASS' : 'FAIL'}`);
+  } catch (e: any) {
+    localError = e?.message || String(e);
   }
 
   const final = verify.status === 'pass' && localPass ? 'PASS' : verify.status.toUpperCase();
-  console.log(final);
+
+  if (jsonMode) {
+    const output = {
+      status: final,
+      auction_id: auction,
+      publisher_id: publisher,
+      timestamp: detail.timestamp,
+      key_id: verify.key_id || detail.integrity?.key_id || null,
+      algo: verify.algo || detail.integrity?.algo || null,
+      canonical: verify.canonical || null,
+      canonical_length: verify.canonical?.length || 0,
+      sample_bps: verify.sample_bps || 0,
+      server_verification: {
+        status: verify.status,
+        reason: verify.reason || null,
+      },
+      local_verification: {
+        status: localPass ? 'pass' : 'fail',
+        error: localError || null,
+      },
+    };
+    console.log(JSON.stringify(output, null, 2));
+  } else {
+    if (verbose) {
+      console.log(`[debug] local verification: ${localPass ? 'PASS' : 'FAIL'}`);
+    }
+    console.log(final);
+  }
+
   process.exit(final === 'PASS' ? 0 : 1);
 }
 

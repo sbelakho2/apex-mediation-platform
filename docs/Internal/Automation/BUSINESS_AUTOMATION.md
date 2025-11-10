@@ -1084,6 +1084,6 @@ jobs:
 ---
 
 **Document Version**: 1.0  
-**Last Updated**: November 3, 2025  
+**Last Updated**: 2025-11-03  
 **Owner**: Bel Consulting OÜ  
 **Review Schedule**: Quarterly

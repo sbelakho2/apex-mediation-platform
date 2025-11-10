@@ -53,7 +53,7 @@ November 2025 Payment Schedule
 │ Week 5  │ Nov 25-Dec 1 │ Dec 6      │ Pending    │
 └─────────┴──────────────┴────────────┴────────────┘
 
-Next Payment: Nov 15, 2025 ($1,156.78)
+Next Payment: 2025-11-15 ($1,156.78)
 ```
 
 ### Holiday Schedule
@@ -166,9 +166,9 @@ Recent Invoices
 INVOICE
 
 Invoice #:      INV-2025-11-01
-Issue Date:     November 8, 2025
-Due Date:       November 8, 2025 (Immediate)
-Period:         October 28 - November 3, 2025
+Issue Date:     2025-11-08
+Due Date:       2025-11-08 (Immediate)
+Period:         October 28 - 2025-11-03
 
 Bill To:
 [Your Company Name]
@@ -216,7 +216,7 @@ TOTAL DUE:                             $1,234.56
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 Payment Status: PAID ✅
-Payment Date: November 8, 2025
+Payment Date: 2025-11-08
 Payment Method: Bank Transfer
 Transaction ID: TXN-ABC123DEF456
 
@@ -455,7 +455,7 @@ No waiting for $100 threshold!
 **Example:**
 ```
 Revenue:           $1,234.56 USD
-Exchange Rate:     1 USD = 0.92 EUR (Nov 8, 2025)
+Exchange Rate:     1 USD = 0.92 EUR (2025-11-08)
 Payout:            €1,135.79 EUR
 ```
 
@@ -471,10 +471,10 @@ Recent Exchange Rates
 ┌─────────────┬──────────┬──────────────┐
 │ Date        │ USD/EUR  │ Source       │
 ├─────────────┼──────────┼──────────────┤
-│ Nov 8, 2025 │ 0.9200   │ ECB          │
-│ Nov 7, 2025 │ 0.9198   │ ECB          │
-│ Nov 6, 2025 │ 0.9205   │ ECB          │
-│ Nov 5, 2025 │ 0.9203   │ ECB          │
+│ 2025-11-08 │ 0.9200   │ ECB          │
+│ 2025-11-07 │ 0.9198   │ ECB          │
+│ 2025-11-06 │ 0.9205   │ ECB          │
+│ 2025-11-05 │ 0.9203   │ ECB          │
 └─────────────┴──────────┴──────────────┘
 ```
 

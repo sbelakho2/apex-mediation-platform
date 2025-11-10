@@ -281,5 +281,5 @@ How we compare to competitors:
 ---
 
 **Last Updated**: January 2025  
-**Pricing effective**: January 1, 2025  
+**Pricing effective**: 2025-01-01  
 **Subject to change**: We'll notify you 30 days before any price changes

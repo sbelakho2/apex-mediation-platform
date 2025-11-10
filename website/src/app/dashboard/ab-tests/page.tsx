@@ -40,7 +40,7 @@ export default function ABTestsPage() {
       id: '1',
       name: 'Banner Position Test',
       status: 'running',
-      startDate: 'Nov 1, 2025',
+      startDate: '2025-11-01',
       variantA: {
         name: 'Top Banner',
         impressions: 45678,
@@ -60,7 +60,7 @@ export default function ABTestsPage() {
       id: '2',
       name: 'Rewarded Video Timing',
       status: 'running',
-      startDate: 'Oct 28, 2025',
+      startDate: '2025-10-28',
       variantA: {
         name: 'Level Start',
         impressions: 23456,
@@ -80,8 +80,8 @@ export default function ABTestsPage() {
       id: '3',
       name: 'Interstitial Frequency',
       status: 'completed',
-      startDate: 'Oct 15, 2025',
-      endDate: 'Oct 30, 2025',
+      startDate: '2025-10-15',
+      endDate: '2025-10-30',
       variantA: {
         name: 'Every 3 levels',
         impressions: 89234,
@@ -101,7 +101,7 @@ export default function ABTestsPage() {
       id: '4',
       name: 'Ad Network Priority',
       status: 'paused',
-      startDate: 'Oct 20, 2025',
+      startDate: '2025-10-20',
       variantA: {
         name: 'AdMob First',
         impressions: 12345,

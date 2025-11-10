@@ -184,7 +184,7 @@ export default function RevenuePage() {
             </h2>
             <p className="text-white text-body mb-4">
               Your next payout of <span className="font-bold text-sunshine-yellow">$8,934.18</span> is
-              scheduled for <span className="font-bold">Friday, November 8, 2025</span>
+              scheduled for <span className="font-bold">Friday, 2025-11-08</span>
             </p>
             <div className="space-y-2 text-sm text-white">
               <div className="flex items-center gap-2">

@@ -2,7 +2,7 @@
 
 **Project:** RivalApexMediation  
 **Company:** Bel Consulting OÜ (Estonia)  
-**Last Updated:** November 3, 2025
+**Last Updated:** 2025-11-03
 
 ---
 
@@ -372,7 +372,7 @@ await vatService.generateQuarterlyReport(2025, 4);
 - Generate first invoice
 - Process first payment
 - Verify ledger entries balance
-- Generate Q4 2025 VAT report (due Jan 20, 2026)
+- Generate Q4 2025 VAT report (due 2026-01-20)
 - Submit manually to e-MTA
 
 ---
@@ -603,5 +603,5 @@ The automated accounting system is **65% complete** and ready for first producti
 
 ---
 
-**Last Updated:** November 3, 2025  
+**Last Updated:** 2025-11-03  
 **Next Review:** After Q4 2025 VAT submission (January 2026)
