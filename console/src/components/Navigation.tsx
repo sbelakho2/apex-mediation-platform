@@ -14,10 +14,11 @@ import {
   LogOut,
   Menu,
   X,
+  ShieldCheck,
 } from 'lucide-react'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 
-const navigation = [
+const baseNavigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { name: 'Placements', href: '/placements', icon: Layout },
   { name: 'Adapters', href: '/adapters', icon: Layers },
@@ -31,6 +32,16 @@ export default function Navigation({ children }: { children: React.ReactNode }) 
   const pathname = usePathname()
   const { data: session } = useSession()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+
+  const showTransparency = process.env.NEXT_PUBLIC_TRANSPARENCY_ENABLED === 'true'
+
+  const navigation = useMemo(() => {
+    const items = [...baseNavigation]
+    if (showTransparency) {
+      items.splice(4, 0, { name: 'Transparency', href: '/transparency/auctions', icon: ShieldCheck })
+    }
+    return items
+  }, [showTransparency])
 
   // Don't show navigation on login page
   if (!pathname || pathname === '/login' || pathname === '/') return <>{children}</>
@@ -92,7 +103,7 @@ export default function Navigation({ children }: { children: React.ReactNode }) 
           <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
             {navigation?.map((item) => {
               const isActive = pathname === item.href || pathname?.startsWith(`${item.href}/`)
-              const Icon = item.icon
+              const Icon = item.icon as any
               return (
                 <Link
                   key={item.name}

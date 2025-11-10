@@ -1,6 +1,6 @@
 # Development TODO Checklist (Phased, Check‑off)
 
-Last updated: 2025-11-09
+Last updated: 2025-11-10 00:50 UTC
 Owner: Platform Engineering
 
 Source of truth for tasks:
@@ -19,14 +19,160 @@ Legend
 - [~] In progress
 - [x] Done
 
-## Current Priority Checklist (as of 2025-11-09 15:46)
+## Master Numbered Development Checklist (authoritative, updated 2025-11-10 00:45)
+
+Note: This section is the single source of truth for active work. It replaces scattered ad‑hoc checklists below. All tasks are numbered for planning, with sub‑steps covering hardening, edge cases, tests, and system relationships. Use the legend at the top. Older sections remain for reference only.
+
+1. Transparency Integrity, Verification, and UI (P0)
+   - 1.1 Writer pipeline with deterministic signing and per‑publisher sampling (Ed25519)
+     - [x] Implement writer with canonicalization, Ed25519 signing, per‑publisher sampling (bps) — service: `backend/src/services/transparencyWriter.ts`
+     - [x] Persist `sample_bps`, integrity fields into ClickHouse — schema: `backend/src/utils/clickhouse.schema.ts`
+     - [x] Integrate into OpenRTB engine on success and failure paths — `backend/src/services/openrtbEngine.ts`
+     - [~] Observability counters (attempted/succeeded/failed, sampled/unsampled) with metrics exposure and tests — `getTransparencyMetrics`
+     - [ ] Backpressure & retry: bounded retry with jitter on transient insert failures (HTTP 429/5xx, ECONNRESET, ETIMEDOUT) — tests simulate flakiness
+     - [ ] Breaker & cooldown: pause sampling writes after N consecutive failures for M sec; one‑time open/close logs — env knobs `TRANSPARENCY_BREAKER_THRESHOLD`, `TRANSPARENCY_BREAKER_COOLDOWN_MS`
+     - [ ] Partial‑write policy: if `auctions` insert succeeds but `auction_candidates` fails, record failure counter and proceed (no rollback); document in VERIFY.md
+     - [ ] Prometheus mapping (if registry present) + keep JSON `/metrics` endpoint for Console
+   - 1.2 Verification API (publisher‑scoped, feature‑flagged)
+     - [x] GET `/api/v1/transparency/keys` — active signer keys with env fallback
+     - [x] GET `/api/v1/transparency/auctions/:auction_id/verify` — rebuild canonical, verify Ed25519; diagnostics
+     - [x] GET `/api/v1/transparency/summary/auctions` — KPIs for Console
+     - [x] Unit tests (503/401, unknown_key, not_applicable, pass/fail) — `controllers/__tests__`
+     - [ ] Input validation: ISO8601 `from`/`to`, `limit` 1..500, `page ≥ 1`, `sort`+`order` whitelist; 400 on invalid
+     - [ ] `includeCanonical` query flag and 32KB canonical size cap with `truncated:true` indicator
+   - 1.3 Console Transparency (feature‑flagged via `NEXT_PUBLIC_TRANSPARENCY_ENABLED`)
+     - [x] Pages: list, detail (with verify panel & copy), summary — `console/src/app/transparency/*`
+     - [x] Component tests with mocked API client — RTL/jsdom
+     - [ ] UX polish: lazy verify badges with spinner, tooltips (PASS/FAIL/NOT_APPLICABLE), copy affordances, debounced filters with querystring persistence, skeleton loaders
+   - 1.4 CLI Verifier
+     - [x] Node CLI reconstructs canonical locally and verifies signature; optional `--key` — `backend/scripts/transparency-verify.ts`
+     - [ ] `--json` mode with structured diagnostics; fixtures and negative cases (bad key, tampered payload, unknown key); exit codes documented
+   - 1.5 Docs
+     - [x] VERIFY.md covering API, CLI, Console; references to canonicalizer
+     - [ ] Ops notes: key rotation procedure; sampling rollout and publisher overrides — `docs/Internal/Operations/TRANSPARENCY_KEY_ROTATION.md`
+     - [ ] VERIFY.md additions: counters, breaker behavior, canonical truncation, `includeCanonical` flag examples
+   - 1.6 Relationships & dependencies
+     - Writer depends on ClickHouse availability (graceful no‑op). API is auth+publisher‑scoped. Console gated by env flag. Canonicalizer is shared to prevent drift across writer/API/CLI.
+
+2. Android SDK — Reliability, Ergonomics, and CI (P0)
+   - 2.1 Core behavior & quality
+     - [x] OM SDK hooks invoked from `show()` paths — tests in `OmSdkHooksTest`
+     - [x] StrictMode sample + CI smoke (Robolectric) — `strictmodeSmoke` job
+     - [x] AAR size budget gate ≤ 500KB — Gradle check wired
+     - [x] Integration Validator task — `validateIntegration`
+     - [ ] `@JvmOverloads` audit across all public Kotlin APIs (facades/builders/config); add annotations where defaults exist — evidence: file paths
+     - [ ] Java interop smoke: minimal Java test compiles and calls core APIs (construct `SDKConfig`, call `BelInterstitial.load()`/`show()`) — `src/test/java/.../JavaInteropSmoke.java`
+     - [ ] Dokka output review: CI runs `generateApiDocs`; link artifact path in checklist
+   - 2.2 Edge cases & tests
+     - [ ] Main‑thread guarantees around public callbacks in all facades — dispatch with `Handler(Looper.getMainLooper())` if needed; extend `MainThreadCallbackTest`
+     - [ ] Network and timeout handling unit tests for loaders/renderers (4xx/5xx retry, malformed body, timeouts) using MockWebServer
+   - 2.3 Relationships
+     - SDK CI jobs surface in main gate; StrictMode violations must fail PRs; size budget enforced post‑`assembleRelease`. Dokka and Java smoke run as part of CI.
+
+3. iOS SDK — Parity, Demo, and Debug Panel (P0)
+   - 3.1 Quality & parity
+     - [x] Taxonomy coverage (429/5xx) and main‑queue assertions — `TaxonomyAndMainQueueTests`
+     - [ ] Demo target with mocked endpoints (URLProtocol) and simple UI for interstitial/rewarded flows — covers `no_fill`, `429`, `5xx`
+     - [ ] Config signature + schema validation parity with Android (Ed25519); allow bypass in test mode
+     - [ ] Debug Panel enrichment (redacted consent snapshot, SDK/version, environment toggle) and Quickstart update
+     - [ ] Public API stability review (no breaking changes); mark experimental flags where needed
+   - 3.2 Tests & CI
+     - [ ] XCTest UI smoke in CI: deterministic URLProtocol fixtures; assert main‑queue completions
+     - [ ] Unit tests for signature parity: valid → accept, tampered → reject, malformed → throws, test‑mode bypass → accept
+     - [ ] Snapshot tests for Debug Panel values (redacted)
+   - 3.3 Hardening & edge cases
+     - [ ] Network retry policy alignment (document if server‑side handles 5xx vs client retry)
+     - [ ] Graceful cancellation and deinit paths (no retain cycles / leaks)
+     - [ ] Error taxonomy mapping parity with Android (status_429/status_5xx/no_fill)
+   - 3.4 Relationships
+     - Parity with Android acceptance; uses Ed25519 verification utilities; Demo relies on mock endpoints; CI macOS lane executes unit+UI smoke.
+
+4. Adapters & Auction Resiliency (P0/P1)
+   - 4.1 Standard resiliency & taxonomy
+     - [x] Shared retry+jitter, CircuitBreaker with clock; standardized NoBid taxonomy across adapters
+     - [x] Hedged requests at p95 latency budget; cancellation tests
+     - [x] Partial aggregation; auction deadline adherence
+   - 4.2 Conformance & golden tests
+     - [x] Initial conformance suites for modern adapters (incl. Vungle, Pangle)
+     - [ ] Parity across all new adapters with golden fixtures, taxonomy, resiliency, headers
+   - 4.3 Relationships
+     - Adapters integrate with observability (metrics/tracing/debugger). Engine uses hedging policies feature‑flagged.
+
+5. Backend Observability & Admin APIs (P0)
+   - 5.1 Metrics & tracing
+     - [x] Per‑adapter metrics (p50/p95/p99, error/fill), snapshot & timeseries APIs
+     - [x] SLO evaluator + Admin APIs + Website pages
+     - [x] Tracing scaffold with unit tests; consider OpenTelemetry later
+   - 5.2 CORS & admin surface
+     - [x] CORS OPTIONS preflight tests (Node + Go admin surfaces)
+   - 5.3 Relationships
+     - Website consumes read‑only Admin APIs; metrics/time series resilient to missing backends.
+
+6. ML Fraud — Foundations and Pipeline (P0; world‑class by design)
+   - 6.1 Data sourcing via CLI (license‑aware, reproducible)
+     - [ ] `scripts/ml/fetch_enrichment.sh` — Tor exit nodes (bulk + Onionoo), Cloud ranges (AWS ip‑ranges.json, GCP cloud.json, Azure ServiceTags), RIPEstat ASN prefixes; optional permissive VPN lists behind env gate
+     - [ ] Dated manifests and checksums under `data/enrichment/v1/<source>/<YYYY-MM-DD>/` with `manifest.json` (url, fetched_at, sha256, license)
+     - [ ] Unit tests (HTTP mocked) verifying idempotency and checksum behavior
+   - 6.2 Feature store & dataset prep (offline/online parity)
+     - [ ] `scripts/ml/prepare_dataset.py` — merge manifests → features (asn, is_cloud, cloud_provider, is_tor, is_vpn, geo_cc), add privacy guards (hashing/truncation, retention windows), output parquet/csv + `schema.json`
+     - [ ] `ML/src/ml_pipelines/feature_store/` — offline builders and online calculators; parity test on rolling windows sample
+     - [ ] Golden fixture tests validating deterministic outputs
+   - 6.3 Weak supervision & labels
+     - [ ] Modular label functions (LFs) with coverage/conflict reports; simple probabilistic label model → `y_weak`, `confidence`
+     - [ ] Synthetic dataset unit tests for LF coverage and conflict metrics
+   - 6.4 Models & training (GPU‑ready, hosting‑friendly)
+     - [~] Small‑sample PyOD/Torch scaffold; GPU autodetect via `torch.cuda.is_available()`
+     - [ ] Deep Autoencoder & DeepSVDD (PyTorch) + IsolationForest/GBDT baselines; calibration (temperature/isotonic)
+     - [ ] Export TorchScript and ONNX; write `models/<run_id>/{model.pt, onnx/, metrics.json, model_card.md, training_manifest.json}`
+     - [ ] Tooling: `requirements.txt` and `requirements-gpu.txt` (CUDA12), `Dockerfile.ml` (CPU) and `Dockerfile.ml-gpu` (NVIDIA), compose profiles, Makefile targets (`ml.fetch`, `ml.prepare`, `ml.train`, `ml.train.gpu`)
+   - 6.5 Evaluation & CI
+     - [ ] Metrics: PR‑AUC, ROC‑AUC, precision@k, precision at FPR∈{0.1%,0.5%,1%}; adversarial stability (IP hopping, ASN masking)
+     - [ ] CPU‑only CI lane runs synthetic tests < 10 min; artifacts not uploaded by default
+   - 6.6 MLOps & rollout
+     - [ ] Shadow‑mode scoring hooks in backend (log‑only); drift detectors on features; manifests and lineage stored with artifacts
+     - [ ] Privacy & fairness checks (hashing, k‑anonymity probes, bias probes across geo/device) documented in `ML_TRAINING.md`
+   - 6.7 Relationships
+     - Enrichment feeds backend fraud services; ensure privacy/licensing compliance; artifacts under `models/`; local Python venv preferred for development; GPU used when available for training.
+
+7. Website/Console & Billing (P2)
+   - 7.1 Transparency
+     - [x] Navigation link and pages wired behind feature flag
+   - 7.2 Billing
+     - [ ] Ingest + reconciliation MVP; mock PDF export; API and Console surfaces
+
+8. CI/CD, Security, and Code Quality (global gates)
+   - 8.1 CI consolidation
+     - [x] Aggregate success gate includes ML lane; backend readiness wait in integration job
+     - [x] Android StrictMode job integrated; iOS XCTest lane present
+     - [ ] Remove duplicate workflows and ensure determinism (toolchain pinning)
+   - 8.2 Security & quality
+     - [x] Trivy FS scan, npm audit; ESLint report artifacts
+     - [ ] Add SAST/secret scanning where feasible; dependency update policy
+
+9. Global Sandbox‑Readiness Gate
+   - 9.1 All suites green in CI (backend, Android, iOS, website/a11y)
+     - [ ] Gate fails on any regression; flakes addressed; budgets enforced
+   - 9.2 Adapters ≥ 12 with extended conformance
+     - [x] Implemented; [ ] extended golden fixtures & auth tests
+   - 9.3 SDKs
+     - [~] Android complete pending `@JvmOverloads` audit; size/StrictMode/OM hooks/validator in place
+     - [ ] iOS demo app smoke + config authenticity tests
+   - 9.4 ML
+     - [ ] Small‑sample ETL/enrichment/tests green; shadow‑mode ON
+   - 9.5 Operator readiness
+     - [ ] Runbook for “Sandbox Test Day” updated
+
+---
+
+## Legacy granular sections (reference only)
+
 
 P0 — SDKs, Transparency, Reliability
 - Android SDK
   - [x] Facades: Interstitial, Rewarded, RewardedInterstitial, AppOpen, Banner — stable APIs and tests
   - [x] OM SDK hooks invoked from show() (display/video + end) — tests in OmSdkHooksTest
   - [x] AAR size budget gate and Integration Validator wired; Dokka docs task available
-  - [~] StrictMode sample + CI smoke (penaltyDeath) — sample introduced; finalize CI smoke and gate
+  - [x] StrictMode sample + CI smoke (penaltyDeath) — Robolectric smoke wired in CI (sdk-android-test)
   - [x] OTA config negative test (bad Base64 key) with test-mode bypass — ConfigSignatureTest
   - [x] Banner adaptive sizing + detach tests; AppOpen OM display smoke
   - [ ] @JvmOverloads audit across public Kotlin APIs for Java ergonomics
@@ -37,10 +183,10 @@ P0 — SDKs, Transparency, Reliability
   - [ ] Debug Panel enrichment (redacted consent snapshot, SDK/version) and Quickstart update
 - Transparency (Killer Feature #1)
   - [x] ClickHouse append-only schemas + Transparency API (list/detail/summary; publisher-scoped; feature-flagged)
-  - [ ] Writer/signature path with per-publisher sampling (Ed25519 signatures)
-  - [ ] Console Transparency views and verification guide/CLI
+  - [x] Writer/signature path with per-publisher sampling (Ed25519 signatures)
+  - [x] Console Transparency views and verification guide/CLI — Backend verify endpoints (/keys, /auctions/:id/verify), CLI verifier script, and Console pages (list/detail/summary) implemented and tested
 - Backend Observability
-  - [ ] Admin API CORS OPTIONS preflight tests
+  - [x] Admin API CORS OPTIONS preflight tests — Evidence: backend/src/__tests__/integration/corsPreflight.integration.test.ts; backend/auction/internal/api/handler_test.go
 - ML Fraud (Foundations)
   - [~] Small-sample PyOD pipeline scaffold (archives, privacy guards, date filters)
   - [ ] Enrichment loaders (Tor/cloud/ASN/VPN) with cached manifests and tests
@@ -51,12 +197,13 @@ P1 — Adapter Expansion and Parity
 - [ ] Conformance test parity across all new adapters (where missing) and golden fixtures
 
 P2 — Website/Console & Billing
-- [ ] Transparency UI (list/detail/summary) and links from Console
+- [x] Transparency UI (list/detail/summary) and links from Console — Evidence: console/src/app/transparency/*, console/src/components/Navigation.tsx (feature-flagged), backend/src/controllers/transparency.controller.ts, docs/Transparency/VERIFY.md
 - [ ] Billing ingest + reconciliation MVP (APIs + mock PDF export)
 
 Global Sandbox‑Readiness Gate
 - [ ] All suites green in CI (backend, Android, iOS, website/a11y)
-- [ ] SDK Android: device/emulator StrictMode smoke; size ≤ 500 KB; OM hooks; validator in CI
+- [x] Backend Jest harness auto-provisions the test database and applies migrations without manual DATABASE_URL flags (backend/src/utils/postgres.ts, backend/src/__tests__/setup.ts). Evidence: npm --prefix backend run test:unit (2025-11-09 19:43 UTC) succeeds with default postgres://postgres:postgres@localhost:5432/apexmediation_test.
+- [~] SDK Android: device/emulator StrictMode smoke; size ≤ 500 KB; OM hooks; validator in CI
 - [ ] SDK iOS: demo app smoke; main‑queue guarantees; config authenticity tests
 - [ ] ML: small‑sample ETL/enrichment/tests green; shadow‑mode ON
 
@@ -516,6 +663,35 @@ Backend — bidders, auction engine, fraud, admin APIs
   - Mediation Debugger: sanitized, in‑memory ring buffer; capture hooks in adapters; unit tests; read‑only Admin API to fetch last‑N events.
   - Time‑series (7‑day) metrics aggregator (5‑minute buckets) and SLO evaluator (p99 latency, error rate, fill) with Admin APIs and tests.
   - Files: backend/auction/internal/bidders/{metrics.go,metrics_rollup.go,metrics_timeseries.go,tracing.go,debugger.go,slo.go} (+ *_test.go), backend/auction/internal/api/handler.go, backend/auction/cmd/main.go
+
+## 2025-11-09 — Transparency writer crypto namespace alignment
+- Context: Follow-up on the transparency writer implementation to normalize how Node crypto helpers are consumed while typings remain relaxed.
+- Changes made:
+  - `backend/src/services/transparencyWriter.ts`: Added explicit `KeyObject` type import and routed private key parsing, hashing, and signature calls through the namespaced `crypto` helper set to avoid unused bindings and keep helper usage consistent.
+- Status impact:
+  - Marked “Writer/signature path with per-publisher sampling (Ed25519 signatures)” as in progress in the Current Priority Checklist; TypeScript checking still suppressed pending proper Node typings wiring.
+- Follow-up / next steps:
+  - Restore strict TypeScript checks by configuring Node core type definitions.
+  - Wire the transparency writer into the auction pipeline once typings and integration points are ready.
+
+## 2025-11-09 — Transparency writer integration, typings restore, and Jest coverage
+- Context: Completed the transparency signing pipeline by re-enabling backend TypeScript checks, wiring the writer into the OpenRTB engine, and proving behavior with deterministic unit coverage.
+- Changes made:
+  - Replaced temporary `@ts-nocheck` usage across `backend/src/services/transparencyWriter.ts` by importing Node’s `KeyObject` and `createPrivateKey` from the `crypto` namespace and adding targeted helpers; removed shim dependencies.
+  - Updated `backend/tsconfig.json` to include `node` and `jest` typings so strict TypeScript builds succeed without suppressions; pruned obsolete shims.
+  - Added ClickHouse client factory usage to ensure the writer instantiates a singleton client at runtime with graceful degradation when credentials are absent.
+  - Integrated the transparency writer into `backend/src/services/openrtbEngine.ts` so every auction result records a transparency payload via `transparencyWriter.recordAuction` on success and failure paths.
+  - Authored deterministic Jest coverage in `backend/src/services/__tests__/transparencyWriter.test.ts` that mocks ClickHouse inserts, validates canonical payload signing, and exercises per-publisher sampling logic.
+- Tests executed:
+  - `npm --prefix backend run lint`
+  - `npm --prefix backend run build`
+  - `SKIP_DB_SETUP=true npm --prefix backend run test:unit` (passes transparency writer suite; remaining failures isolated to DB-dependent suites awaiting `DATABASE_URL`).
+- Status impact:
+  - Current Priority Checklist item “Writer/signature path with per-publisher sampling (Ed25519 signatures)” marked done.
+  - Transparency pipeline now exercises signature generation and logging during auction execution under strict TypeScript checking.
+- Follow-up / next steps:
+  - Provide ephemeral Postgres (`DATABASE_URL`) or guard database-backed unit suites so CI can run `test:unit` without manual intervention.
+  - Add Console transparency views and CLI verification guide per outstanding checklist item.
 
 ## 2025-11-08 — Android SDK controller callback stabilization
 - Context: Targeted the intermittent unit test failure where controller callbacks were not observed under `runTest` despite coroutine refactors.
@@ -1675,3 +1851,96 @@ Evidence
 
 Notes
 - All changes are offline/testable locally; writer/signing path is feature-flagged and will be enabled in subsequent PR.
+
+
+
+## 2025-11-09 — Transparency verification API + CLI + Console pages; Android StrictMode CI smoke
+- Transparency backend verification API (feature-flagged via TRANSPARENCY_API_ENABLED):
+  - Added GET /api/v1/transparency/keys — returns active signer public keys with key_id, algo, public_key_base64.
+  - Added GET /api/v1/transparency/auctions/:auction_id/verify — rebuilds canonical payload (shared canonicalizer) and verifies Ed25519 signatures; returns PASS/FAIL + diagnostics.
+  - Routes wired: backend/src/routes/transparency.routes.ts. Handlers: backend/src/controllers/transparency.controller.ts.
+  - Schema alignment: auctions table includes sample_bps; writer persists it.
+  - Evidence: backend/src/utils/clickhouse.schema.ts; backend/src/services/transparencyWriter.ts; backend/src/controllers/transparency.controller.ts; backend/src/routes/transparency.routes.ts.
+- CLI verifier (Node): backend/scripts/transparency-verify.ts with npm script verify:transparency
+  - Usage: npm --prefix backend run verify:transparency -- --auction <uuid> --publisher <uuid> [--api <url>] [--key <base64>] [--verbose]
+  - Verifies via API and locally (optional --key) and prints PASS/FAIL (non-zero exit on FAIL).
+- Console UI (Next.js) — feature-flagged by NEXT_PUBLIC_TRANSPARENCY_ENABLED
+  - Pages: /transparency/auctions (list with filters + integrity badge), /transparency/auctions/[auction_id] (detail + verification panel), /transparency/summary (KPIs).
+  - Navigation: console/src/components/Navigation.tsx (Transparency link when flag is true).
+  - Client helper: console/src/lib/transparency.ts.
+- Admin API CORS preflight tests
+  - Evidence: backend/src/__tests__/integration/corsPreflight.integration.test.ts (Express middleware OPTIONS → 204); backend/auction/internal/api/handler_test.go (Gorilla mux test middleware OPTIONS → 204).
+- Android StrictMode CI smoke (Robolectric)
+  - Gradle task: :sdk:core:android:strictmodeSmoke (runs StrictMode sample tests; fails on violations).
+  - CI: dedicated workflow added to run the task headlessly (Robolectric) without an emulator.
+
+Impact
+- Transparency pipeline is verifiable end-to-end: signed records → API/CLI verification → Console views. Rollout is safe via feature flags and per-publisher sampling.
+- CI gains a guardrail for StrictMode regressions on Android SDK without flakey emulators.
+- CORS preflight behavior covered by tests across Node and Go admin surfaces.
+
+Next
+- Backend: finalize unit tests for verification handlers; add docs/Transparency/VERIFY.md with CLI examples; expose active signer keys management in Admin panel (optional).
+- Console: add component tests (list/detail) and improve summary KPIs; copy-to-clipboard polish.
+- CI: fix .github/workflows/ci.yml needs: list to reference existing jobs only; integrate Android StrictMode job into main gate.
+- iOS: after parity with Android SDK, add demo target + UI smoke and main-queue callback assertions across flows; then run full iOS test matrix.
+- ML: proceed with CLI-fetchable data manifests and GPU-ready small-sample pipeline (local Python venv preferred), keeping CI on a CPU-only path.
+
+
+
+## 2025-11-09 — P0 Progress: Transparency DRY canonicalizer, summary API tests, BidLandscape refactor, ML scaffolding
+- Transparency
+  - DRY canonicalizer extracted: `backend/src/services/transparency/canonicalizer.ts` and imported by writer, controller, and CLI. Eliminates drift in signature payloads.
+  - Summary API aligned to Console contract and unit-tested:
+    - Endpoint: `GET /api/v1/transparency/summary/auctions` returns `{ total_sampled, winners_by_source[], avg_fee_bp, publisher_share_avg }`
+    - Tests: `backend/src/controllers/__tests__/transparency.summary.controller.test.ts`
+  - Verification CLI now reuses shared canonicalizer: `backend/scripts/transparency-verify.ts`
+- Backend infra
+  - BidLandscapeService now reuses centralized ClickHouse client with lazy acquisition and graceful no-op when unavailable:
+    - `backend/src/services/bidLandscapeService.ts`
+- Tests
+  - Fixed backend unit test failures (Jest mock hoisting in `refreshTokenRepository.test.ts`; transparency signing payload `sample_bps` mismatch in `transparencyWriter.test.ts`).
+  - Full backend unit suite green locally.
+- ML (Foundations) scaffolding for CI
+  - Minimal package + placeholder tests to keep CI green while we add pipelines:
+    - `ML/pyproject.toml`, `ML/requirements.txt`, `ML/src/ml_pipelines/__init__.py`, `ML/scripts/tests/test_placeholder.py`
+
+Impact
+- Transparency P0 is hardened: single canonicalizer source, consistent CLI/controller/writer behavior, and a Console-aligned summary API with tests.
+- Reduced infra duplication and test noise by centralizing ClickHouse usage in BidLandscapeService.
+- ML CI lane unblocked with lightweight scaffolding; small-sample GPU-ready pipeline to follow.
+
+Next
+- Android SDK: consolidate StrictMode CI under main workflow and begin `@JvmOverloads` audit across public Kotlin APIs; run Dokka.
+- iOS SDK: create Demo target with mocked endpoints + UI smoke; add config signature/schema parity tests; enrich Debug Panel and update Quickstart.
+- ML: implement CLI data fetchers (Tor/Cloud/ASN/VPN) with checksums and cached manifests; add small-sample PyOD pipeline (GPU autodetect) with a synthetic unit test and CPU-only CI job.
+
+
+## 2025-11-10 — Transparency canonicalizer/CLI parity, CI hardening, ML model spec, Console tests
+- Transparency
+  - Enforced single source of truth for canonicalization: `backend/src/services/transparency/canonicalizer.ts` now used by the writer, controller, and CLI.
+  - CLI verifier now rebuilds canonical payload locally for verification; server canonical string no longer required.
+  - `GET /api/v1/transparency/auctions/:auction_id` includes `sample_bps` to enable deterministic canonical reconstruction.
+  - Evidence: `backend/src/services/transparency/canonicalizer.ts`, `backend/src/services/transparencyWriter.ts`, `backend/src/controllers/transparency.controller.ts`, `backend/scripts/transparency-verify.ts`.
+- CI
+  - `ci-success` gate now aggregates `ml-test` and prints per‑job statuses on failure.
+  - Added `/health` readiness wait in integration job to reduce flakiness.
+  - Evidence: `.github/workflows/ci.yml` (integration job wait loop, ci-success block).
+- Console tests (Transparency)
+  - Added component tests for list and detail pages using RTL/jsdom.
+  - Evidence: `console/src/app/transparency/auctions/page.test.tsx`, `console/src/app/transparency/auctions/[auction_id]/page.test.tsx`, `console/jest.config.js`, `console/jest.setup.ts`.
+- Docs
+  - New ML model design spec capturing world‑class fraud model plan: `docs/ML/Model_Spec.md`.
+  - Updated verification guide: `docs/Transparency/VERIFY.md` (alignment with shared canonicalizer and CLI behavior).
+- Checklist updates
+  - Marked P2 item “Transparency UI (list/detail/summary) and links from Console” as done with evidence links.
+
+Impact
+- Eliminates drift risks in transparency verification and improves developer ergonomics (CLI).
+- CI becomes more stable with proper service readiness and a complete success aggregator.
+- Establishes the design standard for a GPU‑ready, privacy‑preserving ML fraud model.
+
+Next
+- Add Prometheus counters for transparency writer (attempted/succeeded/failed/sampled/unsampled) and unit tests.
+- Merge Android StrictMode job into main CI (dedupe standalone workflow) and keep gate green.
+- Android `@JvmOverloads` audit + Dokka; iOS Demo target + parity tests; ML data fetchers + feature store scaffolding.

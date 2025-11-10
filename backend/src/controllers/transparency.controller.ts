@@ -1,6 +1,9 @@
 import { Request, Response, NextFunction } from 'express';
 import { executeQuery } from '../utils/clickhouse';
 import { AppError } from '../middleware/errorHandler';
+import * as crypto from 'crypto';
+import { canonicalizeForSignature } from '../services/transparency/canonicalizer';
+import { transparencyWriter } from '../services/transparencyWriter';
 
 // Helpers
 const parseDate = (value?: string): string | null => {
@@ -72,6 +75,7 @@ export const getAuctions = async (req: Request, res: Response, next: NextFunctio
         winner_currency,
         winner_reason,
         aletheia_fee_bp,
+        sample_bps,
         effective_publisher_share,
         integrity_algo,
         integrity_key_id,
@@ -95,7 +99,7 @@ export const getAuctions = async (req: Request, res: Response, next: NextFunctio
 
     // Fetch candidates for these auctions
     const auctionIds = rows.map(r => r.auction_id);
-    let candidatesByAuction: Record<string, any[]> = {};
+  const candidatesByAuction: Record<string, any[]> = {};
     if (auctionIds.length > 0) {
       const candRows = await executeQuery<any>(
         `SELECT auction_id, source, bid_ecpm, currency, response_time_ms, status, metadata_hash
@@ -190,6 +194,7 @@ export const getAuctionById = async (req: Request, res: Response, next: NextFunc
         winner_currency,
         winner_reason,
         aletheia_fee_bp,
+        sample_bps,
         effective_publisher_share,
         integrity_algo,
         integrity_key_id,
@@ -255,6 +260,7 @@ export const getAuctionById = async (req: Request, res: Response, next: NextFunc
         algo: r.integrity_algo,
         key_id: r.integrity_key_id,
       },
+      sample_bps: Number(r.sample_bps || 0),
     };
 
     res.json(payload);
@@ -276,12 +282,6 @@ export const getAuctionSummary = async (req: Request, res: Response, next: NextF
       throw new AppError('Forbidden: cannot access other publishers', 403);
     }
 
-    const groupBy = (req.query.group_by as string) || 'placement';
-    const allowed = new Set(['publisher', 'placement', 'geo', 'surface']);
-    if (!allowed.has(groupBy)) {
-      throw new AppError(`Invalid group_by. Allowed: ${Array.from(allowed).join(', ')}`, 400);
-    }
-
     const from = parseDate(req.query.from as string);
     const to = parseDate(req.query.to as string);
 
@@ -289,32 +289,260 @@ export const getAuctionSummary = async (req: Request, res: Response, next: NextF
     if (from) where.push('timestamp >= toDateTime({from: String})');
     if (to) where.push('timestamp <= toDateTime({to: String})');
 
-    const dim = groupBy === 'publisher' ? 'publisher_id'
-      : groupBy === 'placement' ? 'placement_id'
-      : groupBy === 'geo' ? 'device_geo'
-      : 'surface_type';
+    // Total sampled (signed) auctions
+    const totalRows = await executeQuery<any>(
+      `SELECT count() as total_sampled
+       FROM auctions
+       WHERE ${where.join(' AND ')} AND length(integrity_signature) > 0`,
+      {
+        publisher_id: requestedPublisher,
+        from: from || undefined,
+        to: to || undefined,
+      }
+    );
 
-    const query = `
-      SELECT 
-        ${dim} as group_key,
-        count() as auctions,
-        avg(winner_bid_ecpm) as avg_ecpm,
-        sum(winner_gross_price) as total_gross_price,
-        avg(effective_publisher_share) as avg_pub_share
-      FROM auctions
-      WHERE ${where.join(' AND ')}
-      GROUP BY group_key
-      ORDER BY auctions DESC
-      LIMIT 500
-    `;
+    // Winners by source
+    const winnersRows = await executeQuery<any>(
+      `SELECT winner_source as source, count() as count
+       FROM auctions
+       WHERE ${where.join(' AND ')}
+       GROUP BY winner_source
+       ORDER BY count DESC
+       LIMIT 20`,
+      {
+        publisher_id: requestedPublisher,
+        from: from || undefined,
+        to: to || undefined,
+      }
+    );
 
-    const rows = await executeQuery<any>(query, {
-      publisher_id: requestedPublisher,
-      from: from || undefined,
-      to: to || undefined,
+    // Averages
+    const avgRows = await executeQuery<any>(
+      `SELECT avg(aletheia_fee_bp) as avg_fee_bp, avg(effective_publisher_share) as publisher_share_avg
+       FROM auctions
+       WHERE ${where.join(' AND ')}`,
+      {
+        publisher_id: requestedPublisher,
+        from: from || undefined,
+        to: to || undefined,
+      }
+    );
+
+    const summary = {
+      total_sampled: Number(totalRows?.[0]?.total_sampled ?? 0),
+      winners_by_source: winnersRows.map((r: any) => ({ source: r.source, count: Number(r.count) })),
+      avg_fee_bp: Number(avgRows?.[0]?.avg_fee_bp ?? 0),
+      publisher_share_avg: Number(avgRows?.[0]?.publisher_share_avg ?? 0),
+    };
+
+    res.json(summary);
+  } catch (err) {
+    next(err);
+  }
+};
+
+
+// --- Transparency verification helpers & handlers ---
+
+/** GET /metrics — transparency writer counters (attempted/succeeded/failed, sampled/unsampled) */
+export const getTransparencyMetrics = async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    ensureTransparencyEnabled();
+    const m = transparencyWriter.getMetrics();
+    res.json({ success: true, data: m });
+  } catch (err) {
+    next(err);
+  }
+};
+
+const ensurePublisherScope = (req: Request, publisherId: string) => {
+  const userPublisherId = req.user?.publisherId;
+  if (!userPublisherId) {
+    throw new AppError('Unauthorized', 401);
+  }
+  if (publisherId !== userPublisherId) {
+    throw new AppError('Forbidden: cannot access other publishers', 403);
+  }
+};
+
+const parsePublicKey = (source: string) => {
+  try {
+    const trimmed = source.trim();
+    if (trimmed.includes('BEGIN')) {
+      return crypto.createPublicKey(trimmed);
+    }
+    // Try SPKI DER base64
+    const der = Buffer.from(trimmed, 'base64');
+    try {
+      return crypto.createPublicKey({ key: der, format: 'der', type: 'spki' });
+    } catch (_) {
+      // Last resort: treat as PEM after wrapping (best-effort, may fail)
+      const pem = `-----BEGIN PUBLIC KEY-----\n${trimmed}\n-----END PUBLIC KEY-----\n`;
+      return crypto.createPublicKey(pem);
+    }
+  } catch (err) {
+    return null;
+  }
+};
+
+/** GET /keys — return active transparency signer public keys */
+export const getTransparencyKeys = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    ensureTransparencyEnabled();
+    const userPublisherId = req.user?.publisherId;
+    if (!userPublisherId) {
+      throw new AppError('Unauthorized', 401);
+    }
+
+    const rows = await executeQuery<any>(
+      `SELECT key_id, algo, public_key_base64, active
+       FROM transparency_signer_keys
+       WHERE active = 1
+       ORDER BY created_at DESC
+       LIMIT 10`
+    );
+
+    const fallbackKey = process.env.TRANSPARENCY_PUBLIC_KEY_BASE64;
+    const keyId = process.env.TRANSPARENCY_KEY_ID || 'env-default';
+
+    const data = rows.length > 0
+      ? rows
+      : (fallbackKey
+          ? [{ key_id: keyId, algo: 'ed25519', public_key_base64: fallbackKey, active: 1 }]
+          : []);
+
+    res.json({ count: data.length, data });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/** GET /auctions/:auction_id/verify — verify integrity signature */
+export const verifyAuction = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    ensureTransparencyEnabled();
+
+    const auctionId = req.params.auction_id;
+
+    // Load auction row
+    const aRows = await executeQuery<any>(
+      `SELECT 
+         auction_id,
+         toString(timestamp) as timestamp,
+         publisher_id,
+         winner_source,
+         winner_bid_ecpm,
+         winner_currency,
+         winner_reason,
+         aletheia_fee_bp,
+         sample_bps,
+         integrity_algo,
+         integrity_key_id,
+         integrity_signature
+       FROM auctions
+       WHERE auction_id = {auction_id: UUID}
+       LIMIT 1`,
+      { auction_id: auctionId }
+    );
+
+    if (aRows.length === 0) {
+      throw new AppError('Not found', 404);
+    }
+
+    // Publisher scoping
+    ensurePublisherScope(req, aRows[0].publisher_id);
+
+    // Load candidates
+    const cRows = await executeQuery<any>(
+      `SELECT source, bid_ecpm, status
+       FROM auction_candidates
+       WHERE auction_id = {auction_id: UUID}`,
+      { auction_id: auctionId }
+    );
+
+    // Build canonical payload (must mirror writer)
+    const payload = {
+      auction: {
+        auction_id: aRows[0].auction_id,
+        publisher_id: aRows[0].publisher_id,
+        timestamp: aRows[0].timestamp,
+        winner_source: aRows[0].winner_source,
+        winner_bid_ecpm: Number(aRows[0].winner_bid_ecpm || 0),
+        winner_currency: aRows[0].winner_currency,
+        winner_reason: aRows[0].winner_reason,
+        sample_bps: Number(aRows[0].sample_bps || 0),
+      },
+      candidates: cRows.map((c: any) => ({
+        source: c.source,
+        bid_ecpm: Number(c.bid_ecpm || 0),
+        status: c.status,
+      })),
+    };
+
+    const canonical = canonicalizeForSignature(payload);
+    const signatureB64 = aRows[0].integrity_signature as string | null;
+    const algo = (aRows[0].integrity_algo as string | null) || 'ed25519';
+    const keyId = aRows[0].integrity_key_id as string | null;
+
+    if (!signatureB64 || !keyId || algo.toLowerCase() !== 'ed25519') {
+      return res.json({
+        status: 'not_applicable',
+        reason: 'missing_signature_or_unsupported_algo',
+        key_id: keyId,
+        algo,
+      });
+    }
+
+    // Fetch matching public key (active)
+    const kRows = await executeQuery<any>(
+      `SELECT key_id, algo, public_key_base64, active
+       FROM transparency_signer_keys
+       WHERE key_id = {key_id: String} AND active = 1
+       LIMIT 1`,
+      { key_id: keyId }
+    );
+
+    const fallbackKey = process.env.TRANSPARENCY_PUBLIC_KEY_BASE64;
+    const keyBase64 = (kRows[0]?.public_key_base64 as string | undefined) || fallbackKey;
+
+    if (!keyBase64) {
+      return res.json({
+        status: 'unknown_key',
+        reason: 'public_key_not_found',
+        key_id: keyId,
+        algo,
+      });
+    }
+
+    const pubKey = parsePublicKey(keyBase64);
+    if (!pubKey) {
+      return res.json({
+        status: 'fail',
+        reason: 'public_key_parse_failed',
+        key_id: keyId,
+        algo,
+      });
+    }
+
+    let verified = false;
+    try {
+      verified = crypto.verify(
+        null,
+        Buffer.from(canonical, 'utf8'),
+        pubKey,
+        Buffer.from(signatureB64, 'base64')
+      );
+    } catch (e) {
+      return res.json({ status: 'fail', reason: 'verification_threw', key_id: keyId, algo });
+    }
+
+    return res.json({
+      status: verified ? 'pass' : 'fail',
+      key_id: keyId,
+      algo,
+      canonical,
+      sample_bps: Number(aRows[0].sample_bps || 0),
     });
-
-    res.json({ group_by: groupBy, rows });
   } catch (err) {
     next(err);
   }

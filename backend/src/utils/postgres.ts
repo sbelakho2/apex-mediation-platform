@@ -4,10 +4,19 @@ import logger from './logger';
 
 dotenv.config();
 
-const connectionString = process.env.DATABASE_URL;
+const defaultTestConnection = 'postgresql://postgres:postgres@localhost:5432/apexmediation_test';
+const connectionString = process.env.DATABASE_URL ?? (process.env.NODE_ENV === 'test' ? defaultTestConnection : undefined);
 
 if (!connectionString) {
   throw new Error('DATABASE_URL environment variable is not configured.');
+}
+
+if (!process.env.DATABASE_URL) {
+  process.env.DATABASE_URL = connectionString;
+}
+
+if (!process.env.TEST_DATABASE_URL && process.env.NODE_ENV === 'test') {
+  process.env.TEST_DATABASE_URL = connectionString;
 }
 
 const useSsl = process.env.DATABASE_SSL === 'true';

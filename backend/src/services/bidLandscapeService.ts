@@ -6,7 +6,7 @@
  * into adapter performance, bid pricing, and auction mechanics.
  */
 
-import { createClient } from '@clickhouse/client';
+import { getClickHouseClient } from '../utils/clickhouse';
 import type { 
   OpenRTBBidRequest, 
   OpenRTBBidResponse,
@@ -55,31 +55,17 @@ interface BidLandscapeEntry {
 }
 
 export class BidLandscapeService {
-  private clickhouse: ReturnType<typeof createClient> | null = null;
-  private enabled: boolean = false;
+  private warnedNoClient = false;
 
-  constructor() {
-    this.initializeClickHouse();
-  }
-
-  private initializeClickHouse(): void {
+  private getClient() {
     try {
-      const clickhouseUrl = process.env.CLICKHOUSE_URL || 'http://localhost:8123';
-      const clickhouseDatabase = process.env.CLICKHOUSE_DATABASE || 'ad_analytics';
-
-      this.clickhouse = createClient({
-        url: clickhouseUrl,
-        database: clickhouseDatabase,
-        username: process.env.CLICKHOUSE_USER || 'default',
-        password: process.env.CLICKHOUSE_PASSWORD || '',
-        request_timeout: 30000,
-      });
-
-      this.enabled = true;
-      logger.info('BidLandscapeService initialized with ClickHouse');
+      return getClickHouseClient();
     } catch (error) {
-      logger.warn('BidLandscapeService: ClickHouse not available, logging disabled', { error });
-      this.enabled = false;
+      if (!this.warnedNoClient) {
+        logger.warn('BidLandscapeService: ClickHouse client not available; bid landscape logging disabled', { error });
+        this.warnedNoClient = true;
+      }
+      return null;
     }
   }
 
@@ -91,7 +77,8 @@ export class BidLandscapeService {
     request: OpenRTBBidRequest,
     result: AuctionResult
   ): Promise<void> {
-    if (!this.enabled || !this.clickhouse) {
+    const ch = this.getClient();
+    if (!ch) {
       return;
     }
 
@@ -180,7 +167,7 @@ export class BidLandscapeService {
       }
 
       // Batch insert all bids
-      await this.clickhouse.insert({
+      await ch.insert({
         table: 'bid_landscape',
         values: entries,
         format: 'JSONEachRow',
@@ -211,7 +198,8 @@ export class BidLandscapeService {
     startDate: Date,
     endDate: Date
   ): Promise<Array<Record<string, unknown>>> {
-    if (!this.enabled || !this.clickhouse) {
+    const ch = this.getClient();
+    if (!ch) {
       throw new Error('BidLandscapeService not available');
     }
 
@@ -235,7 +223,7 @@ export class BidLandscapeService {
       ORDER BY total_bids DESC
     `;
 
-    const resultSet = await this.clickhouse.query({
+    const resultSet = await ch.query({
       query,
       query_params: {
         publisherId,
@@ -258,7 +246,8 @@ export class BidLandscapeService {
     endDate: Date,
     intervalMinutes: number = 60
   ): Promise<Array<Record<string, unknown>>> {
-    if (!this.enabled || !this.clickhouse) {
+    const ch = this.getClient();
+    if (!ch) {
       throw new Error('BidLandscapeService not available');
     }
 
@@ -279,7 +268,7 @@ export class BidLandscapeService {
       ORDER BY time_bucket
     `;
 
-    const resultSet = await this.clickhouse.query({
+    const resultSet = await ch.query({
       query,
       query_params: {
         publisherId,
@@ -298,18 +287,14 @@ export class BidLandscapeService {
    * Check service health
    */
   isEnabled(): boolean {
-    return this.enabled;
+    return this.getClient() !== null;
   }
 
   /**
-   * Close ClickHouse connection
+   * Close ClickHouse connection (no-op; lifecycle managed elsewhere)
    */
   async close(): Promise<void> {
-    if (this.clickhouse) {
-      await this.clickhouse.close();
-      this.clickhouse = null;
-      this.enabled = false;
-    }
+    // Intentionally no-op. Connection lifecycle is managed by utils/clickhouse.
   }
 }
 

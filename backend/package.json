@@ -21,7 +21,8 @@
     "seed:testdata": "node scripts/seedTestData.js",
     "clickhouse:init": "ts-node scripts/initClickHouseSchema.ts",
     "secrets:migrate": "node scripts/migrate-secrets-to-infisical.js",
-    "enrichment:refresh": "ts-node scripts/refreshEnrichmentCache.ts"
+    "enrichment:refresh": "ts-node scripts/refreshEnrichmentCache.ts",
+    "verify:transparency": "ts-node scripts/transparency-verify.ts"
   },
   "keywords": [
     "ad-mediation",
@@ -37,7 +38,9 @@
     "@google-cloud/bigquery": "^8.1.1",
     "@google-cloud/storage": "^7.17.2",
     "@maxmind/geoip2-node": "^6.2.0",
+    "@types/axios": "^0.14.4",
     "@types/bull": "^3.15.9",
+    "axios": "^1.13.2",
     "bcryptjs": "^2.4.3",
     "bullmq": "^5.63.0",
     "compression": "^1.7.4",

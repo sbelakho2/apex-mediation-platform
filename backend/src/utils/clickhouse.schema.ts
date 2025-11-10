@@ -208,6 +208,7 @@ CREATE TABLE IF NOT EXISTS auctions (
   winner_currency FixedString(3),
   winner_reason LowCardinality(String),
   aletheia_fee_bp UInt16,
+  sample_bps UInt16,
   effective_publisher_share Float64,
   integrity_algo LowCardinality(String),
   integrity_key_id LowCardinality(String),

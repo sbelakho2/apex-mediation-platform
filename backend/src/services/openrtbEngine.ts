@@ -14,6 +14,7 @@ import {
   NoBidReason,
 } from '../types/openrtb.types';
 import { bidLandscapeService } from './bidLandscapeService';
+import { transparencyWriter } from './transparencyWriter';
 
 // ========================================
 // Adapter Configuration
@@ -213,6 +214,10 @@ export async function executeAuction(
     void bidLandscapeService.logAuction(request, result).catch((err: unknown) =>
       logger.error('Failed to log bid landscape', { error: err })
     );
+    // Record transparency sample (best-effort)
+    void transparencyWriter.recordAuction(request, result).catch((err: unknown) =>
+      logger.error('Failed to write transparency record', { error: err })
+    );
 
     return result;
   }
@@ -239,6 +244,10 @@ export async function executeAuction(
     // Log to bid landscape
     void bidLandscapeService.logAuction(request, result).catch((err: unknown) =>
       logger.error('Failed to log bid landscape', { error: err })
+    );
+    // Record transparency sample (best-effort)
+    void transparencyWriter.recordAuction(request, result).catch((err: unknown) =>
+      logger.error('Failed to write transparency record', { error: err })
     );
 
     return result;
@@ -304,6 +313,10 @@ export async function executeAuction(
     void bidLandscapeService.logAuction(request, result).catch((err: unknown) =>
       logger.error('Failed to log bid landscape', { error: err })
     );
+    // Record transparency sample (best-effort)
+    void transparencyWriter.recordAuction(request, result).catch((err: unknown) =>
+      logger.error('Failed to write transparency record', { error: err })
+    );
 
     return result;
   }
@@ -339,6 +352,10 @@ export async function executeAuction(
     void bidLandscapeService.logAuction(request, result).catch((err: unknown) =>
       logger.error('Failed to log bid landscape', { error: err })
     );
+    // Record transparency sample (best-effort)
+    void transparencyWriter.recordAuction(request, result).catch((err: unknown) =>
+      logger.error('Failed to write transparency record', { error: err })
+    );
 
     return result;
   }
@@ -371,6 +388,10 @@ export async function executeAuction(
   // Log to bid landscape (async, don't wait)
   void bidLandscapeService.logAuction(request, result).catch((err: unknown) =>
     logger.error('Failed to log bid landscape', { error: err })
+  );
+  // Record transparency sample (best-effort)
+  void transparencyWriter.recordAuction(request, result).catch((err: unknown) =>
+    logger.error('Failed to write transparency record', { error: err })
   );
 
   return result;

@@ -1,3 +1,4 @@
+import { jest } from '@jest/globals';
 import type { QueryResult } from 'pg';
 import {
   insertRefreshToken,
@@ -7,9 +8,17 @@ import {
 } from '../refreshTokenRepository';
 import { query } from '../../utils/postgres';
 
-jest.mock('../../utils/postgres', () => ({
-  query: jest.fn(),
-}));
+jest.mock('../../utils/postgres', () => {
+  const query = jest.fn();
+  const initializeDatabase = jest.fn(async () => {});
+  const pool = { end: jest.fn() };
+  return {
+    __esModule: true,
+    query,
+    initializeDatabase,
+    default: pool,
+  };
+});
 
 const queryMock = jest.mocked(query);
 
@@ -75,7 +84,7 @@ describe('refreshTokenRepository', () => {
   });
 
   it('findRefreshTokenById returns null when no row found', async () => {
-  queryMock.mockResolvedValue(createQueryResult([]));
+    queryMock.mockResolvedValue(createQueryResult([]));
 
     const result = await findRefreshTokenById('missing');
 
@@ -91,7 +100,7 @@ describe('refreshTokenRepository', () => {
       replaced_by_token: 'token-789',
     };
 
-  queryMock.mockResolvedValue(createQueryResult([revokedRow]));
+    queryMock.mockResolvedValue(createQueryResult([revokedRow]));
 
     const result = await revokeRefreshToken('token-123', 'rotated', 'token-789');
 

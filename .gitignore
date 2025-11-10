@@ -60,6 +60,8 @@ DerivedData/
 gradle/
 gradlew
 gradlew.bat
+!/sdk/core/android/gradlew.sh
+sdk/core/android/.gradle-dist/
 local.properties
 Package.resolved
 

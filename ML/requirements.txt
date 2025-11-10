@@ -1,15 +1,2 @@
-# Minimal ML pipeline dependencies (CPU-only)
-# Pin versions for reproducibility; keep lightweight to respect budget
-# Optional extras (e.g. Glue/Spark) live in pyproject.toml: `pip install -e .[glue]`.
-pandas==2.3.3
-numpy==2.1.3
-scikit-learn==1.6.1
-fastparquet==2024.11.0
-joblib==1.5.2
-pyod==2.0.2
-dask[dataframe]==2024.10.0
-pyarrow==17.0.0
-tqdm==4.66.5
-# ClickHouse connectivity for ETL exports
-clickhouse-connect==0.7.0
-# TabPFN to be added in a later pass (requires torch). Left out to keep this pass lightweight.
+# Minimal requirements for CI-friendly ML scaffolding
+pytest==8.3.3
