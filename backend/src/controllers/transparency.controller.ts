@@ -5,9 +5,36 @@ import * as crypto from 'crypto';
 import { canonicalizeForSignature } from '../services/transparency/canonicalizer';
 import { transparencyWriter } from '../services/transparencyWriter';
 import { validateISODate, validateInteger, validateEnum, validateBoolean } from '../utils/validation';
+import { Histogram } from 'prom-client';
+import { promRegister } from '../utils/prometheus';
 
 // Constants
 const CANONICAL_SIZE_CAP = 32 * 1024; // 32KB
+
+// Prometheus histograms (register once)
+let verifyLatencyMs: Histogram<string>;
+let canonicalSizeBytes: Histogram<string>;
+try {
+  verifyLatencyMs = new Histogram({
+    name: 'transparency_verify_latency_ms',
+    help: 'Latency of transparency signature verification in milliseconds',
+    buckets: [5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000],
+    registers: [promRegister],
+  });
+} catch (_) {
+  // metric may already be registered in tests/hot reload
+  verifyLatencyMs = (promRegister.getSingleMetric('transparency_verify_latency_ms') as Histogram<string>) || (new Histogram({ name: 'noop_latency', help: 'noop', registers: [] }));
+}
+try {
+  canonicalSizeBytes = new Histogram({
+    name: 'transparency_canonical_size_bytes',
+    help: 'Size of canonical strings produced during verification',
+    buckets: [128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768],
+    registers: [promRegister],
+  });
+} catch (_) {
+  canonicalSizeBytes = (promRegister.getSingleMetric('transparency_canonical_size_bytes') as Histogram<string>) || (new Histogram({ name: 'noop_size', help: 'noop', registers: [] }));
+}
 
 // Allowed values for sort and order parameters
 const ALLOWED_SORT_FIELDS = ['timestamp', 'winner_bid_ecpm', 'aletheia_fee_bp'];
@@ -58,6 +85,12 @@ export const getAuctions = async (req: Request, res: Response, next: NextFunctio
 
     const from = validateISODate(req.query.from as string, 'from');
     const to = validateISODate(req.query.to as string, 'to');
+
+    // Cross-field validation: from must be <= to (when both provided)
+    if (from && to && new Date(from).getTime() > new Date(to).getTime()) {
+      throw new AppError('Invalid range: from must be less than or equal to to', 400);
+    }
+
     const placementId = (req.query.placement_id as string) || undefined;
     const surface = (req.query.surface as string) || undefined;
     const geo = (req.query.geo as string) || undefined;
@@ -68,8 +101,8 @@ export const getAuctions = async (req: Request, res: Response, next: NextFunctio
 
     // Build WHERE conditions
     const where: string[] = ['publisher_id = {publisher_id: String}'];
-    if (from) where.push('timestamp >= toDateTime({from: String})');
-    if (to) where.push('timestamp <= toDateTime({to: String})');
+    if (from) where.push("timestamp >= toDateTime64(parseDateTimeBestEffort({from: String}), 3, 'UTC')");
+    if (to) where.push("timestamp <= toDateTime64(parseDateTimeBestEffort({to: String}), 3, 'UTC')");
     if (placementId) where.push('placement_id = {placement_id: String}');
     if (surface) where.push('surface_type = {surface: String}');
     if (geo) where.push('device_geo = {geo: String}');
@@ -344,9 +377,14 @@ export const getAuctionSummary = async (req: Request, res: Response, next: NextF
     const from = validateISODate(req.query.from as string, 'from');
     const to = validateISODate(req.query.to as string, 'to');
 
+    // Cross-field validation
+    if (from && to && new Date(from).getTime() > new Date(to).getTime()) {
+      throw new AppError('Invalid range: from must be less than or equal to to', 400);
+    }
+
     const where: string[] = ['publisher_id = {publisher_id: String}'];
-    if (from) where.push('timestamp >= toDateTime({from: String})');
-    if (to) where.push('timestamp <= toDateTime({to: String})');
+    if (from) where.push("timestamp >= toDateTime64(parseDateTimeBestEffort({from: String}), 3, 'UTC')");
+    if (to) where.push("timestamp <= toDateTime64(parseDateTimeBestEffort({to: String}), 3, 'UTC')");
 
     // Total sampled (signed) auctions
     const totalRows = await executeQuery<any>(
@@ -470,6 +508,21 @@ export const getTransparencyKeys = async (req: Request, res: Response, next: Nex
           ? [{ key_id: keyId, algo: 'ed25519', public_key_base64: fallbackKey, active: 1 }]
           : []);
 
+    // Generate a stable ETag based on the concatenation of key_id+public_key_base64
+    const etagSource = data.map((k: any) => `${k.key_id}:${k.public_key_base64}`).join('|');
+    const etag = 'W/"' + crypto.createHash('sha256').update(etagSource).digest('hex').slice(0, 32) + '"';
+
+    // Check If-None-Match to support 304s
+    const inm = req.headers['if-none-match'];
+    if (inm && inm === etag) {
+      res.status(304).end();
+      return;
+    }
+
+    // Set caching headers: cache for 5 minutes
+    res.setHeader('ETag', etag);
+    res.setHeader('Cache-Control', 'public, max-age=300, must-revalidate');
+
     res.json({ count: data.length, data });
   } catch (err) {
     next(err);
@@ -482,6 +535,7 @@ export const verifyAuction = async (req: Request, res: Response, next: NextFunct
     ensureTransparencyEnabled();
 
     const auctionId = req.params.auction_id;
+    const tStart = process.hrtime.bigint();
 
     // Load auction row
     const aRows = await executeQuery<any>(
@@ -597,6 +651,13 @@ export const verifyAuction = async (req: Request, res: Response, next: NextFunct
 
     // Check if canonical should be included and potentially truncated
     const { canonical: returnCanonical, truncated } = truncateCanonical(canonical);
+
+    // Observe canonical size
+    try { canonicalSizeBytes.observe(canonical.length); } catch (_) {}
+
+    const tEnd = process.hrtime.bigint();
+    const latencyMs = Number(tEnd - tStart) / 1_000_000;
+    try { verifyLatencyMs.observe(latencyMs); } catch (_) {}
     
     return res.json({
       status: verified ? 'pass' : 'fail',
