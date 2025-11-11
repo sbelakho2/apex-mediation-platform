@@ -183,7 +183,7 @@ func (a *AdMobAdapter) RequestBid(ctx context.Context, req BidRequest) (*BidResp
 		span.SetAttr("outcome", "no_bid")
 		span.SetAttr("reason", reason)
 		// Mediation Debugger capture (sanitized)
-		CaptureDebugEvent(DebugEvent{
+		CaptureDebugEventWithSpan(span, DebugEvent{
 			PlacementID: req.PlacementID,
 			RequestID:   req.RequestID,
 			Adapter:     "admob",
@@ -218,7 +218,7 @@ func (a *AdMobAdapter) RequestBid(ctx context.Context, req BidRequest) (*BidResp
 	} else {
 		recordSuccess("admob")
 		span.SetAttr("outcome", "success")
-		CaptureDebugEvent(DebugEvent{
+		CaptureDebugEventWithSpan(span, DebugEvent{
 			PlacementID: req.PlacementID,
 			RequestID:   req.RequestID,
 			Adapter:     "admob",

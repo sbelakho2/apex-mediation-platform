@@ -36,7 +36,7 @@ func (a *ChocolateAdapter) RequestBid(ctx context.Context, req BidRequest) (*Bid
 
 	if !a.cb.Allow() {
 		recordError(a.GetName(), NoBidCircuitOpen)
-		CaptureDebugEvent(DebugEvent{PlacementID: req.PlacementID, RequestID: req.RequestID, Adapter: a.GetName(), Outcome: "no_bid", Reason: NoBidCircuitOpen, CreatedAt: time.Now()})
+  CaptureDebugEventWithSpan(span, DebugEvent{PlacementID: req.PlacementID, RequestID: req.RequestID, Adapter: a.GetName(), Outcome: "no_bid", Reason: NoBidCircuitOpen, CreatedAt: time.Now()})
 		return &BidResponse{RequestID: req.RequestID, AdapterName: a.GetName(), NoBid: true, NoBidReason: NoBidCircuitOpen}, nil
 	}
 
@@ -80,7 +80,7 @@ func (a *ChocolateAdapter) RequestBid(ctx context.Context, req BidRequest) (*Bid
 		reason := MapErrorToNoBid(err)
 		observeLatency(a.GetName(), float64(time.Since(start).Milliseconds()))
 		if reason == NoBidTimeout { recordTimeout(a.GetName()) } else if reason == NoBidNoFill { recordNoFill(a.GetName()) } else { recordError(a.GetName(), reason) }
-		CaptureDebugEvent(DebugEvent{PlacementID: req.PlacementID, RequestID: req.RequestID, Adapter: a.GetName(), Outcome: "no_bid", Reason: reason, CreatedAt: time.Now()})
+		CaptureDebugEventWithSpan(span, DebugEvent{PlacementID: req.PlacementID, RequestID: req.RequestID, Adapter: a.GetName(), Outcome: "no_bid", Reason: reason, CreatedAt: time.Now()})
 		span.SetAttributes(map[string]string{"outcome": "no_bid", "reason": reason})
 		return &BidResponse{RequestID: req.RequestID, AdapterName: a.GetName(), NoBid: true, NoBidReason: reason}, nil
 	}
@@ -111,7 +111,7 @@ func (a *ChocolateAdapter) RequestBid(ctx context.Context, req BidRequest) (*Bid
 	a.cb.OnSuccess()
 	observeLatency(a.GetName(), float64(time.Since(start).Milliseconds()))
 	recordSuccess(a.GetName())
-	CaptureDebugEvent(DebugEvent{PlacementID: req.PlacementID, RequestID: req.RequestID, Adapter: a.GetName(), Outcome: "success", ReqSummary: map[string]any{"floor": req.FloorCPM}, RespSummary: map[string]any{"cpm": cpm}, CreatedAt: time.Now()})
+	CaptureDebugEventWithSpan(span, DebugEvent{PlacementID: req.PlacementID, RequestID: req.RequestID, Adapter: a.GetName(), Outcome: "success", ReqSummary: map[string]any{"floor": req.FloorCPM}, RespSummary: map[string]any{"cpm": cpm}, CreatedAt: time.Now()})
 	span.SetAttributes(map[string]string{"outcome": "success"})
 	return br, nil
 }

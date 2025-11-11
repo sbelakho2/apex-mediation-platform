@@ -128,7 +128,7 @@ func (i *IronSourceAdapter) RequestBid(ctx context.Context, req BidRequest) (*Bi
 		}
 		span.SetAttr("outcome", "no_bid")
 		span.SetAttr("reason", reason)
-		CaptureDebugEvent(DebugEvent{
+		CaptureDebugEventWithSpan(span, DebugEvent{
 			PlacementID: req.PlacementID,
 			RequestID:   req.RequestID,
 			Adapter:     "ironsource",

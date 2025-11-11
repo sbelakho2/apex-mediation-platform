@@ -32,7 +32,6 @@ router.use('/consent', consentRoutes);
 router.use('/ab-testing', abTestingRoutes);
 router.use('/data-export', dataExportRoutes);
 router.use('/queues', queuesRoutes);
-router.use('/data-export', dataExportRoutes);
 router.use('/transparency', transparencyRoutes);
 
 export default router;
