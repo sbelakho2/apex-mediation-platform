@@ -216,7 +216,7 @@ Note: This section is the single source of truth for active work. It replaces sc
      - [x] Tooling: `requirements.txt` and `requirements-gpu.txt` (CUDA12), `Dockerfile.ml` (CPU) and `Dockerfile.ml-gpu` (NVIDIA), compose profiles, Makefile targets (`ml.fetch`, `ml.prepare`, `ml.train`, `ml.train.gpu`) — Evidence: `ML/requirements.txt`, `ML/requirements-gpu.txt`, `Dockerfile.ml`, `Dockerfile.ml-gpu`, `docker-compose.yml` (ml profiles), `Makefile`
    - 6.5 Evaluation & CI
      - [x] Metrics: PR‑AUC, ROC‑AUC, precision@k, precision at FPR∈{0.1%,0.5%,1%}; adversarial stability (IP hopping, ASN masking) — Evidence: `ML/src/ml_pipelines/evaluation/metrics.py`, `ML/src/ml_pipelines/models/pipeline.py`, `ML/scripts/tests/test_model_training.py`
-     - [x] CPU‑only CI lane runs synthetic tests < 10 min; artifacts not uploaded by default — Evidence: `.venv/bin/pytest ML/scripts/tests/test_model_training.py` (synthetic dataset run), `ML/src/ml_pipelines/models/pipeline.py`
+  - [x] CPU‑only CI lane runs synthetic tests < 10 min; artifacts not uploaded by default — Evidence: `ML/scripts/tests/test_model_training.py` (synthetic dataset CPU smoke), `ML/src/ml_pipelines/models/pipeline.py`
    - 6.6 MLOps & rollout
      - [x] Shadow‑mode scoring hooks in backend (log‑only); drift detectors on features; manifests and lineage stored with artifacts — Evidence: `backend/fraud/internal/ml/fraud_ml.go`, `ML/src/ml_pipelines/models/pipeline.py`
      - [x] Privacy & fairness checks (hashing, k‑anonymity probes, bias probes across geo/device) documented in `ML_TRAINING.md`
