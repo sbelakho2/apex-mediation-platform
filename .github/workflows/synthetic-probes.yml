@@ -1,29 +1,166 @@
-name: synthetic-probes
+name: Synthetic Probes
 
 on:
   schedule:
-    - cron: '0 3 * * *'
+    - cron: '0 3 * * *'  # Daily at 3 AM UTC
   workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to probe'
+        required: true
+        type: choice
+        options:
+          - dev
+          - staging
+          - production
+        default: staging
 
 jobs:
   probe:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        environment: ${{ github.event_name == 'workflow_dispatch' && fromJSON(format('["{0}"]', github.event.inputs.environment)) || fromJSON('["staging", "production"]') }}
+    environment: ${{ matrix.environment }}
     steps:
-      - name: Probe health
+      - name: Set environment URLs
+        id: urls
+        run: |
+          case "${{ matrix.environment }}" in
+            dev)
+              echo "base_url=${{ secrets.DEV_BASE_URL || vars.DEV_BASE_URL || 'http://localhost:4000' }}" >> $GITHUB_OUTPUT
+              echo "api_url=${{ secrets.DEV_API_URL || vars.DEV_API_URL || 'http://localhost:4000/api/v1' }}" >> $GITHUB_OUTPUT
+              echo "console_url=${{ secrets.DEV_CONSOLE_URL || vars.DEV_CONSOLE_URL || 'http://localhost:3000' }}" >> $GITHUB_OUTPUT
+              ;;
+            staging)
+              echo "base_url=${{ secrets.STAGING_BASE_URL || vars.STAGING_BASE_URL }}" >> $GITHUB_OUTPUT
+              echo "api_url=${{ secrets.STAGING_API_URL || vars.STAGING_API_URL }}" >> $GITHUB_OUTPUT
+              echo "console_url=${{ secrets.STAGING_CONSOLE_URL || vars.STAGING_CONSOLE_URL }}" >> $GITHUB_OUTPUT
+              ;;
+            production)
+              echo "base_url=${{ secrets.PRODUCTION_BASE_URL || vars.PRODUCTION_BASE_URL }}" >> $GITHUB_OUTPUT
+              echo "api_url=${{ secrets.PRODUCTION_API_URL || vars.PRODUCTION_API_URL }}" >> $GITHUB_OUTPUT
+              echo "console_url=${{ secrets.PRODUCTION_CONSOLE_URL || vars.PRODUCTION_CONSOLE_URL }}" >> $GITHUB_OUTPUT
+              ;;
+          esac
+
+      - name: Probe backend health
         run: |
           set -e
-          BASE_URL=${{ secrets.SYN_BASE_URL || 'http://localhost:4000' }}
-          curl -fsSL "$BASE_URL/health" | jq '.'
-      - name: Probe RTB auction
+          BASE_URL="${{ steps.urls.outputs.base_url }}"
+          echo "Probing ${{ matrix.environment }} backend: $BASE_URL/health"
+          RESPONSE=$(curl -fsSL "$BASE_URL/health")
+          echo "$RESPONSE" | jq '.'
+          # Verify response contains expected fields
+          echo "$RESPONSE" | jq -e '.status == "ok"' || exit 1
+
+      - name: Probe RTB auction endpoint
         run: |
           set -e
-          BASE_API=${{ secrets.SYN_API_URL || 'http://localhost:4000/api/v1' }}
-          TOKEN=${{ secrets.SYN_AUTH_TOKEN || '' }}
-          DATA='{ "placementId":"probe-placement","adFormat":"interstitial","floorCpm":0 }'
+          BASE_API="${{ steps.urls.outputs.api_url }}"
+          TOKEN="${{ secrets[format('{0}_AUTH_TOKEN', matrix.environment)] || '' }}"
+          DATA='{"placementId":"probe-placement","adFormat":"interstitial","floorCpm":0}'
+          
+          echo "Probing ${{ matrix.environment }} RTB auction: $BASE_API/rtb/bid"
           if [ -n "$TOKEN" ]; then
             CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Content-Type: application/json" -H "Authorization: Bearer $TOKEN" -d "$DATA" "$BASE_API/rtb/bid")
           else
             CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Content-Type: application/json" -d "$DATA" "$BASE_API/rtb/bid")
           fi
           echo "Auction status: $CODE"
-          ( [ "$CODE" = "200" ] || [ "$CODE" = "204" ] ) || exit 1
+          # Accept 200 (bid returned), 204 (no bid), or 401 (auth required)
+          [[ "$CODE" =~ ^(200|204|401)$ ]] || exit 1
+
+      - name: Probe Console HTML
+        run: |
+          set -e
+          CONSOLE_URL="${{ steps.urls.outputs.console_url }}"
+          echo "Probing ${{ matrix.environment }} console: $CONSOLE_URL"
+          
+          # Fetch HTML and check basic content
+          RESPONSE=$(curl -fsSL "$CONSOLE_URL")
+          
+          # Verify HTML structure
+          echo "$RESPONSE" | grep -q "<html" || { echo "ERROR: No HTML tag found"; exit 1; }
+          echo "$RESPONSE" | grep -q "<title>" || { echo "ERROR: No title tag found"; exit 1; }
+          
+          # Extract and display title
+          TITLE=$(echo "$RESPONSE" | grep -o '<title>[^<]*</title>' | sed 's/<[^>]*>//g')
+          echo "Page title: $TITLE"
+          
+          # Verify expected content (adjust based on your console)
+          echo "$RESPONSE" | grep -qi "rival\|apex\|mediation\|console" || { echo "WARNING: Expected brand name not found in page"; }
+          
+          echo "Console HTML probe successful"
+
+      - name: Probe metrics endpoint
+        run: |
+          set -e
+          BASE_URL="${{ steps.urls.outputs.base_url }}"
+          echo "Probing ${{ matrix.environment }} metrics: $BASE_URL/metrics"
+          
+          RESPONSE=$(curl -fsSL "$BASE_URL/metrics")
+          
+          # Verify Prometheus format
+          echo "$RESPONSE" | grep -q "# HELP" || { echo "ERROR: No Prometheus metrics found"; exit 1; }
+          echo "$RESPONSE" | grep -q "# TYPE" || { echo "ERROR: Invalid Prometheus format"; exit 1; }
+          
+          # Count number of metrics
+          METRIC_COUNT=$(echo "$RESPONSE" | grep -c "^[a-z]" || true)
+          echo "Found $METRIC_COUNT metrics"
+          
+          [ "$METRIC_COUNT" -gt 10 ] || { echo "ERROR: Too few metrics ($METRIC_COUNT)"; exit 1; }
+
+  k6-smoke-staging:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule'
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install k6
+        run: |
+          sudo gpg -k
+          sudo gpg --no-default-keyring --keyring /usr/share/keyrings/k6-archive-keyring.gpg --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
+          echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
+          sudo apt-get update
+          sudo apt-get install k6
+
+      - name: Run k6 smoke test
+        run: |
+          cat > smoke-test.js << 'EOF'
+          import http from 'k6/http';
+          import { check, sleep } from 'k6';
+          
+          export const options = {
+            vus: 5,
+            duration: '30s',
+            thresholds: {
+              http_req_duration: ['p(95)<500'],
+              http_req_failed: ['rate<0.1'],
+            },
+          };
+          
+          export default function () {
+            const baseUrl = __ENV.BASE_URL || 'http://localhost:4000';
+            
+            // Health check
+            let res = http.get(`${baseUrl}/health`);
+            check(res, {
+              'health status 200': (r) => r.status === 200,
+              'health has status field': (r) => r.json('status') !== undefined,
+            });
+            
+            sleep(1);
+          }
+          EOF
+          
+          BASE_URL="${{ secrets.STAGING_BASE_URL || vars.STAGING_BASE_URL }}"
+          k6 run --env BASE_URL="$BASE_URL" --out json=k6-results.json smoke-test.js
+
+      - name: Upload k6 results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: k6-smoke-results-${{ github.run_number }}
+          path: k6-results.json
+          retention-days: 30

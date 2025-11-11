@@ -1,0 +1,379 @@
+'use client'
+
+import { useState } from 'react'
+import Link from 'next/link'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { apiClient } from '@/lib/api-client'
+import {
+  CreditCard,
+  Mail,
+  FileText,
+  ExternalLink,
+  AlertCircle,
+  CheckCircle2,
+  Loader2,
+  Settings as SettingsIcon,
+} from 'lucide-react'
+
+interface BillingSettings {
+  plan: {
+    name: string
+    type: 'indie' | 'studio' | 'enterprise'
+    price: number
+    currency: string
+    included_impressions: number
+    included_api_calls: number
+    included_data_transfer_gb: number
+  }
+  billing_email: string
+  receipt_preferences: {
+    send_receipts: boolean
+    send_invoices: boolean
+    send_usage_alerts: boolean
+  }
+  stripe_customer_id: string | null
+}
+
+export default function BillingSettingsPage() {
+  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+  const queryClient = useQueryClient()
+
+  // Fetch settings
+  const { data: settings, isLoading } = useQuery<BillingSettings>({
+    queryKey: ['billing', 'settings'],
+    queryFn: async () => {
+      const response = await apiClient.get('/billing/settings')
+      return response.data
+    },
+  })
+
+  // Update billing email
+  const emailMutation = useMutation({
+    mutationFn: async (email: string) => {
+      await apiClient.put('/billing/settings/email', { email })
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['billing', 'settings'] })
+      setMessage({ type: 'success', text: 'Billing email updated successfully' })
+    },
+    onError: () => {
+      setMessage({ type: 'error', text: 'Failed to update billing email' })
+    },
+  })
+
+  // Update receipt preferences
+  const preferencesMutation = useMutation({
+    mutationFn: async (preferences: BillingSettings['receipt_preferences']) => {
+      await apiClient.put('/billing/settings/preferences', preferences)
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['billing', 'settings'] })
+      setMessage({ type: 'success', text: 'Receipt preferences updated' })
+    },
+    onError: () => {
+      setMessage({ type: 'error', text: 'Failed to update preferences' })
+    },
+  })
+
+  // Create Stripe Portal session
+  const portalMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiClient.post('/billing/portal')
+      return response.data.url
+    },
+    onSuccess: (url: string) => {
+      window.location.href = url
+    },
+    onError: () => {
+      setMessage({ type: 'error', text: 'Failed to open Stripe Portal' })
+    },
+  })
+
+  const [billingEmail, setBillingEmail] = useState('')
+  const [preferences, setPreferences] = useState<BillingSettings['receipt_preferences']>({
+    send_receipts: true,
+    send_invoices: true,
+    send_usage_alerts: true,
+  })
+
+  // Update local state when data loads
+  useState(() => {
+    if (settings) {
+      setBillingEmail(settings.billing_email)
+      setPreferences(settings.receipt_preferences)
+    }
+  })
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="h-8 w-8 animate-spin text-primary-600" />
+      </div>
+    )
+  }
+
+  return (
+    <div className="bg-gray-50 min-h-screen">
+      {/* Header */}
+      <header className="bg-white border-b border-gray-200">
+        <div className="max-w-4xl mx-auto px-6 py-6">
+          <div className="flex items-center gap-3">
+            <div className="h-12 w-12 rounded-lg bg-primary-100 flex items-center justify-center">
+              <SettingsIcon className="h-6 w-6 text-primary-600" aria-hidden="true" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">Billing Settings</h1>
+              <p className="text-sm text-gray-600">
+                Manage your plan, payment method, and billing preferences
+              </p>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <main className="max-w-4xl mx-auto px-6 py-8">
+        {/* Status Message */}
+        {message && (
+          <div
+            className={`mb-6 p-4 rounded-lg border flex items-start gap-3 ${
+              message.type === 'success'
+                ? 'bg-green-50 border-green-200 text-green-800'
+                : 'bg-red-50 border-red-200 text-red-800'
+            }`}
+            role="alert"
+          >
+            {message.type === 'success' ? (
+              <CheckCircle2 className="h-5 w-5 mt-0.5 flex-shrink-0" />
+            ) : (
+              <AlertCircle className="h-5 w-5 mt-0.5 flex-shrink-0" />
+            )}
+            <p className="text-sm font-medium">{message.text}</p>
+          </div>
+        )}
+
+        <div className="space-y-6">
+          {/* Current Plan */}
+          <section className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <div className="flex items-start justify-between">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900 mb-1">Current Plan</h2>
+                <p className="text-sm text-gray-600 mb-4">
+                  Your subscription tier and included usage limits
+                </p>
+                {settings && (
+                  <div className="space-y-3">
+                    <div className="flex items-baseline gap-3">
+                      <span className="text-3xl font-bold text-gray-900">{settings.plan.name}</span>
+                      <span className="text-xl text-gray-600">
+                        ${(settings.plan.price / 100).toFixed(2)}
+                        <span className="text-sm text-gray-500">/month</span>
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-4 border-t border-gray-100">
+                      <div>
+                        <p className="text-xs font-medium text-gray-500 uppercase">Impressions</p>
+                        <p className="text-lg font-semibold text-gray-900">
+                          {(settings.plan.included_impressions / 1_000_000).toFixed(1)}M
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs font-medium text-gray-500 uppercase">API Calls</p>
+                        <p className="text-lg font-semibold text-gray-900">
+                          {(settings.plan.included_api_calls / 1_000).toFixed(0)}K
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs font-medium text-gray-500 uppercase">Data Transfer</p>
+                        <p className="text-lg font-semibold text-gray-900">
+                          {settings.plan.included_data_transfer_gb}GB
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+              <Link
+                href="/billing/usage"
+                className="px-4 py-2 text-sm font-medium text-primary-700 bg-primary-50 rounded-lg hover:bg-primary-100 transition"
+              >
+                View Usage
+              </Link>
+            </div>
+          </section>
+
+          {/* Payment Method & Stripe Portal */}
+          <section className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <div className="flex items-start justify-between mb-4">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900 mb-1">Payment Method</h2>
+                <p className="text-sm text-gray-600">
+                  Manage your payment method, billing address, and subscription settings via Stripe
+                </p>
+              </div>
+              <CreditCard className="h-6 w-6 text-gray-400" aria-hidden="true" />
+            </div>
+            <div className="pt-4 border-t border-gray-100">
+              <button
+                onClick={() => portalMutation.mutate()}
+                disabled={portalMutation.isPending || !settings?.stripe_customer_id}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 text-white text-sm font-medium rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition"
+              >
+                {portalMutation.isPending ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Opening Portal...
+                  </>
+                ) : (
+                  <>
+                    <ExternalLink className="h-4 w-4" />
+                    Manage via Stripe Portal
+                  </>
+                )}
+              </button>
+              {!settings?.stripe_customer_id && (
+                <p className="text-sm text-amber-600 mt-3 flex items-start gap-2">
+                  <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                  No Stripe account linked. Contact support to set up billing.
+                </p>
+              )}
+            </div>
+          </section>
+
+          {/* Billing Email */}
+          <section className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <div className="flex items-start justify-between mb-4">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900 mb-1">Billing Email</h2>
+                <p className="text-sm text-gray-600">
+                  Where we send invoices, receipts, and billing notifications
+                </p>
+              </div>
+              <Mail className="h-6 w-6 text-gray-400" aria-hidden="true" />
+            </div>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault()
+                if (billingEmail && billingEmail !== settings?.billing_email) {
+                  emailMutation.mutate(billingEmail)
+                }
+              }}
+              className="pt-4 border-t border-gray-100"
+            >
+              <div className="flex items-end gap-3">
+                <div className="flex-1">
+                  <label htmlFor="billing-email" className="block text-sm font-medium text-gray-700 mb-2">
+                    Email Address
+                  </label>
+                  <input
+                    id="billing-email"
+                    type="email"
+                    required
+                    value={billingEmail}
+                    onChange={(e) => setBillingEmail(e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                    placeholder="billing@example.com"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={emailMutation.isPending || billingEmail === settings?.billing_email}
+                  className="px-4 py-2 bg-primary-600 text-white text-sm font-medium rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                >
+                  {emailMutation.isPending ? 'Updating...' : 'Update'}
+                </button>
+              </div>
+            </form>
+          </section>
+
+          {/* Receipt Preferences */}
+          <section className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <div className="flex items-start justify-between mb-4">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900 mb-1">Email Preferences</h2>
+                <p className="text-sm text-gray-600">
+                  Control which billing emails you receive
+                </p>
+              </div>
+              <FileText className="h-6 w-6 text-gray-400" aria-hidden="true" />
+            </div>
+            <div className="pt-4 border-t border-gray-100 space-y-4">
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={preferences.send_receipts}
+                  onChange={(e) => {
+                    const newPrefs = { ...preferences, send_receipts: e.target.checked }
+                    setPreferences(newPrefs)
+                    preferencesMutation.mutate(newPrefs)
+                  }}
+                  className="mt-1 h-4 w-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                />
+                <div>
+                  <p className="text-sm font-medium text-gray-900">Payment Receipts</p>
+                  <p className="text-xs text-gray-600">
+                    Receive confirmation emails when payments are processed
+                  </p>
+                </div>
+              </label>
+
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={preferences.send_invoices}
+                  onChange={(e) => {
+                    const newPrefs = { ...preferences, send_invoices: e.target.checked }
+                    setPreferences(newPrefs)
+                    preferencesMutation.mutate(newPrefs)
+                  }}
+                  className="mt-1 h-4 w-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                />
+                <div>
+                  <p className="text-sm font-medium text-gray-900">Monthly Invoices</p>
+                  <p className="text-xs text-gray-600">
+                    Get invoices emailed automatically when they're generated
+                  </p>
+                </div>
+              </label>
+
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={preferences.send_usage_alerts}
+                  onChange={(e) => {
+                    const newPrefs = { ...preferences, send_usage_alerts: e.target.checked }
+                    setPreferences(newPrefs)
+                    preferencesMutation.mutate(newPrefs)
+                  }}
+                  className="mt-1 h-4 w-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                />
+                <div>
+                  <p className="text-sm font-medium text-gray-900">Usage Alerts</p>
+                  <p className="text-xs text-gray-600">
+                    Notify me when approaching or exceeding plan limits
+                  </p>
+                </div>
+              </label>
+            </div>
+          </section>
+
+          {/* Help Text */}
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="h-5 w-5 text-blue-600 mt-0.5 flex-shrink-0" />
+              <div className="text-sm text-blue-900">
+                <p className="font-medium mb-1">Need to upgrade or change your plan?</p>
+                <p>
+                  Use the Stripe Portal to manage your subscription, or{' '}
+                  <a href="mailto:billing@apexmediation.com" className="underline font-medium">
+                    contact sales
+                  </a>{' '}
+                  for Enterprise options.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  )
+}

@@ -86,6 +86,56 @@
 - M4 (Day 4–5): ML harness skeleton, export, inference microservice skeleton, docs; schedule job with placeholders.
 - M5 (Day 5): Dry‑run end‑to‑end; checklist updates; tag a release.
 
+#### 13) Fixes required to align repo with DEVELOPMENT_TODO_CHECKLIST (gaps found)
+- Monitoring — Dashboards
+  - Add RTB overview dashboard under `monitoring/grafana/` with:
+    - `auction_latency_seconds` p50/p95
+    - `rtb_wins_total` by adapter
+    - `rtb_no_fill_total`
+    - `rtb_adapter_latency_seconds` and adapter timeouts
+  - Add Tracking/Ingest dashboard with:
+    - `analytics_events_{enqueued,written,failed}_total` by kind
+    - `tracking_{rate_limited,blocked,head}_total`
+  - Add DB/Queue dashboard with:
+    - `db_query_duration_seconds` p95 and slow-query panels
+    - Queue depth/backlog panels (BullMQ or equivalent)
+  - Add `monitoring/README.md` with import/provision steps and Alertmanager wiring.
+
+- Monitoring — Alerts (`monitoring/alerts.yml`)
+  - Add RTB p95 breach alert based on `auction_latency_seconds` (warning/critical thresholds).
+  - Add adapter timeout spike alert based on `rtb_adapter_timeouts_total` (rate over 5m/1h).
+  - Add ClickHouse write failure alerts (e.g., failures in analytics/tracking writers).
+  - Add queue backlog growth alert (derivative of queue depth or age).
+  - Add HTTP error budget burn alerts (short/long windows — 5m/1h).
+
+- Synthetic probes (`.github/workflows/synthetic-probes.yml`)
+  - Add environment selectors (DEV/STAGING/PROD) via matrix or inputs; base URLs from secrets/vars.
+  - Add Console HTML probe (fetch page, assert basic content/title).
+  - Optional: Add nightly k6 smoke against STAGING; upload JSON artifacts.
+
+- CI/CD — SDK releases & documentation
+  - Decide single source of truth between `release-sdks.yml` and `sdk-release.yml`; document clearly.
+  - iOS: add XCFramework build and attach to GitHub Release (in addition to SPM source tarball) or explicitly document SPM-by-tag as the only distribution.
+  - Android: wire Dokka `generateApiDocs` into CI (either `ci-all.yml` or `ci.yml`) and upload artifact for review.
+  - Create `docs/CI_RELEASE_GUIDE.md` describing unified CI, release, publishing, and rollback.
+
+- Security & supply chain (optional but recommended per plan)
+  - Add CodeQL workflow for JS/TS + Kotlin/Swift (as supported).
+  - Add Trivy image scans for built Docker images and upload SBOMs (CycloneDX); fail on CRITICAL unless waived.
+
+- ML pipeline & deployment
+  - Create `services/inference-ml/` (FastAPI or Node) with Prometheus metrics, Dockerfile, and Helm chart; expose latency/QPS/error metrics.
+  - Wire a canary selection flag in backend to route requests to new model/service versions.
+  - Establish model registry layout `models/<model>/<version>/metadata.json` (metrics, dataset hash) and attach artifacts to GitHub Releases.
+  - Update `ML_TRAINING.md` with on‑device GPU training and CPU deployment guide (export/quantization/validation steps).
+
+- Documentation
+  - Add `docs/Monitoring/GRAFANA_DASHBOARDS.md` and `docs/Monitoring/ALERTS.md` with screenshots/queries and simulate‑to‑fire instructions.
+  - Ensure `monitoring/README.md` includes import/apply steps (kube‑prometheus‑stack provisioning tips).
+
+- Checklist hygiene
+  - Fix inconsistency in `docs/Internal/Development/DEVELOPMENT_TODO_CHECKLIST.md` Unity summary: it lists “IAB TCF parsing” as remaining work, but Section 4.5 marks TCF parsing as completed with tests; update the summary to reflect completion.
+
 ---
 
 ### What’s already landed (delta)
@@ -96,14 +146,3 @@
  - Synthetic probes workflow present: `.github/workflows/synthetic-probes.yml` probing `/health` and `/api/v1/rtb/bid` on schedule and manual dispatch.
  - Prometheus alert rules file present: `monitoring/alerts.yml` (backend, database, payments; extendable for RTB/ingest specifics).
 
-### Next actions to complete the plan
-1) Validate and finalize tag‑driven SDK releases using existing workflows:
-   - Configure org/repo for GitHub Packages in Gradle (`GITHUB_PACKAGES_URL`) and set `GITHUB_TOKEN` scope; dry‑run a pre‑release tag to verify `.github/workflows/release-sdks.yml` and `.github/workflows/sdk-release.yml` produce artifacts without duplication.
-   - Confirm Android (mobile + CTV) AARs publish to GitHub Packages; iOS SPM source/XCFramework asset attaches to Release; Unity UPM `.tgz` attaches to Release.
-   - Decide on single‑source of truth between `release-sdks.yml` and `sdk-release.yml`, or keep both with clear scopes; document in CI guide.
-2) Add remaining dashboards (RTB overview, Tracking/ingest, DB/queue) and extend Prometheus alert rules (update `monitoring/alerts.yml` with RTB p95, adapter timeouts, ClickHouse write failures, queue backlog growth) + add README under `monitoring/` with import/apply steps.
-3) Extend `synthetic-probes.yml` with console HTML probe and environment selectors (DEV/STAGING/PROD base URLs via inputs/secrets); optional k6 nightly against staging with JSON artifact upload.
-4) Draft docs: `docs/CI_RELEASE_GUIDE.md`, Monitoring guides (`docs/Monitoring/GRAFANA_DASHBOARDS.md`, `docs/Monitoring/ALERTS.md`), and update `ML_TRAINING.md`.
-5) Optional: CodeQL workflow coverage for JS/TS + Kotlin/Swift, Trivy image scan for built images with SBOM upload, and Helm chart OCI packaging guidance.
-
-This plan will bring Part 6 to a world‑class, production‑ready state while meeting the device‑GPU training and cloud‑CPU deployment constraints. Please confirm defaults (GitHub Actions + Kubernetes target) or provide your environment details for tailored deployment steps.

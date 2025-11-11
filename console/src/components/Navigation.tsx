@@ -4,6 +4,7 @@ import { usePathname } from 'next/navigation'
 import Link from 'next/link'
 import { signOut } from 'next-auth/react'
 import { useSession as useCookieSession } from '@/lib/useSession'
+import { useFeatures } from '@/lib/useFeatures'
 import {
   LayoutDashboard,
   Layout,
@@ -16,6 +17,7 @@ import {
   Menu,
   X,
   ShieldCheck,
+  CreditCard,
 } from 'lucide-react'
 import { useMemo, useState } from 'react'
 
@@ -34,15 +36,26 @@ export default function Navigation({ children }: { children: React.ReactNode }) 
   const { user } = useCookieSession()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
-  const showTransparency = process.env.NEXT_PUBLIC_TRANSPARENCY_ENABLED === 'true'
+  // Prefer runtime feature flags from API, with build-time env as SSR fallback
+  const { features } = useFeatures({
+    fallback: {
+      transparency: process.env.NEXT_PUBLIC_TRANSPARENCY_ENABLED === 'true',
+      billing: process.env.NEXT_PUBLIC_BILLING_ENABLED === 'true',
+    },
+  })
+  const showTransparency = !!features?.transparency
+  const showBilling = !!features?.billing
 
   const navigation = useMemo(() => {
     const items = [...baseNavigation]
     if (showTransparency) {
       items.splice(4, 0, { name: 'Transparency', href: '/transparency/auctions', icon: ShieldCheck })
     }
+    if (showBilling) {
+      items.splice(5, 0, { name: 'Billing', href: '/billing/usage', icon: CreditCard })
+    }
     return items
-  }, [showTransparency])
+  }, [showTransparency, showBilling])
 
   // Don't show navigation on login page
   if (!pathname || pathname === '/login' || pathname === '/') return <>{children}</>
@@ -59,6 +72,8 @@ export default function Navigation({ children }: { children: React.ReactNode }) 
         </div>
         <button
           onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+          aria-label={mobileMenuOpen ? 'Close menu' : 'Open menu'}
+          aria-expanded={mobileMenuOpen}
           className="p-2 hover:bg-gray-100 rounded-lg"
         >
           {mobileMenuOpen ? (
@@ -73,6 +88,8 @@ export default function Navigation({ children }: { children: React.ReactNode }) 
       {mobileMenuOpen && (
         <div
           className="lg:hidden fixed inset-0 bg-black/50 z-40"
+          role="presentation"
+          aria-hidden="true"
           onClick={() => setMobileMenuOpen(false)}
         />
       )}
@@ -130,7 +147,7 @@ export default function Navigation({ children }: { children: React.ReactNode }) 
           <div className="p-4 border-t">
             <div className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-50 cursor-pointer group">
               <div className="h-8 w-8 rounded-full bg-primary-100 text-primary-700 flex items-center justify-center text-sm font-semibold">
-                {session?.user?.name?.charAt(0).toUpperCase() || session?.user?.email?.charAt(0).toUpperCase() || 'U'}
+                {user?.email?.charAt(0).toUpperCase() || 'U'}
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-gray-900 truncate">
@@ -140,7 +157,13 @@ export default function Navigation({ children }: { children: React.ReactNode }) 
                 </div>
               </div>
               <button
-                onClick={() => { window.location.href = '/login' }}
+                onClick={async () => {
+                  try {
+                    await signOut({ callbackUrl: '/login' })
+                  } finally {
+                    // no-op
+                  }
+                }}
                 className="w-full mt-2 flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 hover:text-gray-900 transition"
               >
                 <LogOut className="h-5 w-5" aria-hidden={true} />

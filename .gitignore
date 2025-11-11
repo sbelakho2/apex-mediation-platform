@@ -4,16 +4,27 @@ vendor/
 *.egg-info/
 __pycache__/
 *.pyc
+.venv/
+venv/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
 
 # Build outputs
 dist/
 build/
+out/
 *.class
 *.o
 *.a
 *.so
 *.dylib
 *.dll
+
+# Next.js/SwC/Turbo
+.next/
+.swc/
+.turbo/
 
 # IDE
 .vscode/
@@ -27,6 +38,7 @@ build/
 .env
 .env.local
 .env.*.local
+.env.*
 *.pem
 *.key
 secrets/
@@ -38,11 +50,18 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# Testing
+# Test artifacts
 coverage/
-.pytest_cache/
-.coverage
-*.test
+.nyc_output/
+jest-results/
+test-results*/
+playwright-report/
+.lighthouse/
+*.lcov
+
+# k6
+k6-results.json
+quality/**/results*.json
 
 # Mobile
 *.apk
@@ -65,14 +84,26 @@ sdk/core/android/.gradle-dist/
 local.properties
 Package.resolved
 
+# Unity
+Library/
+Temp/
+Obj/
+Logs/
+Build/
+Builds/
+UserSettings/
+
 # Terraform
 .terraform/
 *.tfstate
 *.tfstate.backup
 .terraform.lock.hcl
+crash.log
 
 # Docker
 .docker/
+docker/*.env
+.docker-compose.override.yml
 
 # Temporary
 tmp/
@@ -110,3 +141,11 @@ ML/ML Data/Criteo/day_20.gz
 ML/ML Data/Criteo/day_21.gz
 ML/ML Data/Criteo/day_23.gz
 ML/ML Data/Criteo/gitattributes
+
+# SBOMs and Security scan outputs
+sbom-*.json
+trivy-*-results.sarif
+trivy-*-report.txt
+
+# Bundle analyzer
+bundle-report/

@@ -87,12 +87,65 @@ namespace RivalApex.Mediation
             }
             
             // GDPR requires explicit consent
-            if (consent.gdpr_applies && string.IsNullOrEmpty(consent.gdpr_consent_string))
+            if (consent.gdpr_applies)
             {
-                return false;
+                if (string.IsNullOrEmpty(consent.gdpr_consent_string))
+                {
+                    return false;
+                }
+                
+                // Parse TCF string to check Purpose 1 consent
+                var tcfCore = TCFParser.Parse(consent.gdpr_consent_string, true);
+                if (!tcfCore.Purpose1Consent)
+                {
+                    if (Logger.IsDebugEnabled)
+                        Debug.Log("[ApexMediation] ConsentManager: TCF Purpose 1 consent not granted");
+                    return false;
+                }
             }
             
             return true;
+        }
+        
+        /// <summary>
+        /// Parse the current GDPR consent string using IAB TCF parser
+        /// Returns null if no consent string is set
+        /// </summary>
+        public TCFParser.TcfCore? ParseTCFString()
+        {
+            var consent = GetConsent();
+            if (!consent.gdpr_applies || string.IsNullOrEmpty(consent.gdpr_consent_string))
+            {
+                return null;
+            }
+            
+            return TCFParser.Parse(consent.gdpr_consent_string, consent.gdpr_applies);
+        }
+        
+        /// <summary>
+        /// Check if a specific IAB purpose has consent
+        /// </summary>
+        /// <param name="purposeId">IAB Purpose ID (1-24)</param>
+        public bool HasPurposeConsent(int purposeId)
+        {
+            var tcf = ParseTCFString();
+            if (!tcf.HasValue)
+                return false;
+            
+            return TCFParser.HasPurposeConsent(tcf.Value, purposeId);
+        }
+        
+        /// <summary>
+        /// Check if a specific IAB vendor has consent
+        /// </summary>
+        /// <param name="vendorId">IAB Vendor ID</param>
+        public bool HasVendorConsent(int vendorId)
+        {
+            var tcf = ParseTCFString();
+            if (!tcf.HasValue)
+                return false;
+            
+            return TCFParser.HasVendorConsent(tcf.Value, vendorId);
         }
         
         /// <summary>

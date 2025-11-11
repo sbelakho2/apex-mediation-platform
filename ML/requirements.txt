@@ -1,2 +1,15 @@
-# Minimal requirements for CI-friendly ML scaffolding
+# Core dependencies for ML data enrichment, feature engineering, and training
+numpy==1.26.4
+pandas==2.2.2
+pyarrow==14.0.2
+scikit-learn==1.4.0
+scipy==1.11.4
+requests==2.31.0
+responses==0.25.3
+pyod==1.1.2
+xgboost==2.0.3
+torch==2.5.1
+onnx==1.14.1
+onnxruntime==1.16.3
+joblib==1.4.2
 pytest==8.3.3

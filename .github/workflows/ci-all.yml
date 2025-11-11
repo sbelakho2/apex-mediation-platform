@@ -7,6 +7,21 @@ on:
     branches: [ main, master ]
 
 jobs:
+  openapi-contract:
+    name: Backend — OpenAPI lint (Billing)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18.20.4'
+      - name: Install Redocly CLI
+        run: npm install -g @redocly/cli@latest
+      - name: Lint OpenAPI spec (billing.yaml)
+        run: redocly lint backend/src/openapi/billing.yaml
+
   backend:
     name: Backend — lint, test, migrations verify
     runs-on: ubuntu-22.04

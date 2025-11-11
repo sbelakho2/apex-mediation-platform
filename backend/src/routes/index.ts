@@ -14,11 +14,16 @@ import abTestingRoutes from './abTesting.routes';
 import dataExportRoutes from './dataExport.routes';
 import queuesRoutes from './queues.routes';
 import transparencyRoutes from './transparency.routes';
+import metaRoutes from './meta.routes';
+import billingRoutes from './billing.routes';
+import webhooksRoutes from './webhooks.routes';
 
 const router = Router();
 
 // Mount route modules
 router.use('/auth', authRoutes);
+router.use('/meta', metaRoutes);
+router.use('/webhooks', webhooksRoutes);
 router.use('/revenue', revenueRoutes);
 router.use('/placements', placementRoutes);
 router.use('/adapters', adapterRoutes);
@@ -33,5 +38,6 @@ router.use('/ab-testing', abTestingRoutes);
 router.use('/data-export', dataExportRoutes);
 router.use('/queues', queuesRoutes);
 router.use('/transparency', transparencyRoutes);
+router.use('/billing', billingRoutes);
 
 export default router;

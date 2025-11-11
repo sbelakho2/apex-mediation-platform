@@ -1,0 +1,321 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "gnetId": null,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "type": "stat",
+      "title": "DB Query p95 Latency",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(db_query_duration_seconds_bucket[5m])))",
+          "legendFormat": "p95"
+        }
+      ],
+      "gridPos": { "w": 6, "h": 4, "x": 0, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "decimals": 3,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "value": null, "color": "green" },
+              { "value": 0.5, "color": "yellow" },
+              { "value": 1.0, "color": "red" }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "type": "stat",
+      "title": "DB Query p99 Latency",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(db_query_duration_seconds_bucket[5m])))",
+          "legendFormat": "p99"
+        }
+      ],
+      "gridPos": { "w": 6, "h": 4, "x": 6, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "decimals": 3,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "value": null, "color": "green" },
+              { "value": 1.0, "color": "yellow" },
+              { "value": 2.0, "color": "red" }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Queue Depth",
+      "targets": [
+        {
+          "expr": "sum(queue_depth)",
+          "legendFormat": "depth"
+        }
+      ],
+      "gridPos": { "w": 6, "h": 4, "x": 12, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "value": null, "color": "green" },
+              { "value": 1000, "color": "yellow" },
+              { "value": 5000, "color": "red" }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Queue Backlog Age",
+      "targets": [
+        {
+          "expr": "max(time() - queue_oldest_job_timestamp)",
+          "legendFormat": "age"
+        }
+      ],
+      "gridPos": { "w": 6, "h": 4, "x": 18, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "value": null, "color": "green" },
+              { "value": 300, "color": "yellow" },
+              { "value": 900, "color": "red" }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "DB Query Duration Percentiles",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(db_query_duration_seconds_bucket[5m])))",
+          "legendFormat": "p50"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(db_query_duration_seconds_bucket[5m])))",
+          "legendFormat": "p95"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(db_query_duration_seconds_bucket[5m])))",
+          "legendFormat": "p99"
+        }
+      ],
+      "gridPos": { "w": 12, "h": 8, "x": 0, "y": 4 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10
+          }
+        }
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "DB Query Duration by Operation",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (le, operation) (rate(db_query_duration_seconds_bucket[5m])))",
+          "legendFormat": "{{operation}} p95"
+        }
+      ],
+      "gridPos": { "w": 12, "h": 8, "x": 12, "y": 4 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 0
+          }
+        }
+      }
+    },
+    {
+      "type": "table",
+      "title": "Slow Queries (>1s, 5m window)",
+      "targets": [
+        {
+          "expr": "topk(10, sum by (query_name, operation) (rate(db_query_duration_seconds_bucket{le=\"+Inf\"}[5m])) > 1)",
+          "legendFormat": "{{query_name}}",
+          "format": "table",
+          "instant": true
+        }
+      ],
+      "gridPos": { "w": 12, "h": 8, "x": 0, "y": 12 },
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "renameByName": {
+              "query_name": "Query",
+              "operation": "Operation",
+              "Value": "Rate (qps)"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "DB Connection Pool Utilization",
+      "targets": [
+        {
+          "expr": "db_pool_active_connections / db_pool_max_connections * 100",
+          "legendFormat": "utilization %"
+        }
+      ],
+      "gridPos": { "w": 12, "h": 8, "x": 12, "y": 12 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "max": 100,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "value": null, "color": "green" },
+              { "value": 70, "color": "yellow" },
+              { "value": 90, "color": "red" }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Queue Depth by Queue",
+      "targets": [
+        {
+          "expr": "sum by (queue) (queue_depth)",
+          "legendFormat": "{{queue}}"
+        }
+      ],
+      "gridPos": { "w": 12, "h": 8, "x": 0, "y": 20 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10
+          }
+        }
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Queue Processing Rate",
+      "targets": [
+        {
+          "expr": "sum by (queue) (rate(queue_jobs_completed_total[5m]))",
+          "legendFormat": "{{queue}} completed"
+        },
+        {
+          "expr": "sum by (queue) (rate(queue_jobs_failed_total[5m]))",
+          "legendFormat": "{{queue}} failed"
+        }
+      ],
+      "gridPos": { "w": 12, "h": 8, "x": 12, "y": 20 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10
+          }
+        }
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Queue Backlog Growth Rate",
+      "targets": [
+        {
+          "expr": "deriv(sum by (queue) (queue_depth)[5m:])",
+          "legendFormat": "{{queue}} growth rate"
+        }
+      ],
+      "gridPos": { "w": 24, "h": 8, "x": 0, "y": 28 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 20
+          }
+        }
+      }
+    },
+    {
+      "type": "table",
+      "title": "Queue Summary (5m)",
+      "targets": [
+        {
+          "expr": "sum by (queue) (queue_depth)",
+          "legendFormat": "{{queue}}",
+          "format": "table",
+          "instant": true
+        },
+        {
+          "expr": "sum by (queue) (increase(queue_jobs_completed_total[5m]))",
+          "legendFormat": "{{queue}}",
+          "format": "table",
+          "instant": true
+        },
+        {
+          "expr": "sum by (queue) (increase(queue_jobs_failed_total[5m]))",
+          "legendFormat": "{{queue}}",
+          "format": "table",
+          "instant": true
+        }
+      ],
+      "gridPos": { "w": 24, "h": 8, "x": 0, "y": 36 },
+      "transformations": [
+        {
+          "id": "merge",
+          "options": {}
+        },
+        {
+          "id": "organize",
+          "options": {
+            "renameByName": {
+              "queue": "Queue",
+              "Value #A": "Depth",
+              "Value #B": "Completed (5m)",
+              "Value #C": "Failed (5m)"
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 36,
+  "style": "dark",
+  "tags": ["database", "queue", "performance"],
+  "templating": { "list": [] },
+  "timezone": "",
+  "title": "Database & Queue Health",
+  "uid": "db-queue",
+  "version": 1
+}

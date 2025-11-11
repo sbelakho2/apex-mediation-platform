@@ -1,0 +1,149 @@
+{
+  "billing": {
+    "title": "Billing",
+    "description": "Manage usage and invoices",
+    "tabs": {
+      "usage": "Usage",
+      "invoices": "Invoices",
+      "settings": "Settings"
+    },
+    "usage": {
+      "title": "Current Usage",
+      "description": "Track your plan usage and overages for the current billing period",
+      "currentPeriod": "Current Period",
+      "plan": "Plan",
+      "metrics": {
+        "impressions": "Impressions",
+        "apiCalls": "API Calls",
+        "dataTransfer": "Data Transfer"
+      },
+      "overages": {
+        "title": "Overages",
+        "none": "No overages this period",
+        "warning": "You've exceeded your plan limits",
+        "cost": "Overage Cost"
+      },
+      "noData": "No usage data available for this period"
+    },
+    "invoices": {
+      "title": "Invoices",
+      "description": "View and download your billing invoices",
+      "number": "Invoice #",
+      "amount": "Amount",
+      "status": "Status",
+      "period": "Period",
+      "dueDate": "Due Date",
+      "paidDate": "Paid Date",
+      "actions": "Actions",
+      "viewDetails": "View Details",
+      "downloadPDF": "Download PDF",
+      "downloadingPDF": "Downloading PDF...",
+      "statuses": {
+        "paid": "Paid",
+        "open": "Open",
+        "draft": "Draft",
+        "void": "Void",
+        "uncollectible": "Uncollectible"
+      },
+      "empty": {
+        "title": "No Invoices Yet",
+        "description": "Your invoices will appear here once they're generated"
+      },
+      "error": {
+        "title": "Failed to Load Invoices",
+        "description": "There was an error loading your invoices",
+        "retry": "Try Again"
+      },
+      "pagination": {
+        "showing": "Showing",
+        "of": "of",
+        "results": "results",
+        "page": "Page",
+        "previous": "Previous",
+        "next": "Next"
+      },
+      "filters": {
+        "status": "Status",
+        "all": "All Statuses",
+        "dateRange": "Date Range",
+        "from": "From",
+        "to": "To"
+      },
+      "detail": {
+        "title": "Invoice Details",
+        "lineItems": "Line Items",
+        "description": "Description",
+        "quantity": "Quantity",
+        "unitPrice": "Unit Price",
+        "total": "Total",
+        "subtotal": "Subtotal",
+        "tax": "Tax",
+        "grandTotal": "Grand Total"
+      }
+    },
+    "settings": {
+      "title": "Billing Settings",
+      "description": "Manage your plan, payment method, and billing preferences",
+      "currentPlan": {
+        "title": "Current Plan",
+        "description": "Your subscription tier and included usage limits",
+        "viewUsage": "View Usage",
+        "perMonth": "/month"
+      },
+      "paymentMethod": {
+        "title": "Payment Method",
+        "description": "Manage your payment method, billing address, and subscription settings via Stripe",
+        "managePortal": "Manage via Stripe Portal",
+        "openingPortal": "Opening Portal...",
+        "noStripeAccount": "No Stripe account linked. Contact support to set up billing."
+      },
+      "billingEmail": {
+        "title": "Billing Email",
+        "description": "Where we send invoices, receipts, and billing notifications",
+        "label": "Email Address",
+        "placeholder": "billing@example.com",
+        "update": "Update",
+        "updating": "Updating..."
+      },
+      "emailPreferences": {
+        "title": "Email Preferences",
+        "description": "Control which billing emails you receive",
+        "receipts": {
+          "title": "Payment Receipts",
+          "description": "Receive confirmation emails when payments are processed"
+        },
+        "invoices": {
+          "title": "Monthly Invoices",
+          "description": "Get invoices emailed automatically when they're generated"
+        },
+        "usageAlerts": {
+          "title": "Usage Alerts",
+          "description": "Notify me when approaching or exceeding plan limits"
+        }
+      },
+      "help": {
+        "title": "Need to upgrade or change your plan?",
+        "description": "Use the Stripe Portal to manage your subscription, or contact sales for Enterprise options.",
+        "contactSales": "contact sales"
+      },
+      "messages": {
+        "emailUpdated": "Billing email updated successfully",
+        "emailUpdateFailed": "Failed to update billing email",
+        "preferencesUpdated": "Receipt preferences updated",
+        "preferencesUpdateFailed": "Failed to update preferences",
+        "portalFailed": "Failed to open Stripe Portal"
+      }
+    },
+    "currency": {
+      "usd": "USD"
+    },
+    "common": {
+      "loading": "Loading...",
+      "error": "Error",
+      "retry": "Retry",
+      "cancel": "Cancel",
+      "save": "Save",
+      "close": "Close"
+    }
+  }
+}

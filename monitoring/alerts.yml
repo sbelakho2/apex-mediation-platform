@@ -238,6 +238,158 @@ groups:
           summary: "High ANR rate detected"
           description: "SDK ANR rate is {{ $value | humanizePercentage }}, above 0.02% threshold."
 
+  # RTB & Auction alerts
+  - name: rtb_auction
+    interval: 30s
+    rules:
+      - alert: AuctionLatencyP95Warning
+        expr: histogram_quantile(0.95, sum by (le) (rate(auction_latency_seconds_bucket[5m]))) > 0.2
+        for: 5m
+        labels:
+          severity: warning
+          service: rtb
+        annotations:
+          summary: "Auction latency p95 elevated"
+          description: "Auction p95 latency is {{ $value }}s, above 200ms warning threshold."
+
+      - alert: AuctionLatencyP95Critical
+        expr: histogram_quantile(0.95, sum by (le) (rate(auction_latency_seconds_bucket[5m]))) > 0.5
+        for: 5m
+        labels:
+          severity: critical
+          service: rtb
+        annotations:
+          summary: "Auction latency p95 critical"
+          description: "Auction p95 latency is {{ $value }}s, above 500ms critical threshold. Investigate adapter timeouts."
+
+      - alert: AdapterTimeoutSpikeShort
+        expr: sum by (adapter) (rate(rtb_adapter_timeouts_total[5m])) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          service: rtb
+        annotations:
+          summary: "Adapter timeout spike detected (5m window)"
+          description: "Adapter {{ $labels.adapter }} timeout rate is {{ $value }}/s over the last 5 minutes."
+
+      - alert: AdapterTimeoutSpikeSustained
+        expr: sum by (adapter) (rate(rtb_adapter_timeouts_total[1h])) > 0.05
+        for: 1h
+        labels:
+          severity: critical
+          service: rtb
+        annotations:
+          summary: "Sustained adapter timeout spike (1h window)"
+          description: "Adapter {{ $labels.adapter }} timeout rate is {{ $value }}/s over the last hour. Check adapter health."
+
+      - alert: HighNoFillRate
+        expr: sum(rate(rtb_no_fill_total[5m])) / sum(rate(rtb_requests_total[5m])) > 0.5
+        for: 10m
+        labels:
+          severity: warning
+          service: rtb
+        annotations:
+          summary: "High no-fill rate"
+          description: "No-fill rate is {{ $value | humanizePercentage }}, above 50% threshold. Check adapter availability."
+
+      - alert: HTTPErrorBudgetBurnShort
+        expr: (1 - (sum(rate(http_request_duration_seconds_count{status_code!~"5.."}[5m])) / sum(rate(http_request_duration_seconds_count[5m])))) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+          service: backend
+        annotations:
+          summary: "HTTP error budget burn (5m window)"
+          description: "Error rate {{ $value | humanizePercentage }} is burning through error budget rapidly."
+
+      - alert: HTTPErrorBudgetBurnLong
+        expr: (1 - (sum(rate(http_request_duration_seconds_count{status_code!~"5.."}[1h])) / sum(rate(http_request_duration_seconds_count[1h])))) > 0.01
+        for: 1h
+        labels:
+          severity: warning
+          service: backend
+        annotations:
+          summary: "HTTP error budget burn (1h window)"
+          description: "Error rate {{ $value | humanizePercentage }} is consistently elevated over the last hour."
+
+  # ClickHouse & Analytics alerts
+  - name: clickhouse_analytics
+    interval: 1m
+    rules:
+      - alert: ClickHouseWriteFailures
+        expr: sum(rate(analytics_events_failed_total{destination="clickhouse"}[5m])) > 10
+        for: 5m
+        labels:
+          severity: critical
+          service: analytics
+        annotations:
+          summary: "ClickHouse write failures detected"
+          description: "{{ $value }} write failures/s to ClickHouse. Check database health and connectivity."
+
+      - alert: ClickHouseHighWriteLatency
+        expr: histogram_quantile(0.95, sum by (le) (rate(clickhouse_write_duration_seconds_bucket[5m]))) > 1.0
+        for: 10m
+        labels:
+          severity: warning
+          service: analytics
+        annotations:
+          summary: "ClickHouse write latency elevated"
+          description: "ClickHouse write p95 latency is {{ $value }}s, above 1s threshold."
+
+      - alert: AnalyticsPipelineBroken
+        expr: sum(rate(analytics_events_enqueued_total[5m])) - sum(rate(analytics_events_written_total[5m])) > 100
+        for: 10m
+        labels:
+          severity: critical
+          service: analytics
+        annotations:
+          summary: "Analytics pipeline backed up"
+          description: "Event lag rate is {{ $value }}/s. Queue may be blocked or ClickHouse unavailable."
+
+  # Queue health alerts
+  - name: queue_health
+    interval: 30s
+    rules:
+      - alert: QueueBacklogGrowth
+        expr: deriv(sum by (queue) (queue_depth)[5m:]) > 50
+        for: 10m
+        labels:
+          severity: warning
+          service: queue
+        annotations:
+          summary: "Queue backlog growing"
+          description: "Queue {{ $labels.queue }} depth growing at {{ $value }}/s. Check worker health."
+
+      - alert: QueueDepthCritical
+        expr: sum by (queue) (queue_depth) > 10000
+        for: 5m
+        labels:
+          severity: critical
+          service: queue
+        annotations:
+          summary: "Queue depth critical"
+          description: "Queue {{ $labels.queue }} has {{ $value }} jobs. Workers may be stalled."
+
+      - alert: QueueOldestJobStale
+        expr: time() - queue_oldest_job_timestamp > 900
+        for: 5m
+        labels:
+          severity: warning
+          service: queue
+        annotations:
+          summary: "Queue has stale jobs"
+          description: "Oldest job in queue {{ $labels.queue }} is {{ $value }}s old (>15m). Check worker processing."
+
+      - alert: HighQueueFailureRate
+        expr: sum by (queue) (rate(queue_jobs_failed_total[5m])) / sum by (queue) (rate(queue_jobs_completed_total[5m])) > 0.1
+        for: 10m
+        labels:
+          severity: warning
+          service: queue
+        annotations:
+          summary: "High queue job failure rate"
+          description: "Queue {{ $labels.queue }} failure rate is {{ $value | humanizePercentage }}, above 10% threshold."
+
   # AI automation cost controls
   - name: ai_cost_controls
     interval: 1h

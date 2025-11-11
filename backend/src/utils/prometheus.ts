@@ -111,3 +111,22 @@ export const analyticsEventsFailedTotal = new Counter({
   help: 'Total analytics events failed to write to ClickHouse',
   labelNames: ['kind'] as const,
 });
+
+// Billing and Stripe-related counters
+export const billingUsageLimitExceededTotal = new Counter({
+  name: 'billing_usage_limit_exceeded_total',
+  help: 'Total number of times an organization exceeded usage limits',
+  labelNames: ['org_id'] as const,
+});
+
+export const stripeUsageSyncSuccessTotal = new Counter({
+  name: 'stripe_usage_sync_success_total',
+  help: 'Total number of successful Stripe usage sync operations',
+  labelNames: ['org_id'] as const,
+});
+
+export const stripeUsageSyncFailuresTotal = new Counter({
+  name: 'stripe_usage_sync_failures_total',
+  help: 'Total number of failed Stripe usage sync operations',
+  labelNames: ['org_id', 'reason'] as const,
+});

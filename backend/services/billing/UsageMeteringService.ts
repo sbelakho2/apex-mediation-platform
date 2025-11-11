@@ -402,6 +402,41 @@ export class UsageMeteringService {
   }
 
   /**
+   * Get subscription details for a customer
+   */
+  async getSubscriptionDetails(customerId: string): Promise<{
+    plan_type: string;
+    included_impressions: number;
+    included_api_calls: number;
+    included_data_transfer_gb: number;
+  }> {
+    const subscription = await db.query(
+      `SELECT plan_type, included_impressions
+       FROM subscriptions
+       WHERE customer_id = $1 AND status = 'active'`,
+      [customerId]
+    );
+
+    if (subscription.rows.length === 0) {
+      throw new Error(`No active subscription found for customer ${customerId}`);
+    }
+
+    const planType = subscription.rows[0].plan_type;
+    const limits = PLAN_LIMITS[planType];
+
+    if (!limits) {
+      throw new Error(`Unknown plan type: ${planType}`);
+    }
+
+    return {
+      plan_type: planType,
+      included_impressions: limits.included_impressions,
+      included_api_calls: limits.included_api_calls,
+      included_data_transfer_gb: limits.included_data_transfer_gb,
+    };
+  }
+
+  /**
    * Get usage analytics for customer dashboard
    */
   async getUsageAnalytics(
