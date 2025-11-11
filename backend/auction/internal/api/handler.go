@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strconv"
 	"time"
+	"strings"
 
 	"github.com/gorilla/mux"
 	log "github.com/sirupsen/logrus"
@@ -108,8 +109,8 @@ func (h *Handlers) GetMediationDebugEvents(w http.ResponseWriter, r *http.Reques
 			n = v
 		}
 	}
-	events := bidders.GetLastDebugEvents(placementID, n)
-	respondJSON(w, http.StatusOK, map[string]any{
+ events := bidders.GetLastDebugEvents(placementID, n)
+	respondAdminJSON(w, http.StatusOK, map[string]any{
 		"success": true,
 		"data":    events,
 	})
@@ -119,22 +120,44 @@ func (h *Handlers) GetMediationDebugEvents(w http.ResponseWriter, r *http.Reques
 // Route: GET /v1/metrics/adapters
 func (h *Handlers) GetAdapterMetrics(w http.ResponseWriter, r *http.Request) {
 	snaps := bidders.GetAdapterMetricsSnapshot()
-	respondJSON(w, http.StatusOK, map[string]any{
+	respondAdminJSON(w, http.StatusOK, map[string]any{
 		"success": true,
 		"data":    snaps,
 	})
 }
 
-// GetAdapterMetricsTimeSeries returns 7-day time-series buckets (5-min) per adapter.
-// Route: GET /v1/metrics/adapters/timeseries?days=7
+// GetAdapterMetricsTimeSeries returns time-series buckets per adapter.
+// Routes:
+//   - GET /v1/metrics/adapters/timeseries?days=7 (legacy shape: []AdapterSeriesSnapshot)
+//   - GET /v1/metrics/adapters/timeseries?windows=5m,1h,24h (new additive shape: map[string][]AdapterSeriesSnapshot)
 func (h *Handlers) GetAdapterMetricsTimeSeries(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	if ws := strings.TrimSpace(q.Get("windows")); ws != "" {
+		// Multi-window mode (additive, backward-compatible)
+		parts := strings.Split(ws, ",")
+		out := map[string]any{}
+		for _, p := range parts {
+			wstr := strings.TrimSpace(p)
+			if wstr == "" { continue }
+			dur, err := time.ParseDuration(wstr)
+			if err != nil {
+				// Accept shorthands: 1h, 24h, 5m are parseable; ignore invalid tokens
+				continue
+			}
+			snaps := bidders.GetTimeSeriesSnapshot(dur)
+			out[wstr] = snaps
+		}
+		respondAdminJSON(w, http.StatusOK, map[string]any{"success": true, "data": out})
+		return
+	}
+	// Legacy single-window by days (default 7, max 14)
 	days := 7
-	if s := r.URL.Query().Get("days"); s != "" {
+	if s := q.Get("days"); s != "" {
 		if v, err := strconv.Atoi(s); err == nil && v > 0 && v <= 14 { days = v }
 	}
 	maxAge := time.Duration(days) * 24 * time.Hour
 	snaps := bidders.GetTimeSeriesSnapshot(maxAge)
-	respondJSON(w, http.StatusOK, map[string]any{
+	respondAdminJSON(w, http.StatusOK, map[string]any{
 		"success": true,
 		"data":    snaps,
 	})
@@ -190,6 +213,16 @@ func (h *Handlers) GetObservabilitySnapshot(w http.ResponseWriter, r *http.Reque
 }
 
 // Helper functions
+
+// respondAdminJSON writes an envelope with schema_version for admin endpoints
+func respondAdminJSON(w http.ResponseWriter, statusCode int, payload map[string]any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(statusCode)
+	if payload == nil { payload = map[string]any{} }
+	payload["schema_version"] = 1
+	if _, ok := payload["success"]; !ok { payload["success"] = true }
+	_ = json.NewEncoder(w).Encode(payload)
+}
 
 func respondJSON(w http.ResponseWriter, statusCode int, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")

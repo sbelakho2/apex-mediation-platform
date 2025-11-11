@@ -19,6 +19,10 @@ type TimeSeriesBucket struct {
 	// Latency histogram counts in milliseconds (upper bounds of each bin)
 	// Bins: [25, 50, 100, 200, 400, 800, 1600, +Inf]
 	LatBins   [8]int           `json:"lat_bins"`
+	// Additive, computed percentiles for convenience (ms)
+	P50MS     float64          `json:"p50_ms,omitempty"`
+	P95MS     float64          `json:"p95_ms,omitempty"`
+	P99MS     float64          `json:"p99_ms,omitempty"`
 }
 
 // AdapterSeries is the set of buckets for one adapter.
@@ -44,6 +48,19 @@ const (
 )
 
 var globalTS *TimeSeriesAggregator
+
+// RecordForTest is a helper to record synthetic observations for tests and smokes.
+// It increments requests/errors/nofill/success and observes given latency samples (ms) into the current bucket.
+func RecordForTest(adapter string, requests, nofill, timeout, success int, latencyMS []float64) {
+	if globalTS == nil {
+		globalTS = NewTimeSeriesAggregator(defaultBucketSize, defaultRetention)
+	}
+	for i := 0; i < requests; i++ { globalTS.IncRequest(adapter) }
+	for i := 0; i < nofill; i++ { globalTS.IncNoFill(adapter) }
+	for i := 0; i < timeout; i++ { globalTS.IncTimeout(adapter) }
+	for i := 0; i < success; i++ { globalTS.IncSuccess(adapter) }
+	for _, ms := range latencyMS { globalTS.ObserveLatencyMS(adapter, ms) }
+}
 
 // SetTimeSeriesAggregator installs a global aggregator used by helper wrappers.
 func SetTimeSeriesAggregator(ts *TimeSeriesAggregator) { if ts != nil { globalTS = ts } }
@@ -141,19 +158,50 @@ func (ts *TimeSeriesAggregator) SnapshotAll(maxAge time.Duration) []AdapterSerie
 	for a := range ts.adapters { adapters = append(adapters, a) }
 	sort.Strings(adapters)
 
-	cutoff := time.Now().Add(-maxAge).Unix()
+	// Determine the maximum number of buckets to include based on the requested window.
+	maxBuckets := int(maxAge / ts.bucketSize)
+	if maxBuckets < 1 { maxBuckets = 1 }
+
 	out := make([]AdapterSeriesSnapshot, 0, len(adapters))
 	for _, a := range adapters {
 		ser := ts.adapters[a]
-		var filtered []TimeSeriesBucket
-		for _, b := range ser.buckets {
-			if b.StartUnix >= cutoff {
-				filtered = append(filtered, b)
+		// Take the last N buckets, where N is bounded by retention and the requested window size.
+		n := len(ser.buckets)
+		if n > maxBuckets { n = maxBuckets }
+		if n > 0 {
+			filtered := make([]TimeSeriesBucket, n)
+			copy(filtered, ser.buckets[len(ser.buckets)-n:])
+			// Compute additive percentiles per bucket for convenience (does not mutate source)
+			for i := range filtered {
+				b := &filtered[i]
+				b.P50MS = b.EstimateP50()
+				b.P95MS = b.EstimateP95()
+				b.P99MS = b.EstimateP99()
 			}
+			out = append(out, AdapterSeriesSnapshot{Adapter: a, Buckets: filtered})
+		} else {
+			out = append(out, AdapterSeriesSnapshot{Adapter: a, Buckets: nil})
 		}
-		out = append(out, AdapterSeriesSnapshot{Adapter: a, Buckets: filtered})
 	}
 	return out
+}
+
+// EstimateP50 returns p50 latency in milliseconds for a bucket using the histogram bins.
+func (b *TimeSeriesBucket) EstimateP50() float64 {
+	total := 0
+	for _, c := range b.LatBins { total += c }
+	if total == 0 { return 0 }
+	threshold := int(float64(total) * 0.50)
+	if threshold == 0 { threshold = 1 }
+	cum := 0
+	bounds := [...]float64{25, 50, 100, 200, 400, 800, 1600, 3200}
+	for i, c := range b.LatBins {
+		cum += c
+		if cum >= threshold {
+			return bounds[i]
+		}
+	}
+	return 3200
 }
 
 // EstimateP95 returns p95 latency in milliseconds for a bucket using the histogram bins.
@@ -168,6 +216,24 @@ func (b *TimeSeriesBucket) EstimateP95() float64 {
 		cum += c
 		if cum >= threshold {
 			// return upper bound as estimate
+			return bounds[i]
+		}
+	}
+	return 3200
+}
+
+// EstimateP99 returns p99 latency in milliseconds for a bucket using the histogram bins.
+func (b *TimeSeriesBucket) EstimateP99() float64 {
+	total := 0
+	for _, c := range b.LatBins { total += c }
+	if total == 0 { return 0 }
+	threshold := int(float64(total) * 0.99)
+	if threshold == 0 { threshold = 1 }
+	cum := 0
+	bounds := [...]float64{25, 50, 100, 200, 400, 800, 1600, 3200}
+	for i, c := range b.LatBins {
+		cum += c
+		if cum >= threshold {
 			return bounds[i]
 		}
 	}

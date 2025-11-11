@@ -2,6 +2,7 @@ package com.rivalapexmediation.sdk
 
 import android.app.Activity
 import android.content.Context
+import androidx.annotation.NonNull
 import com.rivalapexmediation.sdk.models.Ad
 
 /**
@@ -12,7 +13,7 @@ object BelRewarded {
     @Volatile private var lastPlacement: String? = null
 
     @JvmStatic
-    fun load(context: Context, placementId: String, listener: AdLoadCallback) {
+    fun load(@NonNull context: Context, @NonNull placementId: String, @NonNull listener: AdLoadCallback) {
         lastPlacement = placementId
         MediationSDK.getInstance().loadAd(placementId, listener)
     }
@@ -21,7 +22,7 @@ object BelRewarded {
      * Attempts to show the last loaded rewarded ad. Returns true if an ad was shown.
      */
     @JvmStatic
-    fun show(activity: Activity): Boolean {
+    fun show(@NonNull activity: Activity): Boolean {
         val placement = lastPlacement ?: return false
         val sdk = MediationSDK.getInstance()
         val ad: Ad = sdk.consumeCachedAd(placement) ?: return false

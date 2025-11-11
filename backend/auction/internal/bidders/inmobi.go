@@ -9,49 +9,46 @@ import (
 	"time"
 )
 
-// ChartboostAdapter implements a minimal S2S bidder for Chartboost with standardized resiliency
+// InMobiAdapter implements a minimal S2S bidder for InMobi with standardized resiliency
 // and observability hooks. It supports a test_endpoint override for offline conformance tests.
-type ChartboostAdapter struct {
-	appID  string
-	apiKey string
-	client *http.Client
-	cb     *CircuitBreaker
+type InMobiAdapter struct {
+	accountID string
+	apiKey    string
+	client    *http.Client
+	cb        *CircuitBreaker
 }
 
-func NewChartboostAdapter(appID, apiKey string) *ChartboostAdapter {
-	c := &http.Client{Timeout: 5 * time.Second}
-	// Do not follow redirects so 3xx statuses are observable as status_XXX
-	c.CheckRedirect = func(req *http.Request, via []*http.Request) error { return http.ErrUseLastResponse }
-	return &ChartboostAdapter{
-		appID:  appID,
-		apiKey: apiKey,
-		client: c,
-		cb:     NewCircuitBreaker(3, 30*time.Second),
+func NewInMobiAdapter(accountID, apiKey string) *InMobiAdapter {
+	return &InMobiAdapter{
+		accountID: accountID,
+		apiKey:    apiKey,
+		client:    &http.Client{Timeout: 5 * time.Second},
+		cb:        NewCircuitBreaker(3, 30*time.Second),
 	}
 }
 
-func (a *ChartboostAdapter) GetName() string { return "chartboost" }
-func (a *ChartboostAdapter) GetTimeout() time.Duration { return 5 * time.Second }
+func (a *InMobiAdapter) GetName() string { return "inmobi" }
+func (a *InMobiAdapter) GetTimeout() time.Duration { return 5 * time.Second }
 
-func (a *ChartboostAdapter) RequestBid(ctx context.Context, req BidRequest) (*BidResponse, error) {
+func (a *InMobiAdapter) RequestBid(ctx context.Context, req BidRequest) (*BidResponse, error) {
 	ctx, span := StartSpan(ctx, "adapter.request", map[string]string{"adapter": a.GetName()})
 	defer span.End()
 
 	if !a.cb.Allow() {
 		recordError(a.GetName(), NoBidCircuitOpen)
-  CaptureDebugEventWithSpan(span, DebugEvent{PlacementID: req.PlacementID, RequestID: req.RequestID, Adapter: a.GetName(), Outcome: "no_bid", Reason: NoBidCircuitOpen, CreatedAt: time.Now()})
+		CaptureDebugEventWithSpan(span, DebugEvent{PlacementID: req.PlacementID, RequestID: req.RequestID, Adapter: a.GetName(), Outcome: "no_bid", Reason: NoBidCircuitOpen, CreatedAt: time.Now()})
 		return &BidResponse{RequestID: req.RequestID, AdapterName: a.GetName(), NoBid: true, NoBidReason: NoBidCircuitOpen}, nil
 	}
 
 	recordRequest(a.GetName())
 	start := time.Now()
 
-	endpoint := "https://api.chartboost.com/s2s/bid"
+	endpoint := "https://api.inmobi.com/s2s/bid"
 	if ep, ok := req.Metadata["test_endpoint"]; ok && ep != "" {
 		endpoint = ep
 	}
 	payload := map[string]any{
-		"app_id":       a.appID,
+		"account_id":   a.accountID,
 		"placement_id": req.PlacementID,
 		"ad_type":      req.AdType,
 		"bundle_id":    req.AppID,
@@ -66,7 +63,7 @@ func (a *ChartboostAdapter) RequestBid(ctx context.Context, req BidRequest) (*Bi
 		h, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
 		if err != nil { return err }
 		h.Header.Set("Content-Type", "application/json")
-		h.Header.Set("X-Api-Key", a.apiKey)
+		h.Header.Set("Authorization", fmt.Sprintf("Bearer %s", a.apiKey))
 
 		resp, err := a.client.Do(h)
 		if err != nil { return err }

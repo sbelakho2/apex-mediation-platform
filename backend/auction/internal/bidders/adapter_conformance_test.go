@@ -634,7 +634,7 @@ func TestMeta_Status400_NoRetry_NoBid(t *testing.T) {
     }))
     defer ts.Close()
 
-    adapter := NewMetaAdapter("token-abc")
+    adapter := NewMetaAdapter("app", "secret")
     req := BidRequest{RequestID: "req-meta-400", Metadata: map[string]string{"meta_placement_id": "pl-1", "test_endpoint": ts.URL}}
 
     // Act
@@ -663,7 +663,7 @@ func TestMeta_MalformedJSON_NoBidError(t *testing.T) {
     }))
     defer ts.Close()
 
-    adapter := NewMetaAdapter("token-abc")
+    adapter := NewMetaAdapter("app", "secret")
     req := BidRequest{RequestID: "req-meta-badjson", Metadata: map[string]string{"meta_placement_id": "pl-1", "test_endpoint": ts.URL}}
 
     // Act
@@ -1131,7 +1131,6 @@ func TestAdmost_MalformedJSON_NoBidError(t *testing.T) {
 
 
 func TestAppLovin_302_NoRetry_andStatusReason(t *testing.T) {
-	t := t
 	var calls int32
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		atomic.AddInt32(&calls, 1)

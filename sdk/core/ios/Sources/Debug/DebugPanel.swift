@@ -22,7 +22,21 @@ public enum DebugPanel {
         }
     }
     
+    /// Returns true when the app is allowed to show the debug panel.
+    private static func allowlisted() -> Bool {
+        #if DEBUG
+        return true
+        #else
+        let bundleId = Bundle.main.bundleIdentifier ?? ""
+        if let list = Bundle.main.object(forInfoDictionaryKey: "ApexMediationDebugAllowlist") as? [String] {
+            return list.contains(bundleId)
+        }
+        return false
+        #endif
+    }
+
     public static func show(from viewController: UIViewController) {
+        guard allowlisted() else { return }
         let sdk = MediationSDK.shared
         
         // Basic info

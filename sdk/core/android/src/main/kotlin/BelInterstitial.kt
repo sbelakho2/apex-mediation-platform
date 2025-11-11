@@ -2,6 +2,7 @@ package com.rivalapexmediation.sdk
 
 import android.app.Activity
 import android.content.Context
+import androidx.annotation.NonNull
 import com.rivalapexmediation.sdk.models.Ad
 
 /**
@@ -10,8 +11,11 @@ import com.rivalapexmediation.sdk.models.Ad
 object BelInterstitial {
     @Volatile private var lastPlacement: String? = null
 
+    /**
+     * Load an interstitial for the given placement.
+     */
     @JvmStatic
-    fun load(context: Context, placementId: String, listener: AdLoadCallback) {
+    fun load(@NonNull context: Context, @NonNull placementId: String, @NonNull listener: AdLoadCallback) {
         lastPlacement = placementId
         MediationSDK.getInstance().loadAd(placementId, listener)
     }
@@ -20,7 +24,7 @@ object BelInterstitial {
      * Attempts to show the last loaded interstitial. Returns true if an ad was shown.
      */
     @JvmStatic
-    fun show(activity: Activity): Boolean {
+    fun show(@NonNull activity: Activity): Boolean {
         val placement = lastPlacement ?: return false
         val sdk = MediationSDK.getInstance()
         val ad: Ad = sdk.consumeCachedAd(placement) ?: return false
@@ -37,6 +41,9 @@ object BelInterstitial {
         return true
     }
 
+    /**
+     * Indicates whether an interstitial is ready for the last loaded placement.
+     */
     @JvmStatic
     fun isReady(): Boolean {
         val placement = lastPlacement ?: return false

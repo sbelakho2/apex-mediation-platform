@@ -11,6 +11,8 @@ type Span interface {
 	End()
 	// SetAttr sets a string attribute on the span.
 	SetAttr(key, val string)
+	// SetAttributes sets multiple attributes (compat shim for existing callers)
+	SetAttributes(attrs map[string]string)
 }
 
 // Tracer starts spans. Real implementations may attach spans to contexts.
@@ -24,6 +26,7 @@ type noopSpan struct{}
 
 func (noopSpan) End()                    {}
 func (noopSpan) SetAttr(key, val string) {}
+func (noopSpan) SetAttributes(attrs map[string]string) {}
 
 type noopTracer struct{}
 

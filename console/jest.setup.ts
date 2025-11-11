@@ -2,6 +2,7 @@
 process.env.NEXT_PUBLIC_TRANSPARENCY_ENABLED = process.env.NEXT_PUBLIC_TRANSPARENCY_ENABLED || 'true'
 
 import '@testing-library/jest-dom'
+import 'jest-axe/extend-expect'
 
 // Basic mock for next-auth session to avoid errors when components import it
 jest.mock('next-auth/react', () => ({

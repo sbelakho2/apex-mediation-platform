@@ -22,9 +22,12 @@ type AppLovinAdapter struct {
 
 // NewAppLovinAdapter creates a new AppLovin MAX adapter
 func NewAppLovinAdapter(sdkKey string) *AppLovinAdapter {
+	c := &http.Client{Timeout: 5 * time.Second}
+	// Do not follow redirects so 3xx statuses are observable as status_XXX
+	c.CheckRedirect = func(req *http.Request, via []*http.Request) error { return http.ErrUseLastResponse }
 	return &AppLovinAdapter{
 		sdkKey: sdkKey,
-		client: &http.Client{Timeout: 5 * time.Second},
+		client: c,
 		cb:     NewCircuitBreaker(3, 30*time.Second),
 	}
 }
@@ -121,7 +124,7 @@ func (a *AppLovinAdapter) RequestBid(ctx context.Context, req BidRequest) (*BidR
 		}
 		span.SetAttr("outcome", "no_bid")
 		span.SetAttr("reason", reason)
-		CaptureDebugEvent(DebugEvent{
+		CaptureDebugEventWithSpan(span, DebugEvent{
 			PlacementID: req.PlacementID,
 			RequestID:   req.RequestID,
 			Adapter:     "applovin",

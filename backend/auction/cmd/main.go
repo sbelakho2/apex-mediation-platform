@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"syscall"
 	"time"
+	"strings"
 
 	"github.com/gorilla/mux"
 	"github.com/redis/go-redis/v9"
@@ -49,12 +50,31 @@ func main() {
 	}
 	waterfallManager := waterfall.NewWaterfallManager(redisClient)
 
-	// Wire a default in-memory Mediation Debugger (bounded capacity)
-	bidders.SetDebugger(bidders.NewInMemoryDebugger(200))
+	// Wire a default in-memory Mediation Debugger (bounded capacity) with optional sampling/redaction
+	ringSize := 200
+	if v := getEnv("DEBUG_RING_SIZE", ""); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 { ringSize = n }
+	}
+	sampleBps := 0 // 0 disables sampling; valid range 0..10000
+	if v := getEnv("DEBUG_SAMPLE_BPS", ""); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n >= 0 && n <= 10000 { sampleBps = n }
+	}
+	redactStrict := false
+	if v := getEnv("DEBUG_REDACTION_LEVEL", ""); v != "" {
+		if strings.EqualFold(v, "strict") { redactStrict = true }
+	}
+	maxLen := 256
+	if v := getEnv("DEBUG_MAXLEN", ""); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 { maxLen = n }
+	}
+	bidders.SetDebugger(bidders.NewInMemoryDebuggerWithOptions(ringSize, sampleBps, redactStrict, maxLen))
 	// Wire a default in-process metrics recorder with rolling percentiles (dev-friendly)
 	bidders.SetMetricsRecorder(bidders.NewRollingMetricsRecorder(512))
 	// Wire a default time-series aggregator for 7-day dashboards (5-min buckets)
 	bidders.SetTimeSeriesAggregator(bidders.NewTimeSeriesAggregator(5*time.Minute, 7*24*time.Hour))
+
+	// Optionally install OpenTelemetry OTLP tracer (default-off; env-gated)
+	_ = bidders.InstallOTelTracer()
 
 	// Initialize HTTP handlers
 	handlers := api.NewHandlers(auctionEngine, waterfallManager)
@@ -68,16 +88,26 @@ func main() {
 	router.HandleFunc("/v1/auction", handlers.RunAuction).Methods("POST")
 	router.HandleFunc("/v1/bids", handlers.ReceiveBid).Methods("POST")
 	router.HandleFunc("/v1/waterfall/{placement}", handlers.GetWaterfall).Methods("GET")
-	// Mediation Debugger (read-only)
-	router.HandleFunc("/v1/debug/mediation", handlers.GetMediationDebugEvents).Methods("GET", "OPTIONS")
-	// Adapter metrics snapshot (read-only)
-	router.HandleFunc("/v1/metrics/adapters", handlers.GetAdapterMetrics).Methods("GET", "OPTIONS")
-	// Time-series metrics (7 days, 5-min buckets)
-	router.HandleFunc("/v1/metrics/adapters/timeseries", handlers.GetAdapterMetricsTimeSeries).Methods("GET", "OPTIONS")
-	// SLO status
-	router.HandleFunc("/v1/metrics/slo", handlers.GetAdapterSLO).Methods("GET", "OPTIONS")
-	// Observability snapshot (SLO + optional last-N debugger events)
-	router.HandleFunc("/v1/metrics/overview", handlers.GetObservabilitySnapshot).Methods("GET", "OPTIONS")
+	// Admin subrouters (apply optional security middlewares)
+	adminDebug := router.PathPrefix("/v1/debug").Subrouter()
+	adminDebug.Use(api.AdminIPAllowlistMiddleware)
+	adminDebug.Use(api.AdminAuthMiddleware)
+	adminDebug.Use(api.AdminRateLimitMiddleware)
+	adminDebug.HandleFunc("/mediation", handlers.GetMediationDebugEvents).Methods("GET", "OPTIONS")
+
+	adminMetrics := router.PathPrefix("/v1/metrics").Subrouter()
+	adminMetrics.Use(api.AdminIPAllowlistMiddleware)
+	adminMetrics.Use(api.AdminAuthMiddleware)
+	adminMetrics.Use(api.AdminRateLimitMiddleware)
+	adminMetrics.HandleFunc("/adapters", handlers.GetAdapterMetrics).Methods("GET", "OPTIONS")
+	adminMetrics.HandleFunc("/adapters/timeseries", handlers.GetAdapterMetricsTimeSeries).Methods("GET", "OPTIONS")
+	adminMetrics.HandleFunc("/slo", handlers.GetAdapterSLO).Methods("GET", "OPTIONS")
+	adminMetrics.HandleFunc("/overview", handlers.GetObservabilitySnapshot).Methods("GET", "OPTIONS")
+
+	// Optional Prometheus text exposition endpoint (default-off)
+	if v := getEnv("PROM_EXPORTER_ENABLED", "false"); v == "true" || v == "1" || v == "TRUE" {
+		router.HandleFunc("/metrics", bidders.PrometheusMetricsHandler()).Methods("GET")
+	}
 
 	// HTTP server
 	srv := &http.Server{

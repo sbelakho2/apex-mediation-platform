@@ -24,12 +24,16 @@ const (
 
 // SLOStatus summarizes the current health for an adapter over a time window.
 type SLOStatus struct {
-	Adapter      string   `json:"adapter"`
-	Window       string   `json:"window"` // e.g., "1h" or "24h"
-	LatencyP99MS float64  `json:"latency_p99_ms"`
-	ErrorRate    float64  `json:"error_rate"`
-	FillRate     float64  `json:"fill_rate"`
-	Level        SLOLevel `json:"level"`
+	Adapter          string   `json:"adapter"`
+	Window           string   `json:"window"` // e.g., "1h" or "24h"
+	LatencyP99MS     float64  `json:"latency_p99_ms"`
+	ErrorRate        float64  `json:"error_rate"`
+	FillRate         float64  `json:"fill_rate"`
+	Level            SLOLevel `json:"level"`
+	// Additive fields (compatible; omitted when zero)
+	ErrorBudget      float64  `json:"error_budget,omitempty"`
+	ErrorBudgetUsed  float64  `json:"error_budget_used,omitempty"`
+	BurnRate         float64  `json:"burn_rate,omitempty"`
 }
 
 // EvaluateSLO computes SLOs per adapter for the given window using the global time-series aggregator.
@@ -61,6 +65,15 @@ func EvaluateSLO(window time.Duration) []SLOStatus {
 			fillRate = float64(merged.Success) / float64(merged.Requests)
 		}
 		level := classifySLO(latP99, errRate, fillRate)
+		// Compute additive SLO projections (compatible):
+		// Use critical error rate as budget target (10%).
+		budgetTarget := SLOCritErrorRate
+		var budget, used, burn float64
+		if budgetTarget > 0 {
+			budget = budgetTarget
+			used = errRate
+			burn = errRate / budgetTarget
+		}
 		statuses = append(statuses, SLOStatus{
 			Adapter: s.Adapter,
 			Window: window.String(),
@@ -68,6 +81,9 @@ func EvaluateSLO(window time.Duration) []SLOStatus {
 			ErrorRate: errRate,
 			FillRate: fillRate,
 			Level: level,
+			ErrorBudget: budget,
+			ErrorBudgetUsed: used,
+			BurnRate: burn,
 		})
 	}
 	return statuses
@@ -77,7 +93,8 @@ func classifySLO(p99ms, errRate, fillRate float64) SLOLevel {
 	crit := false
 	warn := false
 	if p99ms >= SLOCritLatencyP99MS { crit = true } else if p99ms >= SLOWarnLatencyP99MS { warn = true }
-	if errRate >= SLOCritErrorRate { crit = true } else if errRate >= SLOWarnErrorRate { warn = true }
+	// Treat error rate of exactly 10% as WARN; only >10% is CRIT
+	if errRate > SLOCritErrorRate { crit = true } else if errRate >= SLOWarnErrorRate { warn = true }
 	if fillRate <= SLOCritFillRate { crit = true } else if fillRate <= SLOWarnFillRate { warn = true }
 	if crit { return SLOCrit }
 	if warn { return SLOWarn }
