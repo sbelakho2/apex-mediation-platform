@@ -121,4 +121,55 @@ router.post('/impersonate/stop', async (req: Request, res: Response) => {
   return res.json({ success: true, message: 'Impersonation stopped' });
 });
 
+/**
+ * GET /api/v1/admin/health/red
+ * Returns RED metrics summary using Prometheus HTTP API instant queries over 5m window.
+ */
+router.get('/health/red', async (_req: Request, res: Response) => {
+  const base = process.env.PROMETHEUS_URL;
+  if (!base) {
+    return res.status(501).json({ success: false, error: 'PROMETHEUS_URL not configured' });
+  }
+
+  // Use global fetch (Node 18+). If types are missing, rely on runtime presence.
+  const authHeader = process.env.PROMETHEUS_BEARER ? { Authorization: `Bearer ${process.env.PROMETHEUS_BEARER}` } : {};
+
+  async function q(expr: string): Promise<number | null> {
+    try {
+      const url = new URL('/api/v1/query', base);
+      url.searchParams.set('query', expr);
+      // @ts-ignore
+      const r = await fetch(url.toString(), { headers: { ...authHeader } });
+      if (!r.ok) return null;
+      const json = await r.json();
+      const v = json?.data?.result?.[0]?.value?.[1];
+      const num = v != null ? Number(v) : null;
+      return Number.isFinite(num) ? (num as number) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  // Queries (5m rate window)
+  const apiRps = await q('sum(rate(http_request_duration_seconds_count{job="backend-api"}[5m]))');
+  const apiErr = await q('sum(rate(http_request_duration_seconds_count{status_code=~"5..",job="backend-api"}[5m]))');
+  const apiTot = await q('sum(rate(http_request_duration_seconds_count{job="backend-api"}[5m]))');
+  const apiErrRate = apiTot && apiTot > 0 ? (apiErr ?? 0) / apiTot : (apiErr ?? 0);
+  const apiP95 = await q('histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket{job="backend-api"}[5m])))');
+  const rtbP95 = await q('histogram_quantile(0.95, sum by (le) (rate(auction_latency_seconds_bucket{job="backend-api"}[5m])))');
+  const timeouts = await q('sum(rate(rtb_adapter_timeouts_total{job="backend-api"}[5m]))');
+
+  return res.json({
+    success: true,
+    data: {
+      api_rps_5m: apiRps ?? 0,
+      api_error_rate_5m: apiErrRate ?? 0,
+      api_p95_latency_5m: apiP95 ?? null,
+      rtb_p95_latency_5m: rtbP95 ?? null,
+      rtb_adapter_timeouts_rps_5m: timeouts ?? 0,
+      timestamp: new Date().toISOString(),
+    },
+  });
+});
+
 export default router;

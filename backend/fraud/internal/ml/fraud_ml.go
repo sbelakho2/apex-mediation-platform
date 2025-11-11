@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"math"
 	"os"
+	"sort"
 	"sync"
 	"time"
 
@@ -60,6 +61,31 @@ type FeatureVector struct {
 	// Historical features
 	HistoricalFraudRate float64 `json:"historical_fraud_rate"` // Past fraud rate
 	ConversionRate      float64 `json:"conversion_rate"`       // Past conversion rate
+}
+
+type featureStat struct {
+	Count float64 `json:"count"`
+	Mean  float64 `json:"mean"`
+	M2    float64 `json:"m2"`
+}
+
+func (s *featureStat) Update(value float64) {
+	s.Count++
+	delta := value - s.Mean
+	s.Mean += delta / s.Count
+	delta2 := value - s.Mean
+	s.M2 += delta * delta2
+}
+
+func (s *featureStat) StdDev() float64 {
+	if s.Count < 2 {
+		return 0
+	}
+	variance := s.M2 / (s.Count - 1)
+	if variance < 0 {
+		return 0
+	}
+	return math.Sqrt(variance)
 }
 
 // NewMLFraudDetector creates a new ML fraud detector
@@ -139,17 +165,19 @@ func isDegenerateModel(model *FraudModel) bool {
 // Predict predicts fraud score using ML model
 func (mfd *MLFraudDetector) Predict(ctx context.Context, features FeatureVector) float64 {
 	mfd.mu.RLock()
-	defer mfd.mu.RUnlock()
+	model := mfd.model
+	shadow := mfd.shadowMode
+	mfd.mu.RUnlock()
 
-	// Calculate weighted sum
+	if model == nil {
+		return 0.0
+	}
+
 	score := 0.0
-
-	// Add bias if present in weights
-	if bias, ok := mfd.model.Weights["_bias"]; ok {
+	if bias, ok := model.Weights["_bias"]; ok {
 		score = bias
 	}
 
-	// Add weighted features
 	featureMap := map[string]float64{
 		"device_age":            features.DeviceAge,
 		"device_ip_count":       features.DeviceIPCount,
@@ -171,13 +199,24 @@ func (mfd *MLFraudDetector) Predict(ctx context.Context, features FeatureVector)
 	}
 
 	for feature, value := range featureMap {
-		if weight, ok := mfd.model.Weights[feature]; ok {
+		if weight, ok := model.Weights[feature]; ok {
 			score += weight * value
 		}
 	}
 
-	// Apply sigmoid activation to get probability [0, 1]
 	probability := 1.0 / (1.0 + math.Exp(-score))
+
+	mfd.trackFeatureStats(ctx, featureMap)
+
+	if shadow {
+		important := topContributors(model.Weights, featureMap, 3)
+		log.WithFields(log.Fields{
+			"score":              probability,
+			"threshold":          model.Threshold,
+			"version":            model.Version,
+			"important_features": important,
+		}).Info("ml_shadow_score")
+	}
 
 	return probability
 }
@@ -230,11 +269,109 @@ func (mfd *MLFraudDetector) UpdateModel(model FraudModel) {
 
 	mfd.model = &model
 
-	// Cache model in Redis
-	data, _ := json.Marshal(model)
-	mfd.redis.Set(context.Background(), "fraud_model:latest", data, 0)
+	if mfd.redis != nil {
+		data, _ := json.Marshal(model)
+		mfd.redis.Set(context.Background(), "fraud_model:latest", data, 0)
+	}
 
 	log.WithField("version", model.Version).Info("Updated fraud detection model")
+}
+
+func (mfd *MLFraudDetector) trackFeatureStats(ctx context.Context, featureValues map[string]float64) {
+	if mfd == nil || mfd.redis == nil {
+		return
+	}
+	for name, value := range featureValues {
+		if math.IsNaN(value) || math.IsInf(value, 0) {
+			continue
+		}
+		stat := mfd.loadFeatureStat(ctx, name)
+		stat.Update(value)
+
+		if stat.Count >= 50 {
+			std := stat.StdDev()
+			deviation := math.Abs(value - stat.Mean)
+			if std > 0 && deviation > 4*std {
+				log.WithFields(log.Fields{
+					"feature":   name,
+					"value":     value,
+					"mean":      stat.Mean,
+					"stddev":    std,
+					"count":     stat.Count,
+					"deviation": deviation,
+				}).Warn("ml_feature_drift_detected")
+			}
+		}
+
+		mfd.saveFeatureStat(ctx, name, stat)
+	}
+}
+
+func (mfd *MLFraudDetector) loadFeatureStat(ctx context.Context, feature string) featureStat {
+	if mfd.redis == nil {
+		return featureStat{}
+	}
+	key := "fraud:feature:stats:" + feature
+	raw, err := mfd.redis.Get(ctx, key).Result()
+	if err != nil {
+		return featureStat{}
+	}
+	var stat featureStat
+	if err := json.Unmarshal([]byte(raw), &stat); err != nil {
+		return featureStat{}
+	}
+	return stat
+}
+
+func (mfd *MLFraudDetector) saveFeatureStat(ctx context.Context, feature string, stat featureStat) {
+	if mfd.redis == nil {
+		return
+	}
+	payload, err := json.Marshal(stat)
+	if err != nil {
+		return
+	}
+	key := "fraud:feature:stats:" + feature
+	if err := mfd.redis.Set(ctx, key, payload, 24*time.Hour).Err(); err != nil {
+		log.WithError(err).Debug("failed to persist feature stats")
+	}
+}
+
+func topContributors(weights map[string]float64, values map[string]float64, limit int) []string {
+	type contribution struct {
+		name      string
+		magnitude float64
+	}
+	if limit <= 0 {
+		return nil
+	}
+
+	var ranked []contribution
+	for name, value := range values {
+		weight, ok := weights[name]
+		if !ok {
+			continue
+		}
+		magnitude := math.Abs(weight * value)
+		if magnitude == 0 {
+			continue
+		}
+		ranked = append(ranked, contribution{name: name, magnitude: magnitude})
+	}
+
+	sort.Slice(ranked, func(i, j int) bool {
+		return ranked[i].magnitude > ranked[j].magnitude
+	})
+
+	if len(ranked) < limit {
+		limit = len(ranked)
+	}
+
+	result := make([]string, 0, limit)
+	for i := 0; i < limit; i++ {
+		result = append(result, ranked[i].name)
+	}
+	return result
 }
 
 // Feature extraction helpers

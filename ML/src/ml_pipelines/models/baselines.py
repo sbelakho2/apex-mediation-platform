@@ -3,14 +3,15 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Dict, Tuple
+from typing import Dict
 
 import joblib
 import numpy as np
 from sklearn.calibration import CalibratedClassifierCV
 from sklearn.ensemble import GradientBoostingClassifier, IsolationForest
 from sklearn.isotonic import IsotonicRegression
-from sklearn.metrics import average_precision_score, precision_recall_fscore_support, roc_auc_score
+
+from ml_pipelines.evaluation import classification_metrics
 
 
 def train_isolation_forest(
@@ -21,7 +22,7 @@ def train_isolation_forest(
     *,
     output_path: Path,
     random_state: int,
-) -> Dict[str, float]:
+) -> Dict[str, object]:
     model = IsolationForest(random_state=random_state, contamination="auto", n_estimators=200)
     model.fit(X_train)
 
@@ -36,7 +37,12 @@ def train_isolation_forest(
 
     calibrated = calibrator.transform(val_scores)
     metrics = classification_metrics(y_val, calibrated, prefix="isolation_forest")
-    return metrics
+    return {
+        "metrics": metrics,
+        "model": model,
+        "calibrator": calibrator,
+        "probabilities": calibrated,
+    }
 
 
 def train_gradient_boosting(
@@ -47,7 +53,7 @@ def train_gradient_boosting(
     *,
     output_path: Path,
     random_state: int,
-) -> Dict[str, float]:
+) -> Dict[str, object]:
     base = GradientBoostingClassifier(
         random_state=random_state,
         n_estimators=200,
@@ -62,27 +68,14 @@ def train_gradient_boosting(
 
     val_probs = calibrated.predict_proba(X_val)[:, 1]
     metrics = classification_metrics(y_val, val_probs, prefix="gbdt")
-    return metrics
-
-
-def classification_metrics(y_true: np.ndarray, probabilities: np.ndarray, *, prefix: str) -> Dict[str, float]:
-    ap = average_precision_score(y_true, probabilities)
-    roc = roc_auc_score(y_true, probabilities)
-
-    preds = (probabilities >= 0.5).astype(int)
-    precision, recall, f1, _ = precision_recall_fscore_support(y_true, preds, average="binary", zero_division=0)
-
     return {
-        f"{prefix}_pr_auc": float(ap),
-        f"{prefix}_roc_auc": float(roc),
-        f"{prefix}_precision": float(precision),
-        f"{prefix}_recall": float(recall),
-        f"{prefix}_f1": float(f1),
+        "metrics": metrics,
+        "model": calibrated,
+        "probabilities": val_probs,
     }
 
 
 __all__ = [
     "train_isolation_forest",
     "train_gradient_boosting",
-    "classification_metrics",
 ]

@@ -74,8 +74,12 @@ def test_train_models_pipeline(tmp_path: Path, synthetic_dataset: Path) -> None:
         "deepsvdd_pr_auc",
         "isolation_forest_pr_auc",
         "gbdt_pr_auc",
+        "ensemble_pr_auc",
         "autoencoder_temperature",
         "deepsvdd_temperature",
+        "autoencoder_precision_at_5pct",
+        "gbdt_precision_at_fpr_0.1pct",
+        "gbdt_stability_ip_hopping",
     ]
     for key in required_metrics:
         assert key in metrics
@@ -83,6 +87,8 @@ def test_train_models_pipeline(tmp_path: Path, synthetic_dataset: Path) -> None:
     manifest = json.loads((output_dir / "training_manifest.json").read_text(encoding="utf-8"))
     assert manifest["run_id"] == "test-run"
     assert manifest["files"]["autoencoder_torch"].endswith("autoencoder.pt")
+    assert "generated_at" in manifest
+    assert manifest.get("lineage", {}).get("dataset", {}).get("path") == str(config.dataset_path)
 
     model_card = (output_dir / "model_card.md").read_text(encoding="utf-8")
     assert "Model Card" in model_card

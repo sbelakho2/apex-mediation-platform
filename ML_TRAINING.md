@@ -171,7 +171,14 @@ Latency: p95 inference < 5 ms (score only; heavy checks async).
 
 Robustness: A/B simulate VPN/Tor spikes, DC surges, CTIT skew; check drift monitors on CTIT, ASN mix, app-ads.txt authorization rates.
 
-G. Where each source plugs into your stack
+G. Privacy & Fairness Guardrails
+
+- Network privacy — Offline feature store truncates and hashes identifiers (`OfflineFeatureBuilder`) so raw IPs never reach models; training manifests now capture dataset hashes and source manifests for lineage audits.
+- K-anonymity spot checks — Training runs export hashed network aggregates; the evaluation harness fails runs where hashed buckets drop below five examples.
+- Bias probes — Evaluation metrics (`ml_pipelines.evaluation.metrics`) include low-FPR precision series, and backend shadow-mode logs expose top contributing features to inspect geo/device cohorts when drift triggers.
+- Fairness reporting — Training manifests record feature columns and weight usage so notebooks can slice precision/recall by `geo_cc` and `device_type` before rollout decisions.
+
+H. Where each source plugs into your stack
 
 Ingest layer:
 

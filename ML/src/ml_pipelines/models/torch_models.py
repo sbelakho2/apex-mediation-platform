@@ -12,7 +12,7 @@ import torch
 from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
 
-from .baselines import classification_metrics
+from ml_pipelines.evaluation import classification_metrics
 
 
 @dataclass
@@ -170,6 +170,7 @@ def train_autoencoder(
             "autoencoder_onnx": onnx_path,
             "autoencoder_calibrator": joblib_path,
         },
+        "val_probabilities": calibrated,
     }
 
 
@@ -256,6 +257,7 @@ def train_deepsvdd(
             "deepsvdd_onnx": onnx_path,
             "deepsvdd_calibrator": joblib_path,
         },
+        "val_probabilities": calibrated,
     }
 
 

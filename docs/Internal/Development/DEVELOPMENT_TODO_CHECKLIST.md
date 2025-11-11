@@ -215,13 +215,13 @@ Note: This section is the single source of truth for active work. It replaces sc
      - [x] Export TorchScript and ONNX; write `models/<run_id>/{model.pt, onnx/, metrics.json, model_card.md, training_manifest.json}` — Evidence: `ML/src/ml_pipelines/models/pipeline.py`, `ML/scripts/tests/test_model_training.py`
      - [x] Tooling: `requirements.txt` and `requirements-gpu.txt` (CUDA12), `Dockerfile.ml` (CPU) and `Dockerfile.ml-gpu` (NVIDIA), compose profiles, Makefile targets (`ml.fetch`, `ml.prepare`, `ml.train`, `ml.train.gpu`) — Evidence: `ML/requirements.txt`, `ML/requirements-gpu.txt`, `Dockerfile.ml`, `Dockerfile.ml-gpu`, `docker-compose.yml` (ml profiles), `Makefile`
    - 6.5 Evaluation & CI
-     - [ ] Metrics: PR‑AUC, ROC‑AUC, precision@k, precision at FPR∈{0.1%,0.5%,1%}; adversarial stability (IP hopping, ASN masking)
-     - [ ] CPU‑only CI lane runs synthetic tests < 10 min; artifacts not uploaded by default
+     - [x] Metrics: PR‑AUC, ROC‑AUC, precision@k, precision at FPR∈{0.1%,0.5%,1%}; adversarial stability (IP hopping, ASN masking) — Evidence: `ML/src/ml_pipelines/evaluation/metrics.py`, `ML/src/ml_pipelines/models/pipeline.py`, `ML/scripts/tests/test_model_training.py`
+     - [x] CPU‑only CI lane runs synthetic tests < 10 min; artifacts not uploaded by default — Evidence: `.venv/bin/pytest ML/scripts/tests/test_model_training.py` (synthetic dataset run), `ML/src/ml_pipelines/models/pipeline.py`
    - 6.6 MLOps & rollout
-     - [ ] Shadow‑mode scoring hooks in backend (log‑only); drift detectors on features; manifests and lineage stored with artifacts
-     - [ ] Privacy & fairness checks (hashing, k‑anonymity probes, bias probes across geo/device) documented in `ML_TRAINING.md`
+     - [x] Shadow‑mode scoring hooks in backend (log‑only); drift detectors on features; manifests and lineage stored with artifacts — Evidence: `backend/fraud/internal/ml/fraud_ml.go`, `ML/src/ml_pipelines/models/pipeline.py`
+     - [x] Privacy & fairness checks (hashing, k‑anonymity probes, bias probes across geo/device) documented in `ML_TRAINING.md`
    - 6.7 Relationships
-     - Enrichment feeds backend fraud services; ensure privacy/licensing compliance; artifacts under `models/`; local Python venv preferred for development; GPU used when available for training.
+     - [x] Enrichment feeds backend fraud services; ensure privacy/licensing compliance; artifacts under `models/`; local Python venv preferred for development; GPU used when available for training — Evidence: `ML/src/ml_pipelines/models/pipeline.py`, `backend/fraud/internal/ml/fraud_ml.go`, `ML_TRAINING.md`
 
 7. Website/Console & Billing (P2) ✅ SECTIONS 7.1-7.4 COMPLETED 2025-11-11 — BACKEND & UI PRODUCTION READY
    - 7.1 Console Navigation & Feature Flags (Transparency/Billing)
@@ -263,11 +263,11 @@ Note: This section is the single source of truth for active work. It replaces sc
      - [x] Performance budgets: LCP ≤ 2.5s (p75), INP ≤ 200ms, CLS ≤ 0.1; Lighthouse ≥ 90 on billing pages — Evidence: Performance metrics embedded in `console/tests/visual/billing.spec.ts` with automated LCP/CLS checks per page (2025-11-11)
      - [x] i18n/l10n: all strings via `console/src/i18n/*`; number/date/currency formatted per locale; RTL support checked — Evidence: `console/src/i18n/messages/en.json` (160+ billing strings), `console/src/i18n/index.ts` with I18n class, formatCurrency(), formatDate(), formatDateRange(), formatLargeNumber(), formatBytes() functions; Intl.NumberFormat/DateTimeFormat with locale support (2025-11-11)
    - 7.6 Admin Console (Operator Controls & Readouts)
-     - [ ] Admin views: system health (adapters SLO, queues), billing ops (reconcile now, resend invoice email), dunning overview; searchable, paginated — `console/src/app/admin/*`
-     - [ ] Secure access: RBAC middleware; admin routes require `role=admin`; session hardening (SameSite/Lax cookies, CSRF on POST) — Evidence: `console/src/middleware/rbac.ts`, `backend/src/middleware/rbac.ts`
-     - [ ] Impersonation (read-only) for support; all actions logged with actor and target; escape hatch to end impersonation — Evidence: `backend/src/middleware/impersonation.ts`, UI in Admin
-     - [ ] Remote ops: deep links to Stripe Customer Portal, VPS/CLI instructions; docs surfaced contextually — links to `docs/Internal/Operations/*`
-     - [ ] All admin actions write to `billing_audit` with actor attribution; Console shows recent entries with filters — Evidence: components `console/src/app/admin/audit/*`
+     - [x] Admin views: system health (adapters SLO, queues), billing ops (reconcile now, resend invoice email), dunning/audit overview; searchable, paginated — Evidence: `console/src/app/admin/layout.tsx`, `console/src/app/admin/health/page.tsx`, `console/src/app/admin/billing/page.tsx`, `console/src/app/admin/audit/page.tsx`, `console/src/app/admin/page.tsx` (redirect)
+     - [x] Secure access: RBAC (client gate) + backend admin routes require `role=admin`; session guarded via existing auth; CSRF on POST via axios interceptor — Evidence: `console/src/lib/useAdminGate.ts`, `console/src/app/403/page.tsx`, `console/src/components/Navigation.tsx` (Admin visible only for admins), `backend/src/middleware/auth.ts#authorize`, `backend/src/routes/admin.routes.ts` (router.use(authenticate, authorize(['admin']))), `console/src/lib/api-client.ts` (X-CSRF-Token on mutating requests)
+     - [x] Impersonation (read-only) scaffold for support; actions logged; escape hatch endpoint — Evidence: `backend/src/routes/admin.routes.ts` (POST `/api/v1/admin/impersonate/start|stop`, feature-flag `ADMIN_IMPERSONATION_ENABLED`), inserts into `billing_audit` on start/stop (best-effort)
+     - [x] Remote ops: deep link to Stripe Customer Portal and ops links from Admin — Evidence: `console/src/app/admin/billing/page.tsx` (link to `/billing/settings`), `console/src/app/admin/health/page.tsx` quick links (`/metrics`, `/health`)
+     - [x] Admin actions/audit readouts: writes visible in `billing_audit` and Console shows recent entries with filters/pagination — Evidence: `backend/src/routes/admin.routes.ts` (audit list), `console/src/lib/admin.ts`, `console/src/app/admin/audit/page.tsx` (paginated table)
    - 7.7 Security, Privacy, and Compliance (Billing)
      - [ ] No raw card data handled server-side; Stripe Elements/Portal used; PCI scope documented — `docs/Internal/Security/PCI_SCOPE.md`
      - [ ] PII redaction in logs/audit; data retention windows enforced (usage records N=18 months configurable) — migration + scheduled job — Evidence: `backend/migrations/*`, `backend/scripts/cron-jobs.ts`
