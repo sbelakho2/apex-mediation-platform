@@ -1,12 +1,9 @@
 import { Request, Response, NextFunction } from 'express';
-import { executeAuction, getCircuitBreakerStats, getAdapterConfig } from '../services/openrtbEngine';
-import { 
-  executeWithWaterfall, 
-  updateWaterfallStats, 
-  getWaterfallStats 
-} from '../services/waterfallService';
-import { OpenRTBBidRequest } from '../types/openrtb.types';
+import crypto from 'crypto';
 import logger from '../utils/logger';
+import { AuctionRequestBody } from '../schemas/rtb';
+import { runAuction } from '../services/rtb/orchestrator';
+import { getAllAdapters } from '../services/rtb/adapterRegistry';
 
 /**
  * POST /api/v1/rtb/bid
@@ -19,42 +16,54 @@ export const requestBid = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const bidRequest = req.body as OpenRTBBidRequest;
-    const useWaterfall = req.query.waterfall === 'true';
+    const body = req.body as AuctionRequestBody;
+    const enabled = process.env.ENABLE_PRODUCTION_RTB === '1';
 
-    if (useWaterfall) {
-      // Execute with waterfall fallback
-      const waterfallResult = await executeWithWaterfall(bidRequest);
-      updateWaterfallStats(waterfallResult);
-
-      if (!waterfallResult.success || !waterfallResult.finalResult.response) {
-        res.status(204).send();
-        return;
-      }
-
-      // Return response with waterfall metadata
-      res.json({
-        ...waterfallResult.finalResult.response,
-        ext: {
-          ...waterfallResult.finalResult.response.ext,
-          waterfall: {
-            attempts: waterfallResult.attempts.length,
-            fallbackUsed: waterfallResult.fallbackUsed,
-            totalDuration: waterfallResult.totalDuration,
-          },
-        },
-      });
-    } else {
-      // Execute standard S2S auction
-      const auctionResult = await executeAuction(bidRequest);
-
-      if (!auctionResult.success || !auctionResult.response) {
-        res.status(204).send();
-        return;
-      }
-
-      res.json(auctionResult.response);
+    if (!enabled) {
+      // Fallback to legacy mock engine
+      const { executeBid } = await import('../services/rtbEngine');
+      const resp = await executeBid({
+        requestId: body.requestId || crypto.randomUUID?.() || 'req',
+        placementId: body.placementId,
+        adFormat: body.adFormat,
+        floorCpm: body.floorCpm ?? 0,
+        device: body.device as any,
+        user: body.user as any,
+        app: body.app as any,
+        signal: body.signal,
+      } as any);
+      if (!resp) { res.status(204).send(); return; }
+      res.json(resp);
+      return;
     }
+
+    const proto = (req.headers['x-forwarded-proto'] as string) || (req.protocol || 'http');
+    const host = (req.headers['x-forwarded-host'] as string) || req.get('host');
+    const baseUrl = `${proto}://${host}`;
+
+    const result = await runAuction({
+      requestId: body.requestId!,
+      placementId: body.placementId,
+      adFormat: body.adFormat,
+      floorCpm: body.floorCpm ?? 0,
+      device: body.device,
+      user: body.user,
+      app: body.app,
+      consent: body.consent && {
+        gdpr: body.consent.gdpr,
+        gdprConsent: body.consent.gdpr_consent,
+        usPrivacy: body.consent.us_privacy,
+        coppa: body.consent.coppa,
+      },
+      signal: body.signal,
+    }, baseUrl);
+
+    if (!result.success || !result.response) {
+      res.status(204).send();
+      return;
+    }
+
+    res.json(result.response);
   } catch (error) {
     logger.error('RTB bid request failed', { error });
     next(error);
@@ -72,9 +81,9 @@ export const getStatus = async (
   res.json({
     success: true,
     data: {
-      adapters: getAdapterConfig(),
-      circuitBreakers: getCircuitBreakerStats(),
-      waterfall: getWaterfallStats(),
+      adapters: getAllAdapters().map(a => ({ name: a.name, supports: a.supports, timeoutMs: a.timeoutMs })),
+      circuitBreakers: {},
+      waterfall: {},
       status: 'operational',
     },
   });

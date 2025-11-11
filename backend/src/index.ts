@@ -1,5 +1,6 @@
 import express, { Application, Request, Response, NextFunction } from 'express';
 import cors from 'cors';
+import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import compression from 'compression';
 import dotenv from 'dotenv';
@@ -11,7 +12,11 @@ import { initializeDatabase } from './utils/postgres';
 import { initializeClickHouse, checkClickHouseHealth } from './utils/clickhouse';
 import { redis } from './utils/redis';
 import { initializeQueues, shutdownQueues, queueManager } from './queues/queueInitializer';
-import { promRegister } from './utils/prometheus';
+import { promRegister, httpRequestDurationSeconds } from './utils/prometheus';
+import { authRateLimiter } from './middleware/redisRateLimiter';
+import swaggerUi from 'swagger-ui-express';
+import { getOpenAPIDocument } from './utils/openapi';
+import csrfProtection from './middleware/csrf';
 
 // Load environment variables
 dotenv.config();
@@ -21,10 +26,26 @@ const PORT = process.env.PORT || 4000;
 const API_VERSION = process.env.API_VERSION || 'v1';
 
 // Security middleware
-app.use(helmet());
+app.use(helmet({
+  crossOriginOpenerPolicy: { policy: 'same-origin' },
+  contentSecurityPolicy: process.env.ENABLE_CSP === '1' ? undefined : false,
+}));
+
+// Strict CORS allowlist
+const allowlist = (process.env.CORS_ALLOWLIST || process.env.CORS_ORIGIN || 'http://localhost:3000')
+  .split(',')
+  .map(s => s.trim())
+  .filter(Boolean);
+
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true); // allow non-browser clients
+    if (allowlist.includes(origin)) return callback(null, true);
+    return callback(new Error('CORS: origin not allowed'));
+  },
   credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
 }));
 
 // Rate limiting
@@ -39,13 +60,23 @@ app.use(`/api/${API_VERSION}/`, limiter);
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(compression());
+app.use(cookieParser());
 
-// Request logging
+// CSRF protection (double-submit cookie). Safe methods are ignored by csurf.
+// Must be after cookie parser and before routes.
+app.use(csrfProtection);
+
+// Request logging + metrics timing
 app.use((req: Request, res: Response, next: NextFunction) => {
-  logger.info(`${req.method} ${req.path}`, {
-    ip: req.ip,
-    userAgent: req.get('user-agent'),
+  const end = httpRequestDurationSeconds.startTimer();
+  res.on('finish', () => {
+    try {
+      end({ method: req.method, route: req.route?.path || req.path, status_code: String(res.statusCode) });
+    } catch {
+      // noop
+    }
   });
+  logger.info(`${req.method} ${req.path}`, { ip: req.ip, userAgent: req.get('user-agent') });
   next();
 });
 
@@ -83,6 +114,15 @@ app.get('/metrics', async (_req: Request, res: Response) => {
 });
 
 // API routes
+// Attach stricter rate limiting for auth endpoints
+app.use(`/api/${API_VERSION}/auth`, authRateLimiter);
+
+// OpenAPI/Swagger endpoints
+app.get('/openapi.json', (_req, res) => {
+  res.json(getOpenAPIDocument());
+});
+app.use('/docs', swaggerUi.serve, swaggerUi.setup(undefined, { swaggerUrl: '/openapi.json' }));
+
 app.use(`/api/${API_VERSION}`, apiRoutes);
 
 // 404 handler

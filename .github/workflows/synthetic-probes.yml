@@ -1,0 +1,29 @@
+name: synthetic-probes
+
+on:
+  schedule:
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Probe health
+        run: |
+          set -e
+          BASE_URL=${{ secrets.SYN_BASE_URL || 'http://localhost:4000' }}
+          curl -fsSL "$BASE_URL/health" | jq '.'
+      - name: Probe RTB auction
+        run: |
+          set -e
+          BASE_API=${{ secrets.SYN_API_URL || 'http://localhost:4000/api/v1' }}
+          TOKEN=${{ secrets.SYN_AUTH_TOKEN || '' }}
+          DATA='{ "placementId":"probe-placement","adFormat":"interstitial","floorCpm":0 }'
+          if [ -n "$TOKEN" ]; then
+            CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Content-Type: application/json" -H "Authorization: Bearer $TOKEN" -d "$DATA" "$BASE_API/rtb/bid")
+          else
+            CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Content-Type: application/json" -d "$DATA" "$BASE_API/rtb/bid")
+          fi
+          echo "Auction status: $CODE"
+          ( [ "$CODE" = "200" ] || [ "$CODE" = "204" ] ) || exit 1

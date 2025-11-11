@@ -21,14 +21,19 @@ export const authenticate = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    // Get token from Authorization header
+    // Get token from Authorization header or httpOnly cookie (access_token)
     const authHeader = req.headers.authorization;
-    
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      throw new AppError('No token provided', 401);
+    let token: string | null = null;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      token = authHeader.substring(7);
+    } else {
+      const cookieName = process.env.ACCESS_TOKEN_COOKIE_NAME || 'access_token';
+      token = (req as any).cookies?.[cookieName] || null;
     }
 
-    const token = authHeader.substring(7); // Remove 'Bearer ' prefix
+    if (!token) {
+      throw new AppError('No token provided', 401);
+    }
 
     // Verify token
     const jwtSecret = process.env.JWT_SECRET;
@@ -56,4 +61,17 @@ export const authenticate = async (
       next(error);
     }
   }
+};
+
+/**
+ * RBAC authorization middleware
+ */
+export const authorize = (roles: Array<'admin' | 'publisher' | 'readonly'>) => {
+  return (req: Request, _res: Response, next: NextFunction) => {
+    const role = (req.user as any)?.role || 'publisher';
+    if (!roles.includes(role)) {
+      return next(new AppError('Forbidden', 403));
+    }
+    next();
+  };
 };

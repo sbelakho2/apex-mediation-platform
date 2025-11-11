@@ -1,4 +1,5 @@
 import axios, { AxiosInstance, AxiosError } from 'axios'
+import { getCsrfToken, readXsrfCookie } from './csrf'
 
 const USE_MOCK_API = process.env.NEXT_PUBLIC_USE_MOCK_API === 'true'
 const BASE_URL = USE_MOCK_API ? '/api/mock' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1')
@@ -12,6 +13,7 @@ export const apiClient: AxiosInstance = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+  withCredentials: true,
 })
 
 export const fraudApiClient: AxiosInstance = axios.create({
@@ -20,6 +22,7 @@ export const fraudApiClient: AxiosInstance = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+  withCredentials: true,
 })
 
 export const analyticsApiClient: AxiosInstance = axios.create({
@@ -28,13 +31,22 @@ export const analyticsApiClient: AxiosInstance = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+  withCredentials: true,
 })
 
-// Request interceptor - add auth token
-const requestInterceptor = (config: any) => {
-  const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`
+// Request interceptor - include CSRF token for mutating requests
+const requestInterceptor = async (config: any) => {
+  const method = (config.method || 'get').toLowerCase()
+  if (['post', 'put', 'patch', 'delete'].includes(method)) {
+    // Ensure we have a token cookie; request one if absent
+    const existing = typeof window !== 'undefined' ? readXsrfCookie() : null
+    if (!existing && typeof window !== 'undefined') {
+      try { await getCsrfToken() } catch {}
+    }
+    const token = typeof window !== 'undefined' ? readXsrfCookie() : null
+    if (token) {
+      config.headers['X-CSRF-Token'] = token
+    }
   }
   return config
 }
@@ -42,9 +54,7 @@ const requestInterceptor = (config: any) => {
 // Response interceptor - handle errors
 const responseErrorInterceptor = async (error: AxiosError) => {
   if (error.response?.status === 401) {
-    // Clear token and redirect to login
     if (typeof window !== 'undefined') {
-      localStorage.removeItem('auth_token')
       window.location.href = '/login'
     }
   }
@@ -69,21 +79,4 @@ export const handleApiError = (error: unknown): string => {
   return 'An unexpected error occurred'
 }
 
-export const setAuthToken = (token: string) => {
-  if (typeof window !== 'undefined') {
-    localStorage.setItem('auth_token', token)
-  }
-}
-
-export const clearAuthToken = () => {
-  if (typeof window !== 'undefined') {
-    localStorage.removeItem('auth_token')
-  }
-}
-
-export const getAuthToken = (): string | null => {
-  if (typeof window !== 'undefined') {
-    return localStorage.getItem('auth_token')
-  }
-  return null
-}
+// Cookie-based auth; no localStorage usage

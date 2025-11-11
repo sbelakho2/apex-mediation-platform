@@ -6,6 +6,7 @@
 
 import { queueManager, QueueName } from './queueManager';
 import { processAnalyticsAggregation } from './processors/analyticsAggregation';
+import { processAnalyticsIngest } from './processors/analyticsIngest';
 import { processDataExport } from './processors/dataExport';
 import logger from '../utils/logger';
 
@@ -36,6 +37,16 @@ export async function initializeQueues(): Promise<void> {
  * Register all workers
  */
 function registerWorkers(): void {
+  // Analytics Ingest Worker (batch writes to ClickHouse)
+  queueManager.registerWorker(
+    QueueName.ANALYTICS_INGEST,
+    processAnalyticsIngest,
+    {
+      concurrency: 10,
+      limiter: { max: 1000, duration: 1000 }, // up to 1000 jobs/sec across workers
+    }
+  );
+
   // Analytics Aggregation Worker
   queueManager.registerWorker(
     QueueName.ANALYTICS_AGGREGATION,

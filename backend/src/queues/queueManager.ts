@@ -34,6 +34,7 @@ const queueConfig = {
 // Queue names
 export enum QueueName {
   ANALYTICS_AGGREGATION = 'analytics:aggregation',
+  ANALYTICS_INGEST = 'analytics:ingest',
   DATA_EXPORT = 'data:export',
   REPORT_GENERATION = 'report:generation',
   METRICS_CALCULATION = 'metrics:calculation',

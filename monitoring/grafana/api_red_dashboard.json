@@ -1,0 +1,52 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "gnetId": null,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "HTTP Request Rate (RPS)",
+      "targets": [
+        {
+          "expr": "sum(rate(http_request_duration_seconds_count[5m]))",
+          "legendFormat": "all"
+        },
+        {
+          "expr": "sum by (route) (rate(http_request_duration_seconds_count[5m]))",
+          "legendFormat": "{{route}}"
+        }
+      ],
+      "gridPos": { "w": 24, "h": 8, "x": 0, "y": 0 }
+    },
+    {
+      "type": "timeseries",
+      "title": "HTTP Error Rate (5xx)",
+      "targets": [
+        { "expr": "sum by (route) (rate(http_request_duration_seconds_count{status_code=~\"5..\"}[5m]))", "legendFormat": "{{route}}" }
+      ],
+      "gridPos": { "w": 12, "h": 8, "x": 0, "y": 8 }
+    },
+    {
+      "type": "timeseries",
+      "title": "HTTP Latency p95 by route (s)",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (le, route) (rate(http_request_duration_seconds_bucket[5m])))",
+          "legendFormat": "p95 {{route}}"
+        }
+      ],
+      "gridPos": { "w": 12, "h": 8, "x": 12, "y": 8 }
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 36,
+  "style": "dark",
+  "tags": ["api", "red"],
+  "templating": { "list": [] },
+  "timezone": "",
+  "title": "API RED & Latency",
+  "version": 1
+}

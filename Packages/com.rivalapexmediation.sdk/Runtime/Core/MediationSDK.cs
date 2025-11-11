@@ -16,6 +16,7 @@ namespace RivalApex.Mediation
         private ConsentManager _consentManager;
         private IPlatformBridge _platformBridge;
         private AuctionClient _auctionClient;
+        private RemoteConfigClient _remoteConfigClient;
         
         private bool _isInitialized = false;
         private bool _isInitializing = false;
@@ -123,10 +124,20 @@ namespace RivalApex.Mediation
             
             // Initialize auction client
             _auctionClient = new AuctionClient(_config, _consentManager, _platformBridge);
-            
-            // TODO: Load OTA config (future enhancement)
-            // For now, use local config only
-            yield return null;
+
+            // OTA remote config (fetch + merge with local)
+            _remoteConfigClient = new RemoteConfigClient(_config);
+            yield return _remoteConfigClient.FetchAndMerge((success, version) =>
+            {
+                if (success)
+                {
+                    Logger.Log($"Remote config loaded (version={version})");
+                }
+                else
+                {
+                    Logger.LogWarning("Remote config fetch failed; continuing with local config");
+                }
+            });
             
             _isInitialized = true;
             _isInitializing = false;

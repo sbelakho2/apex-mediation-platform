@@ -2,6 +2,7 @@
 require('dotenv/config');
 const { randomUUID } = require('node:crypto');
 const { Pool } = require('pg');
+const crypto = require('node:crypto');
 
 const connectionString = process.env.DATABASE_URL;
 
@@ -139,6 +140,65 @@ async function seed() {
         `PAY-${randomUUID().split('-')[0]}`,
       ]
     );
+
+    // Insert signing key if provided (for RTB token verification downstream)
+    const kid = process.env.SIGNING_KID || 'dev-key';
+    const pub = process.env.SIGNING_PUBLIC_KEY_PEM || null;
+    if (pub) {
+      await client.query(
+        `INSERT INTO signing_keys (kid, public_key_pem)
+         VALUES ($1, $2)
+         ON CONFLICT (kid) DO UPDATE SET public_key_pem = EXCLUDED.public_key_pem, rotated_at = NULL, revoked_at = NULL`,
+        [kid, pub]
+      );
+    }
+
+    // Seed a few auctions/bids/wins for analytics/dev
+    // Idempotent using fixed request_ids
+    const auctionCount = 5;
+    for (let i = 0; i < auctionCount; i++) {
+      const requestId = `00000000-0000-0000-0000-00000000000${i}`;
+      const res = await client.query('SELECT id FROM auctions WHERE request_id = $1', [requestId]);
+      let auctionId;
+      if (res.rowCount === 0) {
+        const out = (i % 2 === 0) ? 'win' : 'no_bid';
+        const deadline = 120;
+        const insert = await client.query(
+          `INSERT INTO auctions (request_id, placement_id, ad_format, floor_cpm, publisher_id, deadline_ms, outcome)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)
+           RETURNING id`,
+          [requestId, SAMPLE_PLACEMENT_ID, 'interstitial', 0, SAMPLE_PUBLISHER_ID, deadline, out]
+        );
+        auctionId = insert.rows[0].id;
+      } else {
+        auctionId = res.rows[0].id;
+      }
+
+      // Insert 2-3 bids per auction
+      const bidBaseCpm = 1.0 + i * 0.1;
+      const adapters = ['admob', 'applovin', 'unityads'];
+      let winnerBidId = null;
+      for (let j = 0; j < adapters.length; j++) {
+        const status = j === 0 ? 'loss' : (j === 1 ? 'win' : 'loss');
+        const cpm = +(bidBaseCpm + j * 0.2).toFixed(2);
+        const row = await client.query(
+          `INSERT INTO bids (auction_id, adapter, cpm, currency, latency_ms, status)
+           VALUES ($1, $2, $3, 'USD', $4, $5)
+           RETURNING id`,
+          [auctionId, adapters[j], cpm, 50 + j * 10, status]
+        );
+        if (status === 'win') winnerBidId = row.rows[0].id;
+      }
+
+      if (winnerBidId) {
+        await client.query(
+          `INSERT INTO auction_wins (auction_id, bid_id, signed_kid)
+           VALUES ($1, $2, $3)
+           ON CONFLICT (auction_id) DO NOTHING`,
+          [auctionId, winnerBidId, kid]
+        );
+      }
+    }
 
     await client.query(
       `INSERT INTO payout_settings (publisher_id, threshold, method, currency, schedule, updated_at)

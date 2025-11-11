@@ -1,0 +1,21 @@
+import Foundation
+
+public struct SDKConfig: Equatable {
+    public let appId: String
+    public let apiBaseUrl: String
+    public let apiKey: String?
+    public let testMode: Bool
+    public let requestTimeoutMs: Int
+
+    public init(appId: String,
+                apiBaseUrl: String = "http://localhost:4000/api/v1",
+                apiKey: String? = nil,
+                testMode: Bool = false,
+                requestTimeoutMs: Int = 5000) {
+        self.appId = appId
+        self.apiBaseUrl = apiBaseUrl
+        self.apiKey = apiKey
+        self.testMode = testMode
+        self.requestTimeoutMs = requestTimeoutMs
+    }
+}

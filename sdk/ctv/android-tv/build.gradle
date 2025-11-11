@@ -1,0 +1,97 @@
+plugins {
+    id 'com.android.library' version '8.1.1'
+    id 'org.jetbrains.kotlin.android' version '1.9.21'
+    id 'maven-publish'
+}
+
+android {
+    namespace 'com.rivalapexmediation.ctv'
+    compileSdk 34
+
+    defaultConfig {
+        minSdk 21
+        targetSdk 34
+        consumerProguardFiles 'consumer-rules.pro'
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        buildConfigField "String", "SDK_VERSION", '"0.1.0"'
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+        debug {
+            buildConfigField "boolean", "STRICT_MODE_ENABLED", "true"
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    kotlinOptions { jvmTarget = '17' }
+}
+
+dependencies {
+    implementation "org.jetbrains.kotlin:kotlin-stdlib:1.9.21"
+    // Networking
+    implementation "com.squareup.okhttp3:okhttp:4.12.0"
+    implementation "com.squareup.okhttp3:logging-interceptor:4.12.0"
+    implementation "com.google.code.gson:gson:2.10.1"
+    // Media playback for TV
+    implementation "androidx.media3:media3-exoplayer:1.4.1"
+    implementation "androidx.media3:media3-ui:1.4.1"
+
+    // Ed25519 signature verification for OTA config
+    implementation "org.bouncycastle:bcprov-jdk15to18:1.77"
+
+    // AndroidX
+    compileOnly "androidx.annotation:annotation:1.7.1"
+    testImplementation "androidx.annotation:annotation:1.7.1"
+
+    // Testing
+    testImplementation "junit:junit:4.13.2"
+    testImplementation "org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3"
+    testImplementation "io.mockk:mockk:1.13.8"
+    testImplementation "com.squareup.okhttp3:mockwebserver:4.12.0"
+    testImplementation "org.robolectric:robolectric:4.11.1"
+    testImplementation "androidx.test:core:1.5.0"
+}
+
+publishing {
+    publications {
+        release(MavenPublication) {
+            from components.release
+            groupId = 'com.rivalapex'
+            artifactId = 'apexmediation-ctv'
+            version = android.defaultConfig.versionName
+        }
+    }
+    repositories {
+        maven {
+            name = 'github'
+            url = uri(System.getenv('GITHUB_PACKAGES_URL') ?: 'https://maven.pkg.github.com/ORG/REPO')
+            credentials {
+                username = System.getenv('GITHUB_ACTOR')
+                password = System.getenv('GITHUB_TOKEN')
+            }
+        }
+    }
+}
+
+// Size budget reminder (warning only)
+tasks.register('checkCtvSdkSize') {
+    doLast {
+        def aar = fileTree("$buildDir/outputs/aar").matching { include '**/*-release.aar' }.files.find { it.isFile() }
+        if (aar) {
+            def size = aar.length()
+            println "CTV SDK Size: ${size} bytes (${Math.round(size/1024)}KB)"
+            if (size > 1024*1024) { // 1MB soft budget for TV
+                logger.warn("CTV SDK release AAR exceeds 1MB soft budget")
+            }
+        }
+    }
+}
+
+tasks.matching { it.name == 'assembleRelease' }.configureEach { finalizedBy 'checkCtvSdkSize' }

@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import { auctionLatencySeconds } from '../utils/prometheus';
 
 export interface BidRequest {
   requestId: string;
@@ -70,36 +71,41 @@ const DEMAND_PARTNERS: DemandPartnerBid[] = [
  * Simulates hybrid waterfall + bidding engine.
  */
 export const executeBid = async (request: BidRequest): Promise<BidResponse | null> => {
-  const eligibleBids = DEMAND_PARTNERS.filter((partner) => partner.cpm >= request.floorCpm);
+  const end = auctionLatencySeconds.startTimer();
+  try {
+    const eligibleBids = DEMAND_PARTNERS.filter((partner) => partner.cpm >= request.floorCpm);
 
-  if (eligibleBids.length === 0) {
-    return null;
+    if (eligibleBids.length === 0) {
+      return null;
+    }
+
+    const sorted = eligibleBids.sort((a, b) => b.cpm - a.cpm);
+    const winner = sorted[0];
+
+    const bidId = crypto.randomUUID();
+
+    return {
+      requestId: request.requestId,
+      bidId,
+      adapter: winner.adapter,
+      cpm: winner.cpm,
+      currency: 'USD',
+      creativeUrl: winner.creativeUrl,
+      ttlSeconds: 300,
+      tracking: {
+        impression: `https://track.apexmediation.com/${bidId}/imp`,
+        click: `https://track.apexmediation.com/${bidId}/click`,
+      },
+      payload: {
+        waterfallRank: 1,
+        decisionTimeMs: 42,
+        metadata: winner.metadata || {},
+        originalBidCount: eligibleBids.length,
+      },
+    };
+  } finally {
+    try { end(); } catch {}
   }
-
-  const sorted = eligibleBids.sort((a, b) => b.cpm - a.cpm);
-  const winner = sorted[0];
-
-  const bidId = crypto.randomUUID();
-
-  return {
-    requestId: request.requestId,
-    bidId,
-    adapter: winner.adapter,
-    cpm: winner.cpm,
-    currency: 'USD',
-    creativeUrl: winner.creativeUrl,
-    ttlSeconds: 300,
-    tracking: {
-      impression: `https://track.apexmediation.com/${bidId}/imp`,
-      click: `https://track.apexmediation.com/${bidId}/click`,
-    },
-    payload: {
-      waterfallRank: 1,
-      decisionTimeMs: 42,
-      metadata: winner.metadata || {},
-      originalBidCount: eligibleBids.length,
-    },
-  };
 };
 
 /**

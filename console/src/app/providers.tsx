@@ -3,6 +3,8 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { SessionProvider } from 'next-auth/react'
 import { useState } from 'react'
+import { useEffect } from 'react'
+import { getCsrfToken } from '@/lib/csrf'
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(
@@ -20,8 +22,15 @@ export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <SessionProvider>
       <QueryClientProvider client={queryClient}>
+        {/* Bootstrap CSRF token cookie on initial mount for mutating requests */}
+        <BootstrapCsrf />
         {children}
       </QueryClientProvider>
     </SessionProvider>
   )
+}
+
+function BootstrapCsrf() {
+  useEffect(() => { void getCsrfToken() }, [])
+  return null
 }

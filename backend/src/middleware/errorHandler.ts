@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { logger } from '../utils/logger';
+import { errorCounter } from '../utils/prometheus';
 
 export class AppError extends Error {
   statusCode: number;
@@ -20,7 +21,14 @@ export const errorHandler = (
   res: Response,
   _next: NextFunction
 ) => {
+  // CSRF errors (from csurf)
+  if ((err as any).code === 'EBADCSRFTOKEN') {
+    try { errorCounter.inc({ type: 'operational' }); } catch {}
+    logger.warn('CSRF token mismatch', { path: req.path, method: req.method });
+    return res.status(403).json({ success: false, error: 'Invalid CSRF token' });
+  }
   if (err instanceof AppError) {
+    try { errorCounter.inc({ type: 'operational' }); } catch {}
     logger.error(`${err.statusCode} - ${err.message}`, {
       stack: err.stack,
       path: req.path,
@@ -34,6 +42,7 @@ export const errorHandler = (
   }
 
   // Unexpected errors
+  try { errorCounter.inc({ type: 'unexpected' }); } catch {}
   logger.error('Unexpected error:', {
     error: err.message,
     stack: err.stack,

@@ -2,7 +2,8 @@
 
 import { usePathname } from 'next/navigation'
 import Link from 'next/link'
-import { useSession, signOut } from 'next-auth/react'
+import { signOut } from 'next-auth/react'
+import { useSession as useCookieSession } from '@/lib/useSession'
 import {
   LayoutDashboard,
   Layout,
@@ -30,7 +31,7 @@ const baseNavigation = [
 
 export default function Navigation({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
-  const { data: session } = useSession()
+  const { user } = useCookieSession()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   const showTransparency = process.env.NEXT_PUBLIC_TRANSPARENCY_ENABLED === 'true'
@@ -133,18 +134,18 @@ export default function Navigation({ children }: { children: React.ReactNode }) 
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-gray-900 truncate">
-                  {session?.user?.name || 'User'}
+                  {user?.email || 'User'}
                 </p>
-                <p className="text-xs text-gray-600 truncate">{session?.user?.email}</p>
+                  <p className="text-xs text-gray-600 truncate">{user?.role}</p>
+                </div>
               </div>
-            </div>
-            <button
-              onClick={() => signOut({ callbackUrl: '/' })}
-              className="w-full mt-2 flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 hover:text-gray-900 transition"
-            >
-              <LogOut className="h-5 w-5" aria-hidden={true} />
-              Sign Out
-            </button>
+              <button
+                onClick={() => { window.location.href = '/login' }}
+                className="w-full mt-2 flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 hover:text-gray-900 transition"
+              >
+                <LogOut className="h-5 w-5" aria-hidden={true} />
+                Sign Out
+              </button>
           </div>
         </div>
       </aside>

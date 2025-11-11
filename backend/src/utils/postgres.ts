@@ -1,6 +1,7 @@
 import dotenv from 'dotenv';
 import { Pool, PoolClient, QueryResult, QueryResultRow } from 'pg';
 import logger from './logger';
+import { dbQueryDurationSeconds } from './prometheus';
 
 dotenv.config();
 
@@ -61,6 +62,8 @@ export const query = <T extends QueryResultRow = QueryResultRow>(
 ): Promise<QueryResult<T>> => {
   // Add query timeout wrapper
   const timeoutMs = parseInt(process.env.DATABASE_STATEMENT_TIMEOUT_MS || '30000', 10);
+  const op = (text.split(/\s+/)[0] || 'QUERY').toUpperCase();
+  const endTimer = dbQueryDurationSeconds.startTimer({ operation: op });
   
   const queryPromise = params && params.length > 0
     ? pool.query<T>(text, [...params])
@@ -72,7 +75,10 @@ export const query = <T extends QueryResultRow = QueryResultRow>(
     new Promise<QueryResult<T>>((_, reject) => 
       setTimeout(() => reject(new Error(`Query timeout after ${timeoutMs}ms`)), timeoutMs)
     )
-  ]);
+  ])
+  .finally(() => {
+    try { endTimer(); } catch { /* noop */ }
+  });
 };
 
 export const getClient = (): Promise<PoolClient> => pool.connect();

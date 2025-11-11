@@ -13,20 +13,22 @@ import {
   revokeRefreshToken,
 } from '../repositories/refreshTokenRepository';
 import { isAuthTokenPayload } from '../types/auth';
+import crypto from 'crypto';
+import { setAuthCookies } from '../utils/cookies';
 
 // Validation schemas
-const loginSchema = z.object({
+export const loginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(8),
 });
 
-const registerSchema = z.object({
+export const registerSchema = z.object({
   email: z.string().email(),
   password: z.string().min(8),
   companyName: z.string().min(2),
 });
 
-const refreshSchema = z.object({
+export const refreshSchema = z.object({
   refreshToken: z.string().min(32),
 });
 
@@ -87,6 +89,7 @@ type TokenPayload = {
   userId: string;
   publisherId: string;
   email: string;
+  role?: 'admin' | 'publisher' | 'readonly';
 };
 
 interface RefreshTokenIssueOptions {
@@ -109,10 +112,11 @@ const issueRefreshToken = async (
 ) => {
   const expiresInSeconds = resolveRefreshTokenExpirationSeconds();
   const id = randomUUID();
+  const idHash = crypto.createHash('sha256').update(id).digest('hex');
   const expiresAt = new Date(Date.now() + expiresInSeconds * 1000);
 
   const record = await insertRefreshToken({
-    id,
+    id: idHash, // store hashed id only
     userId: payload.userId,
     expiresAt,
     userAgent: options.userAgent,
@@ -121,7 +125,7 @@ const issueRefreshToken = async (
 
   const token = jwt.sign({ ...payload, tokenType: 'refresh' }, getRefreshTokenSecret(), {
     expiresIn: expiresInSeconds,
-    jwtid: record.id,
+    jwtid: record.id, // jti is hashed id
     subject: payload.userId,
   });
 
@@ -161,6 +165,7 @@ export const login = async (
       userId: user.id,
       publisherId: user.publisher_id,
       email,
+      role: (user as any).role || 'publisher',
     };
 
     const accessToken = issueAccessToken(tokenPayload);
@@ -170,6 +175,14 @@ export const login = async (
     });
 
     logger.info(`User logged in: ${email}`);
+
+    // Set httpOnly cookies (access + refresh)
+    setAuthCookies(res, {
+      accessToken: accessToken.token,
+      accessExpiresInSeconds: accessToken.expiresInSeconds,
+      refreshToken: refreshToken.token,
+      refreshExpiresInSeconds: refreshToken.expiresInSeconds,
+    });
 
     res.json({
       success: true,
@@ -184,6 +197,7 @@ export const login = async (
           email,
           publisherId: user.publisher_id,
           companyName: user.company_name,
+          role: (user as any).role || 'publisher',
         },
       },
     });
@@ -224,6 +238,7 @@ export const register = async (
       userId: user.id,
       publisherId: user.publisherId,
       email,
+      role: 'publisher',
     };
 
     const accessToken = issueAccessToken(tokenPayload);
@@ -233,6 +248,14 @@ export const register = async (
     });
 
     logger.info(`User registered: ${email}`);
+
+    // Set httpOnly cookies (access + refresh)
+    setAuthCookies(res, {
+      accessToken: accessToken.token,
+      accessExpiresInSeconds: accessToken.expiresInSeconds,
+      refreshToken: refreshToken.token,
+      refreshExpiresInSeconds: refreshToken.expiresInSeconds,
+    });
 
     res.status(201).json({
       success: true,
@@ -247,6 +270,7 @@ export const register = async (
           email,
           publisherId: user.publisherId,
           companyName: user.companyName,
+          role: 'publisher',
         },
       },
     });
@@ -274,7 +298,12 @@ export const refresh = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { refreshToken } = refreshSchema.parse(req.body);
+    // Accept refresh token from cookie first, then body as fallback
+    const cookieName = process.env.REFRESH_TOKEN_COOKIE_NAME || 'refresh_token';
+    const tokenFromCookie = (req as any).cookies?.[cookieName];
+    const tokenFromBody = (req.body && (req.body as any).refreshToken) || undefined;
+    const candidateToken = tokenFromCookie || tokenFromBody;
+    const { refreshToken } = refreshSchema.parse({ refreshToken: candidateToken });
 
     const decodedToken = jwt.verify(refreshToken, getRefreshTokenSecret());
 
@@ -320,7 +349,21 @@ export const refresh = async (
       userId: payload.userId,
       publisherId: payload.publisherId,
       email: payload.email,
+      role: (payload as any).role || 'publisher',
     };
+
+    // Enforce device/IP binding (configurable)
+    const strictIP = process.env.STRICT_REFRESH_IP === '1';
+    const reqUA = req.get('user-agent') || null;
+    const reqIP = req.ip || null;
+    if (storedToken.userAgent && reqUA && storedToken.userAgent !== reqUA) {
+      await revokeRefreshToken(storedToken.id, 'ua_mismatch');
+      throw new AppError('Refresh token invalid (UA mismatch)', 401);
+    }
+    if (strictIP && storedToken.ipAddress && reqIP && storedToken.ipAddress !== reqIP) {
+      await revokeRefreshToken(storedToken.id, 'ip_mismatch');
+      throw new AppError('Refresh token invalid (IP mismatch)', 401);
+    }
 
     const accessToken = issueAccessToken(tokenPayload);
     const nextRefreshToken = await issueRefreshToken(tokenPayload, {
@@ -329,6 +372,14 @@ export const refresh = async (
     });
 
     await revokeRefreshToken(storedToken.id, 'rotated', nextRefreshToken.id);
+
+    // Update auth cookies
+    setAuthCookies(res, {
+      accessToken: accessToken.token,
+      accessExpiresInSeconds: accessToken.expiresInSeconds,
+      refreshToken: nextRefreshToken.token,
+      refreshExpiresInSeconds: nextRefreshToken.expiresInSeconds,
+    });
 
     res.json({
       success: true,
@@ -357,5 +408,47 @@ export const refresh = async (
     }
 
     next(error);
+  }
+};
+
+/**
+ * Return current session user from access token (cookie or header)
+ */
+export const me = async (
+  req: Request,
+  res: Response,
+  _next: NextFunction
+): Promise<void> => {
+  const user = (req as any).user as TokenPayload | undefined;
+  if (!user) {
+    res.status(401).json({ success: false, error: 'Unauthorized' });
+    return;
+  }
+  res.json({ success: true, data: user });
+};
+
+/**
+ * Logout: revoke refresh tokens for user and clear cookies
+ */
+export const logout = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const user = (req as any).user as TokenPayload | undefined;
+    if (user?.userId) {
+      try {
+        const { revokeRefreshTokensForUser } = await import('../repositories/refreshTokenRepository');
+        await revokeRefreshTokensForUser(user.userId, 'logout');
+      } catch (_) {
+        // best-effort
+      }
+    }
+    const { clearAuthCookies } = await import('../utils/cookies');
+    clearAuthCookies(res);
+    res.json({ success: true });
+  } catch (e) {
+    next(e);
   }
 };
