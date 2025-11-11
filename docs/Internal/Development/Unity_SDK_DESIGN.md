@@ -1442,4 +1442,75 @@ A: Custom telemetry hooks provided. Native OM SDK integration planned for future
 
 ---
 
+## Appendix D: Additional Implementation Guidance
+
+### D.1 IL2CPP, AOT, and Stripping Constraints
+- Avoid reflection-heavy patterns and dynamic code generation (no `System.Reflection.Emit`, `Activator.CreateInstance` on unknown types).
+- Prefer concrete types over open generic APIs across public surfaces to reduce AOT stubs. If generics are required, keep the set of closed generic types finite and referenced to prevent stripping.
+- Provide `link.xml` with explicit preserves for:
+  - Public API models passed through JSON (request/response DTOs)
+  - Any types accessed via reflection or native interop
+- Do not rely on `System.Text.Json` in older Unity versions. Use `UnityEngine.JsonUtility` for simple POCOs; for dictionaries/arrays, add minimal hand-written serialization helpers in `NetworkHelpers` (no external JSON libs to keep zero-dep policy).
+- Validate IL2CPP builds for iOS/Android and Mono for Editor; add CI gates for both.
+
+### D.2 Error Taxonomy Parity (Unity ↔ Android/iOS)
+- Map network and server conditions consistently:
+  - 204 → `NoFill`
+  - 400/404 → `InvalidRequest`
+  - 401/403 → `Unauthorized`
+  - 408/timeout/socket → `Timeout`
+  - 429 → `RateLimited`
+  - 5xx → `ServerError`
+  - JSON parse/schema mismatch → `ParseError`
+  - Not initialized/already initialized → `StateError`
+- Document in code comments and keep a single `ErrorCodes.cs` enum mirroring Android `SdkError` and iOS `SDKError`.
+
+### D.3 ATT/IDFA Timing & UX (iOS)
+- The SDK must not trigger the ATT prompt automatically. Expose:
+  - `GetATTStatus()` API for host apps to decide when to prompt
+  - A helper `ShouldRequestATT()` that returns true if status is `notDetermined`
+- Defer IDFA requests until after ATT authorized. If denied, omit IDFA entirely from requests.
+- Provide sample code in `Samples~/AdvancedUsage/` demonstrating a recommended ATT flow at a natural onboarding moment.
+
+### D.4 WebGL-Specific Constraints
+- Networking: Use `UnityWebRequest` only; ensure CORS headers present on backend. No sockets or custom TLS.
+- IDs: No IDFA/GAID. Use a stable, salted hash of `SystemInfo.deviceUniqueIdentifier` when available, else random install GUID persisted via `PlayerPrefs`.
+- Threading: Assume single-threaded execution. Marshal all callbacks to main thread explicitly.
+- Storage: Use `PlayerPrefs` for small caches (config, install GUID). Avoid large writes due to IndexedDB limits.
+- Timeouts: Increase slightly for WebGL (slow start), and surface user-friendly warnings in the debug panel.
+
+### D.5 Memory and Allocation Budgets
+- Per ad request target heap allocation ≤ 50KB; per frame allocations of SDK code ≤ 1KB during idle.
+- No long-lived allocations for banners when hidden; destroy and re-create cleanly.
+- Add a CI profiler smoke (Editor) that asserts allocations do not regress by >10% across releases.
+
+### D.6 Logging and Telemetry
+- Logging levels: `Off`, `Error`, `Warn`, `Info`, `Debug`. Default `Warn` in production, `Debug` in test mode.
+- Redact PII (IDs, consent strings) in logs by default; allow opt-in verbose redaction bypass in Editor only.
+- Telemetry hooks should be no-op in WebGL if OM SDK is unavailable.
+
+### D.7 CI Matrix and Supported Versions
+- Build matrix:
+  - Unity 2020.3 LTS, 2021.3 LTS, 2022.3 LTS, 2023.x (latest)
+  - Platforms: iOS (IL2CPP), Android (IL2CPP), WebGL, Editor Mono
+- CI checks:
+  - Compile Runtime/Editor assemblies
+  - Run Edit Mode tests and selected Play Mode tests (headless) where supported
+  - Verify package import, assembly separation, and size budget gate (≤ 300KB stripped)
+
+### D.8 Security Notes
+- Enforce TLS 1.2+ on all requests; reject plaintext endpoints.
+- Verify OTA config signatures with Ed25519 in production; bypass only in test mode.
+- Consider optional domain allowlist for auction endpoints; expose as config with sane defaults.
+
+### D.9 Versioning and Release Process
+- Semantic Versioning (SemVer): MAJOR.MINOR.PATCH.
+- Maintain `CHANGELOG.md` in `Documentation~/` following Keep a Changelog format.
+- Each release must include:
+  - Updated package `version` in `package.json`
+  - Release notes, updated API docs, and sample import verification
+  - CI artifact with built `.tgz` for UPM and importable `.unitypackage` if needed
+
+---
+
 **End of Unity SDK Design Document**
