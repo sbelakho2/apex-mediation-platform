@@ -12,9 +12,14 @@ public final class MediationSDK {
     private var telemetry: TelemetryCollector?
     private var adapterRegistry: AdapterRegistry?
     private var signatureVerifier: SignatureVerifier?
-    private var isInitialized = false
+    private var _isInitialized = false
 
     private init() {}
+    
+    /// Check if SDK is initialized (public accessor for BelAds)
+    public var isInitialized: Bool {
+        return _isInitialized
+    }
 
     // MARK: - Debug/Diagnostics accessors (read-only)
     /// Current appId set during initialize(), if any.
@@ -62,9 +67,23 @@ public final class MediationSDK {
         let providedConfig = configuration ?? SDKConfig.default(appId: appId)
         let resolvedConfig = providedConfig.withAppId(appId)
 
+        // Configure signature verifier with safe gating for test-mode bypass
         if resolvedConfig.configSignaturePublicKey != nil || resolvedConfig.testMode {
+            let enableTestMode: Bool = {
+                if resolvedConfig.testMode == false { return false }
+                #if DEBUG
+                return true
+                #else
+                // Allow test-mode bypass only if the host app bundle is allowlisted in Info.plist
+                let bundleId = Bundle.main.bundleIdentifier ?? ""
+                if let list = Bundle.main.object(forInfoDictionaryKey: "ApexMediationDebugAllowlist") as? [String] {
+                    return list.contains(bundleId)
+                }
+                return false
+                #endif
+            }()
             signatureVerifier = SignatureVerifier(
-                testMode: resolvedConfig.testMode,
+                testMode: enableTestMode,
                 productionPublicKey: resolvedConfig.configSignaturePublicKey
             )
         } else {
@@ -86,14 +105,14 @@ public final class MediationSDK {
         configManager = manager
         telemetry = telemetryCollector
         adapterRegistry = registry
-        isInitialized = true
+        _isInitialized = true
     }
 
     /// Load an ad for the supplied placement.
     /// - Parameter placementId: Placement identifier configured in the console.
     /// - Returns: Loaded ad or `nil` when no adapter returned fill.
     public func loadAd(placementId: String) async throws -> Ad? {
-        guard isInitialized else {
+        guard _isInitialized else {
             throw SDKError.notInitialized
         }
 
@@ -173,7 +192,7 @@ public final class MediationSDK {
 
     /// Shutdown the SDK and release resources.
     public func shutdown() {
-        guard isInitialized else { return }
+        guard _isInitialized else { return }
 
         telemetry?.stop()
         adapterRegistry?.destroy()
@@ -185,7 +204,7 @@ public final class MediationSDK {
         remoteConfig = nil
         config = nil
         signatureVerifier = nil
-        isInitialized = false
+        _isInitialized = false
     }
 
     private func ensureRemoteConfig() async throws -> SDKRemoteConfig {

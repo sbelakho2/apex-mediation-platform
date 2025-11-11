@@ -76,29 +76,44 @@ export default function TransparencyAuctionsPage() {
   }, [params])
 
   return (
-    <div className="p-6">
+    <div className="p-6" role="main" aria-labelledby="page-title">
       <div className="flex items-center justify-between mb-4">
-        <h1 className="text-xl font-semibold text-gray-900">Transparency — Auctions</h1>
+        <h1 id="page-title" className="text-xl font-semibold text-gray-900">Transparency — Auctions</h1>
       </div>
 
       {/* Filters */}
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-3 mb-4">
-        <input className="border rounded px-3 py-2" placeholder="From (ISO)" value={from} onChange={(e) => setFrom(e.target.value)} />
-        <input className="border rounded px-3 py-2" placeholder="To (ISO)" value={to} onChange={(e) => setTo(e.target.value)} />
-        <input className="border rounded px-3 py-2" placeholder="Placement ID" value={placementId} onChange={(e) => setPlacementId(e.target.value)} />
-        <select className="border rounded px-3 py-2" value={surface} onChange={(e) => setSurface(e.target.value)}>
-          <option value="">Surface</option>
-          <option value="mobile_app">Mobile App</option>
-          <option value="web">Web</option>
-          <option value="ctv">CTV</option>
-        </select>
-        <input className="border rounded px-3 py-2" placeholder="Geo (CC)" value={geo} onChange={(e) => setGeo(e.target.value.toUpperCase())} />
-      </div>
+      <form className="grid grid-cols-1 md:grid-cols-5 gap-3 mb-4" aria-label="Auction filters" onSubmit={(e) => e.preventDefault()}>
+        <div className="flex flex-col">
+          <label htmlFor="fromInput" className="sr-only">From (ISO8601)</label>
+          <input id="fromInput" aria-label="From date (ISO8601)" className="border rounded px-3 py-2" placeholder="From (ISO)" value={from} onChange={(e) => setFrom(e.target.value)} />
+        </div>
+        <div className="flex flex-col">
+          <label htmlFor="toInput" className="sr-only">To (ISO8601)</label>
+          <input id="toInput" aria-label="To date (ISO8601)" className="border rounded px-3 py-2" placeholder="To (ISO)" value={to} onChange={(e) => setTo(e.target.value)} />
+        </div>
+        <div className="flex flex-col">
+          <label htmlFor="placementInput" className="sr-only">Placement ID</label>
+          <input id="placementInput" aria-label="Placement ID" className="border rounded px-3 py-2" placeholder="Placement ID" value={placementId} onChange={(e) => setPlacementId(e.target.value)} />
+        </div>
+        <div className="flex flex-col">
+          <label htmlFor="surfaceSelect" className="sr-only">Surface</label>
+          <select id="surfaceSelect" aria-label="Surface" className="border rounded px-3 py-2" value={surface} onChange={(e) => setSurface(e.target.value)}>
+            <option value="">Surface</option>
+            <option value="mobile_app">Mobile App</option>
+            <option value="web">Web</option>
+            <option value="ctv">CTV</option>
+          </select>
+        </div>
+        <div className="flex flex-col">
+          <label htmlFor="geoInput" className="sr-only">Geo (country code)</label>
+          <input id="geoInput" aria-label="Geo country code" className="border rounded px-3 py-2" placeholder="Geo (CC)" value={geo} onChange={(e) => setGeo(e.target.value.toUpperCase())} />
+        </div>
+      </form>
 
       {loading && <AuctionsTableSkeleton />}
       
       {!loading && error && (
-        <div className="border border-red-200 rounded-lg bg-red-50 px-4 py-3">
+        <div className="border border-red-200 rounded-lg bg-red-50 px-4 py-3" role="alert" aria-live="polite">
           <p className="text-sm text-red-800 font-medium">Failed to load auctions</p>
           <p className="text-xs text-red-600 mt-1">{error}</p>
         </div>
@@ -106,7 +121,7 @@ export default function TransparencyAuctionsPage() {
 
       {!loading && !error && (
         <div className="overflow-x-auto border rounded">
-          <table className="min-w-full text-sm">
+          <table className="min-w-full text-sm" role="table" aria-label="Auctions table">
             <thead className="bg-gray-50 text-gray-600">
               <tr>
                 <th className="text-left px-3 py-2">Timestamp</th>

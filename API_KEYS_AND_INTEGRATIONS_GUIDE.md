@@ -934,3 +934,70 @@ Operational notes:
 - Adheres to normalized NoBid taxonomy: timeout, network_error, status_XXX, no_fill, circuit_open, error.
 - Conformance tests to mirror Vungle’s suite; implemented adapter compiles and follows shared patterns.
 - Production/sandbox credentials and endpoint validation occur in FT phase per DEVELOPMENT_ROADMAP.md
+
+
+---
+
+### Mintegral — Development placeholders
+Purpose: Enable S2S bidding via placeholder adapter for offline conformance and dev.
+
+Required fields (dev/local):
+- MINTEGRAL_APP_ID — application identifier
+- MINTEGRAL_API_KEY — API key (mask in logs; do not commit)
+
+Adapter wiring (Go backend): backend/auction/internal/bidders/mintegral.go
+- Supports test_endpoint override for offline tests
+- Standardized retry + jitter + circuit breaker; normalized NoBid taxonomy; metrics/tracing/debugger hooks
+
+Configuration example (dev):
+```
+MINTEGRAL_APP_ID=your_app_id
+MINTEGRAL_API_KEY=your_api_key
+```
+
+Notes:
+- Do not paste secrets into code or docs. Use environment variables.
+- Sandbox/official endpoints to be configured during FT phase.
+
+### InMobi — Development placeholders
+Purpose: Enable S2S bidding via placeholder adapter for offline conformance and dev.
+
+Required fields (dev/local):
+- INMOBI_ACCOUNT_ID — account identifier
+- INMOBI_API_KEY — API key (mask in logs; do not commit)
+
+Adapter wiring (Go backend): backend/auction/internal/bidders/inmobi.go
+- Supports test_endpoint override for offline tests
+- Standardized resiliency and taxonomy; circuit breaker enabled; metrics/tracing/debugger hooks
+
+Configuration example (dev):
+```
+INMOBI_ACCOUNT_ID=your_account_id
+INMOBI_API_KEY=your_api_key
+```
+
+---
+
+## Adapter Compatibility Matrix (S2S bidders)
+
+| Adapter                | Bidding Type | Formats                          | Surfaces              | Keys/Params                         | Default Timeout |
+|------------------------|--------------|-----------------------------------|-----------------------|-------------------------------------|-----------------|
+| AdMob                  | S2S          | banner, interstitial, rewarded    | iOS, Android, Web     | API key, Publisher ID               | 5s              |
+| ironSource LevelPlay   | S2S          | interstitial, rewarded, banner    | iOS, Android          | App Key, Placement/Instance IDs     | 5s              |
+| AppLovin MAX           | S2S          | interstitial, rewarded, banner    | iOS, Android          | SDK Key, Ad Unit ID                 | 5s              |
+| Unity Mediation        | S2S          | interstitial, rewarded            | iOS, Android          | Game ID/App ID, Placement ID        | 5s              |
+| Fyber FairBid          | S2S          | interstitial, rewarded, banner    | iOS, Android          | App ID, API Key                     | 5s              |
+| Appodeal               | S2S          | interstitial, rewarded, banner    | iOS, Android          | App Key                             | 5s              |
+| Admost                 | S2S          | interstitial, rewarded, banner    | iOS, Android          | App ID, API Key                     | 5s              |
+| Chocolate Platform     | S2S          | interstitial, rewarded, banner    | iOS, Android, Web     | App ID, API Key                     | 5s              |
+| Tapdaq                 | S2S          | interstitial, rewarded, banner    | iOS, Android          | App ID, API Key                     | 5s              |
+| Chartboost             | S2S          | interstitial, rewarded            | iOS, Android          | App ID, API Key                     | 5s              |
+| Liftoff (Vungle)       | S2S          | interstitial, rewarded            | iOS, Android          | App ID, API Key                     | 5s              |
+| Pangle (Bytedance)     | S2S          | interstitial, rewarded, banner    | iOS, Android          | App ID, API Key                     | 5s              |
+| Meta Audience Network  | S2S          | interstitial, rewarded, banner    | iOS, Android          | App ID, App Secret                  | 5s              |
+| Mintegral              | S2S          | interstitial, rewarded, banner    | iOS, Android          | App ID, API Key                     | 5s              |
+| InMobi                 | S2S          | interstitial, rewarded, banner    | iOS, Android          | Account ID, API Key                 | 5s              |
+
+Notes:
+- All adapters adhere to the normalized NoBid taxonomy: timeout, network_error, status_XXX, no_fill, circuit_open, error.
+- Conformance is verified in offline tests under `backend/auction/internal/bidders/*_conformance_test.go` and `adapter_conformance_test.go`.

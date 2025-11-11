@@ -35,13 +35,10 @@ func (r *testRecorder) inc(m map[string]int, k string) {
 	m[k] = m[k] + 1
 }
 
-// MetricsRecorder interface (duplicated here to avoid import cycles if any changes occur).
-// It should match the interface defined in metrics.go.
-func (r *testRecorder) RecordRequest(adapter string) { r.inc(r.requests, adapter) }
-func (r *testRecorder) RecordSuccess(adapter string) { r.inc(r.success, adapter) }
-func (r *testRecorder) RecordNoFill(adapter string) { r.inc(r.noFill, adapter) }
-func (r *testRecorder) RecordTimeout(adapter string) { r.inc(r.timeout, adapter) }
-func (r *testRecorder) RecordError(adapter, reason string) {
+// MetricsRecorder interface adapter — implement methods matching metrics.go
+func (r *testRecorder) IncRequest(adapter string) { r.inc(r.requests, adapter) }
+func (r *testRecorder) IncSuccess(adapter string) { r.inc(r.success, adapter) }
+func (r *testRecorder) IncError(adapter, reason string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	m, ok := r.errors[adapter]
@@ -51,7 +48,9 @@ func (r *testRecorder) RecordError(adapter, reason string) {
 	}
 	m[reason] = m[reason] + 1
 }
-func (r *testRecorder) ObserveLatency(adapter string, ms float64) {
+func (r *testRecorder) IncNoFill(adapter string) { r.inc(r.noFill, adapter) }
+func (r *testRecorder) IncTimeout(adapter string) { r.inc(r.timeout, adapter) }
+func (r *testRecorder) ObserveLatencyMS(adapter string, ms float64) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.latency[adapter] = append(r.latency[adapter], ms)

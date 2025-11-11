@@ -1,0 +1,147 @@
+import XCTest
+@testable import RivalApexMediationSDK
+
+final class ConsentManagerTests: XCTestCase {
+    
+    override func setUp() {
+        super.setUp()
+        ConsentManager.shared.clear()
+    }
+    
+    override func tearDown() {
+        ConsentManager.shared.clear()
+        super.tearDown()
+    }
+    
+    func testDefaultConsent() {
+        let consent = ConsentManager.shared.getConsent()
+        
+        XCTAssertNil(consent.gdprApplies)
+        XCTAssertNil(consent.gdprConsentString)
+        XCTAssertFalse(consent.ccpaOptOut)
+        XCTAssertFalse(consent.coppa)
+    }
+    
+    func testSetAndGetConsent() {
+        let consent = ConsentData(
+            gdprApplies: true,
+            gdprConsentString: "test-string",
+            ccpaOptOut: true,
+            coppa: false
+        )
+        
+        ConsentManager.shared.setConsent(consent)
+        let retrieved = ConsentManager.shared.getConsent()
+        
+        XCTAssertEqual(retrieved.gdprApplies, true)
+        XCTAssertEqual(retrieved.gdprConsentString, "test-string")
+        XCTAssertEqual(retrieved.ccpaOptOut, true)
+        XCTAssertEqual(retrieved.coppa, false)
+    }
+    
+    func testConsentPersistence() {
+        let consent = ConsentData(
+            gdprApplies: true,
+            gdprConsentString: "persistent-string",
+            ccpaOptOut: false,
+            coppa: false
+        )
+        
+        ConsentManager.shared.setConsent(consent)
+        
+        // Create new instance (simulates app restart)
+        let newManager = ConsentManager()
+        let retrieved = newManager.getConsent()
+        
+        XCTAssertEqual(retrieved.gdprApplies, true)
+        XCTAssertEqual(retrieved.gdprConsentString, "persistent-string")
+    }
+    
+    func testCanShowPersonalizedAds_Default() {
+        let canShow = ConsentManager.shared.canShowPersonalizedAds()
+        XCTAssertTrue(canShow, "Default should allow personalized ads")
+    }
+    
+    func testCanShowPersonalizedAds_COPPA() {
+        let consent = ConsentData(coppa: true)
+        ConsentManager.shared.setConsent(consent)
+        
+        let canShow = ConsentManager.shared.canShowPersonalizedAds()
+        XCTAssertFalse(canShow, "COPPA users should not see personalized ads")
+    }
+    
+    func testCanShowPersonalizedAds_CCPAOptOut() {
+        let consent = ConsentData(ccpaOptOut: true)
+        ConsentManager.shared.setConsent(consent)
+        
+        let canShow = ConsentManager.shared.canShowPersonalizedAds()
+        XCTAssertFalse(canShow, "CCPA opt-out should prevent personalized ads")
+    }
+    
+    func testCanShowPersonalizedAds_GDPRWithConsent() {
+        let consent = ConsentData(
+            gdprApplies: true,
+            gdprConsentString: "valid-consent-string"
+        )
+        ConsentManager.shared.setConsent(consent)
+        
+        let canShow = ConsentManager.shared.canShowPersonalizedAds()
+        XCTAssertTrue(canShow, "GDPR with consent string should allow personalized ads")
+    }
+    
+    func testCanShowPersonalizedAds_GDPRWithoutConsent() {
+        let consent = ConsentData(gdprApplies: true, gdprConsentString: nil)
+        ConsentManager.shared.setConsent(consent)
+        
+        let canShow = ConsentManager.shared.canShowPersonalizedAds()
+        XCTAssertFalse(canShow, "GDPR without consent string should prevent personalized ads")
+    }
+    
+    func testToAdRequestMetadata_GDPR() {
+        let consent = ConsentData(
+            gdprApplies: true,
+            gdprConsentString: "test-consent"
+        )
+        ConsentManager.shared.setConsent(consent)
+        
+        let metadata = ConsentManager.shared.toAdRequestMetadata()
+        
+        XCTAssertEqual(metadata["gdpr"] as? Int, 1)
+        XCTAssertEqual(metadata["gdpr_consent"] as? String, "test-consent")
+    }
+    
+    func testToAdRequestMetadata_CCPA() {
+        let consent = ConsentData(ccpaOptOut: true)
+        ConsentManager.shared.setConsent(consent)
+        
+        let metadata = ConsentManager.shared.toAdRequestMetadata()
+        
+        XCTAssertEqual(metadata["us_privacy"] as? String, "1YNN")
+    }
+    
+    func testToAdRequestMetadata_COPPA() {
+        let consent = ConsentData(coppa: true)
+        ConsentManager.shared.setConsent(consent)
+        
+        let metadata = ConsentManager.shared.toAdRequestMetadata()
+        
+        XCTAssertEqual(metadata["coppa"] as? Int, 1)
+    }
+    
+    func testGetRedactedConsentInfo() {
+        let consent = ConsentData(
+            gdprApplies: true,
+            gdprConsentString: "sensitive-string-should-be-redacted",
+            ccpaOptOut: true,
+            coppa: false
+        )
+        ConsentManager.shared.setConsent(consent)
+        
+        let redacted = ConsentManager.shared.getRedactedConsentInfo()
+        
+        XCTAssertEqual(redacted["gdprApplies"] as? Bool, true)
+        XCTAssertEqual(redacted["gdprConsentString"] as? String, "<redacted>")
+        XCTAssertEqual(redacted["ccpaOptOut"] as? Bool, true)
+        XCTAssertEqual(redacted["coppa"] as? Bool, false)
+    }
+}

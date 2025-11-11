@@ -145,7 +145,9 @@ func NewCircuitBreakerWithClock(threshold int, openFor time.Duration, clk Clock)
 
 // Allow returns false if the breaker is open.
 func (c *CircuitBreaker) Allow() bool {
-	return c.clock.Now().After(c.openUntil)
+	now := c.clock.Now()
+	// Allow when the open window has elapsed (now >= openUntil)
+	return !now.Before(c.openUntil)
 }
 
 // OnFailure records a failure and opens the breaker when threshold is reached.

@@ -19,10 +19,13 @@ type ChartboostAdapter struct {
 }
 
 func NewChartboostAdapter(appID, apiKey string) *ChartboostAdapter {
+	c := &http.Client{Timeout: 5 * time.Second}
+	// Do not follow redirects so 3xx statuses are observable as status_XXX
+	c.CheckRedirect = func(req *http.Request, via []*http.Request) error { return http.ErrUseLastResponse }
 	return &ChartboostAdapter{
 		appID:  appID,
 		apiKey: apiKey,
-		client: &http.Client{Timeout: 5 * time.Second},
+		client: c,
 		cb:     NewCircuitBreaker(3, 30*time.Second),
 	}
 }
@@ -36,7 +39,7 @@ func (a *ChartboostAdapter) RequestBid(ctx context.Context, req BidRequest) (*Bi
 
 	if !a.cb.Allow() {
 		recordError(a.GetName(), NoBidCircuitOpen)
-		CaptureDebugEvent(DebugEvent{PlacementID: req.PlacementID, RequestID: req.RequestID, Adapter: a.GetName(), Outcome: "no_bid", Reason: NoBidCircuitOpen, CreatedAt: time.Now()})
+  CaptureDebugEventWithSpan(span, DebugEvent{PlacementID: req.PlacementID, RequestID: req.RequestID, Adapter: a.GetName(), Outcome: "no_bid", Reason: NoBidCircuitOpen, CreatedAt: time.Now()})
 		return &BidResponse{RequestID: req.RequestID, AdapterName: a.GetName(), NoBid: true, NoBidReason: NoBidCircuitOpen}, nil
 	}
 
@@ -79,7 +82,7 @@ func (a *ChartboostAdapter) RequestBid(ctx context.Context, req BidRequest) (*Bi
 		reason := MapErrorToNoBid(err)
 		observeLatency(a.GetName(), float64(time.Since(start).Milliseconds()))
 		if reason == NoBidTimeout { recordTimeout(a.GetName()) } else if reason == NoBidNoFill { recordNoFill(a.GetName()) } else { recordError(a.GetName(), reason) }
-		CaptureDebugEvent(DebugEvent{PlacementID: req.PlacementID, RequestID: req.RequestID, Adapter: a.GetName(), Outcome: "no_bid", Reason: reason, CreatedAt: time.Now()})
+		CaptureDebugEventWithSpan(span, DebugEvent{PlacementID: req.PlacementID, RequestID: req.RequestID, Adapter: a.GetName(), Outcome: "no_bid", Reason: reason, CreatedAt: time.Now()})
 		span.SetAttributes(map[string]string{"outcome": "no_bid", "reason": reason})
 		return &BidResponse{RequestID: req.RequestID, AdapterName: a.GetName(), NoBid: true, NoBidReason: reason}, nil
 	}
@@ -109,7 +112,7 @@ func (a *ChartboostAdapter) RequestBid(ctx context.Context, req BidRequest) (*Bi
 	a.cb.OnSuccess()
 	observeLatency(a.GetName(), float64(time.Since(start).Milliseconds()))
 	recordSuccess(a.GetName())
-	CaptureDebugEvent(DebugEvent{PlacementID: req.PlacementID, RequestID: req.RequestID, Adapter: a.GetName(), Outcome: "success", ReqSummary: map[string]any{"floor": req.FloorCPM}, RespSummary: map[string]any{"cpm": cpm}, CreatedAt: time.Now()})
+	CaptureDebugEventWithSpan(span, DebugEvent{PlacementID: req.PlacementID, RequestID: req.RequestID, Adapter: a.GetName(), Outcome: "success", ReqSummary: map[string]any{"floor": req.FloorCPM}, RespSummary: map[string]any{"cpm": cpm}, CreatedAt: time.Now()})
 	span.SetAttributes(map[string]string{"outcome": "success"})
 	return br, nil
 }

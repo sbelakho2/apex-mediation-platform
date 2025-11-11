@@ -36,7 +36,7 @@ func (f *FyberAdapter) RequestBid(ctx context.Context, req BidRequest) (*BidResp
 
 	if f.isCircuitOpen() {
 		recordError("fyber", NoBidCircuitOpen)
-		CaptureDebugEvent(DebugEvent{PlacementID: req.PlacementID, RequestID: req.RequestID, Adapter: "fyber", Outcome: "no_bid", Reason: NoBidCircuitOpen, CreatedAt: time.Now()})
+		CaptureDebugEventWithSpan(span, DebugEvent{PlacementID: req.PlacementID, RequestID: req.RequestID, Adapter: "fyber", Outcome: "no_bid", Reason: NoBidCircuitOpen, CreatedAt: time.Now()})
 		return &BidResponse{RequestID: req.RequestID, AdapterName: "fyber", NoBid: true, NoBidReason: NoBidCircuitOpen}, nil
 	}
 
@@ -86,7 +86,7 @@ func (f *FyberAdapter) RequestBid(ctx context.Context, req BidRequest) (*BidResp
 		reason := MapErrorToNoBid(err)
 		observeLatency("fyber", float64(time.Since(callStart).Milliseconds()))
 		if reason == NoBidTimeout { recordTimeout("fyber") } else if reason == NoBidNoFill { recordNoFill("fyber") } else { recordError("fyber", reason) }
-		CaptureDebugEvent(DebugEvent{PlacementID: req.PlacementID, RequestID: req.RequestID, Adapter: "fyber", Outcome: "no_bid", Reason: reason, CreatedAt: time.Now()})
+		CaptureDebugEventWithSpan(span, DebugEvent{PlacementID: req.PlacementID, RequestID: req.RequestID, Adapter: "fyber", Outcome: "no_bid", Reason: reason, CreatedAt: time.Now()})
 		span.SetAttributes(map[string]string{"outcome": "no_bid", "reason": reason})
 		return &BidResponse{RequestID: req.RequestID, AdapterName: "fyber", NoBid: true, NoBidReason: reason}, nil
 	}
@@ -117,7 +117,7 @@ func (f *FyberAdapter) RequestBid(ctx context.Context, req BidRequest) (*BidResp
 	f.onSuccess()
 	observeLatency("fyber", float64(time.Since(callStart).Milliseconds()))
 	recordSuccess("fyber")
-	CaptureDebugEvent(DebugEvent{PlacementID: req.PlacementID, RequestID: req.RequestID, Adapter: "fyber", Outcome: "success", ReqSummary: map[string]any{"floor": req.FloorCPM}, RespSummary: map[string]any{"cpm": cpm}, CreatedAt: time.Now()})
+	CaptureDebugEventWithSpan(span, DebugEvent{PlacementID: req.PlacementID, RequestID: req.RequestID, Adapter: "fyber", Outcome: "success", ReqSummary: map[string]any{"floor": req.FloorCPM}, RespSummary: map[string]any{"cpm": cpm}, CreatedAt: time.Now()})
 	span.SetAttributes(map[string]string{"outcome": "success"})
 	return br, nil
 }

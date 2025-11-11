@@ -9,6 +9,10 @@ type testSpan struct{ attrs map[string]string; ended bool }
 
 func (s *testSpan) End() { s.ended = true }
 func (s *testSpan) SetAttr(k, v string) { if s.attrs == nil { s.attrs = map[string]string{} }; s.attrs[k] = v }
+func (s *testSpan) SetAttributes(attrs map[string]string) {
+	if s.attrs == nil { s.attrs = map[string]string{} }
+	for k, v := range attrs { s.attrs[k] = v }
+}
 
 type testTracer struct{ started bool; lastName string; lastAttrs map[string]string }
 

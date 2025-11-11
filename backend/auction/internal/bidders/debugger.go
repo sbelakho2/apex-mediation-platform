@@ -1,6 +1,7 @@
 package bidders
 
 import (
+	"math/rand"
 	"sync"
 	"time"
 )
@@ -9,15 +10,17 @@ import (
 // It must not contain PII or raw secrets. Payload fields should be pre-redacted and truncated.
 // This type intentionally uses only primitive types and maps for easy JSON marshalling by callers.
 type DebugEvent struct {
-	PlacementID string            `json:"placement_id"`
-	RequestID   string            `json:"request_id"`
-	Adapter     string            `json:"adapter"`
-	Outcome     string            `json:"outcome"` // success | no_bid
-	Reason      string            `json:"reason,omitempty"`
+	PlacementID string             `json:"placement_id"`
+	RequestID   string             `json:"request_id"`
+	Adapter     string             `json:"adapter"`
+	Outcome     string             `json:"outcome"` // success | no_bid
+	Reason      string             `json:"reason,omitempty"`
 	TimingsMS   map[string]float64 `json:"timings_ms,omitempty"` // e.g. {"total": 42, "http": 37}
-	ReqSummary  map[string]any    `json:"req_summary,omitempty"`
-	RespSummary map[string]any    `json:"resp_summary,omitempty"`
-	CreatedAt   time.Time         `json:"created_at"`
+	ReqSummary  map[string]any     `json:"req_summary,omitempty"`
+	RespSummary map[string]any     `json:"resp_summary,omitempty"`
+	TraceID     string             `json:"trace_id,omitempty"`
+	SpanID      string             `json:"span_id,omitempty"`
+	CreatedAt   time.Time          `json:"created_at"`
 }
 
 // Debugger is the interface for capturing adapter call events for a short-lived, in-memory debugger.
@@ -49,6 +52,17 @@ func SetDebugger(d Debugger) {
 // Adapters may call this at the end of their RequestBid to record a summary for the Mediation Debugger.
 func CaptureDebugEvent(ev DebugEvent) { globalDebugger.Capture(ev) }
 
+// CaptureDebugEventWithSpan enriches ev with trace/span IDs when available and captures it.
+func CaptureDebugEventWithSpan(sp Span, ev DebugEvent) {
+	if sp != nil {
+		if tid, sid := TraceAndSpanIDs(sp); tid != "" {
+			ev.TraceID = tid
+			ev.SpanID = sid
+		}
+	}
+	CaptureDebugEvent(ev)
+}
+
 // GetLastDebugEvents exposes the last N events for a placement from the configured debugger (read-only).
 // If placementID is empty, returns events stored under the unknown bucket.
 func GetLastDebugEvents(placementID string, n int) []DebugEvent { return globalDebugger.GetLast(placementID, n) }
@@ -58,6 +72,9 @@ func GetLastDebugEvents(placementID string, n int) []DebugEvent { return globalD
 type InMemoryDebugger struct {
 	mu              sync.Mutex
 	perPlacementCap int
+	sampleBps       int    // 0 disables sampling; else 0..10000 (basis points)
+	redactStrict    bool   // strict redaction mode
+	maxLen          int    // truncation length for long strings in summaries
 	// placement -> events (newest at end)
 	store map[string][]DebugEvent
 }
@@ -65,15 +82,36 @@ type InMemoryDebugger struct {
 // NewInMemoryDebugger creates a new debugger with a per-placement ring buffer capacity.
 // If cap <= 0, defaults to 100.
 func NewInMemoryDebugger(perPlacementCap int) *InMemoryDebugger {
+	return NewInMemoryDebuggerWithOptions(perPlacementCap, 0, false, 256)
+}
+
+// NewInMemoryDebuggerWithOptions creates a new debugger with sampling/redaction options.
+// sampleBps is basis points (0..10000). When >0, approximately sampleBps/10000 of events are retained.
+// When redactStrict is true, PII-like fields are removed and strings truncated to maxLen.
+func NewInMemoryDebuggerWithOptions(perPlacementCap int, sampleBps int, redactStrict bool, maxLen int) *InMemoryDebugger {
 	if perPlacementCap <= 0 {
 		perPlacementCap = 100
 	}
-	return &InMemoryDebugger{perPlacementCap: perPlacementCap, store: make(map[string][]DebugEvent)}
+	if sampleBps < 0 { sampleBps = 0 }
+	if sampleBps > 10000 { sampleBps = 10000 }
+	if maxLen <= 0 { maxLen = 256 }
+	return &InMemoryDebugger{perPlacementCap: perPlacementCap, sampleBps: sampleBps, redactStrict: redactStrict, maxLen: maxLen, store: make(map[string][]DebugEvent)}
 }
 
 func (d *InMemoryDebugger) Capture(ev DebugEvent) {
+	// Optional sampling before any processing (basis points 0..10000)
+	if d.sampleBps > 0 {
+		if rand.Intn(10000) >= d.sampleBps {
+			return // drop sampled-out events
+		}
+	}
 	if ev.CreatedAt.IsZero() {
 		ev.CreatedAt = time.Now()
+	}
+	// Optional redaction/truncation of summaries in strict mode
+	if d.redactStrict {
+		if ev.ReqSummary != nil { ev.ReqSummary = RedactForDebugger(ev.ReqSummary, d.maxLen, true) }
+		if ev.RespSummary != nil { ev.RespSummary = RedactForDebugger(ev.RespSummary, d.maxLen, true) }
 	}
 	key := ev.PlacementID
 	if key == "" {

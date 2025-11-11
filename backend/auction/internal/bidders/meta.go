@@ -166,7 +166,7 @@ func (m *MetaAdapter) RequestBid(ctx context.Context, req BidRequest) (*BidRespo
 		}
 		span.SetAttr("outcome", "no_bid")
 		span.SetAttr("reason", genericResponse.NoBidReason)
-		CaptureDebugEvent(DebugEvent{
+		CaptureDebugEventWithSpan(span, DebugEvent{
 			PlacementID: req.PlacementID,
 			RequestID:   req.RequestID,
 			Adapter:     "meta",
@@ -178,7 +178,7 @@ func (m *MetaAdapter) RequestBid(ctx context.Context, req BidRequest) (*BidRespo
 	} else {
 		recordSuccess("meta")
 		span.SetAttr("outcome", "success")
-		CaptureDebugEvent(DebugEvent{
+		CaptureDebugEventWithSpan(span, DebugEvent{
 			PlacementID: req.PlacementID,
 			RequestID:   req.RequestID,
 			Adapter:     "meta",
