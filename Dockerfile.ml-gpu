@@ -1,0 +1,19 @@
+# GPU-enabled image aligned with CUDA 12 for deep model training
+FROM pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+WORKDIR /workspace
+
+COPY ML/requirements-gpu.txt /tmp/requirements-gpu.txt
+RUN pip install --no-cache-dir --upgrade pip \
+    && pip install --no-cache-dir -r /tmp/requirements-gpu.txt
+
+COPY ML /workspace/ML
+COPY scripts /workspace/scripts
+
+ENV PYTHONPATH=/workspace/ML/src:$PYTHONPATH
+
+ENTRYPOINT ["python", "scripts/ml/train_models.py"]
+CMD ["--help"]

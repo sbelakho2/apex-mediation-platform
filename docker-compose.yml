@@ -66,6 +66,39 @@ services:
     networks:
       - ad-stack
 
+  ml-train:
+    build:
+      context: .
+      dockerfile: Dockerfile.ml
+    working_dir: /workspace
+    volumes:
+      - .:/workspace
+    command: ["--help"]
+    profiles:
+      - ml
+    networks:
+      - ad-stack
+
+  ml-train-gpu:
+    build:
+      context: .
+      dockerfile: Dockerfile.ml-gpu
+    working_dir: /workspace
+    volumes:
+      - .:/workspace
+    command: ["--help"]
+    profiles:
+      - ml-gpu
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: [gpu]
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+    networks:
+      - ad-stack
+
 networks:
   ad-stack:
     driver: bridge

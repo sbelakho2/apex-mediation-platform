@@ -106,6 +106,7 @@ def train_autoencoder(
         model.train()
         epoch_loss = 0.0
         for batch in train_loader:
+            batch = batch[0].to(device)
             optimizer.zero_grad()
             recon = model(batch)
             loss = criterion(recon, batch)

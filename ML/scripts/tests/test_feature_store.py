@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import sys
 
@@ -62,8 +62,8 @@ def test_offline_builder_generates_parquet_and_schema(tmp_path: Path) -> None:
 
 def test_retention_prunes_old_runs(tmp_path: Path) -> None:
     enrichment_root = tmp_path / "data" / "enrichment"
-    old_date = (datetime.utcnow() - timedelta(days=400)).strftime("%Y-%m-%d")
-    recent_date = datetime.utcnow().strftime("%Y-%m-%d")
+    old_date = (datetime.now(timezone.utc) - timedelta(days=400)).strftime("%Y-%m-%d")
+    recent_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
     _write_manifest(
         enrichment_root,

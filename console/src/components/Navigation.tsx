@@ -54,8 +54,12 @@ export default function Navigation({ children }: { children: React.ReactNode }) 
     if (showBilling) {
       items.splice(5, 0, { name: 'Billing', href: '/billing/usage', icon: CreditCard })
     }
+    // Admin section (operators only)
+    if (user?.role === 'admin') {
+      items.push({ name: 'Admin', href: '/admin/health', icon: Settings })
+    }
     return items
-  }, [showTransparency, showBilling])
+  }, [showTransparency, showBilling, user?.role])
 
   // Don't show navigation on login page
   if (!pathname || pathname === '/login' || pathname === '/') return <>{children}</>

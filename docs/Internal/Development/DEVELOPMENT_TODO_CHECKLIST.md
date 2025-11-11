@@ -210,10 +210,10 @@ Note: This section is the single source of truth for active work. It replaces sc
      - [x] Modular label functions (LFs) with coverage/conflict reports; simple probabilistic label model → `y_weak`, `confidence` — Evidence: `ML/src/ml_pipelines/weak_supervision/label_functions.py`, `.../label_model.py`, `.../metrics.py`
      - [x] Synthetic dataset unit tests for LF coverage and conflict metrics — Evidence: `ML/scripts/tests/test_weak_supervision.py`
    - 6.4 Models & training (GPU‑ready, hosting‑friendly)
-     - [~] Small‑sample PyOD/Torch scaffold; GPU autodetect via `torch.cuda.is_available()`
-     - [ ] Deep Autoencoder & DeepSVDD (PyTorch) + IsolationForest/GBDT baselines; calibration (temperature/isotonic)
-     - [ ] Export TorchScript and ONNX; write `models/<run_id>/{model.pt, onnx/, metrics.json, model_card.md, training_manifest.json}`
-     - [ ] Tooling: `requirements.txt` and `requirements-gpu.txt` (CUDA12), `Dockerfile.ml` (CPU) and `Dockerfile.ml-gpu` (NVIDIA), compose profiles, Makefile targets (`ml.fetch`, `ml.prepare`, `ml.train`, `ml.train.gpu`)
+     - [x] Small-sample PyOD/Torch scaffold; GPU autodetect via `torch.cuda.is_available()` — Evidence: `ML/src/ml_pipelines/models/config.py`, `ML/src/ml_pipelines/models/pipeline.py`
+     - [x] Deep Autoencoder & DeepSVDD (PyTorch) + IsolationForest/GBDT baselines; calibration (temperature/isotonic) — Evidence: `ML/src/ml_pipelines/models/torch_models.py`, `ML/src/ml_pipelines/models/baselines.py`
+     - [x] Export TorchScript and ONNX; write `models/<run_id>/{model.pt, onnx/, metrics.json, model_card.md, training_manifest.json}` — Evidence: `ML/src/ml_pipelines/models/pipeline.py`, `ML/scripts/tests/test_model_training.py`
+     - [x] Tooling: `requirements.txt` and `requirements-gpu.txt` (CUDA12), `Dockerfile.ml` (CPU) and `Dockerfile.ml-gpu` (NVIDIA), compose profiles, Makefile targets (`ml.fetch`, `ml.prepare`, `ml.train`, `ml.train.gpu`) — Evidence: `ML/requirements.txt`, `ML/requirements-gpu.txt`, `Dockerfile.ml`, `Dockerfile.ml-gpu`, `docker-compose.yml` (ml profiles), `Makefile`
    - 6.5 Evaluation & CI
      - [ ] Metrics: PR‑AUC, ROC‑AUC, precision@k, precision at FPR∈{0.1%,0.5%,1%}; adversarial stability (IP hopping, ASN masking)
      - [ ] CPU‑only CI lane runs synthetic tests < 10 min; artifacts not uploaded by default

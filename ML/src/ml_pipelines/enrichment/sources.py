@@ -75,11 +75,11 @@ def _read_json(path: Path) -> MutableMapping[str, object]:
 def _choose_date(date_override: Optional[str] = None) -> str:
     if date_override:
         return date_override
-    return _dt.datetime.utcnow().strftime("%Y-%m-%d")
+    return _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%d")
 
 
 def _now_iso() -> str:
-    return _dt.datetime.utcnow().strftime(ISO_FMT)
+    return _dt.datetime.now(_dt.timezone.utc).strftime(ISO_FMT)
 
 
 def _download_if_needed(

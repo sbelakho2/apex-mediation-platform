@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Optional
 
@@ -157,7 +157,7 @@ def _write_manifest(
         "learning_rate": config.learning_rate,
         "hidden_dim": config.hidden_dim,
         "device": str(config.device),
-        "generated_at": datetime.utcnow().isoformat() + "Z",
+    "generated_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
     }
     (output_dir / "training_manifest.json").write_text(
         json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"

@@ -119,4 +119,3 @@ def test_train_models_cli(tmp_path: Path, synthetic_dataset: Path) -> None:
     assert manifest_path.exists()
     metrics_path = manifest_path.parent / "metrics.json"
     assert metrics_path.exists()
-```

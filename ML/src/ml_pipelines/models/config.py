@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, Sequence
 
@@ -30,7 +30,7 @@ class TrainingConfig:
         self.dataset_path = Path(self.dataset_path)
         self.output_root = Path(self.output_root)
         if self.run_id is None:
-            self.run_id = datetime.utcnow().strftime("%Y%m%d-%H%M%S")
+            self.run_id = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
 
     @property
     def device(self) -> torch.device:

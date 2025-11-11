@@ -3,6 +3,23 @@ node_modules/
 npm-debug.log
 yarn-error.log
 
+# Build artifacts
+dist/
+build/
+.cache/
+
+# Coverage & test outputs
+coverage/
+.nyc_output/
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+.env.development
+.env.staging
+.env.production
+
 # Environment variables
 .env
 .env.local
@@ -19,6 +36,11 @@ logs/
 *.sqlite
 *.sqlite3
 *.db
+
+# Security scan artifacts
+sbom-*.json
+trivy-*-results.sarif
+trivy-*-report.txt
 
 # OS files
 .DS_Store

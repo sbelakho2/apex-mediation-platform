@@ -5,6 +5,10 @@ node_modules/
 
 # Testing
 /coverage
+.lighthouse/
+playwright-report/
+.swc/
+.turbo/
 
 # Next.js
 /.next/
@@ -39,6 +43,7 @@ next-env.d.ts
 
 # Bundle analyzer
 /analyze
+bundle-report/
 
 # IDE
 .vscode/*

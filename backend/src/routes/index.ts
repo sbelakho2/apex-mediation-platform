@@ -17,6 +17,7 @@ import transparencyRoutes from './transparency.routes';
 import metaRoutes from './meta.routes';
 import billingRoutes from './billing.routes';
 import webhooksRoutes from './webhooks.routes';
+import adminRoutes from './admin.routes';
 
 const router = Router();
 
@@ -39,5 +40,6 @@ router.use('/data-export', dataExportRoutes);
 router.use('/queues', queuesRoutes);
 router.use('/transparency', transparencyRoutes);
 router.use('/billing', billingRoutes);
+router.use('/admin', adminRoutes);
 
 export default router;

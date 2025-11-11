@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import os
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Dict, Iterable, List, Mapping, MutableMapping, Optional
 
@@ -46,7 +46,7 @@ class OfflineFeatureBuilder:
         frame.to_csv(csv_path, index=False)
 
         manifest_payload = {
-            "generatedAt": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "generatedAt": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
             "records": len(frame),
             "sources": {
                 name: {
@@ -333,7 +333,7 @@ class OfflineFeatureBuilder:
     def _prune_old_runs(self, retention_days: int) -> None:
         if retention_days <= 0 or not self.version_dir.exists():
             return
-        cutoff = datetime.utcnow() - timedelta(days=retention_days)
+        cutoff = datetime.now(timezone.utc) - timedelta(days=retention_days)
         for source_dir in self.version_dir.iterdir():
             if not source_dir.is_dir():
                 continue
@@ -341,7 +341,7 @@ class OfflineFeatureBuilder:
                 if not run_dir.is_dir():
                     continue
                 try:
-                    run_date = datetime.strptime(run_dir.name, "%Y-%m-%d")
+                    run_date = datetime.strptime(run_dir.name, "%Y-%m-%d").replace(tzinfo=timezone.utc)
                 except ValueError:
                     continue
                 if run_date < cutoff:
