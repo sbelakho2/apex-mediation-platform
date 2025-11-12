@@ -18,6 +18,8 @@ import metaRoutes from './meta.routes';
 import billingRoutes from './billing.routes';
 import webhooksRoutes from './webhooks.routes';
 import adminRoutes from './admin.routes';
+import privacyRoutes from './privacy.routes';
+import migrationRoutes from './migration.routes';
 
 const router = Router();
 
@@ -41,5 +43,7 @@ router.use('/queues', queuesRoutes);
 router.use('/transparency', transparencyRoutes);
 router.use('/billing', billingRoutes);
 router.use('/admin', adminRoutes);
+router.use('/privacy', privacyRoutes);
+router.use('/migration', migrationRoutes);
 
 export default router;

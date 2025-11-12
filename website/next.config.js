@@ -28,6 +28,7 @@ const nextConfig = {
       {
         source: '/:path*',
         headers: [
+          // Security headers
           {
             key: 'X-DNS-Prefetch-Control',
             value: 'on'
@@ -50,11 +51,31 @@ const nextConfig = {
           },
           {
             key: 'Referrer-Policy',
-            value: 'origin-when-cross-origin'
+            value: 'strict-origin-when-cross-origin'
           },
           {
             key: 'Permissions-Policy',
             value: 'camera=(), microphone=(), geolocation=()'
+          },
+          {
+            // NOTE: Prefer nonce-based CSP for any inline usage; avoid inline scripts/styles.
+            // Adjust connect-src/img-src/font-src as needed for CDNs.
+            key: 'Content-Security-Policy',
+            value: [
+              "default-src 'self'",
+              "base-uri 'self'",
+              "frame-ancestors 'none'",
+              // Allow images and media from self and our CDN
+              "img-src 'self' data: https:",
+              // Style from self; allow 'unsafe-inline' only if strictly necessary (prefer hashed/nonce styles)
+              "style-src 'self' 'unsafe-inline'",
+              // Scripts from self; avoid inline scripts. If inline is unavoidable, switch to nonce-based in middleware.
+              "script-src 'self'",
+              // XHR/WebSocket endpoints
+              "connect-src 'self' https:",
+              // Fonts
+              "font-src 'self' data:",
+            ].join('; ')
           }
         ]
       }

@@ -130,7 +130,7 @@ tasks.register('checkSdkSize') {
         
         // Generate JSON report
         outputDir.mkdirs()
-        def jsonReport = new File(outputDir, 'size-report.json')
+        def jsonReport = file("${outputDir}/size-report.json")
         def passed = size <= maxSize
         def warning = size > warningSize && size <= maxSize
         
@@ -143,7 +143,7 @@ tasks.register('checkSdkSize') {
             passed: passed,
             warning: warning,
             percentOfBudget: Math.round((size / maxSize) * 100.0 * 100) / 100,
-            timestamp: new Date().format("yyyy-MM-dd'T'HH:mm:ss'Z'"),
+            timestamp: String.valueOf(System.currentTimeMillis()),
             thresholds: [
                 fail: maxSize,
                 warning: warningSize

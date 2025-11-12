@@ -11,6 +11,8 @@ on:
     paths:
       - 'Packages/com.rivalapexmediation.sdk/**'
       - 'sdk/core/unity/**'
+    tags:
+      - 'sdk-unity-v*'
   workflow_dispatch:
 
 concurrency:
@@ -201,6 +203,50 @@ jobs:
           else
             echo "[WARN] AdvancedUsage sample missing"
           fi
+
+  package-on-tag:
+    if: startsWith(github.ref, 'refs/tags/sdk-unity-v')
+    name: Package UPM and attach to Release
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+      - name: Create UPM tarball
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF#refs/tags/sdk-unity-v}"
+          PKG_DIR="Packages/com.rivalapexmediation.sdk"
+          TAR="com.rivalapexmediation.sdk-${VERSION}.tgz"
+          tar --exclude-vcs -czf "$TAR" -C "$PKG_DIR" .
+          echo "$TAR" > tar_name.txt
+      - name: Generate package size report
+        run: |
+          set -euo pipefail
+          TAR=$(cat tar_name.txt)
+          SIZE_BYTES=$(stat -c%s "$TAR" || stat -f%z "$TAR")
+          SIZE_KB=$(node -e "console.log( (parseInt(process.argv[1],10)/1024).toFixed(2) )" "$SIZE_BYTES")
+          echo "{\n  \"artifact\": \"$TAR\",\n  \"sizeBytes\": $SIZE_BYTES,\n  \"sizeKB\": $SIZE_KB,\n  \"timestamp\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"\n}" > unity-upm-size-report.json
+          cat unity-upm-size-report.json
+      - name: Upload size report artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: unity-upm-size-report
+          path: unity-upm-size-report.json
+          retention-days: 30
+      - name: Upload tarball artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: unity-upm-tarball
+          path: com.rivalapexmediation.sdk-*.tgz
+          retention-days: 30
+      - name: Attach to GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAR=$(cat tar_name.txt)
+          gh release upload "$GITHUB_REF_NAME" "$TAR" --clobber
 
 # Setup Instructions:
 # 1. Add Unity license as repository secret: UNITY_LICENSE

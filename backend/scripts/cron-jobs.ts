@@ -95,6 +95,40 @@ cron.schedule('0 4 * * *', async () => {
 });
 
 /**
+ * 02:30 - Data retention purge (daily)
+ * Purge usage/audit data older than USAGE_RETENTION_MONTHS (default 18)
+ */
+import { Pool as _Pool } from 'pg';
+cron.schedule('30 2 * * *', async () => {
+  const months = parseInt(process.env.USAGE_RETENTION_MONTHS || '18', 10);
+  const databaseUrl = process.env.DATABASE_URL;
+  if (!databaseUrl) {
+    console.error('[Cron] Retention purge skipped: DATABASE_URL not set');
+    return;
+  }
+  const pool = new _Pool({ connectionString: databaseUrl });
+  try {
+    const now = new Date();
+    const cutoff = new Date(now.getFullYear(), now.getMonth() - months, now.getDate());
+    console.log(`[Cron] Purging usage/audit older than ${months} months (cutoff ${cutoff.toISOString()})...`);
+    // Purge usage events
+    const resUsage = await pool.query('DELETE FROM usage_events WHERE created_at < $1', [cutoff.toISOString()]);
+    console.log(`[Cron] Purged usage_events: ${resUsage.rowCount}`);
+    // Optional: purge audit logs if present
+    try {
+      const resAudit = await pool.query('DELETE FROM billing_audit WHERE created_at < $1', [cutoff.toISOString()]);
+      console.log(`[Cron] Purged billing_audit: ${resAudit.rowCount}`);
+    } catch {
+      // table may not exist; ignore
+    }
+  } catch (error) {
+    console.error('[Cron] Retention purge failed:', error);
+  } finally {
+    await pool.end();
+  }
+});
+
+/**
  * 05:00 - Geographic expansion discounts (daily)
  */
 cron.schedule('0 5 * * *', async () => {

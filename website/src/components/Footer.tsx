@@ -14,6 +14,7 @@ export default function Footer() {
             </h3>
             <ul className="space-y-2 text-sm">
               <li><a href="/about" className="hover:underline">Our Mission</a></li>
+              <li><a href="/contact" className="hover:underline">Contact</a></li>
               <li><a href="/team" className="hover:underline">Team</a></li>
               <li><a href="/careers" className="hover:underline">Careers</a></li>
               <li><a href="/press" className="hover:underline">Press Kit</a></li>

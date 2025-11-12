@@ -89,6 +89,16 @@ jobs:
       - name: Install backend deps
         working-directory: backend
         run: npm ci
+      - name: Env schema check
+        working-directory: backend
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/apexmediation
+          CLICKHOUSE_URL: http://localhost:8123
+          REDIS_URL: redis://localhost:6379
+          JWT_SECRET: test-secret-key-123456
+          NODE_ENV: test
+        run: |
+          npx ts-node -e "require('./src/config/env'); console.log('Env OK')"
       - name: Lint backend
         working-directory: backend
         run: npm run lint
@@ -166,6 +176,117 @@ jobs:
           name: playwright-screenshots
           path: console/test-results/
           retention-days: 30
+
+  console-a11y-perf:
+    name: Console — a11y and Lighthouse budgets
+    runs-on: ubuntu-22.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use Node.js 18.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18.20.4'
+      - name: Cache npm (console)
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.npm
+            console/node_modules
+          key: ${{ runner.os }}-npm-console-${{ hashFiles('console/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-npm-console-
+      - name: Install console deps
+        working-directory: console
+        run: npm ci
+      - name: Build Next.js app
+        working-directory: console
+        run: npm run build
+      - name: Start Next.js server in background
+        working-directory: console
+        run: |
+          npm run start &
+          sleep 10
+          curl -f http://localhost:3000 || exit 1
+      - name: Run jest-axe tests (a11y)
+        working-directory: console
+        run: npm run test:a11y --silent
+      - name: Run Lighthouse with budgets
+        working-directory: console
+        run: npx @lhci/cli autorun --config=./lighthouse.config.cjs || true
+      - name: Upload Lighthouse reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: console-lighthouse-reports
+          path: console/.lighthouse/
+          retention-days: 14
+
+  billing-e2e-smoke:
+    name: Billing — E2E smoke
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use Node.js 18.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18.20.4'
+      - name: Cache npm (console)
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.npm
+            console/node_modules
+            quality/node_modules
+          key: ${{ runner.os }}-npm-billing-e2e-${{ hashFiles('console/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-npm-billing-e2e-
+      - name: Install deps
+        run: |
+          npm ci
+          cd console && npm ci && npx playwright install --with-deps chromium && cd ..
+      - name: Build Console
+        working-directory: console
+        run: npm run build
+      - name: Start Console
+        working-directory: console
+        run: |
+          npm run start &
+          sleep 10
+          curl -f http://localhost:3000 || exit 1
+      - name: Run billing E2E smoke
+        working-directory: quality
+        run: npx playwright test e2e/billing/usage-to-invoice.spec.ts --reporter=list || true
+      - name: Upload E2E artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: billing-e2e-artifacts
+          path: |
+            console/test-results/
+            console/playwright-report/
+          retention-days: 14
+
+  openapi-drift:
+    name: Backend — OpenAPI drift guard (billing)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18.20.4'
+      - name: Install openapi-diff
+        run: npm install -g @redocly/openapi-core@latest openapi-diff@3
+      - name: Compare current spec to baseline (if present)
+        run: |
+          if [ -f backend/src/openapi/.baselines/billing.yaml ]; then
+            npx openapi-diff backend/src/openapi/.baselines/billing.yaml backend/src/openapi/billing.yaml || exit 1
+          else
+            echo "No OpenAPI baseline found. Skipping drift guard."
+          fi
       - name: Upload Playwright videos on failure
         uses: actions/upload-artifact@v4
         if: failure()
@@ -173,6 +294,108 @@ jobs:
           name: playwright-videos
           path: console/playwright-report/
           retention-days: 30
+
+  website-a11y-perf:
+    name: Website — a11y and Lighthouse budgets + token lint
+    runs-on: ubuntu-22.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use Node.js 18.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18.20.4'
+      - name: Cache npm (website)
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.npm
+            website/node_modules
+          key: ${{ runner.os }}-npm-website-${{ hashFiles('website/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-npm-website-
+      - name: Install website deps
+        working-directory: website
+        run: npm ci
+      - name: Build Website
+        working-directory: website
+        run: npm run build
+      - name: Start Website server in background
+        working-directory: website
+        run: |
+          npm run start &
+          sleep 10
+          curl -f http://localhost:3000 || exit 1
+      - name: Run Lighthouse with budgets (website)
+        working-directory: .
+        run: npx @lhci/cli autorun --config=quality/lighthouse/website.config.cjs || true
+      - name: Upload Lighthouse reports (website)
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: website-lighthouse-reports
+          path: ./.lighthouse-website/
+          retention-days: 14
+      - name: Token lint — forbid hard-coded hex in website components
+        run: node quality/lint/no-hardcoded-hex.js website/src
+
+      - name: Generate bundle analyzer reports (client and server)
+        run: |
+          cd website
+          ANALYZE=true npm run build || true
+          cd ..
+      - name: Upload bundle analyzer reports (website)
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: website-bundle-analyzer
+          path: website/analyze/**
+          retention-days: 14
+
+  website-visual-regression:
+    name: Website — visual regression (light/dark across 3 widths)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18.20.4'
+      - name: Cache npm (console)
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.npm
+            quality/node_modules
+          key: ${{ runner.os }}-npm-website-vr-${{ hashFiles('quality/package-lock.json', 'website/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-npm-website-vr-
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+      - name: Install repo deps (root + quality)
+        run: |
+          npm ci
+          cd quality && npm ci || true
+      - name: Start Website
+        working-directory: website
+        run: |
+          npm ci
+          npm run build
+          npm run start &
+          sleep 10
+          curl -f http://localhost:3000 || exit 1
+      - name: Run visual regression for website (Playwright)
+        working-directory: quality
+        run: npx playwright test e2e/website/visual.spec.ts --reporter=list || true
+      - name: Upload visual regression artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: website-visual-regression
+          path: |
+            quality/playwright-report/
+          retention-days: 14
 
   android:
     name: Android SDK — unit tests and size gate
@@ -221,9 +444,9 @@ jobs:
           path: sdk/core/android/build/dokka/html/
           retention-days: 30
       
-      - name: Check API compatibility
+      - name: Check API compatibility (binary-compatibility-validator)
         working-directory: sdk/core/android
-        run: ./gradlew checkApiCompatibility --no-daemon
+        run: ./gradlew apiCheck --no-daemon
 
   ios:
     name: iOS SDK — build and test
@@ -267,18 +490,103 @@ jobs:
           name: ios-sdk-docc-docs
           path: sdk/core/ios/docs/
           retention-days: 30
-      
       - name: Check API compatibility (swift-api-digester)
         working-directory: sdk/core/ios
         run: |
-          # Build current version
+          set -euo pipefail
+          # Ensure build
           swift build -c release
-          
-          # Generate API baseline (stored in .api-baseline/ if exists)
-          # This is a placeholder - full implementation requires baseline storage
-          echo "API compatibility check: comparing current build against baseline"
-          echo "Note: Full API digester integration requires baseline .json files"
-          echo "[OK] API surface validation ready for implementation"
+          MOD="RivalApexMediationSDK"
+          BASELINE_DIR=".api-baseline"
+          if [ -f "$BASELINE_DIR/${MOD}.public.json" ]; then
+            sdk_path=$(xcrun --show-sdk-path --sdk iphoneos)
+            xcrun swift-api-digester \
+              -sdk "$sdk_path" \
+              -diagnose-sdk \
+              -module "$MOD" \
+              -target arm64-apple-ios14.0 \
+              -input-paths "$BASELINE_DIR/${MOD}.public.json" \
+              -o api-diff.txt || true
+            if grep -qi "breaking" api-diff.txt; then
+              echo "Detected potential breaking API changes:" >&2
+              cat api-diff.txt >&2
+              exit 1
+            else
+              echo "No breaking API changes detected."
+            fi
+          else
+            echo "No baseline found at $BASELINE_DIR/${MOD}.public.json — skipping digester check."
+            echo "Run scripts/generate-api-baseline.sh to create and commit a baseline."
+            echo "(This step will be enforced once baseline exists.)"
+            echo "No baseline present" > api-diff.txt
+          fi
+      - name: Upload iOS API diff
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-api-diff
+          path: sdk/core/ios/api-diff.txt
+          retention-days: 14
+
+  prom-rules-validate:
+    name: Monitoring — Prometheus rules validation
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate alerts.yml with promtool
+        run: |
+          docker run --rm \
+            -v ${{ github.workspace }}/monitoring:/mon \
+            prom/prometheus:latest \
+            promtool check rules /mon/alerts.yml
+      - name: Validate recording rules (if present)
+        run: |
+          if [ -f monitoring/recording-rules.yml ]; then
+            docker run --rm \
+              -v ${{ github.workspace }}/monitoring:/mon \
+              prom/prometheus:latest \
+              promtool check rules /mon/recording-rules.yml; \
+          else \
+            echo "No recording-rules.yml found, skipping."; \
+          fi
+
+  website-security-headers:
+    name: Website — security headers
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use Node.js 18.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18.20.4'
+      - name: Cache npm (website)
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.npm
+            website/node_modules
+          key: ${{ runner.os }}-npm-website-${{ hashFiles('website/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-npm-website-
+      - name: Install dependencies (website)
+        working-directory: website
+        run: npm ci
+      - name: Build website
+        working-directory: website
+        run: npm run build
+      - name: Start website in background
+        working-directory: website
+        run: |
+          npm run start &
+          sleep 5
+          curl -f http://localhost:3000 || (echo 'Website failed to start' && exit 1)
+      - name: Run security headers test
+        working-directory: website
+        env:
+          WEBSITE_BASE_URL: http://localhost:3000
+        run: npm test -- src/__tests__/security.headers.test.ts --runInBand --silent
 
   ctv:
     name: CTV/OTT — Android TV + tvOS

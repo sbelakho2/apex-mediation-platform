@@ -12,9 +12,10 @@ export default function HomeNav() {
 
   const navItems = [
     { label: 'Features', href: '/#features' },
-    { label: 'Pricing', href: '/#pricing' },
+    { label: 'Pricing', href: '/pricing' },
     { label: 'Documentation', href: '/documentation' },
-    { label: 'Blog', href: '/blog' },
+    { label: 'About', href: '/about' },
+    { label: 'Contact', href: '/contact' },
   ];
 
   return (

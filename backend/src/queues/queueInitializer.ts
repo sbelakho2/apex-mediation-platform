@@ -8,6 +8,7 @@ import { queueManager, QueueName } from './queueManager';
 import { processAnalyticsAggregation } from './processors/analyticsAggregation';
 import { processAnalyticsIngest } from './processors/analyticsIngest';
 import { processDataExport } from './processors/dataExport';
+import { processPrivacyJob } from './processors/privacy';
 import logger from '../utils/logger';
 
 /**
@@ -69,6 +70,19 @@ function registerWorkers(): void {
       limiter: {
         max: 20, // Max 20 jobs
         duration: 60000, // per minute
+      },
+    }
+  );
+
+  // Privacy (GDPR/CCPA) Worker
+  queueManager.registerWorker(
+    QueueName.PRIVACY,
+    processPrivacyJob,
+    {
+      concurrency: 2,
+      limiter: {
+        max: 10,
+        duration: 60000,
       },
     }
   );

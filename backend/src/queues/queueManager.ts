@@ -40,6 +40,7 @@ export enum QueueName {
   METRICS_CALCULATION = 'metrics:calculation',
   CACHE_WARMING = 'cache:warming',
   CLEANUP = 'cleanup',
+  PRIVACY = 'privacy:jobs',
 }
 
 // Job data types
@@ -80,6 +81,14 @@ export interface CacheWarmingJob {
 export interface CleanupJob {
   type: 'old_logs' | 'expired_tokens' | 'temp_files';
   olderThan?: string;
+}
+
+export interface PrivacyJob {
+  kind: 'export' | 'delete';
+  tenantId: string;
+  userId?: string;
+  requestId?: string;
+  format?: 'json' | 'csv';
 }
 
 /**

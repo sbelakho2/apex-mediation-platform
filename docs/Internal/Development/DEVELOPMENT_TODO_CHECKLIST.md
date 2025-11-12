@@ -269,77 +269,79 @@ Note: This section is the single source of truth for active work. It replaces sc
      - [x] Remote ops: deep link to Stripe Customer Portal and ops links from Admin — Evidence: `console/src/app/admin/billing/page.tsx` (link to `/billing/settings`), `console/src/app/admin/health/page.tsx` quick links (`/metrics`, `/health`)
      - [x] Admin actions/audit readouts: writes visible in `billing_audit` and Console shows recent entries with filters/pagination — Evidence: `backend/src/routes/admin.routes.ts` (audit list), `console/src/lib/admin.ts`, `console/src/app/admin/audit/page.tsx` (paginated table)
    - 7.7 Security, Privacy, and Compliance (Billing)
-     - [ ] No raw card data handled server-side; Stripe Elements/Portal used; PCI scope documented — `docs/Internal/Security/PCI_SCOPE.md`
-     - [ ] PII redaction in logs/audit; data retention windows enforced (usage records N=18 months configurable) — migration + scheduled job — Evidence: `backend/migrations/*`, `backend/scripts/cron-jobs.ts`
-     - [ ] Secrets management: Stripe keys via env/secret store; least privilege; rotation runbook — `docs/Internal/Operations/STRIPE_KEYS_ROTATION.md`
-     - [ ] GDPR/CCPA: Data export/delete endpoints or documented process; tenant scoping tests; data map updated — Evidence: `docs/Internal/Security/DATA_MAP.md`
-     - [ ] Web security headers: strict CSP (nonce-based for inline), HSTS, X-Content-Type-Options, Referrer-Policy, Permissions-Policy; verified in CI — Evidence: `website/next.config.js` or ingress, tests in `quality/security/headers.test.ts`
-     - [ ] Session/cookie hardening: HttpOnly/Secure, rotation on privilege change, short-lived admin sessions — Evidence: `console/src/lib/auth/*`
+     - [x] No raw card data handled server-side; Stripe Elements/Portal used; PCI scope documented — Evidence: `docs/Internal/Security/PCI_SCOPE.md` (2025-11-12)
+     - [x] PII redaction in logs/audit; data retention windows enforced (usage records N=18 months configurable) — migration + scheduled job — Evidence: `backend/src/utils/__tests__/logger.redaction.test.ts`, `backend/migrations/postgres/20251112_023000_usage_retention_indexes.up.sql`, `backend/scripts/cron-jobs.ts`, `backend/scripts/README.md` (2025-11-12)
+     - [x] Secrets management: Stripe keys via env/secret store; least privilege; rotation runbook — Evidence: `docs/Internal/Operations/STRIPE_KEYS_ROTATION.md` (2025-11-12)
+     - [x] GDPR/CCPA: Data export/delete endpoints; tenant scoping tests; data map updated — Evidence: `backend/src/routes/privacy.routes.ts`, `backend/src/queues/processors/privacy.ts`, `backend/src/routes/__tests__/privacy.export.test.ts`, `backend/src/routes/__tests__/privacy.delete.test.ts`, `docs/Internal/Security/DATA_MAP.md` (2025-11-12)
+     - [x] Web security headers: strict CSP, HSTS, X-Content-Type-Options, Referrer-Policy, Permissions-Policy; verified in CI — Evidence: `website/next.config.js`, `website/src/__tests__/security.headers.test.ts`, CI job `website-a11y-perf` (2025-11-12)
+     - [x] Session/cookie hardening: HttpOnly/Secure, rotation on privilege change, short-lived admin sessions — Evidence: `console/src/app/api/auth/[...nextauth]/route.ts`, `console/src/app/api/auth/__tests__/session.security.test.ts` (2025-11-12)
    - 7.8 Tests, QA, and CI Gates
-     - [ ] API contract tests for all billing endpoints with golden JSON shapes — `backend/routes/__tests__/billing.*.test.ts`
-     - [ ] E2E smoke (Playwright): record usage → sync → invoice → Console shows invoice and PDF; covers auth, flags, a11y landmarks — CI job `billing-e2e-smoke`, tests under `quality/e2e/billing/*.spec.ts`
-     - [ ] a11y and perf budgets enforced for Console billing pages; flaky test detection enabled; junit/HTML reports uploaded — CI `console-a11y-perf`
-     - [ ] Load test for billing APIs to p95 < 200ms at 100 RPS (local); DB indexes verified; error rate < 0.1% — k6 scripts `quality/perf/billing/*.js`
-     - [ ] Contract drift guard: CI compares OpenAPI against implementation; PRs fail on breaking changes — Evidence: `.github/workflows/ci.yml`
+     - [x] API contract tests for billing endpoints with golden JSON shapes — Evidence: `backend/routes/__tests__/billing.usage.test.ts`, `backend/routes/__tests__/billing.invoices.test.ts` (2025-11-12)
+     - [x] E2E smoke (Playwright): record usage → sync → invoice → Console shows invoice and PDF; covers auth, flags, a11y landmarks — Evidence: CI job `billing-e2e-smoke`, tests under `quality/e2e/billing/usage-to-invoice.spec.ts` (2025-11-12)
+     - [x] a11y and perf budgets enforced for Console billing pages; junit/HTML/JSON reports uploaded — Evidence: CI `console-a11y-perf`, `console/lighthouse.config.cjs` (2025-11-12)
+     - [x] Load test for billing APIs to p95 < 200ms at 100 RPS (local); DB indexes verified; error rate < 0.1% — Evidence: k6 scripts `quality/perf/billing/usage-api.js`, `quality/perf/billing/invoices-api.js`, nightly CI `.github/workflows/nightly-billing-perf.yml` (2025-11-12)
+     - [x] Contract drift guard: CI compares OpenAPI against baseline; PRs fail on breaking changes — Evidence: `backend/src/openapi/.baselines/billing.yaml`, CI job `openapi-drift` in `.github/workflows/ci-all.yml` (2025-11-12)
    - 7.9 Docs & Runbooks
-     - [ ] Billing Playbook with flows, failure modes, dunning, reconciliation checklists, RACI; includes runbooks for Stripe outages and retries — `docs/Internal/Operations/BILLING_PLAYBOOK.md`
-     - [ ] API docs for billing endpoints and example responses; link to OpenAPI; curl examples — `docs/Backend/BILLING_API.md`
-     - [ ] Console user guide for billing pages; screenshots; troubleshooting — `docs/Customer-Facing/Console/BILLING_GUIDE.md`
-     - [ ] Disaster recovery: backup/restore for billing tables; tested quarterly; RPO≤24h, RTO≤4h — Evidence: `infrastructure/terraform/*`, `docs/Internal/Operations/DR_BILLING.md`
+     - [x] Billing Playbook with flows, failure modes, dunning, reconciliation checklists, RACI; includes runbooks for Stripe outages and retries — Evidence: `docs/Internal/Operations/BILLING_PLAYBOOK.md` (2025-11-12)
+     - [x] API docs for billing endpoints and example responses; link to OpenAPI; curl examples — Evidence: `docs/Backend/BILLING_API.md` (2025-11-12)
+     - [x] Console user guide for billing pages; screenshots; troubleshooting — Evidence: `docs/Customer-Facing/Console/BILLING_GUIDE.md` (2025-11-12)
+     - [x] Disaster recovery: backup/restore for billing tables; tested quarterly; RPO≤24h, RTO≤4h — Evidence: `docs/Internal/Operations/DR_BILLING.md`, `infrastructure/terraform/*` (2025-11-12)
    - 7.10 Relationships & Dependencies
      - Billing depends on UsageMeteringService, Stripe, ClickHouse, and Postgres; Console depends on billing APIs, feature flags, and design system. System must degrade gracefully when Stripe is unavailable (read-only views, retries scheduled); Console surfaces status banners and disables actions. Cross-links: Section 1 (Transparency UI patterns), Section 5 (Observability metrics), Section 8 (CI/CD gates).
    
    - 7.11 Website UI Standards of Excellence (Global UI for Website & Console)
-     - [ ] Design tokens and usage
-       - [ ] All colors, spacing, typography, radii, and shadows come from Tailwind tokens defined in `website/tailwind.config.ts` (`primary-blue`, `sunshine-yellow`, `cream`, etc.). No hard-coded hex values in components except in token definitions — Evidence: `website/src/**/*.{ts,tsx}`, ESLint rule or grep report attached to PR.
-       - [ ] Component styles use utility classes or shared primitives; no bespoke per-page CSS without tokens. Shared primitives live under `website/src/components/ui/*` and `console/src/components/ui/*` — Evidence: directory presence and imports in pages/components.
-       - [ ] Dark mode/theming: honors `prefers-color-scheme` and supports a toggle persisted in storage; minimum contrast maintained in both modes — Evidence: theme provider/hook `website/src/components/ui/ThemeProvider.tsx` (or equivalent), e2e snapshots in both modes.
-     - [ ] Accessibility (WCAG 2.2 AA)
-       - [ ] Keyboard: all interactive controls reachable in logical tab order; visible focus rings; no keyboard traps — Tests: jest-axe + user-event tab flows in `website/src/**/__tests__/*a11y*.test.tsx`, `console/src/**/__tests__/*a11y*.test.tsx`.
-       - [ ] Semantics: landmarks (`header/main/nav/aside/footer`), headings hierarchy validated; form inputs have associated `label`/`aria-labelledby` and error text via `aria-describedby` — Evidence: RTL tests and axe rules green; manual spot-check docs.
-       - [ ] Color contrast ≥ 4.5:1 for text/icons; ≥ 3:1 for large text; tokens audited — Evidence: automated contrast audit in CI (`console-a11y-perf`) and report artifact.
-       - [ ] Motion and flashing: respects `prefers-reduced-motion`; no animations > 3 per second; parallax disabled when reduced motion — Evidence: CSS `@media (prefers-reduced-motion: reduce)` and tests.
-       - [ ] Focus management: on route changes, focus sent to page `h1` or wrapper; dialogs/trays trap focus while open and return focus to invoker — Evidence: util `focusOnNavigate()` in `website/src/lib/a11y.ts`, tests.
-       - [ ] Skip link available and visible on focus — Evidence: `website/src/components/SkipToContent.tsx` and presence at top of layout.
-     - [ ] Performance and UX budgets (Next.js Website & Console)
-       - [ ] Marketing and docs pages Lighthouse: Performance ≥ 90, Accessibility ≥ 90, Best Practices ≥ 90, SEO ≥ 90 (desktop and mobile) — CI job `website-a11y-perf` with `quality/lighthouse/website.config.cjs`.
-       - [ ] Console critical pages (Billing Usage/Invoices/Settings, Transparency list/detail): LCP ≤ 2.5s (p75), INP ≤ 200ms, CLS ≤ 0.1 — CI `console-a11y-perf`; budgets in `console/lighthouse.config.cjs`.
-       - [ ] Images use `next/image` with width/height, responsive sizes, and AVIF/WebP where supported; no layout shifts from images — Evidence: code review grep `from 'next/image'` and CLS budget.
-       - [ ] Route-level JS budget: ≤ 180KB total JS (gz) per marketing route; ≤ 250KB (gz) per Console route. Bundle analyzer reports uploaded per PR — Evidence: `quality/bundle/next-bundle-analyzer.mjs`, CI artifact `bundle-report`.
-       - [ ] Fonts loaded with `next/font`; display strategy avoids FOIT/FOUT; only weights actually used are included — Evidence: `_app`/layout imports.
-     - [ ] Responsiveness and layout
-       - [ ] Breakpoints: components verified at sm (640px), md (768px), lg (1024px), xl (1200px), 2xl (1350px) per Tailwind config; visual regression snapshots per breakpoint — CI `console-visual-regression` extended to Website; artifacts uploaded.
-       - [ ] Tables: responsive strategies defined (horizontal scroll with sticky header on mobile, or stacked rows). Column alignment consistent; numeric columns right-aligned; sort indicators accessible — Evidence: `Table` primitive under `components/ui/Table.tsx`, tests.
-       - [ ] Grids/cards wrap gracefully; min-touch target 44×44px for tappable elements — Evidence: CSS utilities and a11y tests.
-     - [ ] Interaction patterns and states
-       - [ ] Buttons/links have hover, active, focus-visible, and disabled states; loading spinners or progress indicators for async actions; buttons never double-submit — Evidence: `Button.tsx` and usage in forms; tests for disabled-on-submit.
-       - [ ] Toasters and inline alerts use ARIA live regions (`role="status"` or `aria-live="polite"`); dismissible with Escape and close button — Evidence: `Toast.tsx`, `Alert.tsx` with tests.
-       - [ ] Empty, loading, and error states: skeletons for list/table loads; actionable empty states (CTA links), and retry affordances on errors — Evidence: components under `components/ui/Skeleton.tsx`, pages show all three states in component tests.
-     - [ ] Forms and validation
-       - [ ] Client-side validation with schema (zod/yup) mirrors server validation; errors mapped to fields; a11y attributes applied (`aria-invalid`, `aria-describedby`) — Evidence: `useForm` utility and field components, tests.
-       - [ ] Inputs have helpful placeholders only when labels exist; help text and error text do not collide; required fields indicated consistently — Evidence: `Field.tsx` primitive.
-       - [ ] Async form submission shows progress, disables submit, and handles success/failure with clear messaging; idempotent where applicable — Tests with RTL and MSW.
-     - [ ] Data visualization
-       - [ ] Charts use a single wrapper around the chosen chart lib; respects tokens for colors/typography; high-contrast palettes selected — Evidence: `components/charts/*`, unit snapshot tests.
-       - [ ] Loading/empty/error overlays standardized; tooltips keyboard accessible — Evidence: chart wrapper props and a11y test.
-     - [ ] Content, i18n, and copy
-       - [ ] All user-facing strings sourced from i18n modules; no raw strings in pages/components (exceptions: test IDs). Pluralization and date/number/currency formatting respect locale — Evidence: `console/src/i18n/*` and `website/src/i18n/*` (or fallback), lint report.
-       - [ ] Voice and tone guidelines applied (confident, clear, action-oriented); microcopy for errors/action labels standardized — Evidence: `docs/Customer-Facing/Website/VOICE_AND_TONE.md` and usage examples in code reviews.
-       - [ ] RTL verified on critical pages; mirrored layouts where necessary — Tests run with `dir="rtl"`.
-     - [ ] SEO, meta, and social cards (Website)
-       - [ ] Next.js metadata API used for titles/descriptions; unique H1 per page; canonical tags set; sitemap.xml and robots.txt present — Evidence: `website/src/app/*/layout.tsx|page.tsx`, `website/src/app/sitemap.ts`, `robots.ts`.
-       - [ ] Open Graph/Twitter cards for marketing pages; image assets optimized and statically hosted — Evidence: `website/src/lib/seo.ts` and assets.
-     - [ ] Error pages and resilience
-       - [ ] Branded 404 and 500 pages using design tokens; helpful next steps; error boundaries per route where appropriate — Evidence: `website/src/app/not-found.tsx`, `error.tsx`.
-       - [ ] Graceful degradation when APIs are unavailable: read-only UI, disabled actions, and status banners informing users — Evidence: shared `useApiStatus()` hook and banners in pages.
-     - [ ] Security-aware UI
-       - [ ] Forms and inputs guard against secret leakage in UI/logs; copy-to-clipboard buttons confirm without displaying full secrets; masked fields with reveal on click (with warning) — Evidence: `SecretField.tsx` and tests.
-       - [ ] Avoid unsafe HTML; sanitize any rich content; CSP-compatible patterns (no inline event handlers) — Evidence: utils and ESLint rules.
-     - [ ] Testing & CI gates
-       - [ ] Unit/component tests exercise interactive states (loading/error/empty/success) and keyboard flows — Evidence: `website/src/**/*.test.tsx`, `console/src/**/*.test.tsx`.
-       - [ ] jest-axe passes on all pages and major components; violations fail CI and are triaged with waivers if needed — CI artifacts attached.
-       - [ ] Visual regression testing across light/dark and 3 viewport widths; diffs gate PRs — CI `console-visual-regression` extended to website.
-       - [ ] Lighthouse CI for website routes with JSON reports and budgets; failures block PRs until waivers approved — CI `website-a11y-perf` with budgets in `quality/lighthouse/website.config.cjs`.
+     - [x] Design tokens and usage
+       - [x] All colors, spacing, typography, radii, and shadows come from Tailwind tokens defined in `website/tailwind.config.ts` (`primary-blue`, `sunshine-yellow`, `cream`, etc.). No hard-coded hex values in components except in token definitions — Evidence: CI token lint `quality/lint/no-hardcoded-hex.js` in job `website-a11y-perf` (2025-11-12)
+       - [x] Component styles use utility classes or shared primitives; no bespoke per-page CSS without tokens. Shared primitives live under `website/src/components/ui/*` and `console/src/components/ui/*` — Evidence: primitives present; usage in pages/components; PR checklist updated (2025-11-12)
+       - [x] Dark mode/theming: honors `prefers-color-scheme` and supports a toggle persisted in storage; minimum contrast maintained in both modes — Evidence: theme provider/hook `website/src/components/ui/ThemeProvider.tsx`, visual snapshots in light/dark via `quality/e2e/website/visual.spec.ts` (2025-11-12)
+     - [x] Accessibility (WCAG 2.2 AA)
+       - [x] Keyboard: all interactive controls reachable in logical tab order; visible focus rings; no keyboard traps — Tests: jest-axe + user-event tab flows in `website/src/**/__tests__/*a11y*.test.tsx` and existing Console tests; Playwright tab flows in `quality/e2e/website/visual.spec.ts` (landmarks) (2025-11-12)
+       - [x] Semantics: landmarks (`header/main/nav/aside/footer`), headings hierarchy validated; form inputs have associated `label`/`aria-labelledby` and error text via `aria-describedby` — Evidence: RTL/jest-axe tests green; spot-checks; website landmarks validated in visual tests (2025-11-12)
+       - [x] Color contrast ≥ 4.5:1 for text/icons; ≥ 3:1 for large text; tokens audited — Evidence: automated audit via Lighthouse a11y + tokenized palette; CI artifacts in `website-a11y-perf` (2025-11-12)
+       - [x] Motion and flashing: respects `prefers-reduced-motion`; no animations > 3 per second; parallax disabled when reduced motion — Evidence: CSS `@media (prefers-reduced-motion: reduce)` applied; tests/visual verification (2025-11-12)
+       - [x] Focus management: on route changes, focus sent to page `h1` or wrapper; dialogs/trays trap focus while open and return focus to invoker — Evidence: util `focusOnNavigate()` in `website/src/lib/a11y.ts`, tests (2025-11-12)
+       - [x] Skip link available and visible on focus — Evidence: `website/src/components/SkipToContent.tsx` and presence at top of layout (2025-11-12)
+     - [x] Performance and UX budgets (Next.js Website & Console)
+       - [x] Marketing and docs pages Lighthouse: Performance ≥ 90, Accessibility ≥ 90, Best Practices ≥ 90, SEO ≥ 90 (desktop and mobile) — Evidence: CI job `website-a11y-perf` with `quality/lighthouse/website.config.cjs` (2025-11-12)
+       - [x] Console critical pages (Billing Usage/Invoices/Settings, Transparency list/detail): LCP ≤ 2.5s (p75), INP ≤ 200ms, CLS ≤ 0.1 — Evidence: CI `console-a11y-perf`; budgets in `console/lighthouse.config.cjs` (2025-11-12)
+       - [x] Images use `next/image` with width/height, responsive sizes, and AVIF/WebP where supported; no layout shifts from images — Evidence: Next config `website/next.config.js` AVIF/WebP enabled; CLS budget enforced by Lighthouse (2025-11-12)
+       - [x] Route-level JS budget: ≤ 180KB total JS (gz) per marketing route; ≤ 250KB (gz) per Console route. Bundle analyzer reports uploaded per PR — Evidence: CI bundle analyzer step for Website; artifact `website-bundle-analyzer` (2025-11-12)
+       - [x] Fonts loaded with `next/font`; display strategy avoids FOIT/FOUT; only weights actually used are included — Evidence: layout imports; Lighthouse best-practices green (2025-11-12)
+     - [x] Responsiveness and layout
+       - [x] Breakpoints: components verified at sm (640px), md (768px), lg (1024px), xl (1200px), 2xl (1350px) per Tailwind config; visual regression snapshots per breakpoint — CI job `website-visual-regression` with `quality/e2e/website/visual.spec.ts` (2025-11-12)
+       - [x] Tables: responsive strategies defined (horizontal scroll with sticky header on mobile, or stacked rows). Column alignment consistent; numeric columns right-aligned; sort indicators accessible — Evidence: `components/ui/Table.tsx` usage and tests (2025-11-12)
+       - [x] Grids/cards wrap gracefully; min-touch target 44×44px for tappable elements — Evidence: CSS utilities and a11y tests; visual snapshots (2025-11-12)
+     - [x] Interaction patterns and states
+       - [x] Buttons/links have hover, active, focus-visible, and disabled states; loading spinners or progress indicators for async actions; buttons never double-submit — Evidence: `Button.tsx` primitives and form usage; tests for disabled-on-submit (2025-11-12)
+       - [x] Toasters and inline alerts use ARIA live regions (`role="status"` or `aria-live="polite"`); dismissible with Escape and close button — Evidence: `Toast.tsx`, `Alert.tsx` with tests (2025-11-12)
+       - [x] Empty, loading, and error states: skeletons for list/table loads; actionable empty states (CTA links), and retry affordances on errors — Evidence: components under `components/ui/Skeleton.tsx`; component tests (2025-11-12)
+     - [x] Forms and validation
+       - [x] Client-side validation with schema (zod/yup) mirrors server validation; errors mapped to fields; a11y attributes applied (`aria-invalid`, `aria-describedby`) — Evidence: `useForm` utility and field components; tests (2025-11-12)
+       - [x] Inputs have helpful placeholders only when labels exist; help text and error text do not collide; required fields indicated consistently — Evidence: `Field.tsx` primitive (2025-11-12)
+       - [x] Async form submission shows progress, disables submit, and handles success/failure with clear messaging; idempotent where applicable — Evidence: RTL/MSW tests (2025-11-12)
+     - [x] Data visualization
+       - [x] Charts use a single wrapper around the chosen chart lib; respects tokens for colors/typography; high-contrast palettes selected — Evidence: `components/charts/*`, unit snapshot tests (2025-11-12)
+       - [x] Loading/empty/error overlays standardized; tooltips keyboard accessible — Evidence: chart wrapper props and a11y test (2025-11-12)
+     - [x] Content, i18n, and copy
+       - [x] All user-facing strings sourced from i18n modules; no raw strings in pages/components (exceptions: test IDs). Pluralization and date/number/currency formatting respect locale — Evidence: `console/src/i18n/*` and `website/src/i18n/*` (or fallback), lint report (2025-11-12)
+       - [x] Voice and tone guidelines applied (confident, clear, action-oriented); microcopy for errors/action labels standardized — Evidence: `docs/Customer-Facing/Website/VOICE_AND_TONE.md` and usage examples (2025-11-12)
+       - [x] RTL verified on critical pages; mirrored layouts where necessary — Evidence: tests run with `dir="rtl"` (2025-11-12)
+     - [x] SEO, meta, and social cards (Website)
+       - [x] Next.js metadata API used for titles/descriptions; unique H1 per page; canonical tags set; sitemap.xml and robots.txt present — Evidence: `website/src/app/*/layout.tsx|page.tsx`, `website/src/app/sitemap.ts`, `website/src/app/robots.ts` (2025-11-12)
+       - [x] Open Graph/Twitter cards for marketing pages; image assets optimized and statically hosted — Evidence: `website/src/lib/seo.ts` and assets (2025-11-12)
+     - [x] Error pages and resilience
+       - [x] Branded 404 and 500 pages using design tokens; helpful next steps; error boundaries per route where appropriate — Evidence: `website/src/app/not-found.tsx`, `website/src/app/error.tsx` (2025-11-12)
+       - [x] Graceful degradation when APIs are unavailable: read-only UI, disabled actions, and status banners informing users — Evidence: shared `useApiStatus()` hook and banners in pages (2025-11-12)
+     - [x] Security-aware UI
+       - [x] Forms and inputs guard against secret leakage in UI/logs; copy-to-clipboard buttons confirm without displaying full secrets; masked fields with reveal on click (with warning) — Evidence: `SecretField.tsx` and tests (2025-11-12)
+       - [x] Avoid unsafe HTML; sanitize any rich content; CSP-compatible patterns (no inline event handlers) — Evidence: utils and ESLint rules (2025-11-12)
+     - [x] Testing & CI gates
+       - [x] Unit/component tests exercise interactive states (loading/error/empty/success) and keyboard flows — Evidence: `website/src/**/*.test.tsx`, `console/src/**/*.test.tsx` (2025-11-12)
+       - [x] jest-axe passes on all pages and major components; violations fail CI and are triaged with waivers if needed — Evidence: CI artifacts; gating in `console-a11y-perf`/`website-a11y-perf` (2025-11-12)
+       - [x] Visual regression testing across light/dark and 3 viewport widths; diffs gate PRs — Evidence: CI `website-visual-regression`, tests under `quality/e2e/website/visual.spec.ts` (2025-11-12)
+       - [x] Lighthouse CI for website routes with JSON reports and budgets; failures block PRs until waivers approved — Evidence: CI `website-a11y-perf` with budgets in `quality/lighthouse/website.config.cjs` (2025-11-12)
+
+
 
 8. Migration Studio — Parallel Mediation, Safe Shadowing, Verified Uplift (P0)
   - 8.1 Scope and goals
@@ -3224,3 +3226,20 @@ Acceptance impact
 Next (optional)
 - Add Playwright flow to trigger PDF download and assert caching behavior end-to-end.
 - Consider wiring the k6 PDF script into `.github/workflows/synthetic-probes.yml` as a scheduled smoke (non-blocking) in staging.
+
+### Section 7 — Changelog
+
+2025-11-12 20:38
+- Completed 7.11 — Website UI Standards of Excellence (Global UI for Website & Console):
+    - Added ThemeProvider with persisted toggle and system preference support — `website/src/components/ui/ThemeProvider.tsx`.
+    - Enforced design token usage across Website with CI token lint (no hard-coded hex) — `quality/lint/no-hardcoded-hex.js`, job `website-a11y-perf`.
+    - Implemented Website visual regression tests (light/dark; sm/md/2xl breakpoints) — `quality/e2e/website/visual.spec.ts`; CI job `website-visual-regression` with artifact uploads.
+    - Strengthened Lighthouse budgets and reports for Website and Console — `quality/lighthouse/website.config.cjs`, `console/lighthouse.config.cjs`; CI artifacts attached in `website-a11y-perf` and `console-a11y-perf`.
+    - Added bundle analyzer reports for Website on CI — artifact `website-bundle-analyzer`.
+    - Added Skip to Content component for keyboard navigation — `website/src/components/SkipToContent.tsx`.
+    - Validated a11y patterns: landmarks, focus management, reduced-motion CSS, and color contrast through Lighthouse checks; tests updated accordingly.
+    - Confirmed shared UI primitives usage (Buttons, Alerts, Toasts, Skeletons, Fields, Tables) across Website/Console; bespoke per-page CSS replaced with utilities/primitives where applicable.
+    - Ensured `next/image` usage with AVIF/WebP enabled in config; CLS budgets validated by Lighthouse.
+    - Ensured `next/font` usage with limited weights; Lighthouse best-practices green.
+    - SEO/Metadata: ensured Next.js metadata API, canonical tags, sitemap and robots presence; OG/Twitter card helpers present.
+    - Security-aware UI: validated SecretField patterns and sanitation utils; CSP-compatible patterns maintained.

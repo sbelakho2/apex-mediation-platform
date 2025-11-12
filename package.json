@@ -24,7 +24,10 @@
     "format": "prettier --write \"**/*.{js,ts,tsx,json,md}\"",
     "dev:console": "npm run dev --workspace=console",
     "dev:backend": "docker-compose up",
-    "prepare": "husky install || true"
+    "prepare": "husky install || true",
+    "capture:website": "bash scripts/capture-website.sh",
+    "capture:console": "bash scripts/capture-console.sh",
+    "capture:all": "npm run capture:website && npm run capture:console"
   },
   "devDependencies": {
     "@types/jest": "^29.5.11",
