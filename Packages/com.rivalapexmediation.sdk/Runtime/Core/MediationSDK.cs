@@ -17,6 +17,7 @@ namespace RivalApex.Mediation
         private IPlatformBridge _platformBridge;
         private AuctionClient _auctionClient;
         private RemoteConfigClient _remoteConfigClient;
+    private PerformanceBudgetMonitor _performanceMonitor;
         
         private bool _isInitialized = false;
         private bool _isInitializing = false;
@@ -124,6 +125,9 @@ namespace RivalApex.Mediation
             
             // Initialize auction client
             _auctionClient = new AuctionClient(_config, _consentManager, _platformBridge);
+
+            // Enable performance monitoring when requested
+            _performanceMonitor = PerformanceBudgetMonitor.Ensure(gameObject, _config);
 
             // OTA remote config (fetch + merge with local)
             _remoteConfigClient = new RemoteConfigClient(_config);

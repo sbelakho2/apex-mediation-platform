@@ -28,6 +28,16 @@ namespace RivalApex.Mediation
         
         [Tooltip("Config server URL for OTA updates")]
         public string ConfigEndpoint = "https://config.apexmediation.com/v1";
+
+    [Tooltip("Optional override URL for remote config fetches")]
+    public string RemoteConfigUrl;
+
+    [Tooltip("Optional API base URL used to derive remote config endpoint when override is not set")]
+    public string ApiBaseUrl;
+
+    [Tooltip("Remote config timeout in milliseconds (minimum 500ms)")]
+    [Min(500)]
+    public int RemoteConfigTimeoutMs = 3000;
         
         [Tooltip("Request timeout in seconds")]
         [Range(3, 30)]
@@ -56,6 +66,22 @@ namespace RivalApex.Mediation
         
         [Tooltip("Default GDPR consent if user hasn't set it explicitly")]
         public bool DefaultGDPRConsent = false;
+
+        [Header("Performance Budgets")]
+        [Tooltip("Enable runtime performance instrumentation for memory budgets")]
+        public bool EnablePerformanceBudgetChecks = true;
+
+        [Tooltip("Maximum allowed bytes allocated per auction request payload")]
+        [Min(1024)]
+        public int RequestAllocationBudgetBytes = 50 * 1024;
+
+        [Tooltip("Maximum allowed idle GC allocations per frame in bytes")]
+        [Min(256)]
+        public int IdleAllocationBudgetBytes = 1024;
+
+        [Tooltip("Allowed percentage over baseline idle allocations before flagging regression")]
+        [Range(1f, 100f)]
+        public float PerfRegressionTolerancePercent = 10f;
         
         public void Validate()
         {
@@ -73,6 +99,11 @@ namespace RivalApex.Mediation
             {
                 Debug.LogError("[ApexMediation] AuctionEndpoint is required in SDKConfig");
             }
+
+            RequestAllocationBudgetBytes = Mathf.Max(1024, RequestAllocationBudgetBytes);
+            IdleAllocationBudgetBytes = Mathf.Max(256, IdleAllocationBudgetBytes);
+            PerfRegressionTolerancePercent = Mathf.Clamp(PerfRegressionTolerancePercent, 1f, 100f);
+            RemoteConfigTimeoutMs = Mathf.Max(500, RemoteConfigTimeoutMs);
         }
     }
 }

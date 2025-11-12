@@ -76,11 +76,15 @@ namespace RivalApex.Mediation
                 byte[] bodyRaw = Encoding.UTF8.GetBytes(jsonPayload);
                 request.uploadHandler = new UploadHandlerRaw(bodyRaw);
                 request.downloadHandler = new DownloadHandlerBuffer();
+
+                // Track allocation against budget when monitor is available
+                PerformanceBudgetMonitor.Instance?.RecordRequestPayload(bodyRaw.Length);
                 
                 // Set headers
                 request.SetRequestHeader("Content-Type", "application/json");
                 request.SetRequestHeader("X-Api-Key", _config.ApiKey);
                 request.SetRequestHeader("User-Agent", _platformBridge.GetUserAgent());
+                ApplyCorsHeaders(request, Application.platform);
                 
                 // Set timeout
                 request.timeout = _config.RequestTimeout;
@@ -213,6 +217,20 @@ namespace RivalApex.Mediation
                 user_agent = _platformBridge.GetUserAgent(),
                 connection_type = _platformBridge.GetConnectionType()
             };
+        }
+
+        internal static void ApplyCorsHeaders(UnityWebRequest request, RuntimePlatform platform)
+        {
+            if (request == null)
+            {
+                return;
+            }
+
+            if (platform == RuntimePlatform.WebGLPlayer)
+            {
+                request.SetRequestHeader("Access-Control-Request-Method", "POST");
+                request.SetRequestHeader("Access-Control-Request-Headers", "content-type,x-api-key");
+            }
         }
     }
 }
