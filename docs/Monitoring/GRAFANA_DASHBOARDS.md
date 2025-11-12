@@ -99,20 +99,127 @@ histogram_quantile(0.99,
 - p95: <200ms
 - p99: <500ms
 
+### Dashboard Screenshot
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│ API RED Metrics Dashboard                    [Last 1h] [↻ 10s]      │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                       │
+│  Total Req/s    Error Rate     p50 Latency    p95 Latency           │
+│  ┌─────────┐   ┌──────────┐   ┌──────────┐   ┌──────────┐          │
+│  │ 2,450   │   │  0.8%    │   │  42ms    │   │  185ms   │          │
+│  │ ↑ +12%  │   │  🟢      │   │  🟢      │   │  🟢      │          │
+│  └─────────┘   └──────────┘   └──────────┘   └──────────┘          │
+│                                                                       │
+│  Request Rate by Endpoint                                            │
+│  ┌───────────────────────────────────────────────────────────────┐  │
+│  │                        /api/v1/rtb/bid ▓▓▓▓▓▓▓▓▓▓▓            │  │
+│  │                  /api/v1/analytics/event ▓▓▓▓▓                │  │
+│  │                      /api/v1/users/me ▓▓▓                     │  │
+│  └───────────────────────────────────────────────────────────────┘  │
+│                                                                       │
+│  Latency Percentiles (ms)                                            │
+│  ┌───────────────────────────────────────────────────────────────┐  │
+│  │ 500│                                        ╱─ p99              │  │
+│  │    │                                  ╱────╯                   │  │
+│  │ 200│                           ╱─────╯ p95                     │  │
+│  │    │                    ╱──────╯                               │  │
+│  │  50│            ────────╯ p50                                  │  │
+│  │   0└──────────────────────────────────────────────────────────┘  │
+│      10:00   10:15   10:30   10:45   11:00                          │
+│                                                                       │
+│  Slowest Endpoints (Top 10)                                          │
+│  ┌────────────────────────────────────────────┬──────┬──────────┐   │
+│  │ Endpoint                                   │ p95  │ Req/s    │   │
+│  ├────────────────────────────────────────────┼──────┼──────────┤   │
+│  │ POST /api/v1/billing/invoices/:id/pdf     │ 892ms│ 12       │   │
+│  │ GET  /api/v1/transparency/metrics          │ 445ms│ 8        │   │
+│  │ POST /api/v1/rtb/bid                       │ 156ms│ 1,850    │   │
+│  └────────────────────────────────────────────┴──────┴──────────┘   │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
 ### Panels
 
 1. **Total Request Rate** (Stat) - Current req/s
+   ```promql
+   sum(rate(http_requests_total[5m]))
+   ```
+
 2. **Error Rate %** (Stat) - Current error percentage with color thresholds
+   ```promql
+   sum(rate(http_requests_total{status=~"5.."}[5m])) 
+   / sum(rate(http_requests_total[5m])) * 100
+   ```
+
 3. **p50 Latency** (Stat) - Median response time
+   ```promql
+   histogram_quantile(0.5, 
+     sum by (le) (rate(http_request_duration_seconds_bucket[5m]))
+   )
+   ```
+
 4. **p95 Latency** (Stat) - 95th percentile response time
+   ```promql
+   histogram_quantile(0.95, 
+     sum by (le) (rate(http_request_duration_seconds_bucket[5m]))
+   )
+   ```
+
 5. **Request Rate by Endpoint** (Timeseries) - Top 10 endpoints
+   ```promql
+   topk(10, 
+     sum by (route) (rate(http_requests_total[5m]))
+   )
+   ```
+
 6. **Error Rate by Endpoint** (Timeseries) - Endpoints with errors
+   ```promql
+   sum by (route) (rate(http_requests_total{status=~"5.."}[5m]))
+   > 0
+   ```
+
 7. **Latency Percentiles** (Timeseries) - p50/p95/p99 over time
+   ```promql
+   # p50 (green)
+   histogram_quantile(0.50, sum by (le) (rate(http_request_duration_seconds_bucket[5m])))
+   # p95 (yellow)
+   histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket[5m])))
+   # p99 (red)
+   histogram_quantile(0.99, sum by (le) (rate(http_request_duration_seconds_bucket[5m])))
+   ```
+
 8. **Status Code Distribution** (Timeseries) - 2xx/3xx/4xx/5xx counts
+   ```promql
+   sum by (status) (rate(http_requests_total[5m]))
+   ```
+
 9. **Slowest Endpoints** (Table) - Endpoints sorted by p95 latency
+   ```promql
+   # p95 latency
+   histogram_quantile(0.95, 
+     sum by (route, le) (rate(http_request_duration_seconds_bucket[5m]))
+   )
+   # Request rate
+   sum by (route) (rate(http_requests_total[5m]))
+   ```
+
 10. **Error Distribution** (Table) - Error codes and counts
+    ```promql
+    sum by (status, route) (increase(http_requests_total{status=~"5.."}[1h]))
+    > 0
+    ```
+
 11. **Request Size** (Timeseries) - Avg request body size
+    ```promql
+    avg(http_request_size_bytes)
+    ```
+
 12. **Response Size** (Timeseries) - Avg response body size
+    ```promql
+    avg(http_response_size_bytes)
+    ```
 
 ### Usage
 
@@ -189,19 +296,129 @@ sum by (adapter) (rate(rtb_adapter_timeouts_total[5m]))
 
 Timeouts per adapter per second. Should be <0.01/s (<1%) for healthy adapters.
 
+### Dashboard Screenshot
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│ RTB Overview Dashboard                       [Last 1h] [↻ 30s]      │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                       │
+│  Auction p50    Auction p95    Total Wins     No-Fill Rate          │
+│  ┌─────────┐   ┌──────────┐   ┌──────────┐   ┌──────────┐          │
+│  │  78ms   │   │  142ms   │   │  1,245/s │   │  32%     │          │
+│  │  🟢     │   │  🟢      │   │  ↑ +8%   │   │  🟢      │          │
+│  └─────────┘   └──────────┘   └──────────┘   └──────────┘          │
+│                                                                       │
+│  Wins by Adapter                                                     │
+│  ┌───────────────────────────────────────────────────────────────┐  │
+│  │            AdMob ████████████████████████████                  │  │
+│  │     Unity Ads ██████████████                                   │  │
+│  │   AppLovin ████████                                            │  │
+│  │   ironSource ████                                              │  │
+│  └───────────────────────────────────────────────────────────────┘  │
+│                                                                       │
+│  Adapter Performance (Last 1h)                                       │
+│  ┌────────────┬─────────┬────────┬──────────┬────────┬────────┐    │
+│  │ Adapter    │ Wins    │ p95 ms │ Timeouts │ Win %  │ Status │    │
+│  ├────────────┼─────────┼────────┼──────────┼────────┼────────┤    │
+│  │ AdMob      │ 45,230  │ 98ms   │ 12       │ 42%    │ 🟢     │    │
+│  │ Unity Ads  │ 28,156  │ 125ms  │ 8        │ 26%    │ 🟢     │    │
+│  │ AppLovin   │ 15,890  │ 156ms  │ 45       │ 15%    │ 🟡     │    │
+│  │ ironSource │ 8,234   │ 210ms  │ 156      │ 8%     │ 🔴     │    │
+│  └────────────┴─────────┴────────┴──────────┴────────┴────────┘    │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
 ### Panels
 
 1. **Auction Latency p50** (Stat) - Median auction time
+   ```promql
+   histogram_quantile(0.5, 
+     sum by (le) (rate(auction_latency_seconds_bucket[5m]))
+   )
+   ```
+
 2. **Auction Latency p95** (Stat) - 95th percentile with color thresholds
+   ```promql
+   histogram_quantile(0.95, 
+     sum by (le) (rate(auction_latency_seconds_bucket[5m]))
+   )
+   ```
+   **Thresholds:** Green <200ms, Yellow 200-300ms, Red >300ms
+
 3. **Total Wins** (Stat) - Successful auctions per second
+   ```promql
+   sum(rate(rtb_wins_total[5m]))
+   ```
+
 4. **No-Fill Rate** (Stat) - Percentage of auctions without winner
+   ```promql
+   sum(rate(rtb_no_fill_total[5m])) 
+   / (sum(rate(rtb_wins_total[5m])) + sum(rate(rtb_no_fill_total[5m]))) 
+   * 100
+   ```
+   **Thresholds:** Green <30%, Yellow 30-50%, Red >50%
+
 5. **Auction Latency Percentiles** (Timeseries) - p50/p75/p95/p99 over time
+   ```promql
+   # p50
+   histogram_quantile(0.50, sum by (le) (rate(auction_latency_seconds_bucket[5m])))
+   # p75
+   histogram_quantile(0.75, sum by (le) (rate(auction_latency_seconds_bucket[5m])))
+   # p95
+   histogram_quantile(0.95, sum by (le) (rate(auction_latency_seconds_bucket[5m])))
+   # p99
+   histogram_quantile(0.99, sum by (le) (rate(auction_latency_seconds_bucket[5m])))
+   ```
+
 6. **Wins by Adapter** (Timeseries) - Stacked area chart showing which adapters win
+   ```promql
+   sum by (adapter) (rate(rtb_wins_total[5m]))
+   ```
+
 7. **No-Fill Rate Trend** (Timeseries) - No-fill percentage with 50% threshold line
+   ```promql
+   sum(rate(rtb_no_fill_total[5m])) 
+   / (sum(rate(rtb_wins_total[5m])) + sum(rate(rtb_no_fill_total[5m]))) 
+   * 100
+   ```
+
 8. **Adapter Latency p95** (Timeseries) - Per-adapter response times
+   ```promql
+   histogram_quantile(0.95, 
+     sum by (adapter, le) (rate(rtb_adapter_latency_seconds_bucket[5m]))
+   )
+   ```
+
 9. **Adapter Timeouts** (Timeseries) - Timeout counts by adapter
+   ```promql
+   sum by (adapter) (rate(rtb_adapter_timeouts_total[5m]))
+   ```
+
 10. **Adapter Performance Summary** (Table) - 1h aggregation showing latency, wins, timeouts, win %
+    ```promql
+    # Wins (last 1h)
+    sum by (adapter) (increase(rtb_wins_total[1h]))
+    
+    # p95 latency
+    histogram_quantile(0.95, 
+      sum by (adapter, le) (rate(rtb_adapter_latency_seconds_bucket[1h]))
+    )
+    
+    # Timeouts (last 1h)
+    sum by (adapter) (increase(rtb_adapter_timeouts_total[1h]))
+    
+    # Win percentage
+    sum by (adapter) (increase(rtb_wins_total[1h]))
+    / (sum by (adapter) (increase(rtb_wins_total[1h])) 
+       + sum by (adapter) (increase(rtb_no_fill_total[1h])))
+    * 100
+    ```
+
 11. **Auction Volume** (Timeseries) - Total auction requests per second
+    ```promql
+    sum(rate(auction_latency_seconds_count[5m]))
+    ```
 
 ### Usage
 
@@ -276,20 +493,110 @@ redis_queue_lag_seconds
 
 Time difference between oldest event in queue and now. High lag (>60s) indicates processing backlog.
 
+### Dashboard Screenshot
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│ Tracking & Ingest Dashboard                  [Last 1h] [↻ 30s]      │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                       │
+│  Enqueued/s     Written/s      Failed/s       Success Rate          │
+│  ┌─────────┐   ┌──────────┐   ┌──────────┐   ┌──────────┐          │
+│  │  3,450  │   │  3,420   │   │    8     │   │  99.8%   │          │
+│  │  ↑ +5%  │   │  ↑ +5%   │   │  🟢      │   │  🟢      │          │
+│  └─────────┘   └──────────┘   └──────────┘   └──────────┘          │
+│                                                                       │
+│  Events by Kind (Written)                                            │
+│  ┌───────────────────────────────────────────────────────────────┐  │
+│  │      impressions ████████████████████████████████             │  │
+│  │           clicks ████████                                      │  │
+│  │      conversions ██                                            │  │
+│  └───────────────────────────────────────────────────────────────┘  │
+│                                                                       │
+│  Queue Lag (seconds)                                                 │
+│  ┌───────────────────────────────────────────────────────────────┐  │
+│  │ 60│ ─────────────────── Threshold ────────────────────        │  │
+│  │   │                                                           │  │
+│  │ 30│        ╱╲                                                 │  │
+│  │   │   ╱───╯  ╲───╮                                            │  │
+│  │  0│───╯          ╰────────────────────────────────────────    │  │
+│  └───────────────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
 ### Panels
 
 1. **Events Enqueued** (Stat) - Events added to queue per second
+   ```promql
+   sum(rate(analytics_events_enqueued_total[5m]))
+   ```
+
 2. **Events Written** (Stat) - Successful ClickHouse writes per second
+   ```promql
+   sum(rate(analytics_events_written_total[5m]))
+   ```
+
 3. **Events Failed** (Stat) - Failed events per second with color thresholds
+   ```promql
+   sum(rate(analytics_events_failed_total[5m]))
+   ```
+
 4. **Success Rate %** (Stat) - Write success percentage
+   ```promql
+   sum(rate(analytics_events_written_total[5m])) 
+   / (sum(rate(analytics_events_written_total[5m])) 
+      + sum(rate(analytics_events_failed_total[5m]))) 
+   * 100
+   ```
+   **Thresholds:** Green >99%, Yellow 95-99%, Red <95%
+
 5. **Events by Kind (Enqueued)** (Timeseries) - Impressions, clicks, conversions
+   ```promql
+   sum by (kind) (rate(analytics_events_enqueued_total[5m]))
+   ```
+
 6. **Events by Kind (Written)** (Timeseries) - Successful writes by type
+   ```promql
+   sum by (kind) (rate(analytics_events_written_total[5m]))
+   ```
+
 7. **Failed Events by Kind** (Timeseries) - Failure breakdown
+   ```promql
+   sum by (kind) (rate(analytics_events_failed_total[5m]))
+   > 0
+   ```
+
 8. **Rate Limited Events** (Timeseries) - Events rejected by rate limiter
+   ```promql
+   sum(rate(tracking_rate_limited_total[5m]))
+   ```
+
 9. **Blocked Events** (Timeseries) - Events blocked by fraud detector
+   ```promql
+   sum(rate(tracking_blocked_total[5m]))
+   ```
+
 10. **Queue Lag** (Timeseries) - Processing delay with 60s threshold line
+    ```promql
+    redis_queue_lag_seconds
+    ```
+
 11. **Event Kind Summary** (Table) - 1h aggregation showing enqueued/written/failed counts
+    ```promql
+    # Enqueued (last 1h)
+    sum by (kind) (increase(analytics_events_enqueued_total[1h]))
+    
+    # Written (last 1h)
+    sum by (kind) (increase(analytics_events_written_total[1h]))
+    
+    # Failed (last 1h)
+    sum by (kind) (increase(analytics_events_failed_total[1h]))
+    ```
+
 12. **HEAD Requests** (Timeseries) - Tracking pixel HEAD requests
+    ```promql
+    sum(rate(tracking_head_total[5m]))
+    ```
 
 ### Usage
 
@@ -371,21 +678,140 @@ sum(rate(queue_jobs_failed_total[5m]))
 
 Percentage of failed jobs. Should be <5%.
 
+### Dashboard Screenshot
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│ Database & Queue Health Dashboard            [Last 1h] [↻ 30s]      │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                       │
+│  DB p95         DB p99         Queue Depth    Backlog Age           │
+│  ┌─────────┐   ┌──────────┐   ┌──────────┐   ┌──────────┐          │
+│  │  85ms   │   │  245ms   │   │  1,234   │   │  45s     │          │
+│  │  🟢     │   │  🟢      │   │  ↑ +15%  │   │  🟢      │          │
+│  └─────────┘   └──────────┘   └──────────┘   └──────────┘          │
+│                                                                       │
+│  Connection Pool Utilization (%)                                     │
+│  ┌───────────────────────────────────────────────────────────────┐  │
+│  │ 100│                                                           │  │
+│  │  80│ ─────────────────── Warning ─────────────────────        │  │
+│  │    │                              ╱──╲                        │  │
+│  │  50│                    ╱────────╯    ╲                       │  │
+│  │    │       ╱───────────╯                ╲                     │  │
+│  │  20│──────╯                               ╲─────────────      │  │
+│  └───────────────────────────────────────────────────────────────┘  │
+│                                                                       │
+│  Queue Performance (Last 1h)                                         │
+│  ┌────────────────────┬─────────┬───────────┬─────────┬────────┐   │
+│  │ Queue              │ Depth   │ Completed │ Failed  │ Rate   │   │
+│  ├────────────────────┼─────────┼───────────┼─────────┼────────┤   │
+│  │ payment-processing │ 856     │ 45,890    │ 12      │ 0.03%  │   │
+│  │ email-sending      │ 234     │ 89,234    │ 5       │ 0.01%  │   │
+│  │ analytics-export   │ 144     │ 12,456    │ 0       │ 0.00%  │   │
+│  └────────────────────┴─────────┴───────────┴─────────┴────────┘   │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
 ### Panels
 
 1. **DB Query p95** (Stat) - 95th percentile query latency
+   ```promql
+   histogram_quantile(0.95, 
+     sum by (le) (rate(db_query_duration_seconds_bucket[5m]))
+   )
+   ```
+
 2. **DB Query p99** (Stat) - 99th percentile with color thresholds
+   ```promql
+   histogram_quantile(0.99, 
+     sum by (le) (rate(db_query_duration_seconds_bucket[5m]))
+   )
+   ```
+   **Thresholds:** Green <500ms, Yellow 500-1000ms, Red >1000ms
+
 3. **Queue Depth** (Stat) - Total jobs waiting across all queues
+   ```promql
+   sum(queue_depth)
+   ```
+
 4. **Backlog Age** (Stat) - Oldest job age with 300s threshold
+   ```promql
+   max(time() - queue_oldest_job_timestamp)
+   ```
+
 5. **DB Query Latency Percentiles** (Timeseries) - p50/p75/p95/p99
+   ```promql
+   # p50
+   histogram_quantile(0.50, sum by (le) (rate(db_query_duration_seconds_bucket[5m])))
+   # p75
+   histogram_quantile(0.75, sum by (le) (rate(db_query_duration_seconds_bucket[5m])))
+   # p95
+   histogram_quantile(0.95, sum by (le) (rate(db_query_duration_seconds_bucket[5m])))
+   # p99
+   histogram_quantile(0.99, sum by (le) (rate(db_query_duration_seconds_bucket[5m])))
+   ```
+
 6. **DB Query Latency by Operation** (Timeseries) - SELECT/INSERT/UPDATE/DELETE
+   ```promql
+   histogram_quantile(0.95, 
+     sum by (operation, le) (rate(db_query_duration_seconds_bucket[5m]))
+   )
+   ```
+
 7. **Connection Pool Utilization** (Timeseries) - % of max connections with 80% line
+   ```promql
+   db_pool_active_connections / db_pool_max_connections * 100
+   ```
+
 8. **Slow Queries** (Table) - Top 10 queries >1s
+   ```promql
+   topk(10,
+     histogram_quantile(0.95, 
+       sum by (query, le) (rate(db_query_duration_seconds_bucket[5m]))
+     )
+   ) > 1.0
+   ```
+
 9. **Queue Depth by Queue** (Timeseries) - payment-processing, email-sending, etc.
+   ```promql
+   sum by (queue) (queue_depth)
+   ```
+
 10. **Queue Processing Rate** (Timeseries) - Jobs completed per second
+    ```promql
+    sum by (queue) (rate(queue_jobs_completed_total[5m]))
+    ```
+
 11. **Queue Backlog Growth Rate** (Timeseries) - Derivative of depth (growing/shrinking)
+    ```promql
+    deriv(sum by (queue) (queue_depth)[5m:])
+    ```
+
 12. **Queue Failure Rate** (Timeseries) - Failed job percentage with 10% threshold
+    ```promql
+    sum by (queue) (rate(queue_jobs_failed_total[5m])) 
+    / (sum by (queue) (rate(queue_jobs_completed_total[5m])) 
+       + sum by (queue) (rate(queue_jobs_failed_total[5m]))) 
+    * 100
+    ```
+
 13. **Queue Summary** (Table) - Per-queue stats (depth, completed, failed)
+    ```promql
+    # Queue depth
+    sum by (queue) (queue_depth)
+    
+    # Jobs completed (last 1h)
+    sum by (queue) (increase(queue_jobs_completed_total[1h]))
+    
+    # Jobs failed (last 1h)
+    sum by (queue) (increase(queue_jobs_failed_total[1h]))
+    
+    # Failure rate
+    sum by (queue) (increase(queue_jobs_failed_total[1h]))
+    / (sum by (queue) (increase(queue_jobs_completed_total[1h])) 
+       + sum by (queue) (increase(queue_jobs_failed_total[1h])))
+    * 100
+    ```
 
 ### Usage
 

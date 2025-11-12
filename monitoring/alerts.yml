@@ -23,6 +23,8 @@ groups:
         annotations:
           summary: "High error rate detected"
           description: "Error rate is {{ $value | humanizePercentage }} over the last 5 minutes."
+          runbook: "https://github.com/sbelakho2/Ad-Project/blob/main/docs/runbooks/http-error-spike.md"
+          dashboard: "https://grafana.rival.com/d/api-red-metrics"
 
       - alert: HighLatency
         expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])) > 0.5
@@ -33,6 +35,8 @@ groups:
         annotations:
           summary: "High API latency detected"
           description: "P95 latency is {{ $value }}s, above 500ms threshold."
+          runbook: "https://github.com/sbelakho2/Ad-Project/blob/main/docs/runbooks/high-api-latency.md"
+          dashboard: "https://grafana.rival.com/d/api-red-metrics"
 
       - alert: HighMemoryUsage
         expr: process_resident_memory_bytes{job="backend-api"} / 1024 / 1024 > 450
@@ -251,6 +255,8 @@ groups:
         annotations:
           summary: "Auction latency p95 elevated"
           description: "Auction p95 latency is {{ $value }}s, above 200ms warning threshold."
+          runbook: "https://github.com/sbelakho2/Ad-Project/blob/main/docs/runbooks/rtb-high-latency.md"
+          dashboard: "https://grafana.rival.com/d/rtb-overview"
 
       - alert: AuctionLatencyP95Critical
         expr: histogram_quantile(0.95, sum by (le) (rate(auction_latency_seconds_bucket[5m]))) > 0.5
@@ -261,6 +267,8 @@ groups:
         annotations:
           summary: "Auction latency p95 critical"
           description: "Auction p95 latency is {{ $value }}s, above 500ms critical threshold. Investigate adapter timeouts."
+          runbook: "https://github.com/sbelakho2/Ad-Project/blob/main/docs/runbooks/rtb-critical-latency.md"
+          dashboard: "https://grafana.rival.com/d/rtb-overview"
 
       - alert: AdapterTimeoutSpikeShort
         expr: sum by (adapter) (rate(rtb_adapter_timeouts_total[5m])) > 0.1
@@ -271,6 +279,8 @@ groups:
         annotations:
           summary: "Adapter timeout spike detected (5m window)"
           description: "Adapter {{ $labels.adapter }} timeout rate is {{ $value }}/s over the last 5 minutes."
+          runbook: "https://github.com/sbelakho2/Ad-Project/blob/main/docs/runbooks/adapter-timeouts.md"
+          dashboard: "https://grafana.rival.com/d/rtb-overview"
 
       - alert: AdapterTimeoutSpikeSustained
         expr: sum by (adapter) (rate(rtb_adapter_timeouts_total[1h])) > 0.05
@@ -281,6 +291,8 @@ groups:
         annotations:
           summary: "Sustained adapter timeout spike (1h window)"
           description: "Adapter {{ $labels.adapter }} timeout rate is {{ $value }}/s over the last hour. Check adapter health."
+          runbook: "https://github.com/sbelakho2/Ad-Project/blob/main/docs/runbooks/adapter-timeouts.md"
+          dashboard: "https://grafana.rival.com/d/rtb-overview"
 
       - alert: HighNoFillRate
         expr: sum(rate(rtb_no_fill_total[5m])) / sum(rate(rtb_requests_total[5m])) > 0.5
@@ -291,6 +303,8 @@ groups:
         annotations:
           summary: "High no-fill rate"
           description: "No-fill rate is {{ $value | humanizePercentage }}, above 50% threshold. Check adapter availability."
+          runbook: "https://github.com/sbelakho2/Ad-Project/blob/main/docs/runbooks/high-no-fill-rate.md"
+          dashboard: "https://grafana.rival.com/d/rtb-overview"
 
       - alert: HTTPErrorBudgetBurnShort
         expr: (1 - (sum(rate(http_request_duration_seconds_count{status_code!~"5.."}[5m])) / sum(rate(http_request_duration_seconds_count[5m])))) > 0.05
@@ -325,6 +339,8 @@ groups:
         annotations:
           summary: "ClickHouse write failures detected"
           description: "{{ $value }} write failures/s to ClickHouse. Check database health and connectivity."
+          runbook: "https://github.com/sbelakho2/Ad-Project/blob/main/docs/runbooks/clickhouse-write-failures.md"
+          dashboard: "https://grafana.rival.com/d/tracking-ingest"
 
       - alert: ClickHouseHighWriteLatency
         expr: histogram_quantile(0.95, sum by (le) (rate(clickhouse_write_duration_seconds_bucket[5m]))) > 1.0
@@ -335,6 +351,8 @@ groups:
         annotations:
           summary: "ClickHouse write latency elevated"
           description: "ClickHouse write p95 latency is {{ $value }}s, above 1s threshold."
+          runbook: "https://github.com/sbelakho2/Ad-Project/blob/main/docs/runbooks/clickhouse-write-failures.md"
+          dashboard: "https://grafana.rival.com/d/tracking-ingest"
 
       - alert: AnalyticsPipelineBroken
         expr: sum(rate(analytics_events_enqueued_total[5m])) - sum(rate(analytics_events_written_total[5m])) > 100
@@ -345,6 +363,8 @@ groups:
         annotations:
           summary: "Analytics pipeline backed up"
           description: "Event lag rate is {{ $value }}/s. Queue may be blocked or ClickHouse unavailable."
+          runbook: "https://github.com/sbelakho2/Ad-Project/blob/main/docs/runbooks/analytics-pipeline-broken.md"
+          dashboard: "https://grafana.rival.com/d/tracking-ingest"
 
   # Queue health alerts
   - name: queue_health
@@ -359,6 +379,8 @@ groups:
         annotations:
           summary: "Queue backlog growing"
           description: "Queue {{ $labels.queue }} depth growing at {{ $value }}/s. Check worker health."
+          runbook: "https://github.com/sbelakho2/Ad-Project/blob/main/docs/runbooks/queue-backlog.md"
+          dashboard: "https://grafana.rival.com/d/db-queue"
 
       - alert: QueueDepthCritical
         expr: sum by (queue) (queue_depth) > 10000
@@ -369,6 +391,8 @@ groups:
         annotations:
           summary: "Queue depth critical"
           description: "Queue {{ $labels.queue }} has {{ $value }} jobs. Workers may be stalled."
+          runbook: "https://github.com/sbelakho2/Ad-Project/blob/main/docs/runbooks/queue-backlog.md"
+          dashboard: "https://grafana.rival.com/d/db-queue"
 
       - alert: QueueOldestJobStale
         expr: time() - queue_oldest_job_timestamp > 900
@@ -379,6 +403,8 @@ groups:
         annotations:
           summary: "Queue has stale jobs"
           description: "Oldest job in queue {{ $labels.queue }} is {{ $value }}s old (>15m). Check worker processing."
+          runbook: "https://github.com/sbelakho2/Ad-Project/blob/main/docs/runbooks/queue-backlog.md"
+          dashboard: "https://grafana.rival.com/d/db-queue"
 
       - alert: HighQueueFailureRate
         expr: sum by (queue) (rate(queue_jobs_failed_total[5m])) / sum by (queue) (rate(queue_jobs_completed_total[5m])) > 0.1
@@ -389,6 +415,8 @@ groups:
         annotations:
           summary: "High queue job failure rate"
           description: "Queue {{ $labels.queue }} failure rate is {{ $value | humanizePercentage }}, above 10% threshold."
+          runbook: "https://github.com/sbelakho2/Ad-Project/blob/main/docs/runbooks/queue-backlog.md"
+          dashboard: "https://grafana.rival.com/d/db-queue"
 
   # AI automation cost controls
   - name: ai_cost_controls

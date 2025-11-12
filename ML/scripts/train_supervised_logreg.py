@@ -3,6 +3,7 @@ import json
 import os
 import random
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 import joblib
@@ -161,8 +162,10 @@ def run(argv: Optional[List[str]] = None) -> str:
     out_dir = args.out_dir or os.path.join("models", "fraud", "dev", datetime.now(UTC).strftime("%Y%m%d_%H%M"))
     os.makedirs(out_dir, exist_ok=True)
 
+    # Enforce deterministic training with seed control
     random.seed(args.seed)
     np.random.seed(args.seed)
+    os.environ["PYTHONHASHSEED"] = str(args.seed)
 
     features_df, labels = _load_datasets(args.features, args.weak_labels, args.label_column)
 
@@ -288,6 +291,18 @@ def run(argv: Optional[List[str]] = None) -> str:
             handle,
             indent=2,
         )
+
+    # Capture environment snapshot for reproducibility
+    try:
+        from capture_environment import capture_environment, save_snapshot
+        env_snapshot = capture_environment(
+            features_path=args.features,
+            weak_labels_path=args.weak_labels,
+            seed=args.seed,
+        )
+        save_snapshot(env_snapshot, Path(out_dir) / "environment_snapshot.json")
+    except Exception as e:
+        print(f"Warning: Could not capture environment snapshot: {e}")
 
     print(f"Logistic regression model written to {out_dir}")
     return out_dir

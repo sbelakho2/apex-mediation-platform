@@ -186,37 +186,101 @@ jobs:
           path: sdks/android/build/outputs/aar/*.aar
 
   build-unity-sdk:
-    name: Build Unity SDK
+    name: Build Unity SDK (UPM Package)
     runs-on: ubuntu-latest
     needs: validate-version
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-
       - name: Update package.json version
-        working-directory: sdks/unity
+        working-directory: Packages/com.rivalapexmediation.sdk
         run: |
           VERSION=${{ needs.validate-version.outputs.version }}
-          npm version $VERSION --no-git-tag-version
+          # Update version in package.json
+          jq ".version = \"$VERSION\"" package.json > package.json.tmp
+          mv package.json.tmp package.json
+          
+          echo "Updated package.json version to $VERSION"
+          cat package.json | jq .
 
-      - name: Create Unity package
-        working-directory: sdks/unity
+      - name: Create UPM tarball
+        working-directory: Packages/com.rivalapexmediation.sdk
         run: |
-          mkdir -p build
-          # Unity packages are just folders with package.json
-          cp -r package.json Runtime Editor build/
-          cd build && tar -czf ../ApexMediation-Unity-${{ needs.validate-version.outputs.version }}.tgz .
+          # Create tarball with all package contents
+          PACKAGE_NAME="com.rivalapexmediation.sdk-${{ needs.validate-version.outputs.version }}.tgz"
+          
+          tar -czf ../../$PACKAGE_NAME \
+            --exclude='.git*' \
+            --exclude='node_modules' \
+            --exclude='.DS_Store' \
+            package.json \
+            CHANGELOG.md \
+            README.md \
+            Runtime/ \
+            Editor/ \
+            Tests/ \
+            Plugins/ \
+            Documentation~/ \
+            Samples~/
+          
+          cd ../..
+          
+          # Verify tarball
+          echo "UPM Package created: $PACKAGE_NAME"
+          ls -lh $PACKAGE_NAME
+          
+          # Check size
+          SIZE_BYTES=$(stat -f%z "$PACKAGE_NAME" 2>/dev/null || stat -c%s "$PACKAGE_NAME")
+          SIZE_MB=$(echo "scale=2; $SIZE_BYTES / 1024 / 1024" | bc)
+          echo "Package size: ${SIZE_MB}MB"
+          
+          # Size gate: warn if > 10MB, fail if > 50MB
+          MAX_SIZE_BYTES=$((50 * 1024 * 1024))
+          WARN_SIZE_BYTES=$((10 * 1024 * 1024))
+          
+          if [ $SIZE_BYTES -gt $MAX_SIZE_BYTES ]; then
+            echo "ERROR: Package size ${SIZE_MB}MB exceeds 50MB limit"
+            exit 1
+          elif [ $SIZE_BYTES -gt $WARN_SIZE_BYTES ]; then
+            echo "WARNING: Package size ${SIZE_MB}MB exceeds 10MB warning threshold"
+          else
+            echo "✅ Package size within acceptable limits"
+          fi
 
-      - name: Upload Unity artifact
-        uses: actions/upload-artifact@v3
+      - name: Generate package manifest
+        run: |
+          PACKAGE_FILE="com.rivalapexmediation.sdk-${{ needs.validate-version.outputs.version }}.tgz"
+          SHA256=$(sha256sum $PACKAGE_FILE | awk '{print $1}')
+          SIZE_BYTES=$(stat -f%z "$PACKAGE_FILE" 2>/dev/null || stat -c%s "$PACKAGE_FILE")
+          
+          cat > unity-package-manifest.json <<EOF
+          {
+            "name": "com.rivalapexmediation.sdk",
+            "version": "${{ needs.validate-version.outputs.version }}",
+            "packageFile": "$PACKAGE_FILE",
+            "sha256": "$SHA256",
+            "sizeBytes": $SIZE_BYTES,
+            "releaseDate": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          }
+          EOF
+          
+          echo "Package manifest:"
+          cat unity-package-manifest.json
+
+      - name: Upload Unity UPM tarball
+        uses: actions/upload-artifact@v4
         with:
           name: unity-sdk
-          path: sdks/unity/ApexMediation-Unity-*.tgz
+          path: com.rivalapexmediation.sdk-*.tgz
+          retention-days: 90
+      
+      - name: Upload package manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: unity-package-manifest
+          path: unity-package-manifest.json
+          retention-days: 90
 
   publish-cocoapods:
     name: Publish to CocoaPods

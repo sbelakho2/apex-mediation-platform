@@ -13,9 +13,10 @@ alerting:
         - targets:
             - alertmanager:9093
 
-# Load alerting rules
+# Load alerting and recording rules
 rule_files:
   - 'alerts.yml'
+  - 'recording-rules.yml'
 
 # Scrape configurations
 scrape_configs:

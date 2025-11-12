@@ -2,7 +2,8 @@ name: Synthetic Probes
 
 on:
   schedule:
-    - cron: '0 3 * * *'  # Daily at 3 AM UTC
+    - cron: '*/15 * * * *'  # Every 15 minutes for production monitoring
+    - cron: '0 3 * * *'     # Daily full smoke test at 3 AM UTC
   workflow_dispatch:
     inputs:
       environment:
@@ -164,3 +165,157 @@ jobs:
           name: k6-smoke-results-${{ github.run_number }}
           path: k6-results.json
           retention-days: 30
+
+  console-playwright-checks:
+    name: Console — Playwright Health Checks
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    if: github.event.schedule == '*/15 * * * *' || github.event_name == 'workflow_dispatch'
+    strategy:
+      matrix:
+        environment: [staging, production]
+    environment: ${{ matrix.environment }}
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18.20.4'
+      
+      - name: Install Console dependencies
+        working-directory: console
+        run: npm ci
+      
+      - name: Install Playwright browsers
+        working-directory: console
+        run: npx playwright install --with-deps chromium
+      
+      - name: Set Console URL
+        id: console-url
+        run: |
+          case "${{ matrix.environment }}" in
+            staging)
+              echo "url=${{ secrets.STAGING_CONSOLE_URL || vars.STAGING_CONSOLE_URL }}" >> $GITHUB_OUTPUT
+              ;;
+            production)
+              echo "url=${{ secrets.PRODUCTION_CONSOLE_URL || vars.PRODUCTION_CONSOLE_URL }}" >> $GITHUB_OUTPUT
+              ;;
+          esac
+      
+      - name: Run Playwright synthetic checks
+        working-directory: console
+        env:
+          CONSOLE_URL: ${{ steps.console-url.outputs.url }}
+          SYNTHETIC_CHECK_EMAIL: ${{ secrets[format('{0}_SYNTHETIC_EMAIL', matrix.environment)] }}
+          SYNTHETIC_CHECK_PASSWORD: ${{ secrets[format('{0}_SYNTHETIC_PASSWORD', matrix.environment)] }}
+        run: |
+          # Create a quick synthetic test if tests don't exist yet
+          if [ ! -d "tests/synthetic" ]; then
+            mkdir -p tests/synthetic
+            cat > tests/synthetic/health.spec.ts << 'EOF'
+          import { test, expect } from '@playwright/test';
+
+          test('Console loads successfully', async ({ page }) => {
+            const consoleUrl = process.env.CONSOLE_URL || 'http://localhost:3000';
+            
+            await page.goto(consoleUrl, { waitUntil: 'networkidle', timeout: 30000 });
+            
+            // Verify page loaded
+            await expect(page).toHaveTitle(/Rival|Apex|Mediation|Console/i);
+            
+            // Verify no JavaScript errors
+            page.on('pageerror', (error) => {
+              throw new Error(`Page error: ${error.message}`);
+            });
+            
+            // Verify basic interactive elements
+            const body = await page.locator('body');
+            await expect(body).toBeVisible();
+          });
+
+          test('Console login page accessible', async ({ page }) => {
+            const consoleUrl = process.env.CONSOLE_URL || 'http://localhost:3000';
+            
+            await page.goto(`${consoleUrl}/login`, { timeout: 30000 });
+            
+            // Verify login form elements exist
+            const emailInput = page.locator('input[type="email"], input[name="email"]');
+            const passwordInput = page.locator('input[type="password"]');
+            
+            await expect(emailInput).toBeVisible({ timeout: 10000 });
+            await expect(passwordInput).toBeVisible({ timeout: 10000 });
+          });
+          EOF
+          fi
+          
+          npx playwright test tests/synthetic/ --project=chromium --reporter=list,html
+      
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-${{ matrix.environment }}-${{ github.run_number }}
+          path: console/playwright-report/
+          retention-days: 7
+      
+      - name: Create GitHub Issue on production failure
+        if: failure() && matrix.environment == 'production' && github.event.schedule == '*/15 * * * *'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issueTitle = `🚨 Production Console Health Check Failed — ${new Date().toISOString()}`;
+            const issueBody = `
+            ## Production Synthetic Probe Failure
+            
+            **Workflow Run**: [#${context.runNumber}](${context.payload.repository.html_url}/actions/runs/${context.runId})
+            **Time**: ${new Date().toISOString()}
+            **Environment**: Production Console
+            
+            ### Immediate Actions Required
+            
+            1. ✅ Verify Console status: Check if users are impacted
+            2. 🔍 Review [Playwright test report](${context.payload.repository.html_url}/actions/runs/${context.runId})
+            3. 📊 Check [Grafana dashboards](https://grafana.rivaladplatform.com)
+            4. 📝 Review recent deployments in the last 15 minutes
+            
+            ### Investigation Checklist
+            
+            - [ ] Backend API health check passing?
+            - [ ] Database connectivity OK?
+            - [ ] CDN/DNS resolution working?
+            - [ ] Authentication service responding?
+            - [ ] Browser console errors?
+            
+            ---
+            
+            **Auto-generated by synthetic-probes workflow**
+            `;
+            
+            // Check for existing open issues
+            const existingIssues = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'synthetic-probe,console,production',
+              per_page: 1
+            });
+            
+            if (existingIssues.data.length === 0) {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: issueTitle,
+                body: issueBody,
+                labels: ['incident', 'console', 'p0', 'synthetic-probe', 'production']
+              });
+            } else {
+              const existingIssue = existingIssues.data[0];
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existingIssue.number,
+                body: `### Additional Failure at ${new Date().toISOString()}\n\n**Run**: [#${context.runNumber}](${context.payload.repository.html_url}/actions/runs/${context.runId})\n\nProduction Console still failing health checks.`
+              });
+            }

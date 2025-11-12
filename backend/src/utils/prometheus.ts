@@ -12,12 +12,19 @@ export async function getPrometheusMetrics(): Promise<string> {
   return register.metrics();
 }
 
-// HTTP request duration histogram (seconds)
+// HTTP request duration histogram (seconds) - RED metrics (Rate, Errors, Duration)
 export const httpRequestDurationSeconds = new Histogram({
   name: 'http_request_duration_seconds',
-  help: 'Duration of HTTP requests in seconds',
+  help: 'Duration of HTTP requests in seconds (p50, p95, p99 per route)',
   labelNames: ['method', 'route', 'status_code'] as const,
   buckets: [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10],
+});
+
+// HTTP request counter (for rate calculation)
+export const httpRequestsTotal = new Counter({
+  name: 'http_requests_total',
+  help: 'Total number of HTTP requests',
+  labelNames: ['method', 'route', 'status_code'] as const,
 });
 
 // RTB auction latency histogram (seconds)

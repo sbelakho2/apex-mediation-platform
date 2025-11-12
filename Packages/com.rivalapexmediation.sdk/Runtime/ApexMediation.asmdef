@@ -2,7 +2,11 @@
   "name": "ApexMediation",
   "rootNamespace": "RivalApex.Mediation",
   "references": [],
-  "includePlatforms": [],
+  "includePlatforms": [
+    "Android",
+    "iOS",
+    "tvOS"
+  ],
   "excludePlatforms": [],
   "allowUnsafeCode": false,
   "overrideReferences": false,

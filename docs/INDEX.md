@@ -120,6 +120,12 @@ Docs/
 - **production-deployment.md** - Production procedures
 
 ### Security
+- **SECRETS_POLICY.md** - Secrets management policy
+  - Never commit secrets to version control
+  - Secret rotation schedules
+  - GitHub secret scanning and push protection
+  - Incident response procedures
+  
 - **SECRETS_MANAGEMENT_SETUP.md** - Infisical setup
   - Installation guide
   - Migration procedures

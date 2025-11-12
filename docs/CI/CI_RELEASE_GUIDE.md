@@ -516,6 +516,202 @@ ls -lh artifacts/
 # See: https://github.com/settings/billing
 ```
 
+## Environment Secrets and Permissions
+
+### Required GitHub Secrets
+
+Configure the following secrets in **Settings → Secrets and variables → Actions**:
+
+#### Backend Deployment
+| Secret | Purpose | How to Generate |
+|--------|---------|-----------------|
+| `FLY_API_TOKEN` | Fly.io deployment | `fly auth token` |
+| `DATABASE_URL` | Production database | PostgreSQL connection string |
+| `JWT_SECRET` | JWT signing | `openssl rand -base64 32` |
+| `STRIPE_SECRET_KEY` | Payment processing | Stripe dashboard → API keys |
+| `STRIPE_WEBHOOK_SECRET` | Webhook verification | Stripe dashboard → Webhooks |
+| `CLICKHOUSE_URL` | Analytics database | ClickHouse HTTP endpoint |
+| `REDIS_URL` | Cache/queue | Redis connection string |
+
+#### SDK Publishing
+| Secret | Purpose | How to Generate |
+|--------|---------|-----------------|
+| `COCOAPODS_TRUNK_TOKEN` | CocoaPods publishing | `pod trunk me` (session token) |
+| `OSSRH_USERNAME` | Maven Central | Sonatype OSSRH account |
+| `OSSRH_PASSWORD` | Maven Central | Sonatype OSSRH password |
+| `SIGNING_KEY_ID` | Android signing | Last 8 chars of GPG key ID |
+| `SIGNING_PASSWORD` | Android signing | GPG key passphrase |
+| `SIGNING_SECRET_KEY_RING_FILE` | Android signing | `base64 < ~/.gnupg/secring.gpg` |
+| `NPM_TOKEN` | Unity/npm publishing | `npm token create` |
+
+#### Monitoring & Alerts
+| Secret | Purpose | How to Generate |
+|--------|---------|-----------------|
+| `SLACK_WEBHOOK_URL` | CI notifications | Slack app → Incoming Webhooks |
+| `STAGING_BASE_URL` | E2E test target | `https://staging.rival.com` |
+| `STAGING_API_TOKEN` | E2E authentication | Generate API token in staging |
+| `STAGING_KUBECONFIG` | Chaos testing | `cat ~/.kube/config \| base64` |
+
+#### Security Scanning
+| Secret | Purpose | How to Generate |
+|--------|---------|-----------------|
+| `SNYK_TOKEN` | Vulnerability scanning | Snyk dashboard → API token |
+| `CODECOV_TOKEN` | Code coverage | Codecov dashboard → Repository token |
+
+### Repository Permissions
+
+#### Required Workflow Permissions
+
+In **Settings → Actions → General → Workflow permissions**:
+- ✅ Read and write permissions
+- ✅ Allow GitHub Actions to create and approve pull requests
+
+#### Branch Protection Rules
+
+**Main branch** (`Settings → Branches → main`):
+- ✅ Require pull request reviews (minimum 1 approval)
+- ✅ Require status checks to pass:
+  - `backend-tests`
+  - `console-tests`
+  - `android-sdk-build`
+  - `ios-sdk-build`
+  - `shellcheck`
+  - `promtool-validate`
+- ✅ Require conversation resolution
+- ✅ Require linear history
+- ❌ Do not require signed commits (optional)
+- ✅ Include administrators (enforce for everyone)
+
+#### Environment Protection
+
+**Production environment** (`Settings → Environments → production`):
+- ✅ Required reviewers: Add DevOps team members
+- ✅ Wait timer: 10 minutes (allows cancellation)
+- ✅ Deployment branches: Only `main`
+
+**Staging environment** (`Settings → Environments → staging`):
+- ✅ Deployment branches: `main`, `staging`
+- ❌ No required reviewers (auto-deploy)
+
+### Setting Up Secrets
+
+#### Via GitHub UI
+
+1. Navigate to **Settings → Secrets and variables → Actions**
+2. Click **New repository secret**
+3. Enter name (e.g., `FLY_API_TOKEN`)
+4. Paste value
+5. Click **Add secret**
+
+#### Via GitHub CLI
+
+```bash
+# Set single secret
+gh secret set FLY_API_TOKEN --body "$(fly auth token)"
+
+# Set from file
+gh secret set SIGNING_SECRET_KEY_RING_FILE < ~/.gnupg/secring.gpg.b64
+
+# Set multiple secrets from .env file
+while IFS='=' read -r key value; do
+  gh secret set "$key" --body "$value"
+done < production.env
+```
+
+#### Via Terraform (Infrastructure as Code)
+
+```hcl
+resource "github_actions_secret" "fly_api_token" {
+  repository       = "ad-project"
+  secret_name      = "FLY_API_TOKEN"
+  plaintext_value  = var.fly_api_token
+}
+```
+
+### Secrets Rotation Schedule
+
+| Secret | Rotation Frequency | Owner |
+|--------|-------------------|-------|
+| `FLY_API_TOKEN` | Quarterly | DevOps |
+| `JWT_SECRET` | Annually | Backend team |
+| `STRIPE_SECRET_KEY` | Never (rotate via Stripe dashboard) | Finance |
+| `DATABASE_URL` | Never (change password if compromised) | DevOps |
+| `COCOAPODS_TRUNK_TOKEN` | Annually | iOS team |
+| `OSSRH_PASSWORD` | Annually | Android team |
+| `SLACK_WEBHOOK_URL` | Only if leaked | DevOps |
+
+### Verifying Secrets
+
+```bash
+# Check which secrets are configured (values hidden)
+gh secret list
+
+# Test secret in workflow
+gh workflow run test-secrets.yml
+```
+
+### Security Best Practices
+
+1. **Never commit secrets** to Git (use `.env.example` templates instead)
+2. **Use environment-specific secrets** (separate staging/production)
+3. **Rotate tokens regularly** (see schedule above)
+4. **Audit secret access** via GitHub audit log
+5. **Limit secret scope** (create tokens with minimum required permissions)
+6. **Use Dependabot secrets** for automated security updates
+
+### Access Control
+
+#### Who Can Trigger Releases?
+
+**SDK Releases** (`sdk-release.yml`):
+- Triggered by: Git tag push (`v*.*.*`)
+- Required permission: Write access to repository
+- Team: Maintainers, Release managers
+
+**Production Deployment** (`deploy-production.yml`):
+- Triggered by: Manual approval (workflow_dispatch)
+- Required permission: Admin or maintainer
+- Environment: `production` (requires reviewer approval)
+- Team: DevOps, CTO
+
+**Staging Deployment** (`deploy-staging.yml`):
+- Triggered by: Push to `main` branch
+- Required permission: Write access (automatic via PR merge)
+- Team: All developers
+
+### Emergency Access
+
+In case of emergency (e.g., critical security patch):
+
+1. **Skip CI checks** (admin only):
+   ```bash
+   git push --force-with-lease origin main
+   ```
+
+2. **Manual deployment bypass**:
+   ```bash
+   # Direct Fly.io deployment
+   fly deploy --app rival-backend-prod --strategy immediate
+   ```
+
+3. **Hotfix workflow**:
+   ```bash
+   # Create hotfix branch from production tag
+   git checkout -b hotfix/v1.2.4 v1.2.3
+   
+   # Apply fix and commit
+   git commit -m "fix: critical security patch"
+   
+   # Tag and push
+   git tag v1.2.4
+   git push origin v1.2.4
+   
+   # Merge back to main
+   git checkout main
+   git merge hotfix/v1.2.4
+   git push origin main
+   ```
+
 ## Best Practices
 
 1. **Test Before Tagging:** Always ensure CI passes on main before creating release tags
@@ -525,6 +721,8 @@ ls -lh artifacts/
 5. **Gradual Rollout:** Use feature flags for gradual rollout of breaking changes
 6. **Monitor Post-Release:** Watch dashboards for 24h after major releases
 7. **Document Issues:** Add troubleshooting steps to this guide when new issues arise
+8. **Rotate Secrets Regularly:** Follow the rotation schedule in this guide
+9. **Review Permissions Quarterly:** Audit who has access to production deployments
 
 ## Related Documentation
 

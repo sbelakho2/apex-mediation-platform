@@ -87,6 +87,9 @@ jobs:
   analyze-swift:
     name: Analyze Swift (iOS SDK)
     runs-on: macos-13
+    # NOTE: Swift analysis has limitations with cross-platform code and some
+    # advanced language features. False positives may occur with Objective-C
+    # interop. See: https://codeql.github.com/docs/codeql-language-guides/codeql-for-swift/
     permissions:
       actions: read
       contents: read

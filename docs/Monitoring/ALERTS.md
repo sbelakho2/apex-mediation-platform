@@ -534,20 +534,193 @@ promtool query instant http://localhost:9090 \
   'histogram_quantile(0.95, sum by (le) (rate(auction_latency_seconds_bucket[5m]))) > 0.2'
 ```
 
-#### Force Alert to Fire
+#### Simulate Alerts to Fire
 
-Generate traffic to trigger condition:
+Use the following procedures to trigger each alert for testing on-call response:
+
+##### 1. AuctionLatencyP95Warning/Critical
+
+**Simulate Method:** Add artificial latency to auction endpoint
 
 ```bash
-# Trigger high latency alert
-# 1. Add artificial delay to auction endpoint
-kubectl set env deployment/backend AUCTION_DELAY_MS=300 -n production
+# Add 300ms delay (triggers warning after 5 min)
+kubectl set env deployment/backend AUCTION_DELAY_MS=300 -n staging
 
-# 2. Wait 5 minutes for alert to fire
+# Add 600ms delay (triggers critical)
+kubectl set env deployment/backend AUCTION_DELAY_MS=600 -n staging
 
-# 3. Remove delay
-kubectl set env deployment/backend AUCTION_DELAY_MS- -n production
+# Monitor alert: http://prometheus:9090/alerts
+# Wait 5-6 minutes for alert to fire
+
+# Remove delay when done
+kubectl set env deployment/backend AUCTION_DELAY_MS- -n staging
 ```
+
+**Verify:** Check Grafana "RTB Overview" dashboard → Auction Latency p95 panel
+
+##### 2. AdapterTimeoutSpike
+
+**Simulate Method:** Configure test adapter to timeout
+
+```bash
+# Set adapter timeout to 1ms (forces timeouts)
+kubectl set env deployment/backend ADAPTER_TIMEOUT_TEST=1 -n staging
+kubectl set env deployment/backend ADAPTER_ENABLED_TEST=true -n staging
+
+# Generate load
+kubectl run load-test --image=grafana/k6 --rm -it --restart=Never -- \
+  run -e BASE_URL=http://backend:4000 /scripts/auction-load-test.js
+
+# Wait 5 minutes, check http://prometheus:9090/alerts
+
+# Cleanup
+kubectl set env deployment/backend ADAPTER_TIMEOUT_TEST- -n staging
+```
+
+**Verify:** Check `rtb_adapter_timeouts_total{adapter="test"}` metric
+
+##### 3. HTTPErrorBudgetBurn
+
+**Simulate Method:** Force HTTP 500 errors
+
+```bash
+# Enable error injection (50% error rate)
+kubectl set env deployment/backend ERROR_INJECTION_RATE=0.5 -n staging
+
+# Generate traffic
+for i in {1..1000}; do
+  curl -X POST http://backend:4000/api/v1/rtb/bid \
+    -H "Content-Type: application/json" \
+    -d '{"placementId":"test"}' &
+done
+
+# Wait 5 minutes
+# Disable injection
+kubectl set env deployment/backend ERROR_INJECTION_RATE- -n staging
+```
+
+**Verify:** Check `http_requests_total{status="500"}` in Prometheus
+
+##### 4. ClickHouseWriteFailures
+
+**Simulate Method:** Break ClickHouse connectivity
+
+```bash
+# Block ClickHouse port temporarily (requires network policy)
+kubectl apply -f - <<EOF
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: block-clickhouse
+  namespace: staging
+spec:
+  podSelector:
+    matchLabels:
+      app: analytics-worker
+  policyTypes:
+  - Egress
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+          app: clickhouse
+    ports:
+    - protocol: TCP
+      port: 9999  # Non-existent port
+EOF
+
+# Wait 5 minutes for alert
+# Remove policy
+kubectl delete networkpolicy block-clickhouse -n staging
+```
+
+**Verify:** Check `analytics_events_failed_total` metric
+
+##### 5. QueueDepthCritical
+
+**Simulate Method:** Enqueue jobs faster than processing
+
+```bash
+# Stop queue workers
+kubectl scale deployment/queue-worker --replicas=0 -n staging
+
+# Enqueue 15,000 jobs
+for i in {1..15000}; do
+  redis-cli LPUSH "queue:payment-processing" \
+    '{"job":"test","id":"'$i'"}'
+done
+
+# Wait 5 minutes for alert
+# Resume workers
+kubectl scale deployment/queue-worker --replicas=3 -n staging
+```
+
+**Verify:** Check `queue_depth` metric or `redis-cli LLEN queue:payment-processing`
+
+##### 6. AnalyticsPipelineBroken
+
+**Simulate Method:** Enqueue without writing
+
+```bash
+# Stop ClickHouse writes (but keep enqueuing)
+kubectl set env deployment/analytics-worker CLICKHOUSE_WRITES_ENABLED=false -n staging
+
+# Generate analytics events
+kubectl run load-test --image=curlimages/curl --rm -it --restart=Never -- \
+  sh -c 'while true; do curl -X POST http://backend:4000/api/v1/analytics/event \
+    -d "{\"kind\":\"impression\",\"placementId\":\"test\"}"; sleep 0.1; done'
+
+# Wait 10 minutes for queue lag to grow
+# Re-enable writes
+kubectl set env deployment/analytics-worker CLICKHOUSE_WRITES_ENABLED=true -n staging
+```
+
+**Verify:** Check queue lag: `redis_queue_lag_seconds` metric
+
+##### 7. HighQueueFailureRate
+
+**Simulate Method:** Inject job processing failures
+
+```bash
+# Make jobs fail 20% of the time
+kubectl set env deployment/queue-worker JOB_FAILURE_RATE=0.2 -n staging
+
+# Enqueue jobs
+for i in {1..1000}; do
+  redis-cli LPUSH "queue:test" '{"job":"test","id":"'$i'"}'
+done
+
+# Wait 10 minutes
+# Remove injection
+kubectl set env deployment/queue-worker JOB_FAILURE_RATE- -n staging
+```
+
+**Verify:** Check `queue_jobs_failed_total` / `queue_jobs_completed_total` ratio
+
+---
+
+### Alert Simulation Best Practices
+
+1. **Always use staging environment** for simulations (never production)
+2. **Document what you're doing:** Post in Slack before starting
+3. **Set a reminder** to clean up after simulation
+4. **Verify alert fires** in Alertmanager: http://alertmanager:9093/#/alerts
+5. **Test notification routing** (check Slack/PagerDuty receives alert)
+6. **Follow runbook** as if it were a real incident
+7. **Time your response** and document any runbook improvements
+
+### Simulation Schedule
+
+Run simulations quarterly to ensure:
+- Runbooks are up-to-date
+- On-call rotation is trained
+- Alerting infrastructure works
+- Notification channels function
+
+**Q1 2025 Simulation:** February 15  
+**Q2 2025 Simulation:** May 15  
+**Q3 2025 Simulation:** August 15  
+**Q4 2025 Simulation:** November 15
 
 #### Unit Test Alerts
 

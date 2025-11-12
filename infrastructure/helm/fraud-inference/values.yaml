@@ -1,0 +1,150 @@
+# Fraud Inference Service Helm Values
+
+replicaCount: 2
+
+image:
+  repository: fraud-inference
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "8080"
+  prometheus.io/path: "/metrics"
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+
+securityContext:
+  capabilities:
+    drop:
+    - ALL
+  readOnlyRootFilesystem: true
+  allowPrivilegeEscalation: false
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 8080
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: fraud-inference.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+resources:
+  limits:
+    cpu: 2000m
+    memory: 4Gi
+  requests:
+    cpu: 500m
+    memory: 1Gi
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+  # Custom metrics for HPA based on p95 latency and QPS
+  metrics:
+    - type: Pods
+      pods:
+        metric:
+          name: fraud_inference_duration_seconds_p95
+        target:
+          type: AverageValue
+          averageValue: "50m"  # 50ms p95 target
+    - type: Pods
+      pods:
+        metric:
+          name: fraud_inference_requests_per_second
+        target:
+          type: AverageValue
+          averageValue: "100"  # 100 QPS per pod
+
+livenessProbe:
+  httpGet:
+    path: /health/live
+    port: http
+  initialDelaySeconds: 10
+  periodSeconds: 30
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /health/ready
+    port: http
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+# Model configuration
+model:
+  # Mount model from ConfigMap or PersistentVolume
+  volumeMount:
+    enabled: true
+    path: /app/models
+  # Model artifact source
+  source:
+    type: "pvc"  # pvc | configmap | init-container
+    pvc:
+      claimName: fraud-models-pvc
+      readOnly: true
+
+env:
+  - name: MODEL_PATH
+    value: "/app/models/fraud_model.onnx"
+  - name: MODEL_META_PATH
+    value: "/app/models/trained_fraud_model.json"
+  - name: OMP_NUM_THREADS
+    value: "4"
+  - name: LOG_LEVEL
+    value: "INFO"
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values:
+                  - fraud-inference
+          topologyKey: kubernetes.io/hostname
+
+# Service Monitor for Prometheus Operator
+serviceMonitor:
+  enabled: true
+  interval: 30s
+  path: /metrics
+  labels: {}
+
+# Pod Disruption Budget
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1

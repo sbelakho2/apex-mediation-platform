@@ -1,5 +1,20 @@
 import { http, HttpResponse } from 'msw'
 
+/**
+ * Mock Service Worker (MSW) handlers for API mocking in tests
+ * 
+ * Benefits:
+ * - Deterministic tests (no real API calls)
+ * - Fast execution (no network latency)
+ * - Test edge cases easily (errors, timeouts, etc.)
+ * - Works in both Jest and browser environments
+ * 
+ * Usage in tests:
+ * - Default handlers are loaded in jest.setup.ts
+ * - Override per test with server.use(...)
+ * - Reset after each test with server.resetHandlers()
+ */
+
 // Simple in-memory store for ETag simulation
 let etagStore: Record<string, string> = {}
 
@@ -55,10 +70,57 @@ export const billingHandlers = [
       headers: { 'Content-Type': 'application/pdf', ETag: currentEtag },
     })
   }),
+
+  // Dashboard stats
+  http.get('http://localhost:4000/api/v1/dashboard/stats', () => {
+    return HttpResponse.json({
+      revenue: { today: 1234.56, week: 8765.43, month: 35678.90 },
+      impressions: { today: 125000, week: 875000, month: 3567890 },
+      fill_rate: { today: 0.85, week: 0.87, month: 0.86 },
+    })
+  }),
+
+  // User profile
+  http.get('http://localhost:4000/api/v1/users/me', () => {
+    return HttpResponse.json({
+      id: 'user_123',
+      email: 'test@example.com',
+      name: 'Test User',
+      role: 'admin',
+    })
+  }),
 ]
 
+/**
+ * Error handlers for testing error scenarios
+ * Use in tests: server.use(errorHandlers.unauthorized)
+ */
 export const errorHandlers = {
-  unauthorized: http.get('http://localhost:4000/api/v1/billing/invoices', () => HttpResponse.json({ message: 'Unauthorized' }, { status: 401 })),
-  forbidden: http.get('http://localhost:4000/api/v1/billing/invoices', () => HttpResponse.json({ message: 'Forbidden' }, { status: 403 })),
-  notFound: http.get('http://localhost:4000/api/v1/billing/invoices', () => HttpResponse.json({ message: 'Not Found' }, { status: 404 })),
+  unauthorized: http.get('http://localhost:4000/api/v1/billing/invoices', () => 
+    HttpResponse.json({ message: 'Unauthorized' }, { status: 401 })
+  ),
+  forbidden: http.get('http://localhost:4000/api/v1/billing/invoices', () => 
+    HttpResponse.json({ message: 'Forbidden' }, { status: 403 })
+  ),
+  notFound: http.get('http://localhost:4000/api/v1/billing/invoices', () => 
+    HttpResponse.json({ message: 'Not Found' }, { status: 404 })
+  ),
+  networkError: http.get('http://localhost:4000/api/v1/billing/invoices', () => 
+    HttpResponse.error()
+  ),
+  timeout: http.get('http://localhost:4000/api/v1/billing/invoices', async () => {
+    await new Promise(resolve => setTimeout(resolve, 10000)) // Simulate timeout
+    return HttpResponse.json({ message: 'Timeout' }, { status: 408 })
+  }),
+}
+
+/**
+ * Delay handler for testing loading states
+ * Use in tests: server.use(delayedHandlers.slow)
+ */
+export const delayedHandlers = {
+  slow: http.get('http://localhost:4000/api/v1/billing/invoices', async () => {
+    await new Promise(resolve => setTimeout(resolve, 2000))
+    return HttpResponse.json({ invoices: [], pagination: { page: 1, limit: 20, total: 0, total_pages: 0 } })
+  }),
 }

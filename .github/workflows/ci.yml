@@ -1,10 +1,15 @@
-name: CI Pipeline
+# DEPRECATED: This workflow has been consolidated into ci-all.yml
+# Please use ci-all.yml for all CI checks going forward.
+# This file is kept for reference only and will be removed in a future release.
+# See docs/Internal/Development/CI_CONSOLIDATION.md for details.
+
+name: CI Pipeline (DEPRECATED - use ci-all.yml)
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ '__deprecated__' ]  # Disabled
   pull_request:
-    branches: [ main, develop ]
+    branches: [ '__deprecated__' ]  # Disabled
 
 env:
   NODE_VERSION: '18'

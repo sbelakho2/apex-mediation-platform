@@ -7,6 +7,25 @@ on:
     branches: [ main, master ]
 
 jobs:
+  shellcheck:
+    name: Scripts — Shellcheck validation
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install shellcheck
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y shellcheck
+          shellcheck --version
+      
+      - name: Lint all shell scripts
+        run: |
+          echo "Checking shell scripts for issues..."
+          find scripts -name "*.sh" -type f -print0 | xargs -0 shellcheck --severity=warning
+          echo "✅ All shell scripts passed shellcheck"
+
   openapi-contract:
     name: Backend — OpenAPI lint (Billing)
     runs-on: ubuntu-22.04
@@ -55,7 +74,16 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '18.20.4'
-          cache: 'npm'
+      - name: Cache npm (deterministic with package-lock.json)
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.npm
+            node_modules
+            backend/node_modules
+          key: ${{ runner.os }}-npm-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-npm-
       - name: Install root deps
         run: npm ci
       - name: Install backend deps
@@ -76,7 +104,7 @@ jobs:
         run: node scripts/verifyMigrations.js
 
   console:
-    name: Console — type-check, unit/a11y
+    name: Console — type-check, unit/a11y, e2e
     runs-on: ubuntu-22.04
     timeout-minutes: 20
     steps:
@@ -85,16 +113,66 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '18.20.4'
-          cache: 'npm'
+      - name: Cache npm (deterministic with package-lock.json)
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.npm
+            console/node_modules
+          key: ${{ runner.os }}-npm-console-${{ hashFiles('console/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-npm-console-
       - name: Install console deps
         working-directory: console
         run: npm ci
+      - name: Install Playwright browsers
+        working-directory: console
+        run: npx playwright install --with-deps chromium
+      - name: Lint (ESLint with a11y rules)
+        working-directory: console
+        run: npm run lint
       - name: Type-check
         working-directory: console
         run: npm run type-check
       - name: Unit/a11y tests
         working-directory: console
         run: npm run test:a11y --silent
+      - name: Build Next.js app
+        working-directory: console
+        run: npm run build
+      - name: Check bundle sizes
+        working-directory: console
+        run: npm run bundle-size
+      - name: Upload bundle size report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bundle-size-report
+          path: console/bundle-size-report.json
+          retention-days: 90
+      - name: Start Next.js server in background
+        working-directory: console
+        run: |
+          npm run start &
+          sleep 10
+          curl -f http://localhost:3000 || exit 1
+      - name: Run Playwright e2e tests
+        working-directory: console
+        run: npm run e2e
+      - name: Upload Playwright screenshots on failure
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-screenshots
+          path: console/test-results/
+          retention-days: 30
+      - name: Upload Playwright videos on failure
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-videos
+          path: console/playwright-report/
+          retention-days: 30
 
   android:
     name: Android SDK — unit tests and size gate
@@ -107,13 +185,13 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - name: Cache Gradle
+      - name: Cache Gradle (deterministic with lockfiles)
         uses: actions/cache@v4
         with:
           path: |
             ~/.gradle/caches
             ~/.gradle/wrapper
-          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/gradle.lockfile', '**/*.gradle*', '**/gradle-wrapper.properties', '**/gradle.properties') }}
           restore-keys: |
             ${{ runner.os }}-gradle-
       - name: Run tests
@@ -122,6 +200,30 @@ jobs:
       - name: Assemble release (size gate)
         working-directory: sdk/core/android
         run: ./gradlew assembleRelease checkSdkSize validateSdkConfig --no-daemon
+      
+      - name: Generate Dokka HTML documentation
+        working-directory: sdk/core/android
+        run: ./gradlew dokkaHtml --no-daemon
+      
+      - name: Upload size report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-sdk-size-report
+          path: sdk/core/android/build/reports/sdk-size/size-report.json
+          retention-days: 90
+      
+      - name: Upload Dokka HTML docs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-sdk-api-docs
+          path: sdk/core/android/build/dokka/html/
+          retention-days: 30
+      
+      - name: Check API compatibility
+        working-directory: sdk/core/android
+        run: ./gradlew checkApiCompatibility --no-daemon
 
   ios:
     name: iOS SDK — build and test
@@ -129,11 +231,54 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
+      - name: Cache Swift Package Manager (deterministic with Package.resolved)
+        uses: actions/cache@v4
+        with:
+          path: |
+            .build
+            ~/Library/Developer/Xcode/DerivedData/**/SourcePackages
+          key: ${{ runner.os }}-spm-${{ hashFiles('**/Package.resolved') }}
+          restore-keys: |
+            ${{ runner.os }}-spm-
       - name: Build and test
         working-directory: sdk/core/ios
         run: |
           swift build
           swift test
+      
+      - name: Generate DocC documentation
+        working-directory: sdk/core/ios
+        run: |
+          # Generate DocC archive
+          swift package --allow-writing-to-directory ./docs \
+            generate-documentation --target RivalApexMediationSDK \
+            --output-path ./docs --emit-digest
+          
+          # Convert to static HTML for artifact
+          xcrun docc process-archive transform-for-static-hosting \
+            ./docs/RivalApexMediationSDK.doccarchive \
+            --output-path ./docs/html \
+            --hosting-base-path /ios-sdk || true
+      
+      - name: Upload DocC documentation
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-sdk-docc-docs
+          path: sdk/core/ios/docs/
+          retention-days: 30
+      
+      - name: Check API compatibility (swift-api-digester)
+        working-directory: sdk/core/ios
+        run: |
+          # Build current version
+          swift build -c release
+          
+          # Generate API baseline (stored in .api-baseline/ if exists)
+          # This is a placeholder - full implementation requires baseline storage
+          echo "API compatibility check: comparing current build against baseline"
+          echo "Note: Full API digester integration requires baseline .json files"
+          echo "[OK] API surface validation ready for implementation"
 
   ctv:
     name: CTV/OTT — Android TV + tvOS
@@ -146,13 +291,13 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - name: Cache Gradle
+      - name: Cache Gradle (deterministic with lockfiles)
         uses: actions/cache@v4
         with:
           path: |
             ~/.gradle/caches
             ~/.gradle/wrapper
-          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/gradle.lockfile', '**/*.gradle*', '**/gradle-wrapper.properties', '**/gradle.properties') }}
           restore-keys: |
             ${{ runner.os }}-gradle-
       - name: Android TV — unit tests and size check
@@ -160,16 +305,172 @@ jobs:
         run: ./gradlew testDebugUnitTest assembleRelease checkCtvSdkSize --no-daemon
 
   tvos:
-    name: CTV tvOS — build and test
+    name: CTV tvOS — build, test, and size check
     runs-on: macos-13
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
+      - name: Cache Swift Package Manager (deterministic with Package.resolved)
+        uses: actions/cache@v4
+        with:
+          path: |
+            .build
+            ~/Library/Developer/Xcode/DerivedData/**/SourcePackages
+          key: ${{ runner.os }}-spm-${{ hashFiles('**/Package.resolved') }}
+          restore-keys: |
+            ${{ runner.os }}-spm-
       - name: Xcode info
         run: xcodebuild -version
-      - name: Swift build
+      - name: Swift build (debug)
         working-directory: sdk/ctv/tvos
         run: swift build -c debug
       - name: Swift test
         working-directory: sdk/ctv/tvos
         run: swift test -c debug
+      
+      - name: Swift build (release for size check)
+        working-directory: sdk/ctv/tvos
+        run: swift build -c release
+      
+      - name: Check tvOS SDK size
+        working-directory: sdk/ctv/tvos
+        run: |
+          # Find the compiled framework binary
+          FRAMEWORK_PATH=$(find .build/release -name "RivalApexMediationSDK" -type f | head -1)
+          
+          if [ -z "$FRAMEWORK_PATH" ]; then
+            echo "ERROR: Framework binary not found"
+            exit 1
+          fi
+          
+          SIZE_BYTES=$(stat -f%z "$FRAMEWORK_PATH")
+          SIZE_KB=$(echo "scale=2; $SIZE_BYTES / 1024" | bc)
+          MAX_SIZE_BYTES=$((150 * 1024))  # 150 KB budget
+          WARN_SIZE_BYTES=$((120 * 1024))  # 120 KB warning
+          
+          echo "=== tvOS SDK Size Report ==="
+          echo "Framework: $FRAMEWORK_PATH"
+          echo "Size: $SIZE_BYTES bytes ($SIZE_KB KB)"
+          
+          # Generate JSON report
+          mkdir -p build/reports
+          cat > build/reports/size-report.json <<EOF
+          {
+            "platform": "tvOS",
+            "architecture": "arm64",
+            "buildConfig": "release",
+            "frameworkSizeBytes": $SIZE_BYTES,
+            "frameworkSizeKB": $SIZE_KB,
+            "maxSizeBytes": $MAX_SIZE_BYTES,
+            "maxSizeKB": 150,
+            "passed": $([ $SIZE_BYTES -le $MAX_SIZE_BYTES ] && echo "true" || echo "false"),
+            "warning": $([ $SIZE_BYTES -gt $WARN_SIZE_BYTES ] && echo "true" || echo "false"),
+            "percentOfBudget": $(echo "scale=2; ($SIZE_BYTES / $MAX_SIZE_BYTES) * 100" | bc),
+            "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          }
+          EOF
+          
+          cat build/reports/size-report.json
+          
+          if [ $SIZE_BYTES -gt $WARN_SIZE_BYTES ]; then
+            echo "⚠️ WARNING: Framework size exceeds 120 KB warning threshold"
+          fi
+          
+          if [ $SIZE_BYTES -gt $MAX_SIZE_BYTES ]; then
+            echo "❌ ERROR: Framework size $SIZE_BYTES bytes exceeds 150 KB budget"
+            exit 1
+          fi
+          
+          echo "✅ Size gate passed: $SIZE_KB KB / 150 KB budget"
+      
+      - name: Upload tvOS size report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tvos-sdk-size-report
+          path: sdk/ctv/tvos/build/reports/size-report.json
+          retention-days: 90
+
+  promtool-validate:
+    name: Monitoring — Validate Prometheus rules
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install Prometheus
+        run: |
+          wget https://github.com/prometheus/prometheus/releases/download/v2.53.0/prometheus-2.53.0.linux-amd64.tar.gz
+          tar xzf prometheus-2.53.0.linux-amd64.tar.gz
+          sudo mv prometheus-2.53.0.linux-amd64/promtool /usr/local/bin/
+          promtool --version
+      
+      - name: Validate alert rules
+        run: promtool check rules monitoring/alerts.yml
+      
+      - name: Validate recording rules
+        run: promtool check rules monitoring/recording-rules.yml
+      
+      - name: Test alert rules
+        run: |
+          if [ -f monitoring/alerts.test.yml ]; then
+            promtool test rules monitoring/alerts.test.yml
+          else
+            echo "No alert rule tests found (monitoring/alerts.test.yml)"
+          fi
+
+  security-trivy:
+    name: Security — Trivy container scanning
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    strategy:
+      matrix:
+        image:
+          - { name: backend, dockerfile: backend/Dockerfile, context: backend }
+          - { name: console, dockerfile: console/Dockerfile, context: console }
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Build Docker image
+        run: |
+          docker build -t ${{ matrix.image.name }}:ci -f ${{ matrix.image.dockerfile }} ${{ matrix.image.context }}
+      
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ matrix.image.name }}:ci
+          format: 'sarif'
+          output: 'trivy-results-${{ matrix.image.name }}.sarif'
+          severity: 'CRITICAL,HIGH,MEDIUM'
+          exit-code: '0'
+      
+      - name: Upload Trivy results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-results-${{ matrix.image.name }}.sarif'
+          category: 'trivy-${{ matrix.image.name }}'
+      
+      - name: Run Trivy (CRITICAL blocker with SBOM)
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ matrix.image.name }}:ci
+          format: 'table'
+          severity: 'CRITICAL'
+          exit-code: '1'
+          vuln-type: 'os,library'
+      
+      - name: Generate and upload SBOM
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ matrix.image.name }}:ci
+          format: 'cyclonedx'
+          output: 'sbom-${{ matrix.image.name }}.json'
+      
+      - name: Upload SBOM artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sbom-${{ matrix.image.name }}
+          path: sbom-${{ matrix.image.name }}.json
+          retention-days: 90

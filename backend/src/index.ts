@@ -3,27 +3,33 @@ import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import compression from 'compression';
-import dotenv from 'dotenv';
 import rateLimit from 'express-rate-limit';
 import { logger } from './utils/logger';
 import { errorHandler } from './middleware/errorHandler';
+import { requestContextMiddleware } from './middleware/requestContext';
 import apiRoutes from './routes';
 import { initializeDatabase } from './utils/postgres';
 import { initializeClickHouse, checkClickHouseHealth } from './utils/clickhouse';
 import { redis } from './utils/redis';
 import { initializeQueues, shutdownQueues, queueManager } from './queues/queueInitializer';
-import { promRegister, httpRequestDurationSeconds } from './utils/prometheus';
+import { promRegister, httpRequestDurationSeconds, httpRequestsTotal } from './utils/prometheus';
 import { authRateLimiter } from './middleware/redisRateLimiter';
 import swaggerUi from 'swagger-ui-express';
 import { getOpenAPIDocument } from './utils/openapi';
 import csrfProtection from './middleware/csrf';
 
-// Load environment variables
-dotenv.config();
+// Validate environment variables (fails fast with helpful errors)
+import { env } from './config/env';
 
 const app: Application = express();
-const PORT = process.env.PORT || 4000;
-const API_VERSION = process.env.API_VERSION || 'v1';
+const PORT = env.PORT;
+const API_VERSION = env.API_VERSION;
+
+// Configure trust proxy if behind reverse proxy (load balancer, nginx, etc.)
+if (env.TRUST_PROXY) {
+  app.set('trust proxy', 1);
+  logger.info('Trust proxy enabled - respecting X-Forwarded-* headers');
+}
 
 // Security middleware
 app.use(helmet({
@@ -62,21 +68,33 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(compression());
 app.use(cookieParser());
 
+// Request context middleware (must be early to capture all logs)
+app.use(requestContextMiddleware);
+
 // CSRF protection (double-submit cookie). Safe methods are ignored by csurf.
 // Must be after cookie parser and before routes.
 app.use(csrfProtection);
 
-// Request logging + metrics timing
+// RED metrics (Rate, Errors, Duration) by route
 app.use((req: Request, res: Response, next: NextFunction) => {
   const end = httpRequestDurationSeconds.startTimer();
   res.on('finish', () => {
     try {
-      end({ method: req.method, route: req.route?.path || req.path, status_code: String(res.statusCode) });
+      const labels = {
+        method: req.method,
+        route: req.route?.path || req.path,
+        status_code: String(res.statusCode)
+      };
+      
+      // Record duration histogram (for p50, p95, p99)
+      end(labels);
+      
+      // Record request counter (for rate)
+      httpRequestsTotal.inc(labels);
     } catch {
       // noop
     }
   });
-  logger.info(`${req.method} ${req.path}`, { ip: req.ip, userAgent: req.get('user-agent') });
   next();
 });
 

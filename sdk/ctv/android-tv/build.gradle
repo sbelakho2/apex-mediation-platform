@@ -2,6 +2,7 @@ plugins {
     id 'com.android.library' version '8.1.1'
     id 'org.jetbrains.kotlin.android' version '1.9.21'
     id 'maven-publish'
+    id 'org.jetbrains.kotlinx.binary-compatibility-validator' version '0.14.0'
 }
 
 android {
@@ -71,7 +72,9 @@ publishing {
     repositories {
         maven {
             name = 'github'
-            url = uri(System.getenv('GITHUB_PACKAGES_URL') ?: 'https://maven.pkg.github.com/ORG/REPO')
+            def githubOrg = project.findProperty('github.packages.org') ?: System.getenv('GITHUB_REPOSITORY_OWNER') ?: 'sbelakho2'
+            def githubRepo = project.findProperty('github.packages.repo') ?: System.getenv('GITHUB_REPOSITORY_NAME') ?: 'Ad-Project'
+            url = uri("https://maven.pkg.github.com/${githubOrg}/${githubRepo}")
             credentials {
                 username = System.getenv('GITHUB_ACTOR')
                 password = System.getenv('GITHUB_TOKEN')
@@ -80,18 +83,92 @@ publishing {
     }
 }
 
-// Size budget reminder (warning only)
+// Size check task with JSON report and CI failure (mirroring core Android SDK)
 tasks.register('checkCtvSdkSize') {
+    def outputDir = file("$buildDir/reports/sdk-size")
+    outputs.dir(outputDir)
+    
     doLast {
-        def aar = fileTree("$buildDir/outputs/aar").matching { include '**/*-release.aar' }.files.find { it.isFile() }
-        if (aar) {
-            def size = aar.length()
-            println "CTV SDK Size: ${size} bytes (${Math.round(size/1024)}KB)"
-            if (size > 1024*1024) { // 1MB soft budget for TV
-                logger.warn("CTV SDK release AAR exceeds 1MB soft budget")
-            }
+        def aarCandidates = fileTree("$buildDir/outputs/aar").matching {
+            include "**/*-release.aar"
+        }.files.findAll { it.isFile() }
+
+        if (aarCandidates.isEmpty()) {
+            logger.warn("No release AAR artifacts found")
+            return
         }
+
+        def aar = aarCandidates.max { it.length() }
+        def size = aar.length()
+        def maxSize = 1048576 // 1MB for CTV (larger due to ExoPlayer/Media3)
+        def warningSize = 921600 // 900KB (90% of max)
+        def sizeKB = Math.round(size / 1024.0 * 100) / 100
+        
+        // Generate JSON report
+        outputDir.mkdirs()
+        def jsonReport = new File(outputDir, 'size-report.json')
+        def passed = size <= maxSize
+        def warning = size > warningSize && size <= maxSize
+        
+        def reportData = [
+            artifact: aar.name,
+            sizeBytes: size,
+            sizeKB: sizeKB,
+            maxSizeBytes: maxSize,
+            maxSizeKB: Math.round(maxSize / 1024.0),
+            passed: passed,
+            warning: warning,
+            percentOfBudget: Math.round((size / maxSize) * 100.0 * 100) / 100,
+            timestamp: new Date().format("yyyy-MM-dd'T'HH:mm:ss'Z'"),
+            platform: "android-tv"
+        ]
+        
+        jsonReport.text = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(reportData))
+        
+        println "CTV Android TV SDK Size: ${size} bytes (${sizeKB}KB) of ${maxSize} bytes (1MB) budget"
+        println "Size Budget: ${reportData.percentOfBudget}% used"
+        
+        if (warning) {
+            logger.warn("[WARN] CTV SDK size ${size} bytes exceeds 90% of budget")
+        }
+        
+        if (!passed) {
+            def message = "CTV SDK size gate FAILED: ${size} bytes exceeds maximum ${maxSize} bytes (1MB)"
+            logger.error(message)
+            throw new GradleException(message)
+        }
+        
+        println "[OK] CTV SDK size gate passed"
     }
 }
 
 tasks.matching { it.name == 'assembleRelease' }.configureEach { finalizedBy 'checkCtvSdkSize' }
+
+// Validate minSdk/targetSdk and R8 (mirror core Android SDK)
+tasks.register('validateSdkConfig') {
+    group = 'verification'
+    description = 'Validates minSdk/targetSdk and R8 settings for CTV Android TV SDK'
+    doLast {
+        def min = android.defaultConfig.minSdk.apiLevel ?: android.defaultConfig.minSdk
+        def target = android.defaultConfig.targetSdk
+        if ((min as int) < 21) {
+            throw new GradleException("minSdk must be >= 21; found ${min}")
+        }
+        if ((target as int) < 33) {
+            logger.warn("[WARN] targetSdk ${target} < 33; consider updating")
+        }
+        def minify = android.buildTypes.release.minifyEnabled
+        if (!minify) {
+            throw new GradleException("Release build must enable R8 (minifyEnabled=true)")
+        }
+        println "[OK] CTV SDK config validated: minSdk=${min}, targetSdk=${target}, R8=${minify}"
+    }
+}
+
+tasks.matching { it.name == 'assembleRelease' }.configureEach { finalizedBy 'validateSdkConfig' }
+
+// API compatibility checks (mirror core Android SDK)
+apiValidation {
+    ignoredPackages += ['com.rivalapexmediation.ctv.internal']
+    validationDisabled = false
+}

@@ -3,6 +3,7 @@ plugins {
     id 'org.jetbrains.kotlin.android' version '1.9.21'
     id 'maven-publish'
     id 'org.jetbrains.dokka' version '1.9.20'
+    id 'org.jetbrains.kotlinx.binary-compatibility-validator' version '0.14.0'
 }
 
 android {
@@ -99,8 +100,11 @@ dependencies {
     androidTestImplementation "androidx.test:runner:1.5.2"
 }
 
-// Size check task
+// Size check task with JSON report and CI failure
 tasks.register('checkSdkSize') {
+    def outputDir = file("$buildDir/reports/sdk-size")
+    outputs.dir(outputDir)
+    
     doLast {
         def aarCandidates = fileTree("$buildDir/outputs/aar").matching {
             include "**/*-release.aar"
@@ -120,13 +124,49 @@ tasks.register('checkSdkSize') {
 
         def size = aar.length()
         def maxSize = 512000 // 500KB
+        def warningSize = 460800 // 450KB (90% of max)
+        def sizeKB = Math.round(size / 1024.0 * 100) / 100
+        def maxSizeKB = Math.round(maxSize / 1024.0 * 100) / 100
         
-        println "SDK Size: ${size} bytes (${size/1024}KB)"
+        // Generate JSON report
+        outputDir.mkdirs()
+        def jsonReport = new File(outputDir, 'size-report.json')
+        def passed = size <= maxSize
+        def warning = size > warningSize && size <= maxSize
         
-        if (size > maxSize) {
-            logger.error("SDK size $size exceeds maximum $maxSize bytes")
-            assert size <= maxSize : "SDK size ${size} exceeds maximum ${maxSize} bytes"
+        def reportData = [
+            artifact: aar.name,
+            sizeBytes: size,
+            sizeKB: sizeKB,
+            maxSizeBytes: maxSize,
+            maxSizeKB: maxSizeKB,
+            passed: passed,
+            warning: warning,
+            percentOfBudget: Math.round((size / maxSize) * 100.0 * 100) / 100,
+            timestamp: new Date().format("yyyy-MM-dd'T'HH:mm:ss'Z'"),
+            thresholds: [
+                fail: maxSize,
+                warning: warningSize
+            ]
+        ]
+        
+        jsonReport.text = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(reportData))
+        println "SDK Size Report: ${jsonReport.absolutePath}"
+        
+        println "SDK Size: ${size} bytes (${sizeKB}KB) of ${maxSize} bytes (${maxSizeKB}KB) budget"
+        println "Size Budget: ${reportData.percentOfBudget}% used"
+        
+        if (warning) {
+            logger.warn("[WARN] SDK size ${size} bytes (${sizeKB}KB) exceeds 90% of budget (${warningSize} bytes)")
         }
+        
+        if (!passed) {
+            def message = "SDK size gate FAILED: ${size} bytes (${sizeKB}KB) exceeds maximum ${maxSize} bytes (${maxSizeKB}KB)"
+            logger.error(message)
+            throw new GradleException(message)
+        }
+        
+        println "[OK] SDK size gate passed"
     }
 }
 
@@ -194,7 +234,10 @@ publishing {
         mavenLocal()
         maven {
             name = 'github'
-            url = uri(System.getenv('GITHUB_PACKAGES_URL') ?: 'https://maven.pkg.github.com/ORG/REPO')
+            // Use project property, env var, or default to actual repository
+            def githubOrg = project.findProperty('github.packages.org') ?: System.getenv('GITHUB_REPOSITORY_OWNER') ?: 'sbelakho2'
+            def githubRepo = project.findProperty('github.packages.repo') ?: System.getenv('GITHUB_REPOSITORY_NAME') ?: 'Ad-Project'
+            url = uri("https://maven.pkg.github.com/${githubOrg}/${githubRepo}")
             credentials {
                 username = System.getenv('GITHUB_ACTOR')
                 password = System.getenv('GITHUB_TOKEN')
@@ -247,4 +290,30 @@ tasks.register('strictmodeSmoke') {
     group = 'verification'
     description = 'Runs the StrictMode sample smoke tests to ensure SDK public flows respect main-thread I/O guarantees.'
     dependsOn(':strictmode-sample:testDebugUnitTest')
+}
+
+// Binary compatibility validation (API surface checks)
+// Run `./gradlew apiDump` to generate baseline, commit the .api files
+// Run `./gradlew apiCheck` in CI to detect breaking changes
+apiValidation {
+    // Ignore internal packages from public API
+    ignoredPackages += ['com.rivalapexmediation.sdk.internal']
+    
+    // Validate only release builds
+    validationDisabled = false
+    
+    // Generate human-readable API dump
+    publicApiDump {
+        enabled = true
+    }
+}
+
+// API check gate for PRs
+tasks.register('checkApiCompatibility') {
+    group = 'verification'
+    description = 'Checks for breaking API changes compared to committed API dump files'
+    dependsOn 'apiCheck'
+    doLast {
+        println "[OK] API compatibility check passed - no breaking changes detected"
+    }
 }
