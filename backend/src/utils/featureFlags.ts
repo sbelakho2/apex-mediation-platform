@@ -8,6 +8,7 @@ export interface FeatureFlags {
   billingEnabled: boolean;
   fraudDetectionEnabled: boolean;
   abTestingEnabled: boolean;
+  migrationStudioEnabled: boolean;
   mlCanaryEnabled: boolean;
   mlCanaryModelVersion: string;
   mlCanaryTrafficPercent: number;
@@ -22,6 +23,7 @@ export const getFeatureFlags = (): FeatureFlags => {
     billingEnabled: process.env.BILLING_ENABLED === 'true',
     fraudDetectionEnabled: process.env.FRAUD_DETECTION_ENABLED !== 'false', // Enabled by default
     abTestingEnabled: process.env.AB_TESTING_ENABLED === 'true',
+    migrationStudioEnabled: process.env.MIGRATION_STUDIO_ENABLED === 'true',
     mlCanaryEnabled: process.env.ML_CANARY_ENABLED === 'true',
     mlCanaryModelVersion: process.env.ML_CANARY_MODEL_VERSION || 'stable',
     mlCanaryTrafficPercent: parseInt(process.env.ML_CANARY_TRAFFIC_PERCENT || '0', 10),

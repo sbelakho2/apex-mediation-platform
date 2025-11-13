@@ -1,53 +1,75 @@
-import { server } from '@/tests/msw/server'
-import { http, HttpResponse } from 'msw'
 import { downloadInvoicePDF } from '../billing'
+import { apiClient } from '../api-client'
 
-// Ensure BASE_URL points to localhost API during tests
 jest.mock('../api-client', () => {
-  const actual = jest.requireActual('../api-client')
+  const original = jest.requireActual('../api-client')
   return {
-    ...actual,
-    apiClient: actual.apiClient, // baseURL defaults to http://localhost:4000/api/v1
+    ...original,
+    apiClient: {
+      get: jest.fn(),
+    },
   }
 })
 
-describe('downloadInvoicePDF — ETag/304 handling with MSW', () => {
-  const pdfEndpoint = 'http://localhost:4000/api/v1/billing/invoices/inv_1/pdf'
+const mockedApiClient = apiClient as jest.Mocked<typeof apiClient>
+
+describe('downloadInvoicePDF — caching behaviour', () => {
+  const mockCreateObjectURL = jest.fn(() => 'blob:http://localhost/mock-pdf')
+  const mockRevokeObjectURL = jest.fn()
 
   beforeEach(() => {
-    jest.restoreAllMocks()
+    jest.clearAllMocks()
+    mockedApiClient.get.mockReset()
+    ;(global.URL.createObjectURL as unknown as jest.Mock | undefined)?.mockClear?.()
+    global.URL.createObjectURL = mockCreateObjectURL as unknown as typeof URL.createObjectURL
+    global.URL.revokeObjectURL = mockRevokeObjectURL as unknown as typeof URL.revokeObjectURL
+    if (typeof window !== 'undefined') {
+      window.URL.createObjectURL = mockCreateObjectURL as unknown as typeof URL.createObjectURL
+      window.URL.revokeObjectURL = mockRevokeObjectURL as unknown as typeof URL.revokeObjectURL
+    }
   })
 
   it('returns cached blob URL when server responds 304 Not Modified', async () => {
-    // First request: 200 with ETag
-    server.use(
-      http.get(pdfEndpoint, () => {
-        const bytes = new Uint8Array([0x25, 0x50, 0x44, 0x46]) // %PDF
-        return new HttpResponse(bytes, {
-          status: 200,
-          headers: { 'Content-Type': 'application/pdf', ETag: 'W/"pdf-etag-xyz"' },
-        })
+    const pdfBytes = new Blob([new Uint8Array([0x25, 0x50, 0x44, 0x46])], {
+      type: 'application/pdf',
+    })
+
+    mockedApiClient.get
+      .mockResolvedValueOnce({
+        status: 200,
+        data: pdfBytes,
+        headers: { etag: 'W/"pdf-etag-xyz"' },
+      } as any)
+      .mockResolvedValueOnce({
+        status: 304,
+        data: new Blob(),
+        headers: { etag: 'W/"pdf-etag-xyz"' },
+      } as any)
+
+    const firstUrl = await downloadInvoicePDF('inv_1')
+    expect(mockCreateObjectURL).toHaveBeenCalledTimes(1)
+    expect(typeof firstUrl).toBe('string')
+
+    const secondUrl = await downloadInvoicePDF('inv_1')
+    expect(secondUrl).toBe(firstUrl)
+    expect(mockCreateObjectURL).toHaveBeenCalledTimes(1)
+
+    expect(mockedApiClient.get).toHaveBeenNthCalledWith(
+      1,
+      '/billing/invoices/inv_1/pdf',
+      expect.objectContaining({
+        responseType: 'blob',
+        headers: {},
       })
     )
 
-    const url1 = await downloadInvoicePDF('inv_1')
-    expect(typeof url1).toBe('string')
-    expect(url1.startsWith('blob:')).toBe(true)
-
-    // Second request: server returns 304 Not Modified
-    server.use(
-      http.get(pdfEndpoint, ({ request }) => {
-        const inm = request.headers.get('if-none-match')
-        // Ensure client sent our previous ETag
-        expect(inm).toBe('W/"pdf-etag-xyz"')
-        return new HttpResponse(null, {
-          status: 304,
-          headers: { ETag: 'W/"pdf-etag-xyz"', 'Content-Type': 'application/pdf' },
-        })
+    expect(mockedApiClient.get).toHaveBeenNthCalledWith(
+      2,
+      '/billing/invoices/inv_1/pdf',
+      expect.objectContaining({
+        responseType: 'blob',
+        headers: expect.objectContaining({ 'If-None-Match': 'W/"pdf-etag-xyz"' }),
       })
     )
-
-    const url2 = await downloadInvoicePDF('inv_1')
-    expect(url2).toBe(url1)
   })
 })

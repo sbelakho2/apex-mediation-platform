@@ -1,4 +1,5 @@
-import { render } from '@testing-library/react'
+import { render, waitFor } from '@testing-library/react'
+// @ts-expect-error jest-axe types do not expose this helper yet
 import { axe, toHaveNoViolations } from 'jest-axe'
 import UsagePage from './page'
 
@@ -62,37 +63,46 @@ jest.mock('@tanstack/react-query', () => ({
 describe('UsagePage Accessibility', () => {
   it('should have no accessibility violations', async () => {
     const { container } = render(<UsagePage />)
-    
-    // Wait for content to render
-    await new Promise(resolve => setTimeout(resolve, 100))
-    
+    await waitFor(() => {
+      expect(container.querySelector('h1')).toBeInTheDocument()
+    })
+
     const results = await axe(container)
     expect(results).toHaveNoViolations()
   })
 
-  it('should have proper heading hierarchy', () => {
+  it('should have proper heading hierarchy', async () => {
     const { container } = render(<UsagePage />)
-    
+
+    await waitFor(() => {
+      expect(container.querySelector('h1')).toBeInTheDocument()
+    })
+
     const headings = container.querySelectorAll('h1, h2, h3, h4, h5, h6')
     expect(headings.length).toBeGreaterThan(0)
-    
-    // Check that h1 exists
+
     const h1 = container.querySelector('h1')
     expect(h1).toBeInTheDocument()
   })
 
   it('should have aria-labels on progress bars', () => {
     const { container } = render(<UsagePage />)
-    
-    const progressBars = container.querySelectorAll('progress')
-    progressBars.forEach(progress => {
-      expect(progress).toHaveAttribute('aria-label')
+
+    return waitFor(() => {
+      const progress = container.querySelectorAll('progress')
+      progress.forEach((bar) => {
+        expect(bar).toHaveAttribute('aria-label')
+      })
+      expect(progress.length).toBeGreaterThan(0)
     })
   })
 
   it('should have proper contrast for status indicators', async () => {
     const { container } = render(<UsagePage />)
-    
+    await waitFor(() => {
+      expect(container.querySelector('h1')).toBeInTheDocument()
+    })
+
     // Axe will check color contrast automatically
     const results = await axe(container, {
       rules: {

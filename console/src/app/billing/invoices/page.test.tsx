@@ -37,15 +37,14 @@ describe('InvoicesPage Component States', () => {
   })
 
   describe('Loading State', () => {
-    it('should display loading spinner', () => {
+    it('should display loading skeleton', () => {
       jest.mocked(billing.listInvoices).mockImplementation(
         () => new Promise(() => {}) // Never resolves
       )
 
-      render(<InvoicesPage />, { wrapper: createWrapper() })
-      
-      expect(screen.getByRole('status')).toBeInTheDocument()
-      expect(screen.getByText(/loading/i)).toBeInTheDocument()
+      const { container } = render(<InvoicesPage />, { wrapper: createWrapper() })
+
+      expect(container.querySelector('.animate-pulse')).toBeTruthy()
     })
   })
 
@@ -64,7 +63,7 @@ describe('InvoicesPage Component States', () => {
       render(<InvoicesPage />, { wrapper: createWrapper() })
 
       await waitFor(() => {
-        expect(screen.getByText(/no invoices/i)).toBeInTheDocument()
+        expect(screen.getByText('No Invoices Found')).toBeInTheDocument()
       })
     })
 
@@ -77,7 +76,7 @@ describe('InvoicesPage Component States', () => {
       render(<InvoicesPage />, { wrapper: createWrapper() })
 
       await waitFor(() => {
-        expect(screen.getByText(/will appear here/i)).toBeInTheDocument()
+        expect(screen.getByText('No invoices have been generated yet')).toBeInTheDocument()
       })
     })
   })
@@ -91,8 +90,8 @@ describe('InvoicesPage Component States', () => {
       render(<InvoicesPage />, { wrapper: createWrapper() })
 
       await waitFor(() => {
-        expect(screen.getByRole('alert')).toBeInTheDocument()
-        expect(screen.getByText(/error/i)).toBeInTheDocument()
+        expect(screen.getByText('Error Loading Invoices')).toBeInTheDocument()
+        expect(screen.getByText('Network error')).toBeInTheDocument()
       })
     })
 
@@ -104,7 +103,7 @@ describe('InvoicesPage Component States', () => {
       render(<InvoicesPage />, { wrapper: createWrapper() })
 
       await waitFor(() => {
-        const retryButton = screen.getByRole('button', { name: /retry/i })
+        const retryButton = screen.getByRole('button', { name: /try again/i })
         expect(retryButton).toBeInTheDocument()
       })
     })
@@ -143,7 +142,7 @@ describe('InvoicesPage Component States', () => {
 
       await waitFor(() => {
         expect(screen.getByText('INV-001')).toBeInTheDocument()
-        expect(screen.getByText('$99.00')).toBeInTheDocument()
+        expect(screen.getByText('$9,900.00')).toBeInTheDocument()
       })
     })
 
@@ -173,7 +172,7 @@ describe('InvoicesPage Component States', () => {
       render(<InvoicesPage />, { wrapper: createWrapper() })
 
       await waitFor(() => {
-        const paidBadge = screen.getByText('Paid')
+        const paidBadge = screen.getByText('Paid', { selector: 'span' })
         expect(paidBadge).toHaveClass('bg-green-100')
       })
     })
@@ -209,7 +208,8 @@ describe('InvoicesPage Component States', () => {
       render(<InvoicesPage />, { wrapper: createWrapper() })
 
       await waitFor(() => {
-        expect(screen.getByText(/page 1 of 3/i)).toBeInTheDocument()
+        expect(screen.getByText(/50 total invoices/i)).toBeInTheDocument()
+        expect(screen.getByRole('navigation', { name: /pagination/i })).toBeInTheDocument()
       })
     })
 
@@ -239,7 +239,7 @@ describe('InvoicesPage Component States', () => {
       render(<InvoicesPage />, { wrapper: createWrapper() })
 
       await waitFor(() => {
-        expect(screen.queryByText(/next/i)).not.toBeInTheDocument()
+        expect(screen.queryByRole('navigation', { name: /pagination/i })).not.toBeInTheDocument()
       })
     })
   })

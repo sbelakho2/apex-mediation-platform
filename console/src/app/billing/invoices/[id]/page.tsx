@@ -88,8 +88,10 @@ export default function InvoiceDetailPage() {
     }
   }
 
-  const formatCurrency = (amount: number) =>
-    new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount)
+  const formatCurrency = (amount: number, currency = 'USD') => {
+    const normalizedCurrency = (currency || 'USD').toUpperCase()
+    return new Intl.NumberFormat('en-US', { style: 'currency', currency: normalizedCurrency }).format(amount)
+  }
 
   const formatDate = (dateString: string) =>
     new Date(dateString).toLocaleDateString('en-US', {
@@ -158,7 +160,9 @@ export default function InvoiceDetailPage() {
             <div className="flex items-center gap-4">
               {getStatusIcon(invoice.status)}
               <div>
-                <h1 className="text-2xl font-bold text-gray-900">{invoice.invoice_number}</h1>
+                <h1 className="text-2xl font-bold text-gray-900">
+                  Invoice {invoice.invoice_number}
+                </h1>
                 <div className="flex items-center gap-3 mt-2">
                   <span
                     className={`px-3 py-1 text-sm font-medium border rounded-full ${getStatusColor(
@@ -168,12 +172,13 @@ export default function InvoiceDetailPage() {
                     {invoice.status.toUpperCase()}
                   </span>
                   <span className="text-sm text-gray-600">
-                    {invoice.currency.toUpperCase()}
+                    {invoice.currency?.toUpperCase()}
                   </span>
                 </div>
               </div>
             </div>
             <button
+              type="button"
               onClick={handleDownloadPDF}
               disabled={downloading}
               className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition font-medium text-sm flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -184,76 +189,96 @@ export default function InvoiceDetailPage() {
           </div>
 
           {/* Invoice Details Grid */}
-          <div className="grid grid-cols-2 gap-6 pt-6 border-t border-gray-200">
+          <dl className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-6 border-t border-gray-200">
             <div>
-              <h3 className="text-sm font-medium text-gray-600 mb-1">Amount</h3>
-              <p className="text-2xl font-bold text-gray-900">{formatCurrency(invoice.amount)}</p>
+              <dt className="text-sm font-medium text-gray-600">Amount</dt>
+              <dd className="text-2xl font-bold text-gray-900 mt-1">
+                {formatCurrency(invoice.amount, invoice.currency)}
+              </dd>
             </div>
             <div>
-              <h3 className="text-sm font-medium text-gray-600 mb-1">Billing Period</h3>
-              <p className="text-gray-900">
+              <dt className="text-sm font-medium text-gray-600">Billing Period</dt>
+              <dd className="text-gray-900 mt-1">
                 {formatDate(invoice.period_start)} - {formatDate(invoice.period_end)}
-              </p>
+              </dd>
             </div>
             {invoice.due_date && (
               <div>
-                <h3 className="text-sm font-medium text-gray-600 mb-1">Due Date</h3>
-                <p className="text-gray-900">{formatDate(invoice.due_date)}</p>
+                <dt className="text-sm font-medium text-gray-600">Due Date</dt>
+                <dd className="text-gray-900 mt-1">{formatDate(invoice.due_date)}</dd>
               </div>
             )}
             {invoice.paid_at && (
               <div>
-                <h3 className="text-sm font-medium text-gray-600 mb-1">Paid On</h3>
-                <p className="text-gray-900">{formatDate(invoice.paid_at)}</p>
+                <dt className="text-sm font-medium text-gray-600">Paid On</dt>
+                <dd className="text-gray-900 mt-1">{formatDate(invoice.paid_at)}</dd>
               </div>
             )}
             <div>
-              <h3 className="text-sm font-medium text-gray-600 mb-1">Created</h3>
-              <p className="text-gray-900">{formatDate(invoice.created_at)}</p>
+              <dt className="text-sm font-medium text-gray-600">Created</dt>
+              <dd className="text-gray-900 mt-1">{formatDate(invoice.created_at)}</dd>
             </div>
             {invoice.stripe_invoice_id && (
               <div>
-                <h3 className="text-sm font-medium text-gray-600 mb-1">Stripe Invoice ID</h3>
-                <p className="text-xs text-gray-900 font-mono">{invoice.stripe_invoice_id}</p>
+                <dt className="text-sm font-medium text-gray-600">Stripe Invoice ID</dt>
+                <dd className="text-xs text-gray-900 font-mono mt-1">{invoice.stripe_invoice_id}</dd>
               </div>
             )}
-          </div>
+          </dl>
         </div>
 
         {/* Line Items */}
         {invoice.line_items && invoice.line_items.length > 0 && (
-          <div className="bg-white rounded-lg border border-gray-200">
+          <section aria-labelledby="invoice-items-heading" className="bg-white rounded-lg border border-gray-200">
             <div className="p-6 border-b border-gray-200">
-              <h2 className="text-lg font-semibold text-gray-900">Invoice Items</h2>
+              <h2 id="invoice-items-heading" className="text-lg font-semibold text-gray-900">Invoice Items</h2>
             </div>
-            <div className="divide-y divide-gray-200">
-              {invoice.line_items.map((item, index) => (
-                <div key={index} className="p-6">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex-1">
-                      <h3 className="font-medium text-gray-900">{item.description}</h3>
-                      <p className="text-sm text-gray-600 mt-1">
-                        Quantity: {item.quantity.toLocaleString()} × {formatCurrency(item.unit_amount)}
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-lg font-semibold text-gray-900">
-                        {formatCurrency(item.amount)}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              ))}
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200" role="table">
+                <caption className="sr-only">Breakdown of services billed on this invoice</caption>
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Description
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Quantity
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Unit Price
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Amount
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {invoice.line_items.map((item, index) => (
+                    <tr key={index}>
+                      <td className="px-6 py-4 text-sm font-medium text-gray-900">{item.description}</td>
+                      <td className="px-6 py-4 text-sm text-gray-600 text-right">{item.quantity.toLocaleString()}</td>
+                      <td className="px-6 py-4 text-sm text-gray-600 text-right">
+                        {formatCurrency(item.unit_amount, invoice.currency)}
+                      </td>
+                      <td className="px-6 py-4 text-sm font-semibold text-gray-900 text-right">
+                        {formatCurrency(item.amount, invoice.currency)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot className="bg-gray-50">
+                  <tr>
+                    <th scope="row" colSpan={3} className="px-6 py-4 text-right text-sm font-semibold text-gray-900">
+                      Total
+                    </th>
+                    <td className="px-6 py-4 text-sm font-semibold text-gray-900 text-right">
+                      {formatCurrency(invoice.amount, invoice.currency)}
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
             </div>
-            <div className="p-6 border-t border-gray-200 bg-gray-50">
-              <div className="flex items-center justify-between">
-                <span className="text-lg font-semibold text-gray-900">Total</span>
-                <span className="text-2xl font-bold text-gray-900">
-                  {formatCurrency(invoice.amount)}
-                </span>
-              </div>
-            </div>
-          </div>
+          </section>
         )}
 
         {/* Payment Status Message */}

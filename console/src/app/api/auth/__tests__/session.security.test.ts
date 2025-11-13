@@ -1,17 +1,46 @@
-import { authOptions } from '../route'
+jest.mock('next-auth', () => ({
+  __esModule: true,
+  default: jest.fn(() => ({})),
+}))
+
+jest.mock('next-auth/providers/credentials', () => ({
+  __esModule: true,
+  default: jest.fn(() => ({ id: 'credentials', type: 'credentials' })),
+}))
+
+const ORIGINAL_NODE_ENV = process.env.NODE_ENV
+
+const setNodeEnv = (value: string) => {
+  Object.defineProperty(process.env, 'NODE_ENV', {
+    value,
+    configurable: true,
+    writable: true,
+  })
+}
+
+const loadAuthOptions = async () => {
+  const mod = await import('../[...nextauth]/route')
+  return mod.authOptions
+}
 
 describe('Session/Cookie security (NextAuth)', () => {
-  it('uses secure cookies in production', () => {
-    const orig = process.env.NODE_ENV
-    process.env.NODE_ENV = 'production'
-    try {
-      expect(authOptions.useSecureCookies).toBe(true)
-    } finally {
-      process.env.NODE_ENV = orig
-    }
+  afterEach(() => {
+    jest.resetModules()
+    setNodeEnv(ORIGINAL_NODE_ENV)
+  })
+
+  it('uses secure cookies in production', async () => {
+    setNodeEnv('production')
+    jest.resetModules()
+
+    const authOptions = await loadAuthOptions()
+    expect(authOptions.useSecureCookies).toBe(true)
   })
 
   it('sets shorter maxAge for admin sessions and rotates on role change', async () => {
+    jest.resetModules()
+    const authOptions = await loadAuthOptions()
+
     const token: any = { role: 'publisher' }
     const session: any = { user: { name: 'X' } }
 

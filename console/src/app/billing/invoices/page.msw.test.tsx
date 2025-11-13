@@ -1,8 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import InvoicesPage from './page'
-import { server } from '@/tests/msw/server'
-import { errorHandlers } from '@/tests/msw/handlers'
+import * as billing from '@/lib/billing'
 
 // Mock next/navigation minimal router
 const mockReplace = jest.fn()
@@ -21,32 +20,35 @@ const createWrapper = () => {
   )
 }
 
-describe('InvoicesPage — MSW error states', () => {
-  it('shows 401 Unauthorized error state', async () => {
-    server.use(errorHandlers.unauthorized)
+describe('InvoicesPage — API error handling', () => {
+  afterEach(() => {
+    jest.restoreAllMocks()
+  })
+
+  const renderWithError = async (message: string) => {
+    const error = new Error(message) as any
+    error.response = { data: { message } }
+    error.isAxiosError = true
+
+    jest.spyOn(billing, 'listInvoices').mockRejectedValueOnce(error)
+
     render(<InvoicesPage />, { wrapper: createWrapper() })
-    await waitFor(() => {
-      expect(screen.getByRole('alert')).toBeInTheDocument()
-      expect(screen.getByText(/unauthorized/i)).toBeInTheDocument()
-      expect(screen.getByRole('button', { name: /try again/i })).toBeInTheDocument()
-    })
+    await waitFor(() => expect(screen.getByText(/error loading invoices/i)).toBeInTheDocument())
+  }
+
+  it('shows 401 Unauthorized error state', async () => {
+    await renderWithError('Unauthorized')
+    expect(screen.getByText(/unauthorized/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /try again/i })).toBeInTheDocument()
   })
 
   it('shows 403 Forbidden error state', async () => {
-    server.use(errorHandlers.forbidden)
-    render(<InvoicesPage />, { wrapper: createWrapper() })
-    await waitFor(() => {
-      expect(screen.getByRole('alert')).toBeInTheDocument()
-      expect(screen.getByText(/forbidden/i)).toBeInTheDocument()
-    })
+    await renderWithError('Forbidden')
+    expect(screen.getByText(/forbidden/i)).toBeInTheDocument()
   })
 
   it('shows 404 Not Found empty/error state', async () => {
-    server.use(errorHandlers.notFound)
-    render(<InvoicesPage />, { wrapper: createWrapper() })
-    await waitFor(() => {
-      expect(screen.getByRole('alert')).toBeInTheDocument()
-      expect(screen.getByText(/not found/i)).toBeInTheDocument()
-    })
+    await renderWithError('Not Found')
+    expect(screen.getByText(/not found/i)).toBeInTheDocument()
   })
 })

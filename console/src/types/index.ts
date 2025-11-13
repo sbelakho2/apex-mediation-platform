@@ -235,3 +235,85 @@ export interface LoginResponse {
   token: string
   expiresAt: string
 }
+
+// Migration Studio types
+export type MigrationExperimentStatus = 'draft' | 'active' | 'paused' | 'completed' | 'archived'
+
+export type MigrationMappingStatus = 'pending' | 'confirmed' | 'skipped' | 'conflict'
+export type MigrationMappingConfidence = 'high' | 'medium' | 'low'
+export type MigrationImportSource = 'csv' | 'ironSource' | 'applovin'
+export type MigrationImportStatus = 'draft' | 'pending_review' | 'completed' | 'failed'
+
+export interface MigrationGuardrails {
+  latency_budget_ms?: number
+  revenue_floor_percent?: number
+  max_error_rate_percent?: number
+  min_impressions?: number
+}
+
+export interface MigrationExperiment {
+  id: string
+  publisher_id: string
+  name: string
+  description?: string
+  app_id?: string
+  placement_id?: string
+  objective: 'revenue_comparison' | 'fill_rate' | 'latency'
+  seed: string
+  mirror_percent: number
+  mode?: 'shadow' | 'mirroring'
+  status: MigrationExperimentStatus
+  activated_at?: string
+  paused_at?: string
+  completed_at?: string
+  guardrails: MigrationGuardrails | null
+  last_guardrail_check?: string
+  created_by?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface MigrationMapping {
+  id: string
+  experiment_id: string
+  incumbent_network: string
+  incumbent_instance_id: string
+  incumbent_instance_name?: string
+  incumbent_waterfall_position?: number
+  incumbent_ecpm_cents?: number
+  mapping_status: MigrationMappingStatus
+  mapping_confidence?: MigrationMappingConfidence
+  our_adapter_id?: string
+  our_adapter_name?: string
+  conflict_reason?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface MigrationImportResponse {
+  import_id: string
+  experiment_id?: string
+  placement_id?: string
+  source: MigrationImportSource
+  status: MigrationImportStatus
+  created_at: string
+  mappings: MigrationMapping[]
+  summary: MigrationImportSummary
+}
+
+export interface MigrationImportSummary {
+  total_mappings: number
+  status_breakdown: Record<MigrationMappingStatus, number>
+  confidence_breakdown: Record<MigrationMappingConfidence, number>
+  unique_networks: number
+}
+
+export interface MigrationMappingUpdateResponse {
+  mapping: MigrationMapping
+  summary: MigrationImportSummary
+}
+
+export interface EvaluateGuardrailsResponse {
+  shouldPause: boolean
+  violations: string[]
+}

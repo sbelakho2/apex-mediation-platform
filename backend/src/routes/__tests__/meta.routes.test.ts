@@ -14,6 +14,7 @@ jest.mock('../../utils/featureFlags', () => ({
     billingEnabled: true,
     fraudDetectionEnabled: true,
     abTestingEnabled: false,
+    migrationStudioEnabled: true,
   })),
 }));
 
@@ -56,6 +57,7 @@ describe('Meta Routes', () => {
       expect(response.body.data.transparency).toBe(true);
       expect(response.body.data.fraudDetection).toBe(true);
       expect(response.body.data.abTesting).toBe(false);
+      expect(response.body.data.migrationStudio).toBe(true);
     });
   });
 

@@ -1,31 +1,33 @@
-import { render } from '@testing-library/react'
+import { render, waitFor } from '@testing-library/react'
 import { axe } from 'jest-axe'
 import InvoicesPage from './page'
 
 // Mock the API client
-jest.mock('@/lib/billing', () => ({
-  listInvoices: jest.fn().mockResolvedValue({
-    invoices: [
-      {
-        id: '1',
-        invoice_number: 'INV-001',
-        amount: 9900,
-        currency: 'usd',
-        status: 'paid',
-        period_start: '2025-10-01T00:00:00Z',
-        period_end: '2025-10-31T23:59:59Z',
-        due_date: '2025-11-15T00:00:00Z',
-        paid_at: '2025-11-10T12:00:00Z',
-        created_at: '2025-11-01T00:00:00Z',
-      },
-    ],
-    pagination: {
-      page: 1,
-      limit: 20,
-      total: 1,
-      total_pages: 1,
+const mockListInvoices = jest.fn().mockResolvedValue({
+  invoices: [
+    {
+      id: '1',
+      invoice_number: 'INV-001',
+      amount: 9900,
+      currency: 'usd',
+      status: 'paid',
+      period_start: '2025-10-01T00:00:00Z',
+      period_end: '2025-10-31T23:59:59Z',
+      due_date: '2025-11-15T00:00:00Z',
+      paid_at: '2025-11-10T12:00:00Z',
+      created_at: '2025-11-01T00:00:00Z',
     },
-  }),
+  ],
+  pagination: {
+    page: 1,
+    limit: 20,
+    total: 1,
+    total_pages: 1,
+  },
+})
+
+jest.mock('@/lib/billing', () => ({
+  listInvoices: (...args: unknown[]) => mockListInvoices(...args),
 }))
 
 jest.mock('@tanstack/react-query', () => ({
@@ -49,14 +51,20 @@ jest.mock('next/navigation', () => ({
 }))
 
 describe('InvoicesPage Accessibility', () => {
+  afterEach(() => {
+    mockListInvoices.mockClear()
+  })
+
   it('should have no accessibility violations', async () => {
     const { container } = render(<InvoicesPage />)
+    await waitFor(() => expect(mockListInvoices).toHaveBeenCalled())
     const results = await axe(container)
     expect(results).toHaveNoViolations()
   })
 
-  it('should have proper table structure with headers', () => {
+  it('should have proper table structure with headers', async () => {
     const { container } = render(<InvoicesPage />)
+    await waitFor(() => expect(mockListInvoices).toHaveBeenCalled())
     
     const table = container.querySelector('table')
     if (table) {
@@ -70,8 +78,9 @@ describe('InvoicesPage Accessibility', () => {
     }
   })
 
-  it('should have accessible status badges', () => {
+  it('should have accessible status badges', async () => {
     const { container } = render(<InvoicesPage />)
+    await waitFor(() => expect(mockListInvoices).toHaveBeenCalled())
     
     // Status badges should have sufficient contrast
     const badges = container.querySelectorAll('[class*="badge"]')
@@ -81,8 +90,9 @@ describe('InvoicesPage Accessibility', () => {
     })
   })
 
-  it('should have keyboard-accessible filters', () => {
+  it('should have keyboard-accessible filters', async () => {
     const { container } = render(<InvoicesPage />)
+    await waitFor(() => expect(mockListInvoices).toHaveBeenCalled())
     
     const selects = container.querySelectorAll('select')
     const inputs = container.querySelectorAll('input')

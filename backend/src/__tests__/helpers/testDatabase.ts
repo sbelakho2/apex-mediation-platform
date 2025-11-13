@@ -34,6 +34,14 @@ export const cleanDatabase = async (testPool: Pool): Promise<void> => {
   // Clean data export tables
   await testPool.query('TRUNCATE TABLE export_jobs RESTART IDENTITY CASCADE');
   await testPool.query('TRUNCATE TABLE warehouse_syncs RESTART IDENTITY CASCADE');
+
+  // Clean migration studio tables
+  await testPool.query('TRUNCATE TABLE migration_guardrail_snapshots RESTART IDENTITY CASCADE');
+  await testPool.query('TRUNCATE TABLE migration_events RESTART IDENTITY CASCADE');
+  await testPool.query('TRUNCATE TABLE migration_mappings RESTART IDENTITY CASCADE');
+  await testPool.query('TRUNCATE TABLE migration_imports RESTART IDENTITY CASCADE');
+  await testPool.query('TRUNCATE TABLE migration_audit RESTART IDENTITY CASCADE');
+  await testPool.query('TRUNCATE TABLE migration_experiments RESTART IDENTITY CASCADE');
 };
 
 export const beginTransaction = async (pool: Pool): Promise<void> => {

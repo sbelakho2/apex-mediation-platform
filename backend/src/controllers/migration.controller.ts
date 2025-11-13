@@ -103,6 +103,188 @@ export const listExperiments = async (
 };
 
 /**
+ * POST /api/v1/migration/import
+ * Create migration import via CSV or connector
+ */
+export const createImportJob = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const publisherId = req.user?.publisherId;
+    const userId = req.user?.userId;
+
+    if (!publisherId || !userId) {
+      throw new AppError('Unauthorized', 401);
+    }
+
+    const source = (req.body.source as string | undefined)?.trim();
+    const placementId = (req.body.placement_id as string | undefined)?.trim();
+    const experimentId = (req.body.experiment_id as string | undefined)?.trim();
+
+    if (!source) {
+      throw new AppError('source is required', 400);
+    }
+
+    if (!['csv', 'ironSource', 'applovin'].includes(source)) {
+      throw new AppError('Unsupported import source', 400);
+    }
+
+    if (!placementId) {
+      throw new AppError('placement_id is required', 400);
+    }
+
+    let credentials: { api_key: string; account_id: string } | undefined;
+    if (req.body.credentials) {
+      if (typeof req.body.credentials === 'string') {
+        try {
+          credentials = JSON.parse(req.body.credentials);
+        } catch {
+          throw new AppError('Invalid credentials payload', 400);
+        }
+      } else {
+        credentials = req.body.credentials;
+      }
+    } else if (req.body.api_key || req.body.account_id) {
+      credentials = {
+        api_key: req.body.api_key,
+        account_id: req.body.account_id,
+      };
+    }
+
+    const fileBuffer = (req as any).file?.buffer as Buffer | undefined;
+
+    const result = await migrationService.createImport({
+      publisherId,
+      userId,
+      placementId,
+      experimentId,
+      source: source as 'csv' | 'ironSource' | 'applovin',
+      fileBuffer,
+      credentials,
+    });
+
+    res.status(201).json({
+      success: true,
+      data: {
+        import_id: result.import.id,
+        experiment_id: result.import.experiment_id,
+        placement_id: result.import.placement_id,
+        source: result.import.source,
+        status: result.import.status,
+        created_at: result.import.created_at,
+        summary: result.summary,
+        mappings: result.mappings,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * PUT /api/v1/migration/mappings/:id
+ * Update mapping assignment and status
+ */
+export const updateMapping = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const publisherId = req.user?.publisherId;
+    const userId = req.user?.userId;
+
+    if (!publisherId || !userId) {
+      throw new AppError('Unauthorized', 401);
+    }
+
+    const result = await migrationService.updateMapping(req.params.id, publisherId, userId, {
+      ourAdapterId: req.body.our_adapter_id,
+      status: req.body.status,
+      notes: req.body.notes,
+    });
+
+    res.json({
+      success: true,
+      data: result,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * POST /api/v1/migration/import/:id/finalize
+ * Finalize import after mappings resolved
+ */
+export const finalizeImport = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const publisherId = req.user?.publisherId;
+    const userId = req.user?.userId;
+
+    if (!publisherId || !userId) {
+      throw new AppError('Unauthorized', 401);
+    }
+
+    const result = await migrationService.finalizeImport(req.params.id, publisherId, userId);
+
+    res.json({
+      success: true,
+      data: {
+        import_id: result.import.id,
+        experiment_id: result.import.experiment_id,
+        placement_id: result.import.placement_id,
+        source: result.import.source,
+        status: result.import.status,
+        created_at: result.import.created_at,
+        summary: result.summary,
+        mappings: result.mappings,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * POST /api/v1/migration/experiments/:id/guardrails/evaluate
+ * Evaluate guardrails for an experiment
+ */
+export const evaluateGuardrails = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const publisherId = req.user?.publisherId;
+    const userId = req.user?.userId;
+
+    if (!publisherId || !userId) {
+      throw new AppError('Unauthorized', 401);
+    }
+
+    const result = await migrationService.evaluateGuardrails(
+      req.params.id,
+      publisherId,
+      userId
+    );
+
+    res.json({
+      success: true,
+      data: result,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
  * PUT /api/v1/migration/experiments/:id
  * Update experiment
  */
@@ -281,12 +463,15 @@ export const getAssignment = async (
       experiment.mirror_percent
     );
 
+    const assignmentTs = new Date().toISOString();
+
     // Log assignment (async, don't block response)
     migrationService.logAssignment(
       experiment.id,
       arm,
       user_identifier,
-      placement_id
+      placement_id,
+      { assignment_ts: assignmentTs }
     ).catch(err => {
       console.error('Failed to log assignment:', err);
     });
@@ -298,6 +483,8 @@ export const getAssignment = async (
         experiment_id: experiment.id,
         arm,
         mirror_percent: experiment.mirror_percent,
+        assignment_ts: assignmentTs,
+        mode: experiment.mode || 'shadow',
       },
     });
   } catch (error) {

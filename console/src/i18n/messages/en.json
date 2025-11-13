@@ -145,5 +145,142 @@
       "save": "Save",
       "close": "Close"
     }
+  },
+  "migrationStudio": {
+    "nav": "Migration Studio",
+    "hero": {
+      "eyebrow": "Parallel Mediation",
+      "title": "Migration Studio",
+      "description": "Shadow your incumbent mediation, monitor guardrails, and verify uplift before a full cutover."
+    },
+    "placementPicker": {
+      "label": "Placement",
+      "placeholder": "Select a placement"
+    },
+    "status": {
+      "none": {
+        "title": "No mirror traffic yet",
+        "description": "Create an experiment to mirror a slice of traffic and compare results side-by-side."
+      },
+      "draft": {
+        "title": "Draft experiment ready",
+        "description": "Finish configuring guardrails and mirror percent to start routing controlled traffic."
+      },
+      "active": {
+        "title": "Mirroring {mirrorPercent}% of traffic",
+        "description": "Experiment {experiment} is sending a controlled slice of placement traffic to Apex. Guardrails are being evaluated continuously."
+      },
+      "paused": {
+        "title": "Experiment paused",
+        "description": "Traffic mirroring is paused. Resume when you are ready to continue collecting uplift data."
+      }
+    },
+    "experiments": {
+      "heading": "Experiments",
+      "empty": {
+        "title": "Nothing running yet",
+        "description": "Start a draft experiment to mirror traffic from this placement without risking production revenue."
+      },
+      "statusLabel": "Status",
+      "updated": "Updated {date}",
+      "mirrorPercent": "Mirror",
+      "guardrails": "Guardrails"
+    },
+    "actions": {
+      "evaluate": "Evaluate guardrails",
+      "evaluateInFlight": "Evaluating…",
+      "pause": "Pause mirroring",
+      "resume": "Resume mirroring",
+      "activate": "Start mirroring",
+      "adjust": "Adjust mirror %"
+    },
+    "messages": {
+      "guardrailPassed": "Guardrails look good",
+      "guardrailPaused": "Guardrails triggered. Experiment paused.",
+      "guardrailViolations": "Violations",
+      "mode": "Mode: {mode}"
+    },
+    "import": {
+      "headingEyebrow": "Incumbent setup",
+      "heading": "Import incumbent mediation setup",
+      "cta": "Import incumbent setup",
+      "steps": {
+        "source": "Select source",
+        "review": "Review mappings",
+        "complete": "Done"
+      },
+      "sources": {
+        "csv": {
+          "title": "Upload CSV",
+          "description": "Use the template export from your incumbent network to map line items."
+        },
+        "ironSource": {
+          "title": "ironSource API",
+          "description": "Connect with a temporary API key to pull waterfalls and instances automatically."
+        },
+        "applovin": {
+          "title": "AppLovin / MAX API",
+          "description": "Authorize MAX to sync placements, instances, and floors directly."
+        }
+      },
+      "actions": {
+        "close": "Close import wizard",
+        "reset": "Reset",
+        "continue": "Continue",
+        "loading": "Working…",
+        "finalize": "Finalize import"
+      },
+      "errors": {
+        "missingPlacement": "Select a placement before importing.",
+        "fileRequired": "Please choose a CSV export to continue.",
+        "generic": "Something went wrong. Try again or contact support.",
+        "unresolvedMappings": "Resolve {count} pending mappings before finalizing."
+      },
+      "csv": {
+        "uploadPrompt": "Drag and drop your CSV export here or choose a file",
+        "hint": "Columns should match the Migration Studio template (network, instance id, instance name, eCPM).",
+        "chooseFile": "Choose CSV",
+        "selectedFile": "Selected file: {name}"
+      },
+      "api": {
+        "apiKeyLabel": "API Key",
+        "apiKeyPlaceholder": "Paste temporary API key",
+        "accountLabel": "Account ID",
+        "accountPlaceholder": "Enter publisher or app account ID"
+      },
+      "summary": {
+        "total": "Rows",
+        "pending": "Pending",
+        "confirmed": "Matched",
+        "conflicts": "Conflicts",
+        "networks": "Networks"
+      },
+      "review": {
+        "metaTitle": "Review detected mappings",
+        "metaSubtitle": "Placement {placement} · Imported {timestamp}",
+        "columns": {
+          "incumbent": "Incumbent instance",
+          "details": "Details",
+          "match": "Match to our adapter",
+          "status": "Status"
+        },
+        "fields": {
+          "position": "Waterfall position {position}",
+          "ecpm": "Historical eCPM ${value}",
+          "confidence": "Confidence: {level}",
+          "adapterLabel": "Our adapter ID",
+          "adapterPlaceholder": "e.g. apex_sdk_adapter_01"
+        },
+        "helperText": "Assign each incumbent instance to the matching Apex adapter before activating mirroring.",
+        "actions": {
+          "saveDraft": "Save progress"
+        }
+      },
+      "success": {
+        "title": "Import ready for activation",
+        "description": "Mappings are synced for placement {placement}. You can now finish configuring guardrails and start mirroring traffic.",
+        "dismiss": "Back to Migration Studio"
+      }
+    }
   }
 }

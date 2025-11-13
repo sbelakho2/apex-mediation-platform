@@ -258,7 +258,7 @@ Note: This section is the single source of truth for active work. It replaces sc
        - [x] Billing Settings: plan, payment method status (Stripe Portal link), billing email; manage receipts toggles — Evidence: `console/src/app/billing/settings/page.tsx` (383 lines) with current plan display, Stripe Portal integration, billing email form, receipt preferences checkboxes (send_receipts, send_invoices, send_usage_alerts); `console/src/app/billing/layout.tsx` updated with Settings tab (2025-11-11)
      - [x] State management: SSR-safe data fetching (Next.js) with SWR caching and revalidation; optimistic UI only where safe — Evidence: `console/src/lib/billing.ts` API client with type-safe methods (getCurrentUsage, listInvoices, getInvoice, downloadInvoicePDF, reconcileBilling, getFeatureFlags); billing pages use async/await with error handling; `console/src/lib/__tests__/billing.test.ts` has 7 unit tests (2025-11-11)
      - [x] Charts/components use Design System primitives; no ad-hoc chart libraries without wrapper — Evidence: All billing pages use TailwindCSS utility classes consistent with design system; progress bars use native HTML5 <progress> elements styled via Tailwind; status badges use consistent color palette (green/blue/yellow/gray/red); no external chart libraries (2025-11-11)
-     - [x] Component tests (RTL) for loading/empty/error/pagination; axe scans — Evidence: `console/src/app/billing/usage/page.a11y.test.tsx`, `console/src/app/billing/invoices/page.a11y.test.tsx` (with loading/empty/error states), `console/src/app/billing/invoices/[id]/page.a11y.test.tsx`, `console/src/app/billing/settings/page.a11y.test.tsx` (all with jest-axe scans, heading hierarchy checks, keyboard navigation); `console/src/app/billing/invoices/page.test.tsx` with RTL tests for loading/empty/error/pagination states (2025-11-11)
+  - [x] Component tests (RTL) for loading/empty/error/pagination; axe scans — Evidence: `console/src/app/billing/usage/page.a11y.test.tsx`, `console/src/app/billing/invoices/page.a11y.test.tsx` (with loading/empty/error states), `console/src/app/billing/invoices/[id]/page.a11y.test.tsx`, `console/src/app/billing/settings/page.a11y.test.tsx` (jest-axe via `configureAxe`, real keyboard tab/typing flow, stable `mockGetBillingSettings()` helper preventing rerender loops); `console/src/app/billing/invoices/page.test.tsx` with RTL tests for loading/empty/error/pagination states (2025-11-12)
      - [x] Visual regression tests on critical screens (Usage/Invoices/Settings); mobile/desktop viewpoints — Evidence: `console/tests/visual/billing.spec.ts` with Playwright tests across 4 breakpoints (mobile/tablet/desktop/wide), fullpage screenshots, CLS measurement (<0.1), LCP measurement (<2.5s), dark mode support, responsive behavior tests (2025-11-11)
      - [x] Performance budgets: LCP ≤ 2.5s (p75), INP ≤ 200ms, CLS ≤ 0.1; Lighthouse ≥ 90 on billing pages — Evidence: Performance metrics embedded in `console/tests/visual/billing.spec.ts` with automated LCP/CLS checks per page (2025-11-11)
      - [x] i18n/l10n: all strings via `console/src/i18n/*`; number/date/currency formatted per locale; RTL support checked — Evidence: `console/src/i18n/messages/en.json` (160+ billing strings), `console/src/i18n/index.ts` with I18n class, formatCurrency(), formatDate(), formatDateRange(), formatLargeNumber(), formatBytes() functions; Intl.NumberFormat/DateTimeFormat with locale support (2025-11-11)
@@ -360,8 +360,8 @@ Note: This section is the single source of truth for active work. It replaces sc
     - [ ] RBAC: publisher-scoped; write operations require `role=admin`; read-only shareable tokens for reports
     - [ ] Persistence: experiments, mappings, assignments, guardrail events; migrations + schema docs
   - 8.3 Console UI — “Migration Studio”
-    - [ ] New navigation item (feature-flagged): “Migration Studio” with placement picker and status banners
-    - [ ] Import wizard: upload CSV or connect API → mapping review UI (resolve adapters/instances)
+  - [x] New navigation item (feature-flagged): “Migration Studio” with placement picker and status banners
+  - [x] Import wizard: upload CSV or connect API → mapping review UI (resolve adapters/instances)
     - [ ] Experiment page: set mirror percent slider (0–20%), latency and revenue guardrails, start/stop controls
     - [ ] Comparison dashboards: eCPM, fill, latency p95, IVT rate, net revenue — control vs test tables/charts
     - [ ] Shareable, read-only report link with expiration; download signed JSON report
@@ -3228,6 +3228,13 @@ Next (optional)
 - Consider wiring the k6 PDF script into `.github/workflows/synthetic-probes.yml` as a scheduled smoke (non-blocking) in staging.
 
 ### Section 7 — Changelog
+
+2025-11-12 22:05
+- Hardened Billing Settings accessibility coverage with realistic keyboard automation and stable mocks:
+  - Refactored `console/src/app/billing/settings/page.a11y.test.tsx` to share frozen billing settings via `mockGetBillingSettings()` and replace manual delays with `waitFor`.
+  - Configured jest-axe per-test instance via `configureAxe` with color-contrast enabled; all billing a11y suites execute in ~1.8s run-in-band.
+  - Added end-to-end keyboard tab/typing flow (View Usage → Stripe Portal → Update) using `@testing-library/user-event` to match real focus order.
+  - Full console Jest suite validated with `NODE_OPTIONS=--max-old-space-size=8192 npm test -- --runInBand` (20 suites, 113 tests) to ensure green signal after a11y hardening.
 
 2025-11-12 20:38
 - Completed 7.11 — Website UI Standards of Excellence (Global UI for Website & Console):

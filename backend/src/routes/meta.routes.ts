@@ -18,6 +18,7 @@ router.get('/features', (_req: Request, res: Response) => {
       billing: flags.billingEnabled,
       fraudDetection: flags.fraudDetectionEnabled,
       abTesting: flags.abTestingEnabled,
+      migrationStudio: flags.migrationStudioEnabled,
     },
     timestamp: new Date().toISOString(),
   });

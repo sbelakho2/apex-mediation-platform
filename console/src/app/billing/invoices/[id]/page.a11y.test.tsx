@@ -1,4 +1,4 @@
-import { render } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import { axe } from 'jest-axe'
 import InvoiceDetailPage from './page'
 
@@ -52,29 +52,31 @@ jest.mock('next/navigation', () => ({
 describe('InvoiceDetailPage Accessibility', () => {
   it('should have no accessibility violations', async () => {
     const { container } = render(<InvoiceDetailPage />)
+    await waitFor(() => expect(screen.getByText(/Invoice INV-001/i)).toBeInTheDocument())
     const results = await axe(container)
     expect(results).toHaveNoViolations()
   })
 
-  it('should have proper heading structure', () => {
-    const { container } = render(<InvoiceDetailPage />)
-    
-    const h1 = container.querySelector('h1')
-    expect(h1).toBeInTheDocument()
-    expect(h1?.textContent).toContain('Invoice')
+  it('should have proper heading structure', async () => {
+    render(<InvoiceDetailPage />)
+
+    const heading = await screen.findByRole('heading', { level: 1 })
+    expect(heading).toBeInTheDocument()
+    expect(heading.textContent).toContain('Invoice')
   })
 
-  it('should have accessible download button', () => {
-    const { getByRole } = render(<InvoiceDetailPage />)
-    
-    const downloadButton = getByRole('button', { name: /download/i })
+  it('should have accessible download button', async () => {
+    render(<InvoiceDetailPage />)
+
+    const downloadButton = await screen.findByRole('button', { name: /download/i })
     expect(downloadButton).toBeInTheDocument()
     expect(downloadButton).toHaveAttribute('type', 'button')
   })
 
-  it('should have proper table structure for line items', () => {
+  it('should have proper table structure for line items', async () => {
     const { container } = render(<InvoiceDetailPage />)
-    
+    await waitFor(() => expect(container.querySelector('table')).not.toBeNull())
+
     const table = container.querySelector('table')
     if (table) {
       const headers = table.querySelectorAll('th')
@@ -88,7 +90,8 @@ describe('InvoiceDetailPage Accessibility', () => {
 
   it('should have accessible status indicator', async () => {
     const { container } = render(<InvoiceDetailPage />)
-    
+    await waitFor(() => expect(screen.getByText(/payment received/i)).toBeInTheDocument())
+
     // Status should be visible and have good contrast
     const results = await axe(container, {
       rules: {

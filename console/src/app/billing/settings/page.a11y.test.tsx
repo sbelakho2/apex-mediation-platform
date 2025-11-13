@@ -1,28 +1,59 @@
-import { render } from '@testing-library/react'
-import { axe } from 'jest-axe'
+import { render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { configureAxe } from 'jest-axe'
 import BillingSettingsPage from './page'
+
+function mockGetBillingSettings() {
+  const globalKey = '__billingSettingsMock'
+  const existing = (globalThis as Record<string, unknown>)[globalKey]
+  if (existing) {
+    return existing as {
+      plan: {
+        name: string
+        type: 'indie'
+        price: number
+        currency: string
+        included_impressions: number
+        included_api_calls: number
+        included_data_transfer_gb: number
+      }
+      billing_email: string
+      receipt_preferences: {
+        send_receipts: boolean
+        send_invoices: boolean
+        send_usage_alerts: boolean
+      }
+      stripe_customer_id: string
+    }
+  }
+
+  const settings = Object.freeze({
+    plan: {
+      name: 'Indie Plan',
+      type: 'indie' as const,
+      price: 9900,
+      currency: 'usd',
+      included_impressions: 1000000,
+      included_api_calls: 100000,
+      included_data_transfer_gb: 50,
+    },
+    billing_email: 'billing@example.com',
+    receipt_preferences: Object.freeze({
+      send_receipts: true,
+      send_invoices: true,
+      send_usage_alerts: true,
+    }),
+    stripe_customer_id: 'cus_123',
+  })
+
+  ;(globalThis as Record<string, unknown>)[globalKey] = settings
+  return settings
+}
 
 jest.mock('@/lib/api-client', () => ({
   apiClient: {
     get: jest.fn().mockResolvedValue({
-      data: {
-        plan: {
-          name: 'Indie Plan',
-          type: 'indie',
-          price: 9900,
-          currency: 'usd',
-          included_impressions: 1000000,
-          included_api_calls: 100000,
-          included_data_transfer_gb: 50,
-        },
-        billing_email: 'billing@example.com',
-        receipt_preferences: {
-          send_receipts: true,
-          send_invoices: true,
-          send_usage_alerts: true,
-        },
-        stripe_customer_id: 'cus_123',
-      },
+      data: mockGetBillingSettings(),
     }),
     put: jest.fn().mockResolvedValue({ data: {} }),
     post: jest.fn().mockResolvedValue({ data: { url: 'https://portal.stripe.com' } }),
@@ -31,24 +62,7 @@ jest.mock('@/lib/api-client', () => ({
 
 jest.mock('@tanstack/react-query', () => ({
   useQuery: jest.fn(() => ({
-    data: {
-      plan: {
-        name: 'Indie Plan',
-        type: 'indie',
-        price: 9900,
-        currency: 'usd',
-        included_impressions: 1000000,
-        included_api_calls: 100000,
-        included_data_transfer_gb: 50,
-      },
-      billing_email: 'billing@example.com',
-      receipt_preferences: {
-        send_receipts: true,
-        send_invoices: true,
-        send_usage_alerts: true,
-      },
-      stripe_customer_id: 'cus_123',
-    },
+    data: mockGetBillingSettings(),
     isLoading: false,
   })),
   useMutation: jest.fn(() => ({
@@ -60,14 +74,21 @@ jest.mock('@tanstack/react-query', () => ({
   })),
 }))
 
+const axe = configureAxe({
+  rules: {
+    'color-contrast': { enabled: true },
+  },
+})
+
 describe('BillingSettingsPage Accessibility', () => {
   it('should have no accessibility violations', async () => {
     const { container } = render(<BillingSettingsPage />)
-    
-    // Wait for content to render
-    await new Promise(resolve => setTimeout(resolve, 100))
-    
-    const results = await axe(container)
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { level: 1, name: /billing settings/i })).toBeInTheDocument()
+    })
+
+    const results = await axe(container, { resultTypes: ['violations'] })
     expect(results).toHaveNoViolations()
   })
 
@@ -116,26 +137,50 @@ describe('BillingSettingsPage Accessibility', () => {
     expect(h2s.length).toBeGreaterThan(0)
   })
 
-  it('should have accessible external link to Stripe Portal', () => {
-    const { getByText } = render(<BillingSettingsPage />)
-    
-    const portalButton = getByText(/Stripe Portal/i)
-    expect(portalButton).toBeInTheDocument()
+  it('should have accessible external link to Stripe Portal', async () => {
+    render(<BillingSettingsPage />)
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /manage via stripe portal/i })).toBeInTheDocument()
+    })
   })
 
-  it('should have accessible status messages', async () => {
-    const { container } = render(<BillingSettingsPage />)
-    
-    // Check for role="alert" on messages
-    const alerts = container.querySelectorAll('[role="alert"]')
-    
-    // Should have good contrast
-    const results = await axe(container, {
-      rules: {
-        'color-contrast': { enabled: true }
-      }
+  it('should surface contextual help with accessible messaging', async () => {
+    render(<BillingSettingsPage />)
+
+    await waitFor(() => {
+      expect(screen.getByText(/Need to upgrade or change your plan/i)).toBeInTheDocument()
     })
-    
-    expect(results).toHaveNoViolations()
+
+    const salesLink = screen.getByRole('link', { name: /contact sales/i })
+    expect(salesLink).toHaveAttribute('href', 'mailto:billing@apexmediation.com')
+  })
+
+  it('supports keyboard navigation for primary actions', async () => {
+    render(<BillingSettingsPage />)
+
+    await waitFor(() => {
+      expect(screen.getByRole('link', { name: /view usage/i })).toBeInTheDocument()
+    })
+
+    const user = userEvent.setup()
+
+    await user.tab()
+    expect(screen.getByRole('link', { name: /view usage/i })).toHaveFocus()
+
+    await user.tab()
+    expect(screen.getByRole('button', { name: /manage via stripe portal/i })).toHaveFocus()
+
+    await user.tab()
+    const emailInput = screen.getByLabelText(/email address/i)
+    expect(emailInput).toHaveFocus()
+
+    await user.clear(emailInput)
+    await user.type(emailInput, 'new-billing@example.com')
+
+    await user.tab()
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /update/i, hidden: false })).toHaveFocus()
+    })
   })
 })

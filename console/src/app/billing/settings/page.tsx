@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiClient } from '@/lib/api-client'
@@ -97,12 +97,12 @@ export default function BillingSettingsPage() {
   })
 
   // Update local state when data loads
-  useState(() => {
+  useEffect(() => {
     if (settings) {
       setBillingEmail(settings.billing_email)
       setPreferences(settings.receipt_preferences)
     }
-  })
+  }, [settings])
 
   if (isLoading) {
     return (
@@ -214,6 +214,7 @@ export default function BillingSettingsPage() {
             </div>
             <div className="pt-4 border-t border-gray-100">
               <button
+                type="button"
                 onClick={() => portalMutation.mutate()}
                 disabled={portalMutation.isPending || !settings?.stripe_customer_id}
                 className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 text-white text-sm font-medium rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition"
@@ -363,7 +364,7 @@ export default function BillingSettingsPage() {
               <div className="text-sm text-blue-900">
                 <p className="font-medium mb-1">Need to upgrade or change your plan?</p>
                 <p>
-                  Use the Stripe Portal to manage your subscription, or{' '}
+                  Use Stripe's billing portal to manage your subscription, or{' '}
                   <a href="mailto:billing@apexmediation.com" className="underline font-medium">
                     contact sales
                   </a>{' '}

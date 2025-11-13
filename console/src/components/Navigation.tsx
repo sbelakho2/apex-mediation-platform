@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { signOut } from 'next-auth/react'
 import { useSession as useCookieSession } from '@/lib/useSession'
 import { useFeatures } from '@/lib/useFeatures'
+import { t } from '@/i18n'
 import {
   LayoutDashboard,
   Layout,
@@ -18,6 +19,7 @@ import {
   X,
   ShieldCheck,
   CreditCard,
+  GitCompare,
 } from 'lucide-react'
 import { useMemo, useState } from 'react'
 
@@ -41,13 +43,18 @@ export default function Navigation({ children }: { children: React.ReactNode }) 
     fallback: {
       transparency: process.env.NEXT_PUBLIC_TRANSPARENCY_ENABLED === 'true',
       billing: process.env.NEXT_PUBLIC_BILLING_ENABLED === 'true',
+      migrationStudio: process.env.NEXT_PUBLIC_MIGRATION_STUDIO_ENABLED === 'true',
     },
   })
   const showTransparency = !!features?.transparency
   const showBilling = !!features?.billing
+  const showMigrationStudio = !!features?.migrationStudio
 
   const navigation = useMemo(() => {
     const items = [...baseNavigation]
+    if (showMigrationStudio) {
+  items.splice(2, 0, { name: t('migrationStudio.nav'), href: '/migration-studio', icon: GitCompare })
+    }
     if (showTransparency) {
       items.splice(4, 0, { name: 'Transparency', href: '/transparency/auctions', icon: ShieldCheck })
     }
@@ -59,7 +66,7 @@ export default function Navigation({ children }: { children: React.ReactNode }) 
       items.push({ name: 'Admin', href: '/admin/health', icon: Settings })
     }
     return items
-  }, [showTransparency, showBilling, user?.role])
+  }, [showMigrationStudio, showTransparency, showBilling, user?.role])
 
   // Don't show navigation on login page
   if (!pathname || pathname === '/login' || pathname === '/') return <>{children}</>

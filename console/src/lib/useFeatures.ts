@@ -7,10 +7,11 @@ type Features = {
   billing?: boolean
   fraudDetection?: boolean
   abTesting?: boolean
+  migrationStudio?: boolean
 }
 
 type Options = {
-  fallback?: Pick<Features, 'transparency' | 'billing'>
+  fallback?: Pick<Features, 'transparency' | 'billing' | 'migrationStudio'>
 }
 
 export function useFeatures(options: Options = {}) {

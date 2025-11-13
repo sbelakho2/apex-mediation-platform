@@ -114,7 +114,16 @@ export default function BillingUsagePage() {
         </div>
 
         {/* Usage Metrics */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <section aria-labelledby="usage-overview-heading" className="space-y-4">
+          <div className="flex items-end justify-between">
+            <h2 id="usage-overview-heading" className="text-2xl font-semibold text-gray-900">
+              Usage Overview
+            </h2>
+            <span className="text-sm text-gray-500">
+              Track how you are pacing against your included limits this period.
+            </span>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {/* Impressions */}
           <div className="bg-white rounded-lg border border-gray-200 p-6">
             <div className="flex items-center justify-between mb-4">
@@ -153,6 +162,15 @@ export default function BillingUsagePage() {
                   }}
                 />
               </div>
+              <progress
+                className="sr-only"
+                value={Math.min(
+                  usage.current_period.impressions,
+                  usage.subscription.included_impressions
+                )}
+                max={Math.max(usage.subscription.included_impressions, 1)}
+                aria-label="Impressions usage"
+              />
               <p
                 className={`text-sm font-medium ${getUsageColor(
                   calculatePercentage(
@@ -219,6 +237,12 @@ export default function BillingUsagePage() {
                   }}
                 />
               </div>
+              <progress
+                className="sr-only"
+                value={Math.min(usage.current_period.api_calls, usage.subscription.included_api_calls)}
+                max={Math.max(usage.subscription.included_api_calls, 1)}
+                aria-label="API calls usage"
+              />
               <p
                 className={`text-sm font-medium ${getUsageColor(
                   calculatePercentage(
@@ -285,6 +309,15 @@ export default function BillingUsagePage() {
                   }}
                 />
               </div>
+              <progress
+                className="sr-only"
+                value={Math.min(
+                  usage.current_period.data_transfer_gb,
+                  usage.subscription.included_data_transfer_gb
+                )}
+                max={Math.max(usage.subscription.included_data_transfer_gb, 1)}
+                aria-label="Data transfer usage"
+              />
               <p
                 className={`text-sm font-medium ${getUsageColor(
                   calculatePercentage(
@@ -312,11 +345,16 @@ export default function BillingUsagePage() {
               )}
             </div>
           </div>
-        </div>
+          </div>
+        </section>
 
         {/* Total Overage Summary */}
         {usage.overages.total_overage_cost > 0 && (
-          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6">
+          <section aria-labelledby="usage-overage-heading" className="space-y-4">
+            <h2 id="usage-overage-heading" className="text-2xl font-semibold text-yellow-900">
+              Overage Summary
+            </h2>
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6">
             <div className="flex items-start gap-4">
               <div className="h-10 w-10 rounded-lg bg-yellow-100 flex items-center justify-center flex-shrink-0">
                 <AlertCircle className="h-6 w-6 text-yellow-600" />
@@ -335,11 +373,16 @@ export default function BillingUsagePage() {
                 </div>
               </div>
             </div>
-          </div>
+            </div>
+          </section>
         )}
 
         {/* Info Box */}
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
+        <section aria-labelledby="usage-insights-heading" className="space-y-4">
+          <h2 id="usage-insights-heading" className="text-2xl font-semibold text-blue-900">
+            Usage Guidance
+          </h2>
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
           <div className="flex items-start gap-4">
             <Database className="h-6 w-6 text-blue-600 flex-shrink-0 mt-0.5" />
             <div>
@@ -350,7 +393,8 @@ export default function BillingUsagePage() {
               </p>
             </div>
           </div>
-        </div>
+          </div>
+        </section>
       </div>
     </div>
   )

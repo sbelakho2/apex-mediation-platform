@@ -3,23 +3,54 @@
  * Handles experiment management, assignment logic, and guardrail evaluation
  */
 
-import { Pool } from 'pg';
-import { createHash } from 'crypto';
+import { Pool, PoolClient } from 'pg';
+import { createHash, randomBytes, randomUUID } from 'crypto';
 import {
   MigrationExperiment,
   MigrationMapping,
-  MigrationEvent,
   CreateExperimentRequest,
   UpdateExperimentRequest,
   ActivateExperimentRequest,
   ExperimentArm,
   Guardrails,
+  MigrationImport,
+  EvaluateGuardrailsResult,
+  ExperimentMode,
+  MappingStatus,
+  MappingConfidence,
+  MigrationImportSummary,
 } from '../types/migration';
 import { AppError } from '../middleware/errorHandler';
 import logger from '../utils/logger';
+import { parseMigrationCsv } from '../utils/migrationCsvParser';
+import {
+  fetchAppLovinSetup,
+  fetchIronSourceSetup,
+  NormalizedMappingRow,
+} from './migrationImportConnectors';
+
+const DEFAULT_GUARDRAILS: Guardrails = {
+  latency_budget_ms: 500,
+  revenue_floor_percent: -10,
+  max_error_rate_percent: 5,
+  min_impressions: 1000,
+};
 
 export class MigrationStudioService {
   constructor(private pool: Pool) {}
+
+  private async validatePlacementOwnership(client: PoolClient, placementId: string, publisherId: string): Promise<void> {
+    const placementCheck = await client.query(
+      `SELECT p.id FROM placements p
+         JOIN apps a ON p.app_id = a.id
+       WHERE p.id = $1 AND a.publisher_id = $2`,
+      [placementId, publisherId]
+    );
+
+    if (placementCheck.rows.length === 0) {
+      throw new AppError('Placement not found or access denied', 404);
+    }
+  }
 
   /**
    * Create a new migration experiment
@@ -36,17 +67,10 @@ export class MigrationStudioService {
 
       // Validate placement exists and belongs to publisher
       if (data.placement_id) {
-        const placementCheck = await client.query(
-          `SELECT p.id FROM placements p
-           JOIN apps a ON p.app_id = a.id
-           WHERE p.id = $1 AND a.publisher_id = $2`,
-          [data.placement_id, publisherId]
-        );
-        
-        if (placementCheck.rows.length === 0) {
-          throw new AppError('Placement not found or access denied', 404);
-        }
+        await this.validatePlacementOwnership(client, data.placement_id, publisherId);
       }
+
+      const guardrails = { ...DEFAULT_GUARDRAILS, ...(data.guardrails ?? {}) };
 
       // Create experiment
       const result = await client.query(
@@ -62,8 +86,8 @@ export class MigrationStudioService {
           data.app_id || null,
           data.placement_id || null,
           data.objective || 'revenue_comparison',
-          data.seed || crypto.randomUUID(),
-          JSON.stringify(data.guardrails || {}),
+          data.seed || randomUUID(),
+          JSON.stringify(guardrails),
           userId,
         ]
       );
@@ -95,6 +119,127 @@ export class MigrationStudioService {
     } finally {
       client.release();
     }
+  }
+
+  private parseImportSummary(value: any): MigrationImportSummary {
+    const base: MigrationImportSummary = {
+      total_mappings: 0,
+      status_breakdown: {
+        pending: 0,
+        confirmed: 0,
+        skipped: 0,
+        conflict: 0,
+      },
+      confidence_breakdown: {
+        high: 0,
+        medium: 0,
+        low: 0,
+      },
+      unique_networks: 0,
+    };
+
+    if (!value) {
+      return base;
+    }
+
+    let parsed = value;
+    if (typeof value === 'string') {
+      try {
+        parsed = JSON.parse(value);
+      } catch {
+        return base;
+      }
+    }
+
+    return {
+      total_mappings: typeof parsed.total_mappings === 'number' ? parsed.total_mappings : base.total_mappings,
+      status_breakdown: {
+        pending: parsed.status_breakdown?.pending ?? base.status_breakdown.pending,
+        confirmed: parsed.status_breakdown?.confirmed ?? base.status_breakdown.confirmed,
+        skipped: parsed.status_breakdown?.skipped ?? base.status_breakdown.skipped,
+        conflict: parsed.status_breakdown?.conflict ?? base.status_breakdown.conflict,
+      },
+      confidence_breakdown: {
+        high: parsed.confidence_breakdown?.high ?? base.confidence_breakdown.high,
+        medium: parsed.confidence_breakdown?.medium ?? base.confidence_breakdown.medium,
+        low: parsed.confidence_breakdown?.low ?? base.confidence_breakdown.low,
+      },
+      unique_networks: typeof parsed.unique_networks === 'number' ? parsed.unique_networks : base.unique_networks,
+    };
+  }
+
+  private mapImport(row: any): MigrationImport {
+    return {
+      id: row.id,
+      publisher_id: row.publisher_id,
+      experiment_id: row.experiment_id,
+      placement_id: row.placement_id,
+      source: row.source,
+      status: row.status,
+      summary: this.parseImportSummary(row.summary),
+      error_message: row.error_message,
+      created_by: row.created_by,
+      created_at: row.created_at,
+      updated_at: row.updated_at,
+      completed_at: row.completed_at,
+    };
+  }
+
+  private mapMapping(row: any): MigrationMapping {
+    return {
+      id: row.id,
+      experiment_id: row.experiment_id,
+      incumbent_network: row.incumbent_network,
+      incumbent_instance_id: row.incumbent_instance_id,
+      incumbent_instance_name: row.incumbent_instance_name,
+      incumbent_waterfall_position: row.incumbent_waterfall_position,
+      incumbent_ecpm_cents: row.incumbent_ecpm_cents,
+      our_adapter_id: row.our_adapter_id,
+      our_adapter_name: row.our_adapter_name,
+      mapping_status: (row.mapping_status || 'pending') as MappingStatus,
+      mapping_confidence: (row.mapping_confidence || 'medium') as MappingConfidence,
+      conflict_reason: row.conflict_reason,
+      resolved_by: row.resolved_by,
+      resolved_at: row.resolved_at,
+      created_at: row.created_at,
+      updated_at: row.updated_at,
+    };
+  }
+
+  private summarizeMappings(mappings: MigrationMapping[]): MigrationImportSummary {
+    const statusBreakdown: Record<MappingStatus, number> = {
+      pending: 0,
+      confirmed: 0,
+      skipped: 0,
+      conflict: 0,
+    };
+
+    const confidenceBreakdown: Record<MappingConfidence, number> = {
+      high: 0,
+      medium: 0,
+      low: 0,
+    };
+
+    const networks = new Set<string>();
+
+    for (const mapping of mappings) {
+      const status = (mapping.mapping_status || 'pending') as MappingStatus;
+      statusBreakdown[status] = (statusBreakdown[status] ?? 0) + 1;
+
+      const confidence = (mapping.mapping_confidence || 'medium') as MappingConfidence;
+      confidenceBreakdown[confidence] = (confidenceBreakdown[confidence] ?? 0) + 1;
+
+      if (mapping.incumbent_network) {
+        networks.add(mapping.incumbent_network);
+      }
+    }
+
+    return {
+      total_mappings: mappings.length,
+      status_breakdown: statusBreakdown,
+      confidence_breakdown: confidenceBreakdown,
+      unique_networks: networks.size,
+    };
   }
 
   /**
@@ -137,6 +282,419 @@ export class MigrationStudioService {
 
     const result = await this.pool.query(query, params);
     return result.rows.map(row => this.mapExperiment(row));
+  }
+
+  /**
+   * Create or update an import job and draft mappings
+   */
+  async createImport(options: {
+    publisherId: string;
+    userId: string;
+    placementId: string;
+    experimentId?: string;
+    source: 'csv' | 'ironSource' | 'applovin';
+    fileBuffer?: Buffer;
+    credentials?: { api_key: string; account_id: string };
+  }): Promise<{
+    import: MigrationImport;
+    mappings: MigrationMapping[];
+    experiment: MigrationExperiment;
+    summary: MigrationImportSummary;
+  }>
+  {
+    const client = await this.pool.connect();
+
+    try {
+      await client.query('BEGIN');
+
+      await this.validatePlacementOwnership(client, options.placementId, options.publisherId);
+
+      let experimentId = options.experimentId;
+      let experimentRow;
+
+      if (experimentId) {
+        const existing = await client.query(
+          `SELECT * FROM migration_experiments WHERE id = $1 AND publisher_id = $2`,
+          [experimentId, options.publisherId]
+        );
+
+        if (existing.rows.length === 0) {
+          throw new AppError('Experiment not found', 404);
+        }
+
+        experimentRow = existing.rows[0];
+      } else {
+        const insertExp = await client.query(
+          `INSERT INTO migration_experiments (
+            publisher_id, name, description, placement_id, objective, seed, mirror_percent, status, guardrails, created_by
+          ) VALUES ($1, $2, $3, $4, $5, $6, 0, 'draft', $7, $8)
+          RETURNING *`,
+          [
+            options.publisherId,
+            `Migration import ${new Date().toISOString()}`,
+            'Draft created from import wizard',
+            options.placementId,
+            'revenue_comparison',
+            randomBytes(8).toString('hex'),
+            JSON.stringify(DEFAULT_GUARDRAILS),
+            options.userId,
+          ]
+        );
+
+        experimentRow = insertExp.rows[0];
+        experimentId = experimentRow.id;
+
+        await client.query(
+          `INSERT INTO migration_audit (
+            experiment_id, user_id, action, resource_type, resource_id, new_value
+          ) VALUES ($1, $2, $3, $4, $5, $6)`,
+          [
+            experimentId,
+            options.userId,
+            'create_import_experiment',
+            'experiment',
+            experimentId,
+            JSON.stringify(experimentRow),
+          ]
+        );
+      }
+
+      let normalized: NormalizedMappingRow[] = [];
+
+      if (options.source === 'csv') {
+        if (!options.fileBuffer) {
+          throw new AppError('CSV file required for import', 400);
+        }
+        try {
+          normalized = parseMigrationCsv(options.fileBuffer);
+        } catch (err) {
+          throw new AppError((err as Error).message || 'Unable to parse CSV', 400);
+        }
+      } else if (options.source === 'ironSource') {
+        if (!options.credentials) {
+          throw new AppError('ironSource credentials required', 400);
+        }
+        try {
+          normalized = await fetchIronSourceSetup(options.credentials);
+        } catch (err) {
+          throw new AppError((err as Error).message, 400);
+        }
+      } else if (options.source === 'applovin') {
+        if (!options.credentials) {
+          throw new AppError('AppLovin credentials required', 400);
+        }
+        try {
+          normalized = await fetchAppLovinSetup(options.credentials);
+        } catch (err) {
+          throw new AppError((err as Error).message, 400);
+        }
+      } else {
+        throw new AppError('Unsupported import source', 400);
+      }
+
+      if (normalized.length === 0) {
+        throw new AppError('No mappings detected in import', 400);
+      }
+
+      const importResult = await client.query(
+        `INSERT INTO migration_imports (
+          publisher_id, experiment_id, placement_id, source, status, summary, created_by
+        ) VALUES ($1, $2, $3, $4, 'pending_review', '{}'::jsonb, $5)
+        RETURNING *`,
+        [options.publisherId, experimentId, options.placementId, options.source, options.userId]
+      );
+
+      const insertedMappings: MigrationMapping[] = [];
+
+      for (const row of normalized) {
+        const result = await client.query(
+          `INSERT INTO migration_mappings (
+            experiment_id,
+            incumbent_network,
+            incumbent_instance_id,
+            incumbent_instance_name,
+            incumbent_waterfall_position,
+            incumbent_ecpm_cents,
+            mapping_status,
+            mapping_confidence
+          ) VALUES ($1, $2, $3, $4, $5, $6, 'pending', $7)
+          ON CONFLICT (experiment_id, incumbent_instance_id)
+          DO UPDATE SET
+            incumbent_network = EXCLUDED.incumbent_network,
+            incumbent_instance_name = EXCLUDED.incumbent_instance_name,
+            incumbent_waterfall_position = EXCLUDED.incumbent_waterfall_position,
+            incumbent_ecpm_cents = EXCLUDED.incumbent_ecpm_cents,
+            mapping_confidence = EXCLUDED.mapping_confidence,
+            updated_at = NOW()
+          RETURNING *`,
+          [
+            experimentId,
+            row.network,
+            row.instanceId,
+            row.instanceName || null,
+            row.waterfallPosition ?? null,
+            row.ecpmCents ?? null,
+            row.confidence,
+          ]
+        );
+
+        insertedMappings.push(this.mapMapping(result.rows[0]));
+      }
+
+      const summary = this.summarizeMappings(insertedMappings);
+
+      const updatedImport = await client.query(
+        `UPDATE migration_imports
+         SET summary = $1, updated_at = NOW()
+         WHERE id = $2
+         RETURNING *`,
+        [JSON.stringify(summary), importResult.rows[0].id]
+      );
+
+      const experiment = this.mapExperiment(experimentRow);
+      const importJob = this.mapImport(updatedImport.rows[0]);
+
+      await client.query('COMMIT');
+
+      return {
+        import: importJob,
+        mappings: insertedMappings,
+        experiment,
+        summary,
+      };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async updateMapping(
+    mappingId: string,
+    publisherId: string,
+    userId: string,
+    options: {
+      ourAdapterId?: string;
+      status?: MappingStatus;
+      notes?: string;
+    }
+  ): Promise<{ mapping: MigrationMapping; summary: MigrationImportSummary }>
+  {
+    const client = await this.pool.connect();
+
+    try {
+      await client.query('BEGIN');
+
+      const mappingResult = await client.query(
+        `SELECT m.*
+         FROM migration_mappings m
+         JOIN migration_experiments e ON m.experiment_id = e.id
+         WHERE m.id = $1 AND e.publisher_id = $2
+         FOR UPDATE`,
+        [mappingId, publisherId]
+      );
+
+      if (mappingResult.rows.length === 0) {
+        throw new AppError('Mapping not found', 404);
+      }
+
+      const currentRow = mappingResult.rows[0];
+      const experimentId = currentRow.experiment_id;
+
+      const adapterId = options.ourAdapterId?.trim() || null;
+
+      const allowedStatuses: MappingStatus[] = ['pending', 'confirmed', 'skipped', 'conflict'];
+      let status: MappingStatus;
+      if (options.status) {
+        if (!allowedStatuses.includes(options.status)) {
+          throw new AppError('Invalid mapping status', 400);
+        }
+        status = options.status;
+      } else {
+        status = adapterId ? 'confirmed' : 'pending';
+      }
+
+      let conflictReason: string | null = null;
+      if (status === 'conflict') {
+        conflictReason = options.notes?.trim() || currentRow.conflict_reason || 'Requires review';
+      } else if (options.notes !== undefined) {
+        conflictReason = options.notes ? options.notes.trim() : null;
+      }
+
+      const updated = await client.query(
+        `UPDATE migration_mappings
+         SET our_adapter_id = $1,
+             our_adapter_name = $2,
+             mapping_status = $3,
+             conflict_reason = $4,
+             resolved_by = CASE WHEN $3 IN ('confirmed','skipped') THEN $5 ELSE NULL END,
+             resolved_at = CASE WHEN $3 IN ('confirmed','skipped') THEN NOW() ELSE NULL END,
+             updated_at = NOW()
+         WHERE id = $6
+         RETURNING *`,
+        [adapterId, adapterId, status, conflictReason, userId, mappingId]
+      );
+
+      const { rows: mappingRows } = await client.query(
+        `SELECT * FROM migration_mappings WHERE experiment_id = $1`,
+        [experimentId]
+      );
+
+      const mappedRows = mappingRows.map(row => this.mapMapping(row));
+      const summary = this.summarizeMappings(mappedRows);
+
+      const latestImport = await client.query<{ id: string }>(
+        `SELECT id FROM migration_imports
+         WHERE experiment_id = $1
+         ORDER BY created_at DESC
+         LIMIT 1`,
+        [experimentId]
+      );
+
+      if (latestImport.rows[0]) {
+        await client.query(
+          `UPDATE migration_imports
+           SET summary = $1::jsonb,
+               updated_at = NOW()
+           WHERE id = $2`,
+          [JSON.stringify(summary), latestImport.rows[0].id]
+        );
+      }
+
+      await client.query(
+        `INSERT INTO migration_audit (
+           experiment_id, user_id, action, resource_type, resource_id, new_value
+         ) VALUES ($1, $2, $3, $4, $5, $6)`,
+        [
+          experimentId,
+          userId,
+          'update_mapping',
+          'mapping',
+          mappingId,
+          JSON.stringify(updated.rows[0]),
+        ]
+      );
+
+      await client.query('COMMIT');
+
+      return {
+        mapping: this.mapMapping(updated.rows[0]),
+        summary,
+      };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async finalizeImport(
+    importId: string,
+    publisherId: string,
+    userId: string
+  ): Promise<{
+    import: MigrationImport;
+    mappings: MigrationMapping[];
+    summary: MigrationImportSummary;
+  }>
+  {
+    const client = await this.pool.connect();
+
+    try {
+      await client.query('BEGIN');
+
+      const importResult = await client.query(
+        `SELECT * FROM migration_imports
+         WHERE id = $1 AND publisher_id = $2
+         FOR UPDATE`,
+        [importId, publisherId]
+      );
+
+      if (importResult.rows.length === 0) {
+        throw new AppError('Import not found', 404);
+      }
+
+      const importRow = importResult.rows[0];
+
+      if (!importRow.experiment_id) {
+        throw new AppError('Import is not associated with an experiment', 400);
+      }
+
+      if (importRow.status !== 'pending_review' && importRow.status !== 'draft') {
+        throw new AppError('Import already finalized', 400);
+      }
+
+      const { rows: mappingRows } = await client.query(
+        `SELECT * FROM migration_mappings WHERE experiment_id = $1`,
+        [importRow.experiment_id]
+      );
+
+      if (mappingRows.length === 0) {
+        throw new AppError('No mappings found for experiment', 400);
+      }
+
+      const mappedRows = mappingRows.map(row => this.mapMapping(row));
+      const unresolved = mappedRows.filter(mapping => mapping.mapping_status === 'pending');
+      if (unresolved.length > 0) {
+        throw new AppError(`Resolve ${unresolved.length} pending mappings before finalizing`, 400);
+      }
+
+      const conflicts = mappedRows.filter(mapping => mapping.mapping_status === 'conflict');
+      if (conflicts.length > 0) {
+        throw new AppError('Resolve conflicts before finalizing import', 400);
+      }
+
+      const summary = this.summarizeMappings(mappedRows);
+
+      const updatedImport = await client.query(
+        `UPDATE migration_imports
+         SET status = 'completed',
+             summary = $1::jsonb,
+             completed_at = NOW(),
+             updated_at = NOW()
+         WHERE id = $2
+         RETURNING *`,
+        [JSON.stringify(summary), importId]
+      );
+
+      await client.query(
+        `UPDATE migration_experiments
+         SET mode = 'shadow',
+             updated_at = NOW(),
+             last_guardrail_check = NOW()
+         WHERE id = $1`,
+        [importRow.experiment_id]
+      );
+
+      await client.query(
+        `INSERT INTO migration_audit (
+           experiment_id, user_id, action, resource_type, resource_id, new_value
+         ) VALUES ($1, $2, $3, $4, $5, $6)`,
+        [
+          importRow.experiment_id,
+          userId,
+          'finalize_import',
+          'import',
+          importId,
+          JSON.stringify(updatedImport.rows[0]),
+        ]
+      );
+
+      await client.query('COMMIT');
+
+      return {
+        import: this.mapImport(updatedImport.rows[0]),
+        mappings: mappedRows,
+        summary,
+      };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
   /**
@@ -258,8 +816,10 @@ export class MigrationStudioService {
       const result = await client.query(
         `UPDATE migration_experiments
          SET status = 'active',
+             mode = 'mirroring',
              mirror_percent = $1,
              activated_at = NOW(),
+             last_guardrail_check = NOW(),
              updated_at = NOW()
          WHERE id = $2 AND publisher_id = $3 AND status IN ('draft', 'paused')
          RETURNING *`,
@@ -313,6 +873,7 @@ export class MigrationStudioService {
       const result = await client.query(
         `UPDATE migration_experiments
          SET status = 'paused',
+             mode = 'shadow',
              paused_at = NOW(),
              updated_at = NOW()
          WHERE id = $1 AND publisher_id = $2 AND status = 'active'
@@ -394,16 +955,183 @@ export class MigrationStudioService {
   /**
    * Evaluate guardrails and pause if violated
    */
-  async evaluateGuardrails(experimentId: string, publisherId: string): Promise<{
-    shouldPause: boolean;
-    violations: string[];
-  }> {
-    // This would query ClickHouse for metrics and compare against guardrails
-    // For now, return stub
-    return {
-      shouldPause: false,
-      violations: [],
-    };
+  async evaluateGuardrails(
+    experimentId: string,
+    publisherId: string,
+    triggeredBy?: string
+  ): Promise<EvaluateGuardrailsResult> {
+    const client = await this.pool.connect();
+
+    try {
+      await client.query('BEGIN');
+
+      const experimentResult = await client.query(
+        `SELECT * FROM migration_experiments
+         WHERE id = $1 AND publisher_id = $2
+         FOR UPDATE`,
+        [experimentId, publisherId]
+      );
+
+      if (experimentResult.rows.length === 0) {
+        throw new AppError('Experiment not found', 404);
+      }
+
+      const experimentRow = experimentResult.rows[0];
+      const guardrails = this.parseGuardrails(experimentRow.guardrails);
+
+      const snapshotsResult = await client.query(
+        `SELECT arm, impressions, fills, revenue_micros, latency_p95_ms, error_rate_percent
+         FROM migration_guardrail_snapshots
+         WHERE experiment_id = $1 AND captured_at >= NOW() - INTERVAL '6 hours'
+         ORDER BY captured_at DESC
+         LIMIT 50`,
+        [experimentId]
+      );
+
+      if (snapshotsResult.rows.length === 0) {
+        await client.query(
+          `UPDATE migration_experiments
+           SET last_guardrail_check = NOW(), updated_at = NOW()
+           WHERE id = $1`,
+          [experimentId]
+        );
+        await client.query('COMMIT');
+        return { shouldPause: false, violations: [] };
+      }
+
+      type Aggregation = {
+        impressions: number;
+        revenueMicros: number;
+        latencies: number[];
+        errors: number[];
+      };
+
+      const aggregate: Record<ExperimentArm, Aggregation> = {
+        control: { impressions: 0, revenueMicros: 0, latencies: [], errors: [] },
+        test: { impressions: 0, revenueMicros: 0, latencies: [], errors: [] },
+      };
+
+      for (const snapshot of snapshotsResult.rows) {
+        const arm = snapshot.arm as ExperimentArm;
+        const bucket = aggregate[arm];
+        bucket.impressions += Number(snapshot.impressions || 0);
+        bucket.revenueMicros += Number(snapshot.revenue_micros || 0);
+
+        if (typeof snapshot.latency_p95_ms === 'number') {
+          bucket.latencies.push(snapshot.latency_p95_ms);
+        }
+
+        if (typeof snapshot.error_rate_percent === 'number') {
+          bucket.errors.push(Number(snapshot.error_rate_percent));
+        }
+      }
+
+      const minImpressions = guardrails.min_impressions ?? DEFAULT_GUARDRAILS.min_impressions;
+      if (aggregate.test.impressions < minImpressions) {
+        await client.query(
+          `UPDATE migration_experiments
+           SET last_guardrail_check = NOW(), updated_at = NOW()
+           WHERE id = $1`,
+          [experimentId]
+        );
+        await client.query('COMMIT');
+        return { shouldPause: false, violations: [] };
+      }
+
+      const average = (values: number[]): number | null => {
+        if (values.length === 0) return null;
+        return values.reduce((sum, value) => sum + value, 0) / values.length;
+      };
+
+      const maxLatency = (values: number[]): number | null => {
+        if (values.length === 0) return null;
+        return Math.max(...values);
+      };
+
+      const testLatency = maxLatency(aggregate.test.latencies);
+      const testErrorRate = average(aggregate.test.errors);
+      const controlEcpm = aggregate.control.impressions > 0
+        ? (aggregate.control.revenueMicros / aggregate.control.impressions) / 1000
+        : null;
+      const testEcpm = aggregate.test.impressions > 0
+        ? (aggregate.test.revenueMicros / aggregate.test.impressions) / 1000
+        : null;
+
+      const violations: string[] = [];
+
+      if (guardrails.latency_budget_ms && testLatency && testLatency > guardrails.latency_budget_ms) {
+        violations.push(`Latency ${testLatency}ms exceeds budget ${guardrails.latency_budget_ms}ms`);
+      }
+
+      if (guardrails.max_error_rate_percent && testErrorRate && testErrorRate > guardrails.max_error_rate_percent) {
+        violations.push(`Error rate ${testErrorRate.toFixed(2)}% exceeds max ${guardrails.max_error_rate_percent}%`);
+      }
+
+      if (
+        typeof guardrails.revenue_floor_percent === 'number' &&
+        controlEcpm !== null &&
+        controlEcpm > 0 &&
+        testEcpm !== null
+      ) {
+        const revenueDelta = ((testEcpm - controlEcpm) / controlEcpm) * 100;
+        if (revenueDelta < guardrails.revenue_floor_percent) {
+          violations.push(
+            `Revenue delta ${revenueDelta.toFixed(2)}% below floor ${guardrails.revenue_floor_percent}%`
+          );
+        }
+      }
+
+      const shouldPause = violations.length > 0;
+
+      if (shouldPause && experimentRow.status === 'active') {
+        await client.query(
+          `UPDATE migration_experiments
+           SET status = 'paused',
+               mode = 'shadow',
+               paused_at = COALESCE(paused_at, NOW()),
+               last_guardrail_check = NOW(),
+               updated_at = NOW()
+           WHERE id = $1`,
+          [experimentId]
+        );
+
+        await client.query(
+          `INSERT INTO migration_events (
+             experiment_id, event_type, reason, triggered_by, event_data
+           ) VALUES ($1, $2, $3, $4, $5)`,
+          [
+            experimentId,
+            violations.includes('Revenue') ? 'guardrail_kill' : 'guardrail_pause',
+            violations.join('; '),
+            triggeredBy || 'system',
+            JSON.stringify({
+              violations,
+              metrics: {
+                testLatency,
+                testErrorRate,
+                testEcpm,
+                controlEcpm,
+              },
+            }),
+          ]
+        );
+      } else {
+        await client.query(
+          `UPDATE migration_experiments
+           SET last_guardrail_check = NOW(), updated_at = NOW()
+           WHERE id = $1`,
+          [experimentId]
+        );
+      }
+
+      await client.query('COMMIT');
+      return { shouldPause, violations };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
   /**
@@ -448,7 +1176,27 @@ export class MigrationStudioService {
     }
   }
 
+  private parseGuardrails(value: any): Guardrails {
+    if (!value) {
+      return { ...DEFAULT_GUARDRAILS };
+    }
+
+    let parsed = value;
+    if (typeof value === 'string') {
+      try {
+        parsed = JSON.parse(value);
+      } catch {
+        return { ...DEFAULT_GUARDRAILS };
+      }
+    }
+
+    return { ...DEFAULT_GUARDRAILS, ...parsed };
+  }
+
   private mapExperiment(row: any): MigrationExperiment {
+    const guardrails = this.parseGuardrails(row.guardrails);
+    const mode = (row.mode as ExperimentMode) || 'shadow';
+
     return {
       id: row.id,
       publisher_id: row.publisher_id,
@@ -459,14 +1207,16 @@ export class MigrationStudioService {
       objective: row.objective,
       seed: row.seed,
       mirror_percent: row.mirror_percent,
+      mode,
       status: row.status,
       activated_at: row.activated_at,
       paused_at: row.paused_at,
       completed_at: row.completed_at,
-      guardrails: row.guardrails,
+      guardrails,
       created_by: row.created_by,
       created_at: row.created_at,
       updated_at: row.updated_at,
+      last_guardrail_check: row.last_guardrail_check,
     };
   }
 }

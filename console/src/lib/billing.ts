@@ -63,6 +63,14 @@ export interface InvoicesListResponse {
   }
 }
 
+export type InvoicesQueryParams = {
+  page?: number
+  limit?: number
+  status?: 'draft' | 'open' | 'paid' | 'void' | 'uncollectible'
+  start_date?: string
+  end_date?: string
+}
+
 export interface ReconciliationResult {
   success: boolean
   discrepancies: Array<{
@@ -93,16 +101,13 @@ export async function getCurrentUsage(): Promise<UsageData> {
 /**
  * List invoices with optional filters
  */
-export async function listInvoices(params?: {
-  page?: number
-  limit?: number
-  status?: 'draft' | 'open' | 'paid' | 'void' | 'uncollectible'
-  start_date?: string
-  end_date?: string
-}): Promise<InvoicesListResponse> {
+export async function listInvoices(params: InvoicesQueryParams = {}): Promise<InvoicesListResponse> {
   try {
     const response: AxiosResponse<InvoicesListResponse> = await apiClient.get('/billing/invoices', {
-      params,
+      params: {
+        limit: 20,
+        ...params,
+      },
     })
     return response.data
   } catch (error) {
@@ -144,19 +149,18 @@ export async function downloadInvoicePDF(invoiceId: string): Promise<string> {
       validateStatus: (s) => [200, 304].includes(s || 0),
     })
 
-    // 304 — Not Modified: use cached blob URL if available
     if (response.status === 304 && cached) {
       return cached.url
     }
 
-    // 200 — OK: create a new object URL and cache it with ETag
     const etag = String((response.headers as any)?.etag || '')
     const blob = new Blob([response.data], { type: 'application/pdf' })
     const objectUrl = URL.createObjectURL(blob)
     if (etag) {
-      // Revoke previous URL to avoid leaks
       if (cached?.url && cached.url !== objectUrl) {
-        try { URL.revokeObjectURL(cached.url) } catch {}
+        try {
+          URL.revokeObjectURL(cached.url)
+        } catch {}
       }
       invoicePdfCache.set(invoiceId, { etag, url: objectUrl })
     }

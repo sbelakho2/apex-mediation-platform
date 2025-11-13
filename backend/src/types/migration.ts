@@ -4,6 +4,7 @@
 
 export type ExperimentStatus = 'draft' | 'active' | 'paused' | 'completed' | 'archived';
 export type ExperimentObjective = 'revenue_comparison' | 'fill_rate' | 'latency';
+export type ExperimentMode = 'shadow' | 'mirroring';
 export type MappingStatus = 'pending' | 'confirmed' | 'skipped' | 'conflict';
 export type MappingConfidence = 'high' | 'medium' | 'low';
 export type ExperimentArm = 'control' | 'test';
@@ -28,12 +29,14 @@ export interface MigrationExperiment {
   objective: ExperimentObjective;
   seed: string;
   mirror_percent: number; // 0-20
+  mode: ExperimentMode;
   
   // Status
   status: ExperimentStatus;
   activated_at?: Date;
   paused_at?: Date;
   completed_at?: Date;
+  last_guardrail_check?: Date;
   
   // Guardrails
   guardrails: Guardrails;
@@ -69,6 +72,13 @@ export interface MigrationMapping {
   // Metadata
   created_at: Date;
   updated_at: Date;
+}
+
+export interface MigrationImportSummary {
+  total_mappings: number;
+  status_breakdown: Record<MappingStatus, number>;
+  confidence_breakdown: Record<MappingConfidence, number>;
+  unique_networks: number;
 }
 
 export interface MigrationEvent {
@@ -107,6 +117,36 @@ export interface MigrationReportToken {
   created_at: Date;
   last_accessed_at?: Date;
   access_count: number;
+}
+
+export interface MigrationImport {
+  id: string;
+  publisher_id: string;
+  experiment_id?: string;
+  placement_id?: string;
+  source: string;
+  status: 'draft' | 'pending_review' | 'completed' | 'failed';
+  summary: MigrationImportSummary;
+  error_message?: string;
+  created_by?: string;
+  created_at: Date;
+  updated_at: Date;
+  completed_at?: Date;
+}
+
+export interface MigrationGuardrailSnapshot {
+  id: string;
+  experiment_id: string;
+  captured_at: Date;
+  arm: ExperimentArm;
+  impressions: number;
+  fills: number;
+  revenue_micros: number;
+  latency_p95_ms?: number;
+  latency_p50_ms?: number;
+  error_rate_percent?: number;
+  ivt_rate_percent?: number;
+  rolling_window_minutes: number;
 }
 
 // Request/Response DTOs
@@ -185,4 +225,15 @@ export interface ComparisonReport {
 export interface CreateReportTokenRequest {
   experiment_id: string;
   expires_in_hours?: number; // Default 72 hours
+}
+
+export interface CreateReportTokenResponse {
+  token: string;
+  expires_at: Date;
+  url: string;
+}
+
+export interface EvaluateGuardrailsResult {
+  shouldPause: boolean;
+  violations: string[];
 }

@@ -19,8 +19,18 @@ import { http, HttpResponse } from 'msw'
 let etagStore: Record<string, string> = {}
 
 export const billingHandlers = [
+  // Feature flag defaults for layout/navigation
+  http.get('*/api/v1/meta/features', () => {
+    return HttpResponse.json({
+      data: {
+        transparency: true,
+        billing: true,
+        migrationStudio: true,
+      },
+    })
+  }),
   // List invoices success (default)
-  http.get('http://localhost:4000/api/v1/billing/invoices', ({ request }) => {
+  http.get('*/api/v1/billing/invoices', ({ request }) => {
     const url = new URL(request.url)
     const status = url.searchParams.get('status')
     const page = Number(url.searchParams.get('page') || '1')
@@ -53,7 +63,7 @@ export const billingHandlers = [
   }),
 
   // Invoice PDF with ETag and 304 support
-  http.get('http://localhost:4000/api/v1/billing/invoices/:id/pdf', ({ params, request }) => {
+  http.get('*/api/v1/billing/invoices/:id/pdf', ({ params, request }) => {
     const id = params.id as string
     const currentEtag = etagStore[id] || 'W/"pdf-etag-1"'
     const ifNoneMatch = request.headers.get('if-none-match')
@@ -72,7 +82,7 @@ export const billingHandlers = [
   }),
 
   // Dashboard stats
-  http.get('http://localhost:4000/api/v1/dashboard/stats', () => {
+  http.get('*/api/v1/dashboard/stats', () => {
     return HttpResponse.json({
       revenue: { today: 1234.56, week: 8765.43, month: 35678.90 },
       impressions: { today: 125000, week: 875000, month: 3567890 },
@@ -81,7 +91,7 @@ export const billingHandlers = [
   }),
 
   // User profile
-  http.get('http://localhost:4000/api/v1/users/me', () => {
+  http.get('*/api/v1/users/me', () => {
     return HttpResponse.json({
       id: 'user_123',
       email: 'test@example.com',
@@ -96,19 +106,19 @@ export const billingHandlers = [
  * Use in tests: server.use(errorHandlers.unauthorized)
  */
 export const errorHandlers = {
-  unauthorized: http.get('http://localhost:4000/api/v1/billing/invoices', () => 
+  unauthorized: http.get('*/api/v1/billing/invoices', () => 
     HttpResponse.json({ message: 'Unauthorized' }, { status: 401 })
   ),
-  forbidden: http.get('http://localhost:4000/api/v1/billing/invoices', () => 
+  forbidden: http.get('*/api/v1/billing/invoices', () => 
     HttpResponse.json({ message: 'Forbidden' }, { status: 403 })
   ),
-  notFound: http.get('http://localhost:4000/api/v1/billing/invoices', () => 
+  notFound: http.get('*/api/v1/billing/invoices', () => 
     HttpResponse.json({ message: 'Not Found' }, { status: 404 })
   ),
-  networkError: http.get('http://localhost:4000/api/v1/billing/invoices', () => 
+  networkError: http.get('*/api/v1/billing/invoices', () => 
     HttpResponse.error()
   ),
-  timeout: http.get('http://localhost:4000/api/v1/billing/invoices', async () => {
+  timeout: http.get('*/api/v1/billing/invoices', async () => {
     await new Promise(resolve => setTimeout(resolve, 10000)) // Simulate timeout
     return HttpResponse.json({ message: 'Timeout' }, { status: 408 })
   }),
@@ -119,7 +129,7 @@ export const errorHandlers = {
  * Use in tests: server.use(delayedHandlers.slow)
  */
 export const delayedHandlers = {
-  slow: http.get('http://localhost:4000/api/v1/billing/invoices', async () => {
+  slow: http.get('*/api/v1/billing/invoices', async () => {
     await new Promise(resolve => setTimeout(resolve, 2000))
     return HttpResponse.json({ invoices: [], pagination: { page: 1, limit: 20, total: 0, total_pages: 0 } })
   }),

@@ -15,6 +15,14 @@ import type {
   TeamInvitation,
   NotificationSettings,
   ComplianceSettings,
+  ApiResponse,
+  MigrationExperiment,
+  MigrationImportResponse,
+  MigrationImportSource,
+  MigrationMapping,
+  MigrationMappingUpdateResponse,
+  MigrationGuardrails,
+  EvaluateGuardrailsResponse,
 } from '@/types'
 
 const USE_MOCK_API = process.env.NEXT_PUBLIC_USE_MOCK_API === 'true'
@@ -110,6 +118,148 @@ export const fraudApi = {
     publisherId: string,
     params: { start: string; end: string; granularity: 'hourly' | 'daily' | 'weekly' }
   ) => fraudApiClient.get(`/fraud/trend/${publisherId}`, { params }),
+}
+
+// Migration Studio API
+type CreateMigrationImportParams = {
+  placementId: string
+  source: MigrationImportSource
+  experimentId?: string
+  file?: File
+  credentials?: Record<string, string>
+}
+
+type UpdateMigrationExperimentParams = {
+  name?: string
+  description?: string
+  mirror_percent?: number
+  guardrails?: Partial<MigrationGuardrails>
+}
+
+type ActivateMigrationExperimentParams = {
+  mirror_percent: number
+}
+
+type UpdateMigrationMappingParams = {
+  mappingId: string
+  ourAdapterId: string
+  notes?: string
+}
+
+export const migrationApi = {
+  listExperiments: async (params?: { placementId?: string; status?: string }) => {
+    const query = params
+      ? {
+          status: params.status,
+          placement_id: params.placementId,
+        }
+      : undefined
+    if (USE_MOCK_API) {
+      return mockApiCall<ApiResponse<MigrationExperiment[]>>('migration-experiments')
+    }
+    return apiClient.get<ApiResponse<MigrationExperiment[]>>('/migration/experiments', {
+      params: query,
+    })
+  },
+  getExperiment: async (id: string) => {
+    if (USE_MOCK_API) {
+      const response = await mockApiCall<ApiResponse<MigrationExperiment>>('migration-experiment')
+      return response.data.data
+    }
+    const response = await apiClient.get<ApiResponse<MigrationExperiment>>(`/migration/experiments/${id}`)
+    return response.data.data
+  },
+  createImport: async (params: CreateMigrationImportParams) => {
+    if (USE_MOCK_API) {
+      const response = await mockApiCall<MigrationImportResponse>('migration-import')
+      return response.data
+    }
+
+    if (params.source === 'csv') {
+      const formData = new FormData()
+      formData.append('source', params.source)
+      formData.append('placement_id', params.placementId)
+      if (params.experimentId) formData.append('experiment_id', params.experimentId)
+      if (params.file) formData.append('file', params.file)
+      const response = await apiClient.post<ApiResponse<MigrationImportResponse>>('/migration/import', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
+      return response.data.data
+    }
+
+    const response = await apiClient.post<ApiResponse<MigrationImportResponse>>('/migration/import', {
+      source: params.source,
+      placement_id: params.placementId,
+      experiment_id: params.experimentId,
+      credentials: params.credentials ?? {},
+    })
+    return response.data.data
+  },
+  updateMapping: async ({ mappingId, ourAdapterId, notes }: UpdateMigrationMappingParams) => {
+    if (USE_MOCK_API) {
+      const response = await mockApiCall<MigrationMapping>('migration-mapping')
+      return { mapping: response.data, summary: { total_mappings: 1, status_breakdown: { pending: 0, confirmed: 1, skipped: 0, conflict: 0 }, confidence_breakdown: { high: 0, medium: 1, low: 0 }, unique_networks: 1 } }
+    }
+    const response = await apiClient.put<ApiResponse<MigrationMappingUpdateResponse>>(`/migration/mappings/${mappingId}`, {
+      our_adapter_id: ourAdapterId,
+      notes,
+    })
+    return response.data.data
+  },
+  finalizeImport: async (importId: string) => {
+    if (USE_MOCK_API) {
+      const response = await mockApiCall<MigrationImportResponse>('migration-import')
+      return response.data
+    }
+    const response = await apiClient.post<ApiResponse<MigrationImportResponse>>(
+      `/migration/import/${importId}/finalize`,
+      {}
+    )
+    return response.data.data
+  },
+  updateExperiment: async (id: string, params: UpdateMigrationExperimentParams) => {
+    if (USE_MOCK_API) {
+      const response = await mockApiCall<ApiResponse<MigrationExperiment>>('migration-experiment')
+      return response.data.data
+    }
+    const response = await apiClient.put<ApiResponse<MigrationExperiment>>(
+      `/migration/experiments/${id}`,
+      params
+    )
+    return response.data.data
+  },
+  activateExperiment: async (id: string, params: ActivateMigrationExperimentParams) => {
+    if (USE_MOCK_API) {
+      const response = await mockApiCall<ApiResponse<MigrationExperiment>>('migration-experiment')
+      return response.data.data
+    }
+    const response = await apiClient.post<ApiResponse<MigrationExperiment>>(
+      `/migration/experiments/${id}/activate`,
+      params
+    )
+    return response.data.data
+  },
+  pauseExperiment: async (id: string, reason?: string) => {
+    if (USE_MOCK_API) {
+      const response = await mockApiCall<ApiResponse<MigrationExperiment>>('migration-experiment')
+      return response.data.data
+    }
+    const response = await apiClient.post<ApiResponse<MigrationExperiment>>(
+      `/migration/experiments/${id}/pause`,
+      { reason }
+    )
+    return response.data.data
+  },
+  evaluateGuardrails: async (id: string) => {
+    if (USE_MOCK_API) {
+      return { shouldPause: false, violations: [] } as EvaluateGuardrailsResponse
+    }
+    const response = await apiClient.post<ApiResponse<EvaluateGuardrailsResponse>>(
+      `/migration/experiments/${id}/guardrails/evaluate`,
+      {}
+    )
+    return response.data.data
+  },
 }
 
 // Payout API

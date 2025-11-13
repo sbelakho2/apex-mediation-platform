@@ -91,7 +91,10 @@ describe('Billing API Client', () => {
 
       const result = await listInvoices()
 
-      expect(mockedApiClient.get).toHaveBeenCalledWith('/billing/invoices', { params: undefined })
+      expect(mockedApiClient.get).toHaveBeenCalledWith(
+        '/billing/invoices',
+        expect.objectContaining({ params: expect.objectContaining({ limit: 20 }) })
+      )
       expect(result).toEqual(mockData)
     })
 
@@ -156,7 +159,11 @@ describe('Billing API Client', () => {
   describe('downloadInvoicePDF', () => {
     it('should download PDF and create blob URL', async () => {
       const mockBlob = new Blob(['PDF content'], { type: 'application/pdf' })
-      mockedApiClient.get.mockResolvedValue({ data: mockBlob } as AxiosResponse)
+      mockedApiClient.get.mockResolvedValue({
+        data: mockBlob,
+        status: 200,
+        headers: {},
+      } as AxiosResponse)
 
       // Mock URL.createObjectURL
       const mockBlobURL = 'blob:http://localhost/mock-blob-url'
@@ -164,9 +171,13 @@ describe('Billing API Client', () => {
 
       const result = await downloadInvoicePDF('1')
 
-      expect(mockedApiClient.get).toHaveBeenCalledWith('/billing/invoices/1/pdf', {
-        responseType: 'blob',
-      })
+      expect(mockedApiClient.get).toHaveBeenCalledWith(
+        '/billing/invoices/1/pdf',
+        expect.objectContaining({
+          responseType: 'blob',
+          validateStatus: expect.any(Function),
+        })
+      )
       expect(result).toBe(mockBlobURL)
       expect(global.URL.createObjectURL).toHaveBeenCalled()
     })
