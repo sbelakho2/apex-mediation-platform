@@ -462,3 +462,73 @@ groups:
           summary: "Unexpected AI spend spike detected"
           description: "Spend rate increased 3x+ compared to yesterday. Investigate for bugs or abuse."
 
+  # Migration Studio experiment health
+  - name: migration_studio
+    interval: 2m
+    rules:
+      - alert: MigrationGuardrailPause
+        expr: increase(migration_guardrail_pauses_total[5m]) > 0
+        for: 1m
+        labels:
+          severity: warning
+          service: migration_studio
+        annotations:
+          summary: "Migration experiment auto-paused by guardrails"
+          description: "Experiment {{ $labels.exp_id }} paused due to {{ $labels.reason }} violation. Check experiment metrics and adjust guardrails if needed."
+          runbook: "https://github.com/sbelakho2/Ad-Project/blob/main/docs/runbooks/migration-studio-guardrails.md"
+          dashboard: "https://grafana.rival.com/d/migration-studio"
+
+      - alert: MigrationKillSwitch
+        expr: increase(migration_kills_total[5m]) > 0
+        for: 1m
+        labels:
+          severity: critical
+          service: migration_studio
+        annotations:
+          summary: "Migration experiment kill switch triggered"
+          description: "CRITICAL: Experiment {{ $labels.exp_id }} killed due to {{ $labels.reason }} violation. Revenue floor or latency budget exceeded. Immediate investigation required."
+          runbook: "https://github.com/sbelakho2/Ad-Project/blob/main/docs/runbooks/migration-studio-guardrails.md"
+          dashboard: "https://grafana.rival.com/d/migration-studio"
+
+      - alert: MigrationHighLatency
+        expr: histogram_quantile(0.95, rate(auction_latency_seconds_bucket{arm="test"}[5m])) > 0.5
+        for: 10m
+        labels:
+          severity: warning
+          service: migration_studio
+        annotations:
+          summary: "Migration test arm experiencing high latency"
+          description: "Test arm p95 latency is {{ $value }}s for exp_id {{ $labels.exp_id }}. Check adapter health and consider reducing mirror_percent."
+          runbook: "https://github.com/sbelakho2/Ad-Project/blob/main/docs/runbooks/migration-studio-guardrails.md"
+          dashboard: "https://grafana.rival.com/d/migration-studio"
+
+      - alert: MigrationRevenueDrop
+        expr: |
+          (
+            rate(rtb_wins_total{arm="test"}[15m]) * 1000
+            /
+            rate(rtb_wins_total{arm="control"}[15m])
+          ) < 0.85
+        for: 20m
+        labels:
+          severity: critical
+          service: migration_studio
+        annotations:
+          summary: "Migration test arm revenue significantly below control"
+          description: "Test arm eCPM is <85% of control for exp_id {{ $labels.exp_id }}. Check adapter configuration and guardrail thresholds."
+          runbook: "https://github.com/sbelakho2/Ad-Project/blob/main/docs/runbooks/migration-studio-guardrails.md"
+          dashboard: "https://grafana.rival.com/d/migration-studio"
+
+      - alert: MigrationTestArmNoFill
+        expr: rate(rtb_no_fill_total{arm="test"}[10m]) > rate(rtb_no_fill_total{arm="control"}[10m]) * 1.2
+        for: 15m
+        labels:
+          severity: warning
+          service: migration_studio
+        annotations:
+          summary: "Migration test arm no-fill rate elevated"
+          description: "Test arm no-fill rate is 20%+ higher than control for exp_id {{ $labels.exp_id }}. Check adapter availability."
+          runbook: "https://github.com/sbelakho2/Ad-Project/blob/main/docs/runbooks/migration-studio-guardrails.md"
+          dashboard: "https://grafana.rival.com/d/migration-studio"
+
+

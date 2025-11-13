@@ -150,3 +150,192 @@ This targets three adoption friction points:
 - DEVELOPMENT_TODO_CHECKLIST Section 8
 - Backend metrics: auction_latency_seconds, rtb_* counters
 - Transparency: Ed25519 canonicalization and verification tooling
+- Runbook: [Migration Studio Guardrails](../../runbooks/migration-studio-guardrails.md)
+
+---
+
+## Implementation Architecture
+
+### ClickHouse Rollup Views
+
+Migration Studio uses materialized views to aggregate experiment metrics for real-time guardrail evaluation and reporting. Schema located at `data/schemas/clickhouse_migration.sql`.
+
+**Primary Tables**:
+- `migration_experiment_outcomes`: Raw auction outcomes from shadow recorder (partitioned by `experiment_id`, `toYYYYMM(date)`)
+- `migration_experiment_hourly`: Hourly aggregation (impressions, fills, revenue, latency p50/p95/p99, errors) per arm
+- `migration_experiment_daily`: Daily rollup for reporting and uplift calculations
+- `migration_experiment_geo_daily`: Stratified by country for variance reduction (CUPED)
+- `migration_experiment_device_daily`: Stratified by device type
+- `migration_experiment_adapter_daily`: Stratified by adapter for adapter-level uplift analysis
+- `migration_experiment_summary`: Cumulative metrics view (control vs test comparison)
+
+**TTL Policy**: 90 days retention for experiment data
+**Granularity**: Hourly views for real-time dashboards, daily views for reports
+**Partitioning**: By `experiment_id` and `toYYYYMM(date)` to optimize query performance
+
+**Sample Query (Cumulative eCPM by Arm)**:
+```sql
+SELECT
+  arm,
+  total_impressions,
+  total_fills,
+  total_revenue_micros,
+  ecpm_micros,
+  fill_rate
+FROM migration_experiment_summary
+WHERE experiment_id = '<exp_id>';
+```
+
+### Prometheus Metrics Catalog
+
+All metrics include `arm` (control|test) and `exp_id` labels for experiment tracking.
+
+**Core Auction Metrics**:
+- `auction_latency_seconds{arm, exp_id}` — Histogram (p50, p95, p99)
+- `rtb_wins_total{adapter, arm, exp_id}` — Counter (wins by adapter and arm)
+- `rtb_no_fill_total{arm, exp_id}` — Counter (no-fill events by arm)
+- `rtb_errors_total{code, adapter, arm, exp_id}` — Counter (errors by taxonomy code)
+
+**Guardrail Metrics**:
+- `migration_guardrail_pauses_total{reason}` — Counter (auto-pause events: latency, error, fill)
+- `migration_kills_total{reason}` — Counter (kill switch triggers: revenue, latency)
+
+**Usage Examples**:
+```promql
+# eCPM comparison (control vs test)
+sum by (arm) (rate(rtb_wins_total{exp_id="<exp_id>"}[5m]))
+
+# Latency p95 by arm
+histogram_quantile(0.95, sum by (arm, le) (rate(auction_latency_seconds_bucket{exp_id="<exp_id>"}[5m]))) * 1000
+
+# Guardrail pause rate (last hour)
+increase(migration_guardrail_pauses_total{exp_id="<exp_id>"}[1h])
+```
+
+### Guardrail Evaluation Flow
+
+1. **Periodic Snapshot Capture**: Analytics pipeline aggregates hourly metrics into `migration_guardrail_snapshots` table
+2. **On-Demand Evaluation**: `MigrationStudioService#evaluateGuardrails` queries last 6 hours of snapshots
+3. **Threshold Checks**:
+   - **Latency Budget**: Test arm p95 > `latency_budget_ms` → Critical violation
+   - **Revenue Floor**: Test eCPM delta < `revenue_floor_percent` → Critical violation
+   - **Error Rate**: Test error rate > `max_error_rate_percent` → Pause
+4. **Auto-Remediation**:
+   - **Pause**: Experiment status → `paused`, mode → `shadow`, event logged
+   - **Kill**: Same as pause + Prometheus `migration_kills_total` incremented
+5. **Notifications**: Prometheus alert fires → Alertmanager → PagerDuty/Slack
+
+**Minimum Impressions**: Evaluation skipped if test arm < `min_impressions` (default: 1000)
+
+### Report Generation & Verification
+
+**Endpoint**: `GET /api/v1/migration/reports/:experimentId`
+
+**Process**:
+1. Query `migration_guardrail_snapshots` for last 14 days
+2. Aggregate control/test metrics (impressions, fills, revenue, latency, IVT)
+3. Calculate uplift percentages:
+   - eCPM uplift: `((test_ecpm - control_ecpm) / control_ecpm) * 100`
+   - Fill uplift: Similar calculation on fill rates
+   - Latency delta: Test p95 - Control p95
+4. Statistical significance: Simplified t-test approximation (production uses CUPED)
+5. Projection: "If 100% test" scenario using control revenue baseline
+6. Generate Ed25519 signed artifact via `generateSignedReportComparison`
+
+**Signed Artifact Structure**:
+```json
+{
+  "generated_at": "2025-11-12T22:15:00.000Z",
+  "period": {
+    "start": "2025-10-29T00:00:00.000Z",
+    "end": "2025-11-12T00:00:00.000Z"
+  },
+  "sample_size": {
+    "control_impressions": 45000,
+    "test_impressions": 5000
+  },
+  "metrics": {
+    "ecpm": {
+      "label": "eCPM",
+      "unit": "currency_cents",
+      "control": 245.32,
+      "test": 257.59,
+      "uplift_percent": 4.99
+    },
+    ...
+  },
+  "signature": {
+    "key_id": "migration-prod-2025",
+    "algo": "ed25519",
+    "payload_base64": "...",
+    "signature_base64": "...",
+    "public_key_base64": "..."
+  }
+}
+```
+
+**Verification**:
+```bash
+# CLI verifier (Node.js)
+node backend/scripts/verifyMigrationReport.js report.json
+```
+
+### Baseline Backfill Procedure
+
+When an experiment activates, populate 14-day control arm baseline for accurate guardrail evaluation.
+
+**Script**: `backend/scripts/migrationBackfillBaseline.ts`
+
+**Usage**:
+```bash
+DATABASE_URL="postgres://..." \
+CLICKHOUSE_URL="http://clickhouse:8123" \
+npx ts-node backend/scripts/migrationBackfillBaseline.ts <experiment_id>
+```
+
+**Process**:
+1. Query experiment details (placement_id, activated_at)
+2. Calculate date range: `activated_at - 14 days` to `activated_at`
+3. Query ClickHouse `migration_experiment_hourly` or `impressions` table
+4. Aggregate daily snapshots (impressions, fills, revenue, latency, errors)
+5. Insert into `migration_guardrail_snapshots` with `arm = 'control'`
+
+**Note**: If ClickHouse unavailable, script uses simulated baseline data with realistic variance
+
+### Grafana Dashboard
+
+Dashboard UID: `migration-studio`
+Path: `monitoring/grafana/migration-studio.json`
+
+**Panels**:
+- **Overview**: Wins/sec, Revenue uplift %, Guardrail pauses/kills (24h)
+- **RED Metrics by Arm**: Rate (wins/no-fill), Errors (by code), Duration (p50/p95/p99 latency)
+- **Side-by-Side Comparison**: Fill rate, eCPM proxy, latency comparison
+- **Guardrail Status**: Pause/kill events by reason (1h rate)
+
+**Variables**:
+- `$experiment`: Dropdown populated from `label_values(rtb_wins_total, exp_id)`
+
+**Annotations**:
+- Guardrail pauses (orange)
+- Kill switches (red)
+
+**Access**: `https://grafana.rival.com/d/migration-studio`
+
+### Alert Routing
+
+All Migration Studio alerts route through Prometheus → Alertmanager → PagerDuty (`migration-studio` service).
+
+**Runbook**: [Migration Studio Guardrails](../../runbooks/migration-studio-guardrails.md)
+
+**Alert Summary**:
+- `MigrationGuardrailPause` (Warning): Auto-pause triggered
+- `MigrationKillSwitch` (Critical): Kill switch triggered
+- `MigrationHighLatency` (Warning): Test arm p95 >500ms
+- `MigrationRevenueDrop` (Critical): Test eCPM <85% of control
+- `MigrationTestArmNoFill` (Warning): Test no-fill 20%+ higher
+
+**Notification Channels**:
+- Slack: `#migration-studio-alerts`
+- PagerDuty: On-call rotation for critical alerts
+- Email: Publisher stakeholders (configurable per experiment)

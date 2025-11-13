@@ -65,7 +65,8 @@ public final class AdapterRegistry {
     private func registerBuiltInAdapters() {
         let builtIns: [String: AdNetworkAdapter.Type] = [
             "admob": AdMobAdapter.self,
-            "applovin": AppLovinAdapter.self
+            "applovin": AppLovinAdapter.self,
+            "unity": UnityAdsAdapter.self
         ]
         adapterClasses.merge(builtIns) { _, new in new }
     }
@@ -82,6 +83,41 @@ public final class AdapterRegistry {
         lock.lock()
         defer { lock.unlock() }
         return adapterClasses.count
+    }
+    
+    /// Initialization diagnostics
+    public struct InitializationStatus: Codable, Equatable {
+        public let networkName: String
+        public let registered: Bool
+        public let initialized: Bool
+        public let version: String?
+        public let minSDKVersion: String?
+        public let error: String?
+    }
+    
+    /// Returns a list of initialization statuses for all known adapters
+    public func getInitializationReport() -> [InitializationStatus] {
+        lock.lock()
+        defer { lock.unlock() }
+        let known = Set(adapterClasses.keys)
+        let union = Array(known.union(Set(adapters.keys))).sorted()
+        return union.map { name in
+            let wrapper = adapters[name]
+            let cls = adapterClasses[name]
+            let adapter: AdNetworkAdapter? = {
+                if let w = wrapper { return w.adapter }
+                if let c = cls { return c.init() }
+                return nil
+            }()
+            return InitializationStatus(
+                networkName: name,
+                registered: cls != nil,
+                initialized: wrapper?.isInitialized == true,
+                version: adapter?.version,
+                minSDKVersion: adapter?.minSDKVersion,
+                error: wrapper?.initError
+            )
+        }
     }
     
     // MARK: - Adapter Management

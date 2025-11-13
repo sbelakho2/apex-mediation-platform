@@ -527,3 +527,31 @@ export const getAssignment = async (
     next(error);
   }
 };
+
+/**
+ * GET /api/v1/migration/reports/:experimentId
+ * Generate side-by-side comparison report with signed verification
+ */
+export const generateReport = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const publisherId = req.user?.publisherId;
+    const { experimentId } = req.params;
+
+    if (!publisherId) {
+      throw new AppError('Unauthorized', 401);
+    }
+
+    const result = await migrationService.generateReport(experimentId, publisherId);
+
+    res.json({
+      success: true,
+      data: result,
+    });
+  } catch (error) {
+    next(error);
+  }
+};

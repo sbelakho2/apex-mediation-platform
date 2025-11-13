@@ -6,6 +6,7 @@
   "workspaces": [
     "backend",
     "console",
+    "packages/*",
     "sdk/*",
     "quality/*",
     "tools/*"

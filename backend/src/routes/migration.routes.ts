@@ -17,6 +17,7 @@ import {
   updateMapping,
   finalizeImport,
   evaluateGuardrails,
+  generateReport,
 } from '../controllers/migration.controller';
 import { authenticate, authorize } from '../middleware/auth';
 
@@ -46,6 +47,9 @@ router.post(
   authorize(['admin', 'publisher']),
   evaluateGuardrails
 );
+
+// Reports (readonly+ access)
+router.get('/reports/:experimentId', authorize(['admin', 'publisher', 'readonly']), generateReport);
 
 // Imports & mappings
 router.post(

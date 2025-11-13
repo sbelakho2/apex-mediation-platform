@@ -12,6 +12,9 @@ android {
     defaultConfig {
         minSdk 21
         targetSdk 34
+        // Align with core Android module by providing explicit version fields
+        versionCode 1
+        versionName "0.1.0"
         consumerProguardFiles 'consumer-rules.pro'
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField "String", "SDK_VERSION", '"0.1.0"'
@@ -106,7 +109,7 @@ tasks.register('checkCtvSdkSize') {
         
         // Generate JSON report
         outputDir.mkdirs()
-        def jsonReport = new File(outputDir, 'size-report.json')
+        def jsonReport = file("${outputDir}/size-report.json")
         def passed = size <= maxSize
         def warning = size > warningSize && size <= maxSize
         
@@ -119,7 +122,7 @@ tasks.register('checkCtvSdkSize') {
             passed: passed,
             warning: warning,
             percentOfBudget: Math.round((size / maxSize) * 100.0 * 100) / 100,
-            timestamp: new Date().format("yyyy-MM-dd'T'HH:mm:ss'Z'"),
+            timestamp: String.valueOf(System.currentTimeMillis()),
             platform: "android-tv"
         ]
         
@@ -135,7 +138,8 @@ tasks.register('checkCtvSdkSize') {
         if (!passed) {
             def message = "CTV SDK size gate FAILED: ${size} bytes exceeds maximum ${maxSize} bytes (1MB)"
             logger.error(message)
-            throw new GradleException(message)
+            // Use Groovy assert to fail CI without depending on GradleException symbol resolution
+            assert false : message
         }
         
         println "[OK] CTV SDK size gate passed"
@@ -152,14 +156,14 @@ tasks.register('validateSdkConfig') {
         def min = android.defaultConfig.minSdk.apiLevel ?: android.defaultConfig.minSdk
         def target = android.defaultConfig.targetSdk
         if ((min as int) < 21) {
-            throw new GradleException("minSdk must be >= 21; found ${min}")
+            assert false : "minSdk must be >= 21; found ${min}"
         }
         if ((target as int) < 33) {
             logger.warn("[WARN] targetSdk ${target} < 33; consider updating")
         }
         def minify = android.buildTypes.release.minifyEnabled
         if (!minify) {
-            throw new GradleException("Release build must enable R8 (minifyEnabled=true)")
+            assert false : "Release build must enable R8 (minifyEnabled=true)"
         }
         println "[OK] CTV SDK config validated: minSdk=${min}, targetSdk=${target}, R8=${minify}"
     }

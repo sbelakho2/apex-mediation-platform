@@ -74,6 +74,11 @@ class AdapterRegistry(
     private val adapterClasses = ConcurrentHashMap<String, Class<*>>()
     
     /**
+     * Public diagnostics: how many adapters are registered (discovered or manually registered)
+     */
+    val registeredCount: Int get() = adapterClasses.size
+    
+    /**
      * Adapter wrapper with metadata
      */
     private data class AdapterWrapper(
@@ -102,7 +107,7 @@ class AdapterRegistry(
             "com.rivalapexmediation.adapter.pangle",
             "com.rivalapexmediation.adapter.mintegral"
         )
-        
+
         for (packageName in adapterPackages) {
             try {
                 val adapterClass = Class.forName("$packageName.Adapter")
@@ -211,6 +216,40 @@ class AdapterRegistry(
      */
     fun getInitializedAdapters(): List<String> {
         return adapters.filter { it.value.isInitialized }.keys.toList()
+    }
+    
+    /**
+     * Diagnostic report of adapter initialization status
+     */
+    data class InitializationStatus(
+        val networkName: String,
+        val registered: Boolean,
+        val initialized: Boolean,
+        val version: String?,
+        val minSDKVersion: String?,
+        val error: String?
+    )
+
+    fun getInitializationReport(): List<InitializationStatus> {
+        val known = adapterClasses.keys
+        val union = (known + adapters.keys).toSortedSet()
+        return union.map { name ->
+            val cls = adapterClasses[name]
+            val wrapper = adapters[name]
+            val adapter: AdNetworkAdapter? = when {
+                wrapper != null -> wrapper.adapter
+                cls != null -> try { (cls.newInstance() as AdNetworkAdapter) } catch (_: Throwable) { null }
+                else -> null
+            }
+            InitializationStatus(
+                networkName = name,
+                registered = cls != null,
+                initialized = wrapper?.isInitialized == true,
+                version = adapter?.version,
+                minSDKVersion = adapter?.minSDKVersion,
+                error = wrapper?.initError
+            )
+        }
     }
     
     /**

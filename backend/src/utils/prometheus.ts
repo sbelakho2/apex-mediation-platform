@@ -139,3 +139,16 @@ export const stripeUsageSyncFailuresTotal = new Counter({
   help: 'Total number of failed Stripe usage sync operations',
   labelNames: ['org_id', 'reason'] as const,
 });
+
+// Migration Studio guardrail counters
+export const migrationGuardrailPausesTotal = new Counter({
+  name: 'migration_guardrail_pauses_total',
+  help: 'Total number of experiment auto-pauses triggered by guardrails',
+  labelNames: ['reason'] as const,
+});
+
+export const migrationKillsTotal = new Counter({
+  name: 'migration_kills_total',
+  help: 'Total number of experiment kill switches triggered by severe violations',
+  labelNames: ['reason'] as const,
+});

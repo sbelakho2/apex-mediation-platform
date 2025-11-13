@@ -10,6 +10,7 @@ on:
     branches: [ main, develop ]
     paths:
       - 'Packages/com.rivalapexmediation.sdk/**'
+      - '.github/workflows/unity-sdk.yml'
 
 jobs:
   test:
@@ -22,6 +23,7 @@ jobs:
           - 2020.3.48f1
           - 2021.3.31f1
           - 2022.3.12f1
+          - 2023.3.0f1
     
     steps:
       - name: Checkout repository
@@ -59,7 +61,7 @@ jobs:
           githubToken: ${{ secrets.GITHUB_TOKEN }}
       
       - name: Upload Test Results
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         if: always()
         with:
           name: test-results-${{ matrix.unityVersion }}
@@ -82,12 +84,12 @@ jobs:
     
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           lfs: true
       
       - name: Cache Unity Library
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: Library
           key: Library-build-${{ matrix.targetPlatform }}-${{ hashFiles('Packages/**') }}
@@ -120,10 +122,39 @@ jobs:
           done
       
       - name: Upload Build
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: build-${{ matrix.targetPlatform }}
           path: builds
+
+      - name: Validate WebGL headless build
+        if: matrix.targetPlatform == 'WebGL'
+        run: |
+          echo "Validating WebGL headless build contents..."
+          BUILD_NAME="${BUILD_NAME:-ApexMediationSDK}"
+          # Common output paths for WebGL builds created by game-ci/unity-builder
+          WEBGL_DIR=""
+          if [ -d "builds/WebGL/${BUILD_NAME}" ]; then
+            WEBGL_DIR="builds/WebGL/${BUILD_NAME}"
+          elif [ -d "builds/WebGL" ]; then
+            WEBGL_DIR="builds/WebGL"
+          fi
+          if [ -z "$WEBGL_DIR" ]; then
+            echo "::error::WebGL build directory not found under builds/"
+            ls -la builds || true
+            exit 1
+          fi
+          echo "Using WebGL directory: $WEBGL_DIR"
+          ls -la "$WEBGL_DIR"
+          if [ ! -f "$WEBGL_DIR/index.html" ]; then
+            echo "::error::index.html not found in WebGL build output ($WEBGL_DIR)"
+            exit 1
+          fi
+          if ! ls "$WEBGL_DIR" | grep -E '\.(data|wasm)'; then
+            echo "::error::Expected .data/.wasm payloads not found in WebGL build output"
+            exit 1
+          fi
+          echo "WebGL headless build validation passed."
   
   package:
     name: Package Unity SDK
@@ -132,7 +163,7 @@ jobs:
     
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       
       - name: Create Package
         run: |
@@ -143,7 +174,7 @@ jobs:
             .
       
       - name: Upload Package Artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: unity-package
           path: apex-mediation-sdk-*.tgz
@@ -160,7 +191,7 @@ jobs:
     
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       
       - name: Generate API Documentation
         run: |
@@ -168,7 +199,7 @@ jobs:
           echo "Documentation generation would run here"
       
       - name: Upload Documentation
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: api-documentation
           path: Documentation~/*.md
