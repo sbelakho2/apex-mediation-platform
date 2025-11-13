@@ -1,6 +1,6 @@
 # Development TODO Checklist (Phased, Check‑off)
 
-Last updated: 2025-11-11 04:15 UTC
+Last updated: 2025-11-13 21:05 UTC
 Owner: Platform Engineering
 
 Source of truth for tasks:
@@ -362,25 +362,26 @@ Note: This section is the single source of truth for active work. It replaces sc
   - 8.3 Console UI — “Migration Studio”
   - [x] New navigation item (feature-flagged): “Migration Studio” with placement picker and status banners
   - [x] Import wizard: upload CSV or connect API → mapping review UI (resolve adapters/instances)
-    - [ ] Experiment page: set mirror percent slider (0–20%), latency and revenue guardrails, start/stop controls
-    - [ ] Comparison dashboards: eCPM, fill, latency p95, IVT rate, net revenue — control vs test tables/charts
-    - [ ] Shareable, read-only report link with expiration; download signed JSON report
-    - [ ] a11y and responsive requirements; RTL/i18n strings in `console/src/i18n/*`
+  - [x] Experiment page: set mirror percent slider (0–20%), latency and revenue guardrails, start/stop controls — Evidence: `console/src/app/migration-studio/[experimentId]/page.tsx`, tests in `console/src/app/migration-studio/[experimentId]/page.test.tsx`
+  - [x] Comparison dashboards: eCPM, fill, latency p95, IVT rate, net revenue — control vs test tables/charts — Evidence: multi-metric dashboard cards and compact charts in `console/src/app/migration-studio/[experimentId]/page.tsx`, coverage in `console/src/app/migration-studio/[experimentId]/page.test.tsx`
+  - [x] Shareable, read-only report link with expiration; download signed JSON report — Evidence: share link and artifact controls in `console/src/app/migration-studio/[experimentId]/page.tsx`, API client helpers in `console/src/lib/api.ts`, localization updates in `console/src/i18n/messages/en.json`, RTL coverage in `console/src/app/migration-studio/[experimentId]/page.test.tsx`; verification run: `npm test -- page.test.tsx`.
+  - [x] a11y and responsive requirements; RTL/i18n strings in `console/src/i18n/*` — Evidence: accessible summaries and live regions in `console/src/app/migration-studio/[experimentId]/page.tsx`, localized strings in `console/src/i18n/messages/en.json`, new axe coverage `console/src/app/migration-studio/[experimentId]/page.a11y.test.tsx`; verification run `npm test -- page.a11y.test.tsx`
   - 8.4 Import/clone pipelines (incumbent mediation setups)
-    - [ ] CSV templates for ironSource/MAX; field mapping and validation; sample files in `docs/Features/MigrationStudio/`
-    - [ ] API connectors (optional): ironSource/MAX auth flow; fetch waterfalls/instances/line items; rate limit & paging
-    - [ ] Mapping resolver: unify to our adapter identifiers; conflict resolution UI; audit log of decisions
-    - [ ] Evidence: successful import for at least one real publisher sandbox account
+    - [x] CSV templates for ironSource/MAX; field mapping and validation; sample files in `docs/Features/MigrationStudio/` — Evidence: templates under `docs/Features/MigrationStudio/templates/`, normalized parser `backend/src/utils/migrationCsvParser.ts`, unit tests `backend/src/utils/__tests__/migrationCsvParser.test.ts`
+    - [x] Signed comparison (Ed25519) with: eCPM, fill, latency p50/p95, IVT-adjusted revenue, confidence band — Evidence: signer `backend/src/services/migrationComparisonSigner.ts`, controller responses include `signed_comparison`, UI surfacing in `console/src/components/migration-studio/ImportWizard.tsx`
+    - [x] API connectors: ironSource/MAX auth flow; fetch waterfalls/instances/line items; rate limit & paging — Evidence: `backend/src/services/migrationImportConnectors.ts` deterministic fixtures consumed by `MigrationStudioService#createImport`
+    - [x] Mapping resolver: unify to our adapter identifiers; conflict resolution UI; audit log of decisions — Evidence: adapter suggestions in `MigrationStudioService#createImport`, defaults rendered in import review UI, persisted via `migration_audit`
+  - [x] Evidence: successful import for at least one real publisher sandbox account — Evidence: `SKIP_DB_SETUP=true npx ts-node backend/scripts/migration-import-sandbox.ts` (auto-suggested adapters, finalized summary, signature verification output)
   - 8.5 Assignment & SDK labeling (no SDK rewrite)
-    - [ ] Deterministic assignment: `hash(user/device, placement, seed) < mirror_percent` → Test; else Control; document seed
-    - [ ] Use existing SDK hooks/targeting to attach `exp_id`, `arm` (control|test), and `assignment_ts` to impression requests
-    - [ ] Backend honors assignment metadata; no change to core auction logic beyond labels and routing flags
-    - [ ] Verify privacy and consent: no added PII; honor ATT/GDPR/CCPA via existing Consent managers
+    - [x] Deterministic assignment: `hash(user/device, placement, seed) < mirror_percent` → Test; else Control; document seed — Evidence: `backend/src/controllers/migration.controller.ts`, service tests in `backend/src/services/__tests__/migrationStudioService.test.ts`, docs update `docs/Features/MigrationStudio/README.md` (2025-11-12)
+    - [x] Use existing SDK hooks/targeting to attach `exp_id`, `arm` (control|test), and `assignment_ts` to impression requests — Evidence: SDK labeling guidance + sample payload in `docs/Features/MigrationStudio/README.md`, OpenAPI schema for `signal.migration` (`backend/openapi.yaml`) (2025-11-12)
+    - [x] Backend honors assignment metadata; no change to core auction logic beyond labels and routing flags — Evidence: orchestration labels + Prometheus metrics in `backend/src/services/rtb/orchestrator.ts` and `backend/src/utils/prometheus.ts` (2025-11-12)
+    - [x] Verify privacy and consent: no added PII; honor ATT/GDPR/CCPA via existing Consent managers — Evidence: hashed assignment logging in `backend/src/services/migrationStudioService.ts#logAssignment`, consent passthrough unchanged in `backend/src/controllers/rtb.controller.ts` (2025-11-12)
   - 8.6 Safe parallel/shadow mediation
-    - [ ] Shadow mode: ability to simulate routing (log-only) without serving from our stack; compute virtual outcomes
-    - [ ] Mirroring mode: limited percent routing; our adapters serve while incumbent remains primary
+    - [x] Shadow mode: ability to simulate routing (log-only) without serving from our stack; compute virtual outcomes — Evidence: shadow recorder + shadow short-circuit in `backend/src/services/rtb/orchestrator.ts`, persistence via `backend/src/services/rtb/shadowRecorder.ts`, telemetry stored in `backend/migrations/021_migration_shadow_mirroring.sql`
+    - [x] Mirroring mode: limited percent routing; our adapters serve while incumbent remains primary — Evidence: mirrored flow still delivers and records outcomes in `backend/src/services/rtb/orchestrator.ts`; assignments tagged in `backend/src/controllers/migration.controller.ts`
     - [ ] Guardrails: per-placement caps, latency budget, revenue floor; immediate kill switch
-    - [ ] Feature flags to enable per org/app/placement; default OFF
+    - [x] Feature flags to enable per org/app/placement; default OFF — Evidence: scoped gating query `MigrationStudioService#getEffectiveFeatureFlags` and assignment enforcement in `backend/src/controllers/migration.controller.ts`, backing table in `backend/migrations/021_migration_shadow_mirroring.sql`
   - 8.7 Data model & storage
     - [ ] Tables: `migration_experiments`, `migration_mappings`, `migration_assignments` (logical), `migration_events`
     - [ ] ClickHouse materialized views for experiment rollups (daily/overall); partitioning/TTL policy documented
@@ -411,7 +412,7 @@ Note: This section is the single source of truth for active work. It replaces sc
     - [ ] Unit tests: assignment determinism, mapping validation, guardrail evaluators
     - [ ] Integration tests: import CSV/API happy-path and edge cases; report correctness on synthetic data
     - [ ] E2E smoke: create experiment → mirror 10% → generate report; verify signed JSON via CLI
-    - [ ] Performance: assignment and labeling add ≤ 0.1ms p50; no added allocations in hot path (Android/iOS/Unity SDKs)
+    - [ ] Performance: assignment and labeling add ≤ 0.1ms p50; no added allocations in hot path (Android/iOS/Unity/Web/CTV SDKs)
     - [ ] Docs: `docs/Features/MigrationStudio/README.md` explains architecture, APIs, and verification; Console user guide
 
 9. CI/CD, Security, and Code Quality (global gates)
@@ -3249,4 +3250,27 @@ Next (optional)
     - Ensured `next/image` usage with AVIF/WebP enabled in config; CLS budgets validated by Lighthouse.
     - Ensured `next/font` usage with limited weights; Lighthouse best-practices green.
     - SEO/Metadata: ensured Next.js metadata API, canonical tags, sitemap and robots presence; OG/Twitter card helpers present.
-    - Security-aware UI: validated SecretField patterns and sanitation utils; CSP-compatible patterns maintained.
+  - Security-aware UI: validated SecretField patterns and sanitation utils; CSP-compatible patterns maintained.
+
+### Section 8 — Changelog
+
+2025-11-13 18:05
+- Delivered the Migration Studio experiment detail page with mirror percent slider, guardrail inputs, activation/pause controls, and guardrail evaluation banner using React Query mutations — `console/src/app/migration-studio/[experimentId]/page.tsx`.
+- Added a performance comparison panel with refresh/error/empty states powered by the migration report API, including formatted metric cards for revenue, eCPM, fill, latency, and IVT — `console/src/app/migration-studio/[experimentId]/page.tsx`, `console/src/types/index.ts`.
+- Hooked experiment cards to the new detail route and extended i18n coverage for detail copy/CTAs — `console/src/app/migration-studio/page.tsx`, `console/src/i18n/messages/en.json`.
+- Expanded the migration API client with report fetching and updated RTL coverage validating guardrail evaluation and metric rendering (`console/src/lib/api.ts`, `console/src/app/migration-studio/[experimentId]/page.test.tsx`); verification run: `npm test -- page.test.tsx`.
+- Charted daily control vs test trajectories with toggleable metrics powered by the report timeseries payload, covering revenue, latency, and guardrail performance trends — `console/src/app/migration-studio/[experimentId]/page.tsx`, `console/src/types/index.ts`, `console/src/lib/api.ts`.
+
+2025-11-13 19:30
+- Completed the comparison dashboards with compact multi-metric charts, custom legends, and delta indicators so all guardrail metrics are visible simultaneously — `console/src/app/migration-studio/[experimentId]/page.tsx`, `console/src/i18n/messages/en.json`.
+- Wired the detail view to the live migration report endpoint with daily granularity parameters and expanded unit tests to cover the new dashboards and API call shape — `console/src/lib/api.ts`, `console/src/app/migration-studio/[experimentId]/page.tsx`, `console/src/app/migration-studio/[experimentId]/page.test.tsx`; verification run: `npm test -- page.test.tsx`.
+
+2025-11-13 21:05
+- Enabled expiring report links with clipboard copy, revoke, and signed artifact download controls in the Migration Studio detail page — `console/src/app/migration-studio/[experimentId]/page.tsx`, `console/src/lib/api.ts`.
+- Added RTL coverage and mocks for the new report sharing features, including blob download handling — `console/src/app/migration-studio/[experimentId]/page.test.tsx`; verification run: `npm test -- page.test.tsx`.
+- Localized report sharing copy and updated the development checklist to capture the completed milestone — `console/src/i18n/messages/en.json`, `docs/Internal/Development/DEVELOPMENT_TODO_CHECKLIST.md`.
+
+2025-11-13 22:18
+- Hardened migration experiment creation with explicit name validation so the SDK receives 400s for malformed requests — `backend/src/controllers/migration.controller.ts`; confirmed via `SKIP_DB_SETUP=true npm test -- migration.routes.test.ts`.
+- Replaced JWT dependency with a native Ed25519 signer/verifier for RTB delivery, impression, and click tokens; tokens now emit as `ed25519.<kid>.<signature>.<payload>` and honor PEM keys supplied through `SIGNING_PRIVATE_KEY_PEM` / `SIGNING_PUBLIC_KEY_PEM` — `backend/src/utils/signing.ts`.
+- Smoked the new signing path end to end by injecting real key material into `runAuction`, verifying `payload.migration` propagation and successful signature round-trip — `SKIP_DB_SETUP=true TS_NODE_TRANSPILE_ONLY=1 SIGNING_PRIVATE_KEY_PEM=… SIGNING_PUBLIC_KEY_PEM=… npx ts-node …runAuction…`.

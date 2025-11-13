@@ -299,6 +299,7 @@ export interface MigrationImportResponse {
   created_at: string
   mappings: MigrationMapping[]
   summary: MigrationImportSummary
+  signed_comparison?: MigrationSignedComparison
 }
 
 export interface MigrationImportSummary {
@@ -306,6 +307,44 @@ export interface MigrationImportSummary {
   status_breakdown: Record<MigrationMappingStatus, number>
   confidence_breakdown: Record<MigrationMappingConfidence, number>
   unique_networks: number
+}
+
+export interface MigrationSignedComparisonMetric {
+  label: string
+  unit: 'currency_cents' | 'percent' | 'milliseconds'
+  control: number
+  test: number
+  uplift_percent: number
+}
+
+export interface MigrationSignedComparisonConfidenceBand {
+  lower: number
+  upper: number
+  confidence_level: number
+  method: string
+}
+
+export interface MigrationSignedComparison {
+  generated_at: string
+  sample_size: {
+    control_impressions: number
+    test_impressions: number
+  }
+  metrics: {
+    ecpm: MigrationSignedComparisonMetric
+    fill: MigrationSignedComparisonMetric
+    latency_p50: MigrationSignedComparisonMetric
+    latency_p95: MigrationSignedComparisonMetric
+    ivt_adjusted_revenue: MigrationSignedComparisonMetric
+  }
+  confidence_band: MigrationSignedComparisonConfidenceBand
+  signature: {
+    key_id: string
+    algo: 'ed25519'
+    payload_base64: string
+    signature_base64: string
+    public_key_base64: string
+  }
 }
 
 export interface MigrationMappingUpdateResponse {
@@ -316,4 +355,58 @@ export interface MigrationMappingUpdateResponse {
 export interface EvaluateGuardrailsResponse {
   shouldPause: boolean
   violations: string[]
+}
+
+export type MigrationMetricUnit = 'currency_cents' | 'percent' | 'milliseconds' | 'ratio' | 'count'
+
+export interface MigrationExperimentMetric {
+  id: string
+  label: string
+  description?: string
+  unit: MigrationMetricUnit
+  control: number | null
+  test: number | null
+  uplift: number | null
+  sample_size?: {
+    control?: number
+    test?: number
+  }
+}
+
+export interface MigrationExperimentTimeseriesPoint {
+  timestamp: string
+  control: number | null
+  test: number | null
+}
+
+export interface MigrationExperimentMetricTimeseries {
+  id: string
+  label: string
+  unit: MigrationMetricUnit
+  points: MigrationExperimentTimeseriesPoint[]
+}
+
+export interface MigrationExperimentReportWindow {
+  start: string
+  end: string
+  timezone?: string
+}
+
+export interface MigrationExperimentReport {
+  experiment_id: string
+  generated_at: string
+  window: MigrationExperimentReportWindow
+  metrics: {
+    overall: MigrationExperimentMetric[]
+    timeseries?: MigrationExperimentMetricTimeseries[]
+  }
+}
+
+export interface MigrationExperimentShareLink {
+  id: string
+  url: string
+  expires_at: string
+  created_at: string
+  created_by?: string
+  last_accessed_at?: string
 }

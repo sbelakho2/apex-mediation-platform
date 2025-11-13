@@ -1,3 +1,5 @@
+import type { ExperimentArm, ExperimentMode } from '../../../types/migration';
+
 export type AdFormat = 'banner' | 'interstitial' | 'rewarded' | 'native';
 
 export interface AuctionContext {
@@ -19,6 +21,14 @@ export interface AdapterBidRequest {
   device?: Record<string, unknown>;
   app?: Record<string, unknown>;
   user?: Record<string, unknown>;
+  signal?: Record<string, unknown>;
+  migration?: {
+    experimentId: string;
+    arm: ExperimentArm;
+    assignmentTs: string;
+    mirrorPercent?: number;
+    mode?: ExperimentMode;
+  };
 }
 
 export interface AdapterBid {

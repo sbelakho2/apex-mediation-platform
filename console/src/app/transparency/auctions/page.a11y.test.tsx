@@ -12,6 +12,14 @@ jest.mock('next/navigation', () => ({
   usePathname: jest.fn(),
 }))
 
+jest.mock('../../../lib/hooks', () => {
+  const actual = jest.requireActual('../../../lib/hooks')
+  return {
+    ...actual,
+    useDebouncedValue: <T,>(value: T) => value,
+  }
+})
+
 // Mock API client
 const mockTransparencyApi = {
   list: jest.fn(),

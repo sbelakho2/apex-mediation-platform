@@ -71,7 +71,7 @@ const DEMAND_PARTNERS: DemandPartnerBid[] = [
  * Simulates hybrid waterfall + bidding engine.
  */
 export const executeBid = async (request: BidRequest): Promise<BidResponse | null> => {
-  const end = auctionLatencySeconds.startTimer();
+  const end = auctionLatencySeconds.startTimer({ arm: 'control', exp_id: 'none' });
   try {
     const eligibleBids = DEMAND_PARTNERS.filter((partner) => partner.cpm >= request.floorCpm);
 

@@ -1,5 +1,6 @@
 "use client"
 
+import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { AlertTriangle, CheckCircle2, Info, PauseCircle } from 'lucide-react'
@@ -427,6 +428,14 @@ export default function MigrationStudioPage() {
                         )}
                       </div>
                     )}
+                    <div className="mt-4">
+                      <Link
+                        href={`/migration-studio/${experiment.id}`}
+                        className="btn btn-ghost text-sm"
+                      >
+                        {t('migrationStudio.experiments.viewDetails')}
+                      </Link>
+                    </div>
                   </article>
                 )
               })}

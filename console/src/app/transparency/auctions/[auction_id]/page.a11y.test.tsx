@@ -46,7 +46,7 @@ describe('Transparency Auction Detail Page — a11y and keyboard', () => {
       integrity: { signature: 'sig', algo: 'ed25519', key_id: 'key-1' },
     })
     mockTransparencyApi.verify.mockResolvedValue({
-      status: 'PASS',
+      status: 'pass',
       canonical_truncated: false,
       size_bytes: 1234,
       diagnostics: [],
@@ -56,6 +56,7 @@ describe('Transparency Auction Detail Page — a11y and keyboard', () => {
   it('has no obvious axe violations', async () => {
     const { container } = render(<Page params={{ auction_id: 'auc-123' }} />)
     await waitFor(() => screen.getByText(/Auction Detail/i))
+    await screen.findByText('PASS')
     const results = await axe(container)
     expect(results).toHaveNoViolations()
   })
@@ -63,6 +64,7 @@ describe('Transparency Auction Detail Page — a11y and keyboard', () => {
   it('allows keyboard navigation to primary actions', async () => {
     render(<Page params={{ auction_id: 'auc-123' }} />)
     await waitFor(() => screen.getByText(/Auction Detail/i))
+    await screen.findByText('PASS')
     const user = userEvent.setup()
 
     // Tab through page and ensure we can reach a button like Copy or Verify

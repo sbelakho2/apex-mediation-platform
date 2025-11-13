@@ -5,7 +5,6 @@
 
 import request from 'supertest';
 import express from 'express';
-import migrationRoutes from '../migration.routes';
 
 // Mock dependencies
 jest.mock('../../middleware/auth', () => ({
@@ -20,16 +19,10 @@ jest.mock('../../middleware/auth', () => ({
   authorize: jest.fn(() => (req: any, res: any, next: any) => next()),
 }));
 
-jest.mock('../../utils/postgres', () => ({
-  __esModule: true,
-  default: {
-    query: jest.fn(),
-    connect: jest.fn(() => ({
-      query: jest.fn(),
-      release: jest.fn(),
-    })),
-  },
-}));
+jest.mock('../../utils/postgres');
+
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const migrationRoutes = require('../migration.routes').default as typeof import('../migration.routes').default;
 
 const app = express();
 app.use(express.json());
@@ -275,8 +268,19 @@ describe('Migration Routes', () => {
             status: 'active',
             seed: 'test-seed',
             mirror_percent: 10,
+            mode: 'shadow',
+            publisher_id: 'pub-123',
+            app_id: 'app-999',
           }],
         }) // Find active experiment
+        .mockResolvedValueOnce({
+          rows: [{
+            placement_id: null,
+            app_id: null,
+            shadow_enabled: true,
+            mirroring_enabled: false,
+          }],
+        }) // Feature flags
         .mockResolvedValueOnce({ rows: [] }); // Log assignment
 
       const response = await request(app)
@@ -290,6 +294,7 @@ describe('Migration Routes', () => {
       expect(response.body.data.has_experiment).toBe(true);
       expect(response.body.data.experiment_id).toBe('exp-123');
       expect(['control', 'test']).toContain(response.body.data.arm);
+      expect(response.body.data.feature_flag_source).toBe('publisher');
     });
 
     it('should return control when no active experiment', async () => {
@@ -307,6 +312,44 @@ describe('Migration Routes', () => {
 
       expect(response.body.data.has_experiment).toBe(false);
       expect(response.body.data.arm).toBe('control');
+    });
+
+    it('should return control when feature flag disabled', async () => {
+      const pool = require('../../utils/postgres').default;
+
+      pool.query
+        .mockResolvedValueOnce({
+          rows: [{
+            id: 'exp-flagged',
+            placement_id: 'placement-789',
+            status: 'active',
+            seed: 'seed-flagged',
+            mirror_percent: 5,
+            mode: 'shadow',
+            publisher_id: 'pub-123',
+            app_id: 'app-999',
+          }],
+        })
+        .mockResolvedValueOnce({
+          rows: [{
+            placement_id: null,
+            app_id: null,
+            shadow_enabled: false,
+            mirroring_enabled: false,
+          }],
+        });
+
+      const response = await request(app)
+        .post('/api/v1/migration/assign')
+        .send({
+          user_identifier: 'user-anon-1',
+          placement_id: 'placement-789',
+        })
+        .expect(200);
+
+      expect(response.body.data.has_experiment).toBe(false);
+      expect(response.body.data.arm).toBe('control');
+      expect(pool.query).toHaveBeenCalledTimes(2);
     });
 
     it('should require user_identifier and placement_id', async () => {

@@ -23,6 +23,8 @@ import type {
   MigrationMappingUpdateResponse,
   MigrationGuardrails,
   EvaluateGuardrailsResponse,
+  MigrationExperimentReport,
+  MigrationExperimentShareLink,
 } from '@/types'
 
 const USE_MOCK_API = process.env.NEXT_PUBLIC_USE_MOCK_API === 'true'
@@ -146,6 +148,18 @@ type UpdateMigrationMappingParams = {
   notes?: string
 }
 
+type GetMigrationExperimentReportParams = {
+  window?: string
+  start?: string
+  end?: string
+  granularity?: 'hour' | 'day'
+  timezone?: string
+}
+
+type CreateMigrationExperimentShareLinkParams = {
+  expires_in_hours: number
+}
+
 export const migrationApi = {
   listExperiments: async (params?: { placementId?: string; status?: string }) => {
     const query = params
@@ -168,6 +182,202 @@ export const migrationApi = {
     }
     const response = await apiClient.get<ApiResponse<MigrationExperiment>>(`/migration/experiments/${id}`)
     return response.data.data
+  },
+  getExperimentReport: async (id: string, params?: GetMigrationExperimentReportParams) => {
+    if (USE_MOCK_API) {
+      const now = new Date()
+      const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+      const days = Array.from({ length: 7 }).map((_, index) => {
+        const offset = 6 - index
+        const date = new Date(now.getTime() - offset * 24 * 60 * 60 * 1000)
+        date.setHours(0, 0, 0, 0)
+        return date
+      })
+
+      const buildCurrencySeries = (baseControl: number, baseTest: number) =>
+        days.map((date, idx) => {
+          const modifier = 1 + Math.sin(idx / 2.5) * 0.05
+          return {
+            timestamp: date.toISOString(),
+            control: Math.round(baseControl * modifier),
+            test: Math.round(baseTest * modifier * 1.06),
+          }
+        })
+
+      const buildPercentSeries = (baseControl: number, baseTest: number) =>
+        days.map((date, idx) => {
+          const modifier = Math.cos(idx / 3) * 1.5
+          return {
+            timestamp: date.toISOString(),
+            control: Number((baseControl + modifier).toFixed(1)),
+            test: Number((baseTest + modifier + 0.8).toFixed(1)),
+          }
+        })
+
+      const buildMillisecondsSeries = (baseControl: number, baseTest: number) =>
+        days.map((date, idx) => {
+          const modifier = Math.sin(idx / 2) * 12
+          return {
+            timestamp: date.toISOString(),
+            control: Math.round(baseControl + modifier),
+            test: Math.round(baseTest + modifier - 18),
+          }
+        })
+
+      return {
+        experiment_id: id,
+        generated_at: now.toISOString(),
+        window: {
+          start: sevenDaysAgo.toISOString(),
+          end: now.toISOString(),
+          timezone: 'UTC',
+        },
+        metrics: {
+          overall: [
+            {
+              id: 'revenue',
+              label: 'Net revenue',
+              unit: 'currency_cents',
+              control: 125_000,
+              test: 138_000,
+              uplift: 10.4,
+              sample_size: { control: 120000, test: 118500 },
+            },
+            {
+              id: 'ecpm',
+              label: 'eCPM',
+              unit: 'currency_cents',
+              control: 235,
+              test: 252,
+              uplift: 7.2,
+            },
+            {
+              id: 'fill',
+              label: 'Fill rate',
+              unit: 'percent',
+              control: 87.4,
+              test: 90.9,
+              uplift: 4.0,
+            },
+            {
+              id: 'latency_p95',
+              label: 'Latency p95',
+              unit: 'milliseconds',
+              control: 430,
+              test: 405,
+              uplift: 5.8,
+            },
+            {
+              id: 'ivt',
+              label: 'IVT rate',
+              unit: 'percent',
+              control: 1.8,
+              test: 1.5,
+              uplift: 16.7,
+            },
+          ],
+          timeseries: [
+            {
+              id: 'revenue',
+              label: 'Net revenue',
+              unit: 'currency_cents',
+              points: buildCurrencySeries(17_500, 19_200),
+            },
+            {
+              id: 'ecpm',
+              label: 'eCPM',
+              unit: 'currency_cents',
+              points: buildCurrencySeries(220, 236),
+            },
+            {
+              id: 'fill',
+              label: 'Fill rate',
+              unit: 'percent',
+              points: buildPercentSeries(86.2, 88.5),
+            },
+            {
+              id: 'latency_p95',
+              label: 'Latency p95',
+              unit: 'milliseconds',
+              points: buildMillisecondsSeries(440, 418),
+            },
+            {
+              id: 'ivt',
+              label: 'IVT rate',
+              unit: 'percent',
+              points: buildPercentSeries(1.9, 1.5),
+            },
+          ],
+        },
+      } satisfies MigrationExperimentReport
+    }
+    const response = await apiClient.get<ApiResponse<MigrationExperimentReport>>(
+      `/migration/experiments/${id}/report`,
+      { params }
+    )
+    return response.data.data
+  },
+  getExperimentShareLinks: async (id: string) => {
+    if (USE_MOCK_API) {
+      const now = new Date()
+      const expires = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
+      return [
+        {
+          id: 'mock-share-link',
+          url: `https://console.example.dev/migration-reports/${id}/mock-share-link`,
+          created_at: now.toISOString(),
+          expires_at: expires.toISOString(),
+        },
+      ] satisfies MigrationExperimentShareLink[]
+    }
+    const response = await apiClient.get<ApiResponse<MigrationExperimentShareLink[]>>(
+      `/migration/experiments/${id}/share-links`
+    )
+    return response.data.data
+  },
+  createExperimentShareLink: async (
+    id: string,
+    params: CreateMigrationExperimentShareLinkParams
+  ) => {
+    if (USE_MOCK_API) {
+      const now = new Date()
+      const expires = new Date(now.getTime() + params.expires_in_hours * 60 * 60 * 1000)
+      return {
+        id: `mock-share-link-${params.expires_in_hours}`,
+        url: `https://console.example.dev/migration-reports/${id}/mock-share-link`,
+        created_at: now.toISOString(),
+        expires_at: expires.toISOString(),
+      } satisfies MigrationExperimentShareLink
+    }
+    const response = await apiClient.post<ApiResponse<MigrationExperimentShareLink>>(
+      `/migration/experiments/${id}/share-links`,
+      params
+    )
+    return response.data.data
+  },
+  revokeExperimentShareLink: async (id: string, shareLinkId: string) => {
+    if (USE_MOCK_API) {
+      return
+    }
+    await apiClient.delete<ApiResponse<null>>(
+      `/migration/experiments/${id}/share-links/${shareLinkId}`
+    )
+  },
+  downloadExperimentReport: async (id: string) => {
+    if (USE_MOCK_API) {
+      const mockArtifact = {
+        experiment_id: id,
+        generated_at: new Date().toISOString(),
+        signature: 'mock-signature',
+      }
+      return new Blob([JSON.stringify(mockArtifact, null, 2)], {
+        type: 'application/json',
+      })
+    }
+    const response = await apiClient.get(`/migration/experiments/${id}/report/artifact`, {
+      responseType: 'blob',
+    })
+    return response.data as Blob
   },
   createImport: async (params: CreateMigrationImportParams) => {
     if (USE_MOCK_API) {

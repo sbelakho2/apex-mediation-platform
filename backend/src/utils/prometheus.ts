@@ -31,6 +31,7 @@ export const httpRequestsTotal = new Counter({
 export const auctionLatencySeconds = new Histogram({
   name: 'auction_latency_seconds',
   help: 'Latency of RTB auction decisions in seconds',
+  labelNames: ['arm', 'exp_id'] as const,
   buckets: [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2, 5],
 });
 
@@ -53,19 +54,20 @@ export const rtbAdapterTimeoutsTotal = new Counter({
 export const rtbWinsTotal = new Counter({
   name: 'rtb_wins_total',
   help: 'Total number of RTB auction wins by adapter',
-  labelNames: ['adapter'] as const,
+  labelNames: ['adapter', 'arm', 'exp_id'] as const,
 });
 
 export const rtbNoFillTotal = new Counter({
   name: 'rtb_no_fill_total',
   help: 'Total number of RTB auctions resulting in no fill',
+  labelNames: ['arm', 'exp_id'] as const,
 });
 
 // RTB error taxonomy counter
 export const rtbErrorsTotal = new Counter({
   name: 'rtb_errors_total',
   help: 'Total number of RTB errors by code and adapter',
-  labelNames: ['code', 'adapter'] as const,
+  labelNames: ['code', 'adapter', 'arm', 'exp_id'] as const,
 });
 
 // Database query duration histogram (seconds)

@@ -397,6 +397,66 @@ describe('MigrationStudioService', () => {
     });
   });
 
+  describe('getEffectiveFeatureFlags', () => {
+    it('should return defaults when no flags set', async () => {
+      mockPool.query.mockResolvedValueOnce({ rows: [] });
+
+      const result = await service.getEffectiveFeatureFlags('pub-123', null, null);
+
+      expect(result).toEqual({ shadowEnabled: false, mirroringEnabled: false, source: 'default' });
+    });
+
+    it('should prioritize placement-specific flags', async () => {
+      mockPool.query.mockResolvedValueOnce({
+        rows: [
+          {
+            placement_id: null,
+            app_id: null,
+            shadow_enabled: false,
+            mirroring_enabled: false,
+          },
+          {
+            placement_id: 'placement-123',
+            app_id: null,
+            shadow_enabled: true,
+            mirroring_enabled: false,
+          },
+        ],
+      });
+
+      const result = await service.getEffectiveFeatureFlags('pub-123', 'app-123', 'placement-123');
+
+      expect(result.source).toBe('placement');
+      expect(result.shadowEnabled).toBe(true);
+      expect(result.mirroringEnabled).toBe(false);
+    });
+
+    it('should fall back to app-level flag when placement disabled', async () => {
+      mockPool.query.mockResolvedValueOnce({
+        rows: [
+          {
+            placement_id: null,
+            app_id: 'app-123',
+            shadow_enabled: true,
+            mirroring_enabled: true,
+          },
+          {
+            placement_id: null,
+            app_id: null,
+            shadow_enabled: false,
+            mirroring_enabled: false,
+          },
+        ],
+      });
+
+      const result = await service.getEffectiveFeatureFlags('pub-123', 'app-123', 'placement-999');
+
+      expect(result.source).toBe('app');
+      expect(result.shadowEnabled).toBe(true);
+      expect(result.mirroringEnabled).toBe(true);
+    });
+  });
+
   describe('deleteExperiment', () => {
     it('should archive experiment instead of hard delete', async () => {
       mockClient.query

@@ -7,6 +7,34 @@ import 'whatwg-fetch'
 import '@testing-library/jest-dom'
 import 'jest-axe/extend-expect'
 
+jest.mock('recharts', () => {
+  const React = require('react')
+  const Recharts = jest.requireActual('recharts')
+
+  const DEFAULT_WIDTH = 800
+  const DEFAULT_HEIGHT = 400
+
+  function ResponsiveContainerMock({ width, height, aspect, children }: any) {
+    const numericWidth = typeof width === 'number' ? width : DEFAULT_WIDTH
+    let numericHeight = typeof height === 'number' ? height : DEFAULT_HEIGHT
+
+    if (typeof height !== 'number' && typeof aspect === 'number' && aspect > 0) {
+      numericHeight = Math.round(numericWidth / aspect)
+    }
+
+    return React.createElement(
+      'div',
+      { style: { width: numericWidth, height: numericHeight } },
+      typeof children === 'function' ? children({ width: numericWidth, height: numericHeight }) : children
+    )
+  }
+
+  return {
+    ...Recharts,
+    ResponsiveContainer: ResponsiveContainerMock,
+  }
+})
+
 // Configure axios to use a fetch-based adapter compatible with MSW in JSDOM
 const AxiosErrorCtor = (axios as any).AxiosError
 

@@ -19,6 +19,7 @@ import {
   MappingStatus,
   MappingConfidence,
   MigrationImportSummary,
+  MigrationSignedComparison,
 } from '../types/migration';
 import { AppError } from '../middleware/errorHandler';
 import logger from '../utils/logger';
@@ -28,6 +29,7 @@ import {
   fetchIronSourceSetup,
   NormalizedMappingRow,
 } from './migrationImportConnectors';
+import { generateSignedComparison } from './migrationComparisonSigner';
 
 const DEFAULT_GUARDRAILS: Guardrails = {
   latency_budget_ms: 500,
@@ -35,6 +37,47 @@ const DEFAULT_GUARDRAILS: Guardrails = {
   max_error_rate_percent: 5,
   min_impressions: 1000,
 };
+
+const ADAPTER_SUGGESTIONS: Record<string, { id: string; name: string; confidence: MappingConfidence }> = {
+  applovin: {
+    id: 'apex_adapter_applovin_max_v1',
+    name: 'Apex · AppLovin MAX',
+    confidence: 'high',
+  },
+  max: {
+    id: 'apex_adapter_applovin_max_v1',
+    name: 'Apex · AppLovin MAX',
+    confidence: 'high',
+  },
+  ironsource: {
+    id: 'apex_adapter_ironsource_v1',
+    name: 'Apex · ironSource',
+    confidence: 'high',
+  },
+  unity: {
+    id: 'apex_adapter_unity_ads_v1',
+    name: 'Apex · Unity Ads',
+    confidence: 'medium',
+  },
+};
+
+function resolveAdapterSuggestion(network: string | undefined) {
+  if (!network) return null;
+  const normalized = network.toLowerCase();
+  const direct = ADAPTER_SUGGESTIONS[normalized];
+  if (direct) return direct;
+
+  const entry = Object.entries(ADAPTER_SUGGESTIONS).find(([alias]) => normalized.includes(alias));
+  return entry ? entry[1] : null;
+}
+
+export type FeatureFlagSource = 'placement' | 'app' | 'publisher' | 'default';
+
+export interface EffectiveFeatureFlags {
+  shadowEnabled: boolean;
+  mirroringEnabled: boolean;
+  source: FeatureFlagSource;
+}
 
 export class MigrationStudioService {
   constructor(private pool: Pool) {}
@@ -300,8 +343,8 @@ export class MigrationStudioService {
     mappings: MigrationMapping[];
     experiment: MigrationExperiment;
     summary: MigrationImportSummary;
-  }>
-  {
+    signedComparison: MigrationSignedComparison;
+  }> {
     const client = await this.pool.connect();
 
     try {
@@ -407,6 +450,12 @@ export class MigrationStudioService {
       const insertedMappings: MigrationMapping[] = [];
 
       for (const row of normalized) {
+        const suggestion = resolveAdapterSuggestion(row.network);
+        const adapterId = suggestion?.id ?? null;
+        const adapterName = suggestion?.name ?? null;
+        const mappingStatus: MappingStatus = suggestion ? 'confirmed' : 'pending';
+        const mappingConfidence: MappingConfidence = suggestion?.confidence ?? row.confidence ?? 'medium';
+
         const result = await client.query(
           `INSERT INTO migration_mappings (
             experiment_id,
@@ -416,8 +465,10 @@ export class MigrationStudioService {
             incumbent_waterfall_position,
             incumbent_ecpm_cents,
             mapping_status,
-            mapping_confidence
-          ) VALUES ($1, $2, $3, $4, $5, $6, 'pending', $7)
+            mapping_confidence,
+            our_adapter_id,
+            our_adapter_name
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
           ON CONFLICT (experiment_id, incumbent_instance_id)
           DO UPDATE SET
             incumbent_network = EXCLUDED.incumbent_network,
@@ -425,6 +476,12 @@ export class MigrationStudioService {
             incumbent_waterfall_position = EXCLUDED.incumbent_waterfall_position,
             incumbent_ecpm_cents = EXCLUDED.incumbent_ecpm_cents,
             mapping_confidence = EXCLUDED.mapping_confidence,
+            our_adapter_id = COALESCE(EXCLUDED.our_adapter_id, migration_mappings.our_adapter_id),
+            our_adapter_name = COALESCE(EXCLUDED.our_adapter_name, migration_mappings.our_adapter_name),
+            mapping_status = CASE
+              WHEN migration_mappings.mapping_status IN ('confirmed','skipped') THEN migration_mappings.mapping_status
+              ELSE EXCLUDED.mapping_status
+            END,
             updated_at = NOW()
           RETURNING *`,
           [
@@ -434,7 +491,10 @@ export class MigrationStudioService {
             row.instanceName || null,
             row.waterfallPosition ?? null,
             row.ecpmCents ?? null,
-            row.confidence,
+            mappingStatus,
+            mappingConfidence,
+            adapterId,
+            adapterName,
           ]
         );
 
@@ -456,11 +516,14 @@ export class MigrationStudioService {
 
       await client.query('COMMIT');
 
+      const signedComparison = generateSignedComparison(insertedMappings);
+
       return {
         import: importJob,
         mappings: insertedMappings,
         experiment,
         summary,
+        signedComparison,
       };
     } catch (error) {
       await client.query('ROLLBACK');
@@ -598,8 +661,8 @@ export class MigrationStudioService {
     import: MigrationImport;
     mappings: MigrationMapping[];
     summary: MigrationImportSummary;
-  }>
-  {
+    signedComparison: MigrationSignedComparison;
+  }> {
     const client = await this.pool.connect();
 
     try {
@@ -684,10 +747,13 @@ export class MigrationStudioService {
 
       await client.query('COMMIT');
 
+      const signedComparison = generateSignedComparison(mappedRows);
+
       return {
         import: this.mapImport(updatedImport.rows[0]),
         mappings: mappedRows,
         summary,
+        signedComparison,
       };
     } catch (error) {
       await client.query('ROLLBACK');
@@ -902,6 +968,68 @@ export class MigrationStudioService {
     } finally {
       client.release();
     }
+  }
+
+  /**
+   * Deterministic assignment: hash(user, placement, seed) < mirror_percent → test
+   */
+  async getEffectiveFeatureFlags(
+    publisherId: string,
+    appId?: string | null,
+    placementId?: string | null
+  ): Promise<EffectiveFeatureFlags> {
+    const { rows } = await this.pool.query(
+      `SELECT
+         placement_id::text AS placement_id,
+         app_id::text AS app_id,
+         shadow_enabled,
+         mirroring_enabled
+       FROM migration_feature_flags
+       WHERE publisher_id = $1
+         AND (app_id IS NULL OR app_id = $2::uuid)
+         AND (placement_id IS NULL OR placement_id = $3::uuid)
+       ORDER BY updated_at DESC`,
+      [publisherId, appId ?? null, placementId ?? null]
+    );
+
+    if (!rows || rows.length === 0) {
+      return { shadowEnabled: false, mirroringEnabled: false, source: 'default' };
+    }
+
+    const placementRow = placementId
+      ? rows.find((row: any) => row.placement_id && row.placement_id === placementId)
+      : undefined;
+
+    if (placementRow) {
+      return {
+        shadowEnabled: Boolean(placementRow.shadow_enabled),
+        mirroringEnabled: Boolean(placementRow.mirroring_enabled),
+        source: 'placement',
+      };
+    }
+
+    const appRow = appId
+      ? rows.find((row: any) => !row.placement_id && row.app_id && row.app_id === appId)
+      : undefined;
+
+    if (appRow) {
+      return {
+        shadowEnabled: Boolean(appRow.shadow_enabled),
+        mirroringEnabled: Boolean(appRow.mirroring_enabled),
+        source: 'app',
+      };
+    }
+
+    const publisherRow = rows.find((row: any) => !row.placement_id && !row.app_id);
+    if (publisherRow) {
+      return {
+        shadowEnabled: Boolean(publisherRow.shadow_enabled),
+        mirroringEnabled: Boolean(publisherRow.mirroring_enabled),
+        source: 'publisher',
+      };
+    }
+
+    return { shadowEnabled: false, mirroringEnabled: false, source: 'default' };
   }
 
   /**

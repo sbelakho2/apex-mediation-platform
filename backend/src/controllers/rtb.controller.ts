@@ -41,6 +41,16 @@ export const requestBid = async (
     const host = (req.headers['x-forwarded-host'] as string) || req.get('host');
     const baseUrl = `${proto}://${host}`;
 
+    const migration = body.signal?.migration
+      ? {
+          experimentId: body.signal.migration.experiment_id,
+          arm: body.signal.migration.arm,
+          assignmentTs: body.signal.migration.assignment_ts,
+          mirrorPercent: body.signal.migration.mirror_percent,
+          mode: body.signal.migration.mode,
+        }
+      : undefined;
+
     const result = await runAuction({
       requestId: body.requestId!,
       placementId: body.placementId,
@@ -56,9 +66,14 @@ export const requestBid = async (
         coppa: body.consent.coppa,
       },
       signal: body.signal,
+      migration,
     }, baseUrl);
 
     if (!result.success || !result.response) {
+      if (result.reason === 'CONTROL_ARM' || result.reason === 'SHADOW_MODE') {
+        res.status(204).send();
+        return;
+      }
       res.status(204).send();
       return;
     }

@@ -41,6 +41,8 @@ export const cleanDatabase = async (testPool: Pool): Promise<void> => {
   await testPool.query('TRUNCATE TABLE migration_mappings RESTART IDENTITY CASCADE');
   await testPool.query('TRUNCATE TABLE migration_imports RESTART IDENTITY CASCADE');
   await testPool.query('TRUNCATE TABLE migration_audit RESTART IDENTITY CASCADE');
+  await testPool.query('TRUNCATE TABLE migration_shadow_outcomes RESTART IDENTITY CASCADE');
+  await testPool.query('TRUNCATE TABLE migration_feature_flags RESTART IDENTITY CASCADE');
   await testPool.query('TRUNCATE TABLE migration_experiments RESTART IDENTITY CASCADE');
 };
 

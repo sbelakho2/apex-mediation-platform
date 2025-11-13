@@ -11,6 +11,7 @@ import type {
   MigrationImportSource,
   MigrationMapping,
   MigrationMappingUpdateResponse,
+  MigrationSignedComparisonMetric,
 } from '@/types'
 
 type WizardStep = 'source' | 'review' | 'success'
@@ -470,6 +471,54 @@ function ReviewStep({
   isFinalizing,
   summaryCards,
 }: ReviewStepProps) {
+  const signedComparison = importResult.signed_comparison
+  const numberFormatter = useMemo(() => new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }), [])
+  const decimalFormatter = useMemo(() => new Intl.NumberFormat(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }), [])
+  const [copiedSignature, setCopiedSignature] = useState(false)
+
+  const metrics = useMemo(() => {
+    if (!signedComparison) return []
+    return [
+      { key: 'ecpm', metric: signedComparison.metrics.ecpm },
+      { key: 'fill', metric: signedComparison.metrics.fill },
+      { key: 'latency_p50', metric: signedComparison.metrics.latency_p50 },
+      { key: 'latency_p95', metric: signedComparison.metrics.latency_p95 },
+      { key: 'ivt_adjusted_revenue', metric: signedComparison.metrics.ivt_adjusted_revenue },
+    ] as Array<{ key: keyof typeof signedComparison.metrics; metric: MigrationSignedComparisonMetric }>
+  }, [signedComparison])
+
+  const formatValue = useCallback(
+    (metric: MigrationSignedComparisonMetric, value: number) => {
+      if (metric.unit === 'currency_cents') {
+        return `$${decimalFormatter.format(value / 100)}`
+      }
+      if (metric.unit === 'percent') {
+        return `${decimalFormatter.format(value)}%`
+      }
+      return `${numberFormatter.format(value)} ms`
+    },
+    [decimalFormatter, numberFormatter]
+  )
+
+  const handleCopySignature = useCallback(async () => {
+    if (!signedComparison) return
+    const payload = {
+      key_id: signedComparison.signature.key_id,
+      algo: signedComparison.signature.algo,
+      payload_base64: signedComparison.signature.payload_base64,
+      signature_base64: signedComparison.signature.signature_base64,
+      public_key_base64: signedComparison.signature.public_key_base64,
+    }
+
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(payload, null, 2))
+      setCopiedSignature(true)
+      setTimeout(() => setCopiedSignature(false), 3000)
+    } catch (error) {
+      console.error('Unable to copy signature payload', error)
+    }
+  }, [signedComparison])
+
   return (
     <div className="space-y-6">
       <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
@@ -493,6 +542,90 @@ function ReviewStep({
           </dl>
         )}
       </div>
+
+      {signedComparison && (
+        <div className="rounded-lg border border-primary-200 bg-primary-50/40 p-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm font-semibold text-primary-900">
+                {t('migrationStudio.import.review.comparison.heading')}
+              </p>
+              <p className="text-xs text-primary-700 mt-1">
+                {t('migrationStudio.import.review.comparison.generated', {
+                  timestamp: formatDate(signedComparison.generated_at),
+                })}
+              </p>
+              <p className="text-xs text-primary-700">
+                {t('migrationStudio.import.review.comparison.sample', {
+                  control: numberFormatter.format(signedComparison.sample_size.control_impressions),
+                  test: numberFormatter.format(signedComparison.sample_size.test_impressions),
+                })}
+              </p>
+              <p className="text-xs text-primary-700">
+                {t('migrationStudio.import.review.comparison.confidence', {
+                  lower: decimalFormatter.format(signedComparison.confidence_band.lower),
+                  upper: decimalFormatter.format(signedComparison.confidence_band.upper),
+                  level: (signedComparison.confidence_band.confidence_level * 100).toFixed(0),
+                })}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={handleCopySignature}
+              className="btn btn-soft-primary w-full sm:w-auto"
+            >
+              {copiedSignature
+                ? t('migrationStudio.import.review.comparison.copied')
+                : t('migrationStudio.import.review.comparison.copySignature')}
+            </button>
+          </div>
+
+          <div className="mt-4 overflow-hidden rounded-lg border border-primary-100">
+            <table className="min-w-full divide-y divide-primary-100 text-sm">
+              <thead className="bg-primary-100/60 text-xs uppercase tracking-wide text-primary-700">
+                <tr>
+                  <th scope="col" className="px-4 py-3 text-left font-medium">
+                    {t('migrationStudio.import.review.comparison.columns.metric')}
+                  </th>
+                  <th scope="col" className="px-4 py-3 text-left font-medium">
+                    {t('migrationStudio.import.review.comparison.columns.control')}
+                  </th>
+                  <th scope="col" className="px-4 py-3 text-left font-medium">
+                    {t('migrationStudio.import.review.comparison.columns.test')}
+                  </th>
+                  <th scope="col" className="px-4 py-3 text-left font-medium">
+                    {t('migrationStudio.import.review.comparison.columns.uplift')}
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-primary-100 bg-white">
+                {metrics.map(({ key, metric }) => (
+                  <tr key={key}>
+                    <td className="px-4 py-3 text-primary-900 font-medium">
+                      {t(`migrationStudio.import.review.comparison.metricLabels.${key}`)}
+                    </td>
+                    <td className="px-4 py-3 text-primary-800">
+                      {formatValue(metric, metric.control)}
+                    </td>
+                    <td className="px-4 py-3 text-primary-800">
+                      {formatValue(metric, metric.test)}
+                    </td>
+                    <td className="px-4 py-3 text-primary-700">
+                      {decimalFormatter.format(metric.uplift_percent)}%
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <p className="mt-3 text-xs text-primary-700">
+            {t('migrationStudio.import.review.comparison.signatureMeta', {
+              keyId: signedComparison.signature.key_id,
+            })}
+          </p>
+        </div>
+      )}
 
       <div className="rounded-xl border border-gray-200 overflow-hidden">
         <table className="min-w-full divide-y divide-gray-200">

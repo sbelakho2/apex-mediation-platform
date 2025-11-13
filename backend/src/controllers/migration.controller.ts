@@ -7,6 +7,7 @@ import { Request, Response, NextFunction } from 'express';
 import { MigrationStudioService } from '../services/migrationStudioService';
 import pool from '../utils/postgres';
 import { AppError } from '../middleware/errorHandler';
+import { ExperimentMode } from '../types/migration';
 
 const migrationService = new MigrationStudioService(pool);
 
@@ -27,10 +28,15 @@ export const createExperiment = async (
       throw new AppError('Unauthorized', 401);
     }
 
+    const name = typeof req.body?.name === 'string' ? req.body.name.trim() : '';
+    if (!name) {
+      throw new AppError('name is required', 400);
+    }
+
     const experiment = await migrationService.createExperiment(
       publisherId,
       userId,
-      req.body
+      { ...req.body, name }
     );
 
     res.status(201).json({
@@ -176,6 +182,7 @@ export const createImportJob = async (
         created_at: result.import.created_at,
         summary: result.summary,
         mappings: result.mappings,
+        signed_comparison: result.signedComparison,
       },
     });
   } catch (error) {
@@ -245,6 +252,7 @@ export const finalizeImport = async (
         created_at: result.import.created_at,
         summary: result.summary,
         mappings: result.mappings,
+        signed_comparison: result.signedComparison,
       },
     });
   } catch (error) {
@@ -454,6 +462,28 @@ export const getAssignment = async (
     }
 
     const experiment = result.rows[0];
+    const mode: ExperimentMode = (experiment.mode as ExperimentMode) || 'shadow';
+
+    const featureFlags = await migrationService.getEffectiveFeatureFlags(
+      experiment.publisher_id,
+      experiment.app_id,
+      experiment.placement_id
+    );
+
+    const modeEnabled = mode === 'shadow'
+      ? featureFlags.shadowEnabled
+      : featureFlags.mirroringEnabled;
+
+    if (!modeEnabled) {
+      res.json({
+        success: true,
+        data: {
+          has_experiment: false,
+          arm: 'control',
+        },
+      });
+      return;
+    }
 
     // Deterministic assignment
     const arm = migrationService.assignArm(
@@ -464,6 +494,11 @@ export const getAssignment = async (
     );
 
     const assignmentTs = new Date().toISOString();
+    const assignmentMetadata = {
+      assignment_ts: assignmentTs,
+      feature_flag_source: featureFlags.source,
+      mode,
+    };
 
     // Log assignment (async, don't block response)
     migrationService.logAssignment(
@@ -471,7 +506,7 @@ export const getAssignment = async (
       arm,
       user_identifier,
       placement_id,
-      { assignment_ts: assignmentTs }
+      assignmentMetadata
     ).catch(err => {
       console.error('Failed to log assignment:', err);
     });
@@ -484,7 +519,8 @@ export const getAssignment = async (
         arm,
         mirror_percent: experiment.mirror_percent,
         assignment_ts: assignmentTs,
-        mode: experiment.mode || 'shadow',
+        mode,
+        feature_flag_source: featureFlags.source,
       },
     });
   } catch (error) {

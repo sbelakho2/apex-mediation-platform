@@ -1,0 +1,4 @@
+provider,InstanceID,Label,rank,floor_cents
+AppLovin,max-video-template,MAX Video,1,320
+AppLovin,max-banner-template,MAX Banner,3,95
+AppLovin,max-interstitial-template,MAX Interstitial,2,210

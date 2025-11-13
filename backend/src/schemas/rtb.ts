@@ -1,6 +1,25 @@
 import { z } from 'zod';
 import crypto from 'crypto';
 
+const MigrationSignalSchema = z.object({
+  experiment_id: z.string().min(1),
+  arm: z.enum(['control', 'test']),
+  assignment_ts: z.string().refine(
+    (value) => {
+      if (!value) return false;
+      const time = Date.parse(value);
+      return Number.isFinite(time);
+    },
+    'assignment_ts must be an ISO 8601 timestamp'
+  ),
+  mirror_percent: z.number().min(0).max(100).optional(),
+  mode: z.enum(['shadow', 'mirroring']).optional(),
+});
+
+const AuctionSignalSchema = z.object({
+  migration: MigrationSignalSchema.optional(),
+}).catchall(z.any());
+
 export const ConsentSchema = z.object({
   gdpr: z.number().int().min(0).max(1).optional(),
   gdpr_consent: z.string().min(1).max(2048).optional(),
@@ -39,11 +58,12 @@ export const AuctionRequestSchema = z.object({
     user: UserSchema.optional(),
     app: AppSchema.optional(),
     consent: ConsentSchema.optional(),
-    signal: z.record(z.string(), z.any()).optional(),
+    signal: AuctionSignalSchema.optional(),
   })
 });
 
 export type AuctionRequestBody = z.infer<typeof AuctionRequestSchema>['body'];
+export type MigrationSignal = z.infer<typeof MigrationSignalSchema>;
 
 export const TrackingTokenSchema = z.object({
   bidId: z.string().min(8),

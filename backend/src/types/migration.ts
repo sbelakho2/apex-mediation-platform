@@ -81,6 +81,44 @@ export interface MigrationImportSummary {
   unique_networks: number;
 }
 
+export interface MigrationSignedComparisonMetric {
+  label: string;
+  unit: 'currency_cents' | 'percent' | 'milliseconds';
+  control: number;
+  test: number;
+  uplift_percent: number;
+}
+
+export interface MigrationSignedComparisonConfidenceBand {
+  lower: number;
+  upper: number;
+  confidence_level: number;
+  method: string;
+}
+
+export interface MigrationSignedComparison {
+  generated_at: string;
+  sample_size: {
+    control_impressions: number;
+    test_impressions: number;
+  };
+  metrics: {
+    ecpm: MigrationSignedComparisonMetric;
+    fill: MigrationSignedComparisonMetric;
+    latency_p50: MigrationSignedComparisonMetric;
+    latency_p95: MigrationSignedComparisonMetric;
+    ivt_adjusted_revenue: MigrationSignedComparisonMetric;
+  };
+  confidence_band: MigrationSignedComparisonConfidenceBand;
+  signature: {
+    key_id: string;
+    algo: 'ed25519';
+    payload_base64: string;
+    signature_base64: string;
+    public_key_base64: string;
+  };
+}
+
 export interface MigrationEvent {
   id: string;
   experiment_id: string;

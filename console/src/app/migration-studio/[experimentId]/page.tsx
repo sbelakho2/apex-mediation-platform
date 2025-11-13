@@ -2,23 +2,40 @@
 
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
-import { useEffect, useMemo, useState, type InputHTMLAttributes } from 'react'
+import { useEffect, useMemo, useRef, useState, type InputHTMLAttributes } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   AlertTriangle,
-  ArrowUpRight,
+  Clock,
+  Copy,
   CheckCircle2,
   ChevronLeft,
+  Download,
+  Link2,
   Loader2,
+  Minus,
   PauseCircle,
   Play,
   RefreshCcw,
   Save,
+  Trash2,
+  TrendingDown,
+  TrendingUp,
 } from 'lucide-react'
 import { migrationApi } from '@/lib/api'
-import type { MigrationExperiment, MigrationGuardrails } from '@/types'
-import { formatDate, t } from '@/i18n'
+import type {
+  MigrationExperiment,
+  MigrationExperimentMetric,
+  MigrationExperimentMetricTimeseries,
+  MigrationExperimentTimeseriesPoint,
+  MigrationGuardrails,
+  MigrationMetricUnit,
+  MigrationExperimentShareLink,
+} from '@/types'
+import { formatCurrency, formatDate, formatDateRange, formatNumber, formatPercentage, t } from '@/i18n'
 import { Spinner } from '@/components/ui/Spinner'
+import { Area, AreaChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import { handleApiError } from '@/lib/api-client'
 
 const statusBadgeStyles: Record<MigrationExperiment['status'], string> = {
   draft: 'bg-slate-100 text-slate-700',
@@ -41,6 +58,16 @@ const emptyGuardrailState: GuardrailFormState = {
   max_error_rate_percent: '',
   min_impressions: '',
 }
+
+const guardrailKeys: (keyof MigrationGuardrails)[] = [
+  'latency_budget_ms',
+  'revenue_floor_percent',
+  'max_error_rate_percent',
+  'min_impressions',
+]
+
+const CONTROL_SERIES_COLOR = '#2563eb'
+const TEST_SERIES_COLOR = '#10b981'
 
 export default function MigrationExperimentPage() {
   const params = useParams<{ experimentId: string }>()
@@ -67,17 +94,78 @@ export default function MigrationExperimentPage() {
 
   const experiment = experimentQuery.data ?? null
 
-  useEffect(() => {
-    if (experiment) {
-  setMirrorPercent(Math.min(20, Math.max(0, experiment.mirror_percent)))
-      const guardrails = experiment.guardrails ?? {}
-      setGuardrailState({
-        latency_budget_ms: guardrails.latency_budget_ms?.toString() ?? '',
-        revenue_floor_percent: guardrails.revenue_floor_percent?.toString() ?? '',
-        max_error_rate_percent: guardrails.max_error_rate_percent?.toString() ?? '',
-        min_impressions: guardrails.min_impressions?.toString() ?? '',
+  const shareLinksQuery = useQuery<MigrationExperimentShareLink[], Error>({
+    queryKey: ['migration-experiment-share-links', experimentId],
+    enabled: Boolean(experimentId),
+    queryFn: async () => {
+      if (!experimentId) return []
+      return migrationApi.getExperimentShareLinks(experimentId)
+    },
+  })
+
+  const shareLinks = shareLinksQuery.data ?? []
+  const shareLinksErrorMessage = shareLinksQuery.isError
+    ? handleApiError(shareLinksQuery.error)
+    : null
+
+  const reportQuery = useQuery({
+    queryKey: ['migration-experiment-report', experimentId],
+    enabled: Boolean(experimentId),
+    queryFn: async () => {
+      if (!experimentId) return null
+      return migrationApi.getExperimentReport(experimentId, {
+        window: 'last_7_days',
+        granularity: 'day',
       })
+    },
+  })
+
+  const report = reportQuery.data ?? null
+  const overallMetrics = report?.metrics?.overall ?? []
+  const isReportEmpty = overallMetrics.length === 0
+  const timeseriesMetrics = report?.metrics?.timeseries ?? []
+  const [selectedTimeseriesId, setSelectedTimeseriesId] = useState<string | null>(null)
+  const hasTimeseries = timeseriesMetrics.length > 0
+  const [selectedShareExpiry, setSelectedShareExpiry] = useState<string>('168')
+  const [shareFeedback, setShareFeedback] = useState<
+    { tone: 'success' | 'error'; message: string } | null
+  >(null)
+  const [downloadFeedback, setDownloadFeedback] = useState<
+    { tone: 'error'; message: string } | null
+  >(null)
+  const [copiedLinkId, setCopiedLinkId] = useState<string | null>(null)
+  const copyTimeoutRef = useRef<number | null>(null)
+
+  useEffect(() => {
+    if (timeseriesMetrics.length === 0) {
+      if (selectedTimeseriesId !== null) {
+        setSelectedTimeseriesId(null)
+      }
+      return
     }
+
+    const exists = timeseriesMetrics.some((metric) => metric.id === selectedTimeseriesId)
+    if (!exists) {
+      setSelectedTimeseriesId(timeseriesMetrics[0]?.id ?? null)
+    }
+  }, [selectedTimeseriesId, timeseriesMetrics])
+
+  const activeTimeseries = useMemo(() => {
+    if (!selectedTimeseriesId) return null
+    return timeseriesMetrics.find((metric) => metric.id === selectedTimeseriesId) ?? null
+  }, [selectedTimeseriesId, timeseriesMetrics])
+
+  useEffect(() => {
+    if (!experiment) return
+
+    setMirrorPercent(Math.min(20, Math.max(0, experiment.mirror_percent)))
+    const guardrails = experiment.guardrails ?? {}
+    setGuardrailState({
+      latency_budget_ms: guardrails.latency_budget_ms?.toString() ?? '',
+      revenue_floor_percent: guardrails.revenue_floor_percent?.toString() ?? '',
+      max_error_rate_percent: guardrails.max_error_rate_percent?.toString() ?? '',
+      min_impressions: guardrails.min_impressions?.toString() ?? '',
+    })
   }, [experiment])
 
   const isDraft = experiment?.status === 'draft'
@@ -91,14 +179,14 @@ export default function MigrationExperimentPage() {
 
   const parsedGuardrails: Partial<MigrationGuardrails> = useMemo(() => {
     const toNumber = (value: string) => {
-  const trimmed = value.trim().replace(/,/g, '')
-  if (!trimmed) return undefined
-  const numeric = Number(trimmed)
+      const trimmed = value.trim().replace(/,/g, '')
+      if (!trimmed) return undefined
+      const numeric = Number(trimmed)
       return Number.isFinite(numeric) ? numeric : undefined
     }
 
     return {
-          <div className="pt-4 border-t border-gray-100">
+      latency_budget_ms: toNumber(guardrailState.latency_budget_ms),
       revenue_floor_percent: toNumber(guardrailState.revenue_floor_percent),
       max_error_rate_percent: toNumber(guardrailState.max_error_rate_percent),
       min_impressions: toNumber(guardrailState.min_impressions),
@@ -106,17 +194,151 @@ export default function MigrationExperimentPage() {
   }, [guardrailState])
 
   const isDirty = useMemo(() => {
-            <div className="mt-6 grid grid-cols-1 gap-6 sm:grid-cols-2">
-    const guardrailChanged = ['latency_budget_ms', 'revenue_floor_percent', 'max_error_rate_percent', 'min_impressions'].some(
-      (key) => {
-        const typedKey = key as keyof MigrationGuardrails
-        const currentValue = currentGuardrails?.[typedKey]
-        const nextValue = parsedGuardrails[typedKey]
-        return (currentValue ?? undefined) !== (nextValue ?? undefined)
-      }
-    )
+    if (!experiment) return false
+    const guardrailChanged = guardrailKeys.some((key) => {
+      const currentValue = currentGuardrails?.[key]
+      const nextValue = parsedGuardrails[key]
+      return (currentValue ?? undefined) !== (nextValue ?? undefined)
+    })
     return guardrailChanged || experiment.mirror_percent !== mirrorPercent
   }, [currentGuardrails, experiment, mirrorPercent, parsedGuardrails])
+
+  useEffect(() => {
+    if (!showSavedBanner) return
+    const timeout = window.setTimeout(() => setShowSavedBanner(false), 4000)
+    return () => window.clearTimeout(timeout)
+  }, [showSavedBanner])
+
+  useEffect(() => {
+    if (guardrailResult && guardrailResult.shouldPause && experiment?.status === 'paused') {
+      setGuardrailResult(null)
+    }
+  }, [experiment?.status, guardrailResult])
+
+  const handleCopyLink = async (link: MigrationExperimentShareLink) => {
+    if (typeof navigator === 'undefined' || !navigator.clipboard?.writeText) {
+      setShareFeedback({
+        tone: 'error',
+        message: t('migrationStudio.detail.reportAccessCopyUnsupported'),
+      })
+      return
+    }
+
+    try {
+      await navigator.clipboard.writeText(link.url)
+      if (copyTimeoutRef.current) {
+        window.clearTimeout(copyTimeoutRef.current)
+      }
+      setCopiedLinkId(link.id)
+      copyTimeoutRef.current = window.setTimeout(() => setCopiedLinkId(null), 2000)
+    } catch (error) {
+      setShareFeedback({
+        tone: 'error',
+        message: handleApiError(error),
+      })
+    }
+  }
+
+  useEffect(() => {
+    return () => {
+      if (copyTimeoutRef.current) {
+        window.clearTimeout(copyTimeoutRef.current)
+      }
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!shareFeedback) return
+    const timeout = window.setTimeout(() => setShareFeedback(null), 5000)
+    return () => window.clearTimeout(timeout)
+  }, [shareFeedback])
+
+  useEffect(() => {
+    if (!downloadFeedback) return
+    const timeout = window.setTimeout(() => setDownloadFeedback(null), 5000)
+    return () => window.clearTimeout(timeout)
+  }, [downloadFeedback])
+
+  const createShareLinkMutation = useMutation<MigrationExperimentShareLink, unknown, number>({
+    mutationFn: async (expiresInHours) => {
+      if (!experiment) {
+        throw new Error(t('migrationStudio.detail.reportAccessMissingExperiment'))
+      }
+      return migrationApi.createExperimentShareLink(experiment.id, {
+        expires_in_hours: expiresInHours,
+      })
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ['migration-experiment-share-links', experimentId],
+      })
+      setShareFeedback({
+        tone: 'success',
+        message: t('migrationStudio.detail.reportAccessShareSuccess'),
+      })
+      setCopiedLinkId(null)
+    },
+    onError: (error) => {
+      setShareFeedback({
+        tone: 'error',
+        message: handleApiError(error),
+      })
+    },
+  })
+
+  const revokeShareLinkMutation = useMutation<void, unknown, string>({
+    mutationFn: async (shareLinkId) => {
+      if (!experiment) {
+        throw new Error(t('migrationStudio.detail.reportAccessMissingExperiment'))
+      }
+      await migrationApi.revokeExperimentShareLink(experiment.id, shareLinkId)
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ['migration-experiment-share-links', experimentId],
+      })
+      setShareFeedback({
+        tone: 'success',
+        message: t('migrationStudio.detail.reportAccessRevokeSuccess'),
+      })
+    },
+    onError: (error) => {
+      setShareFeedback({
+        tone: 'error',
+        message: handleApiError(error),
+      })
+    },
+  })
+
+  const downloadReportMutation = useMutation<Blob, unknown, void>({
+    mutationFn: async () => {
+      if (!experimentId) {
+        throw new Error(t('migrationStudio.detail.reportAccessMissingExperiment'))
+      }
+      return migrationApi.downloadExperimentReport(experimentId)
+    },
+    onSuccess: (blob) => {
+      if (typeof window === 'undefined') return
+      const url = window.URL.createObjectURL(blob)
+      const anchor = document.createElement('a')
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
+      const safeExperimentId = experiment?.id ?? experimentId
+      const fileName = `migration-report-${safeExperimentId}-${timestamp}.json`
+      anchor.href = url
+      anchor.download = fileName
+      document.body.appendChild(anchor)
+      anchor.click()
+      document.body.removeChild(anchor)
+      window.URL.revokeObjectURL(url)
+      setDownloadFeedback(null)
+    },
+    onError: (error) => {
+      setDownloadFeedback({
+        tone: 'error',
+        message: handleApiError(error),
+      })
+    },
+  })
 
   const invalidateExperimentQueries = (updated: MigrationExperiment) => {
     queryClient.setQueryData(['migration-experiment', experimentId], updated)
@@ -126,7 +348,7 @@ export default function MigrationExperimentPage() {
   const updateMutation = useMutation({
     mutationFn: async () => {
       if (!experiment) return null
-      const payload: { mirror_percent: number; guardrails: Partial<MigrationGuardrails> } = {
+      const payload = {
         mirror_percent: mirrorPercent,
         guardrails: parsedGuardrails,
       }
@@ -175,8 +397,7 @@ export default function MigrationExperimentPage() {
   const evaluateMutation = useMutation({
     mutationFn: async () => {
       if (!experiment) return null
-      const result = await migrationApi.evaluateGuardrails(experiment.id)
-      return result
+      return migrationApi.evaluateGuardrails(experiment.id)
     },
     onSuccess: (result) => {
       if (result) {
@@ -189,38 +410,26 @@ export default function MigrationExperimentPage() {
     },
   })
 
-  useEffect(() => {
-    if (guardrailResult && guardrailResult.shouldPause && experiment?.status === 'paused') {
-      setGuardrailResult(null)
-    }
-  }, [experiment?.status, guardrailResult])
-
-  useEffect(() => {
-    if (!showSavedBanner) return
-    const timeout = window.setTimeout(() => setShowSavedBanner(false), 4000)
-    return () => window.clearTimeout(timeout)
-  }, [showSavedBanner])
-
   if (!experimentId) {
     return null
   }
 
   if (experimentQuery.isLoading) {
     return (
-        <section className="card flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h2 className="text-lg font-semibold text-gray-900">
-              {t('migrationStudio.detail.nextStepsHeading')}
-            </h2>
-            <p className="mt-1 text-sm text-gray-600">
-              {t('migrationStudio.detail.nextStepsCopy')}
-            </p>
+      <div className="min-h-screen bg-gray-50">
+        <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
+          <div className="card flex items-center gap-3">
+            <Spinner size="md" label={t('migrationStudio.detail.loadingLabel')} />
+            <span className="text-sm text-gray-600">{t('migrationStudio.detail.loadingCopy')}</span>
           </div>
-          <Link href="/migration-studio" className="btn btn-outline flex items-center gap-2">
-            <ChevronLeft className="h-4 w-4" aria-hidden={true} />
-            {t('migrationStudio.detail.backToOverview')}
-          </Link>
-        </section>
+        </main>
+      </div>
+    )
+  }
+
+  if (experimentQuery.isError || !experiment) {
+    return (
+      <div className="min-h-screen bg-gray-50">
         <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
           <div className="card border border-rose-200 bg-rose-50 text-rose-800">
             <div className="flex items-start gap-3">
@@ -230,47 +439,44 @@ export default function MigrationExperimentPage() {
                   {t('migrationStudio.detail.loadErrorTitle')}
                 </h1>
                 <p className="mt-1 text-sm">
+                  {t('migrationStudio.detail.loadErrorCopy')}
+                </p>
                 <button
                   type="button"
-  min,
-  step,
                   className="btn btn-outline mt-4"
                   onClick={() => router.push('/migration-studio')}
+                >
+                  {t('migrationStudio.detail.returnToList')}
+                </button>
               </div>
-  suffix: string
-  inputMode?: InputHTMLAttributes<HTMLInputElement>['inputMode']
+            </div>
           </div>
-  min?: number
-  step?: string
         </main>
       </div>
     )
   }
-      <div className="mt-2 flex items-center gap-2">
-        <input
-          type="number"
-          inputMode={inputMode}
-          min={min}
-          step={step}
-          className="input"
-          value={value}
-          onChange={(event) => onChange(event.target.value)}
-        />
-        <span className="text-sm text-gray-500">{suffix}</span>
-      </div>
-          </div>
+
+  const statusBadgeClass = statusBadgeStyles[experiment.status]
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <header className="bg-white/90 backdrop-blur border-b">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-4">
+          <Link
+            href="/migration-studio"
+            className="inline-flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700"
+          >
+            <ChevronLeft className="h-4 w-4" aria-hidden={true} />
+            {t('migrationStudio.detail.backToOverview')}
+          </Link>
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
               <p className="text-sm font-medium uppercase tracking-wide text-primary-600">
                 {t('migrationStudio.detail.eyebrow')}
               </p>
-              <h1 className="mt-1 text-3xl font-semibold text-gray-900">
-                {experiment.name}
-              </h1>
+              <h1 className="mt-1 text-3xl font-semibold text-gray-900">{experiment.name}</h1>
               {experiment.description && (
-                <p className="mt-2 text-sm text-gray-600 max-w-2xl">
-                  {experiment.description}
-                </p>
+                <p className="mt-2 text-sm text-gray-600 max-w-2xl">{experiment.description}</p>
               )}
               <div className="mt-3 flex flex-wrap items-center gap-3 text-sm text-gray-600">
                 <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${statusBadgeClass}`}>
@@ -286,19 +492,19 @@ export default function MigrationExperimentPage() {
                 )}
               </div>
             </div>
-            <div className="text-right text-xs text-gray-500 space-y-1">
-              <div>{t('migrationStudio.detail.objectiveLabel')}: {experiment.objective}</div>
-              <div>{t('migrationStudio.detail.seedLabel')}: <span className="font-mono text-gray-600">{experiment.seed}</span></div>
+            <div className="text-xs text-gray-500 space-y-1 text-left sm:text-right">
               <div>
-                {t('migrationStudio.detail.updatedLabel', {
-                  date: formatDate(experiment.updated_at),
-                })}
+                {t('migrationStudio.detail.objectiveLabel')}: {experiment.objective}
+              </div>
+              <div>
+                {t('migrationStudio.detail.seedLabel')}: <span className="font-mono text-gray-600">{experiment.seed}</span>
+              </div>
+              <div>
+                {t('migrationStudio.detail.updatedLabel', { date: formatDate(experiment.updated_at) })}
               </div>
               {experiment.last_guardrail_check && (
                 <div>
-                  {t('migrationStudio.detail.lastGuardrailCheck', {
-                    date: formatDate(experiment.last_guardrail_check),
-                  })}
+                  {t('migrationStudio.detail.lastGuardrailCheck', { date: formatDate(experiment.last_guardrail_check) })}
                 </div>
               )}
             </div>
@@ -308,67 +514,451 @@ export default function MigrationExperimentPage() {
 
       <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-8">
         {showSavedBanner && (
-          <div className="border border-emerald-200 bg-emerald-50 text-emerald-800 rounded-xl px-4 py-3 flex items-start gap-3">
+          <div
+            className="border border-emerald-200 bg-emerald-50 text-emerald-800 rounded-xl px-4 py-3 flex items-start gap-3"
+            role="status"
+            aria-live="polite"
+          >
             <CheckCircle2 className="h-5 w-5" aria-hidden={true} />
             <div>
-              <p className="font-medium text-sm">
-                {t('migrationStudio.detail.saveSuccessTitle')}
-              </p>
-              <p className="text-xs mt-1">
-                {t('migrationStudio.detail.saveSuccessCopy')}
-              </p>
+              <p className="font-medium text-sm">{t('migrationStudio.detail.saveSuccessTitle')}</p>
+              <p className="text-xs mt-1">{t('migrationStudio.detail.saveSuccessCopy')}</p>
             </div>
           </div>
         )}
 
-        <section className="card space-y-6">
-            <div className="flex items-center justify-between">
+  <section className="card space-y-6">
+          <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
               <h2 className="text-xl font-semibold text-gray-900">
-                {t('migrationStudio.detail.mirrorHeading')}
+                {t('migrationStudio.detail.metricsHeading')}
               </h2>
+              <p className="mt-1 text-sm text-gray-600 max-w-2xl">
+                {t('migrationStudio.detail.metricsDescription')}
+              </p>
+              {report?.window && (
+                <p className="mt-2 text-xs text-gray-500">
+                  {t('migrationStudio.detail.metricsWindow', {
+                    window: formatDateRange(report.window.start, report.window.end),
+                  })}
+                </p>
+              )}
+            </div>
+            <div className="flex flex-col items-end gap-2 text-xs text-gray-500">
+              {report && (
+                <span>
+                  {t('migrationStudio.detail.metricsGenerated', {
+                    date: formatDate(report.generated_at),
+                  })}
+                </span>
+              )}
+              <button
+                type="button"
+                className="btn btn-ghost text-sm inline-flex items-center gap-2"
+                onClick={() => reportQuery.refetch()}
+                disabled={reportQuery.isLoading || reportQuery.isFetching}
+              >
+                {reportQuery.isFetching ? (
+                  <Spinner size="sm" label={t('migrationStudio.detail.metricsRefreshing')} />
+                ) : (
+                  <RefreshCcw className="h-4 w-4" aria-hidden={true} />
+                )}
+                {t('migrationStudio.detail.metricsRefresh')}
+              </button>
+            </div>
+          </div>
+
+          {reportQuery.isLoading ? (
+            <div className="flex items-center gap-3 text-sm text-gray-500">
+              <Spinner size="sm" label={t('migrationStudio.detail.metricsLoadingLabel')} />
+              <span>{t('migrationStudio.detail.metricsLoadingCopy')}</span>
+            </div>
+          ) : reportQuery.isError ? (
+            <div className="flex gap-3 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-rose-800">
+              <AlertTriangle className="h-5 w-5" aria-hidden={true} />
+              <div>
+                <p className="font-medium text-sm">
+                  {t('migrationStudio.detail.metricsErrorTitle')}
+                </p>
+                <p className="mt-1 text-xs">
+                  {t('migrationStudio.detail.metricsErrorCopy')}
+                </p>
+                <button
+                  type="button"
+                  className="btn btn-outline btn-sm mt-3 inline-flex items-center gap-2"
+                  onClick={() => reportQuery.refetch()}
+                >
+                  <RefreshCcw className="h-3.5 w-3.5" aria-hidden={true} />
+                  {t('migrationStudio.detail.metricsRetryCta')}
+                </button>
+              </div>
+            </div>
+          ) : isReportEmpty ? (
+            <div className="rounded-lg border border-dashed border-gray-200 bg-gray-50/70 px-4 py-5 text-sm text-gray-600">
+              <p className="font-medium text-gray-700">
+                {t('migrationStudio.detail.metricsEmptyTitle')}
+              </p>
+              <p className="mt-1 text-xs text-gray-500">
+                {t('migrationStudio.detail.metricsEmptyCopy')}
+              </p>
+            </div>
+          ) : (
+            <div className="grid gap-4 md:grid-cols-2">
+              {overallMetrics.map((metric) => (
+                <MetricComparisonCard key={metric.id} metric={metric} />
+              ))}
+            </div>
+          )}
+        </section>
+
+  <section className="card space-y-6">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <h2 className="text-xl font-semibold text-gray-900">
+                {t('migrationStudio.detail.metricsTimeseriesHeading')}
+              </h2>
+              <p className="mt-1 text-sm text-gray-600 max-w-2xl">
+                {t('migrationStudio.detail.metricsTimeseriesDescription')}
+              </p>
+            </div>
+          </div>
+
+          {reportQuery.isLoading ? (
+            <div className="flex items-center gap-3 text-sm text-gray-500">
+              <Spinner size="sm" label={t('migrationStudio.detail.metricsLoadingLabel')} />
+              <span>{t('migrationStudio.detail.metricsLoadingCopy')}</span>
+            </div>
+          ) : reportQuery.isError ? (
+            <div className="flex gap-3 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-rose-800">
+              <AlertTriangle className="h-5 w-5" aria-hidden={true} />
+              <div>
+                <p className="font-medium text-sm">
+                  {t('migrationStudio.detail.metricsErrorTitle')}
+                </p>
+                <p className="mt-1 text-xs">
+                  {t('migrationStudio.detail.metricsErrorCopy')}
+                </p>
+                <button
+                  type="button"
+                  className="btn btn-outline btn-sm mt-3 inline-flex items-center gap-2"
+                  onClick={() => reportQuery.refetch()}
+                >
+                  <RefreshCcw className="h-3.5 w-3.5" aria-hidden={true} />
+                  {t('migrationStudio.detail.metricsRetryCta')}
+                </button>
+              </div>
+            </div>
+          ) : timeseriesMetrics.length === 0 || !activeTimeseries ? (
+            <div className="rounded-lg border border-dashed border-gray-200 bg-gray-50/70 px-4 py-5 text-sm text-gray-600">
+              <p className="font-medium text-gray-700">
+                {t('migrationStudio.detail.metricsTimeseriesEmptyTitle')}
+              </p>
+              <p className="mt-1 text-xs text-gray-500">
+                {t('migrationStudio.detail.metricsTimeseriesEmptyCopy')}
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-5">
+              <div className="flex flex-wrap gap-2">
+                {timeseriesMetrics.map((metric) => {
+                  const isActive = metric.id === activeTimeseries.id
+                  return (
+                    <button
+                      key={metric.id}
+                      type="button"
+                      className={`btn btn-sm ${
+                        isActive ? 'btn-primary' : 'btn-ghost'
+                      }`}
+                      aria-pressed={isActive}
+                      onClick={() => setSelectedTimeseriesId(metric.id)}
+                    >
+                      {metric.label}
+                    </button>
+                  )
+                })}
+              </div>
+              <MetricTimeseriesChart metric={activeTimeseries} />
+            </div>
+          )}
+        </section>
+
+        {!reportQuery.isLoading && !reportQuery.isError && hasTimeseries && (
+          <section className="card space-y-6">
+            <div>
+              <h2 className="text-xl font-semibold text-gray-900">
+                {t('migrationStudio.detail.metricsDashboardsHeading')}
+              </h2>
+              <p className="mt-1 text-sm text-gray-600 max-w-2xl">
+                {t('migrationStudio.detail.metricsDashboardsDescription')}
+              </p>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              {timeseriesMetrics.map((metric) => (
+                <MetricTimeseriesDashboardCard key={`dashboard-${metric.id}`} metric={metric} />
+              ))}
+            </div>
+          </section>
+        )}
+
+        <section className="card space-y-6">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <h2 className="text-xl font-semibold text-gray-900">
+                {t('migrationStudio.detail.reportAccessHeading')}
+              </h2>
+              <p className="mt-1 text-sm text-gray-600 max-w-2xl">
+                {t('migrationStudio.detail.reportAccessDescription')}
+              </p>
+            </div>
+          </div>
+
+          {shareFeedback ? (
+            <div
+              className={`flex items-start gap-2 rounded-lg border px-3 py-2 text-sm ${
+                shareFeedback.tone === 'success'
+                  ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                  : 'border-rose-200 bg-rose-50 text-rose-800'
+              }`}
+              role={shareFeedback.tone === 'success' ? 'status' : 'alert'}
+              aria-live="polite"
+            >
+              {shareFeedback.tone === 'success' ? (
+                <CheckCircle2 className="h-4 w-4" aria-hidden={true} />
+              ) : (
+                <AlertTriangle className="h-4 w-4" aria-hidden={true} />
+              )}
+              <span>{shareFeedback.message}</span>
+            </div>
+          ) : null}
+
+          {downloadFeedback ? (
+            <div
+              className="flex items-start gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800"
+              role="alert"
+              aria-live="assertive"
+            >
+              <AlertTriangle className="h-4 w-4" aria-hidden={true} />
+              <span>{downloadFeedback.message}</span>
+            </div>
+          ) : null}
+
+          <div className="space-y-6">
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900">
+                {t('migrationStudio.detail.reportAccessShareHeading')}
+              </h3>
+              <p className="mt-1 text-sm text-gray-600 max-w-2xl">
+                {t('migrationStudio.detail.reportAccessShareDescription')}
+              </p>
+
+              <div className="mt-4 space-y-4">
+                {shareLinksQuery.isLoading || shareLinksQuery.isFetching ? (
+                  <div className="flex items-center gap-3 text-sm text-gray-500">
+                    <Spinner size="sm" label={t('migrationStudio.detail.reportAccessSharingLoading')} />
+                    <span>{t('migrationStudio.detail.reportAccessSharingLoadingCopy')}</span>
+                  </div>
+                ) : shareLinksErrorMessage ? (
+                  <div className="flex items-start gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
+                    <AlertTriangle className="h-4 w-4" aria-hidden={true} />
+                    <div>
+                      <p>{shareLinksErrorMessage}</p>
+                      <button
+                        type="button"
+                        className="btn btn-outline btn-sm mt-3 inline-flex items-center gap-2"
+                        onClick={() => shareLinksQuery.refetch()}
+                      >
+                        <RefreshCcw className="h-3.5 w-3.5" aria-hidden={true} />
+                        {t('migrationStudio.detail.reportAccessRetryCta')}
+                      </button>
+                    </div>
+                  </div>
+                ) : shareLinks.length === 0 ? (
+                  <div className="rounded-lg border border-dashed border-gray-200 bg-gray-50/70 px-4 py-4 text-sm text-gray-600">
+                    <p className="font-medium text-gray-700">
+                      {t('migrationStudio.detail.reportAccessEmptyTitle')}
+                    </p>
+                    <p className="mt-1 text-xs text-gray-500">
+                      {t('migrationStudio.detail.reportAccessEmptyCopy')}
+                    </p>
+                  </div>
+                ) : (
+                  <ul className="space-y-3">
+                    {shareLinks.map((link) => (
+                      <li
+                        key={link.id}
+                        className="flex flex-col gap-3 rounded-lg border border-gray-200 bg-white px-4 py-3 md:flex-row md:items-center md:justify-between"
+                      >
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2 text-sm font-medium text-gray-900 break-all">
+                            <Link2 className="h-4 w-4 text-primary-500" aria-hidden={true} />
+                            <span>{link.url}</span>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-3 text-xs text-gray-500">
+                            <span className="inline-flex items-center gap-1">
+                              <Clock className="h-3.5 w-3.5" aria-hidden={true} />
+                              {t('migrationStudio.detail.reportAccessExpires', {
+                                date: formatDate(link.expires_at),
+                              })}
+                            </span>
+                            <span>
+                              {t('migrationStudio.detail.reportAccessCreated', {
+                                date: formatDate(link.created_at),
+                              })}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <button
+                            type="button"
+                            className="btn btn-ghost btn-sm inline-flex items-center gap-2"
+                            onClick={() => void handleCopyLink(link)}
+                          >
+                            <Copy className="h-4 w-4" aria-hidden={true} />
+                            {copiedLinkId === link.id
+                              ? t('migrationStudio.detail.reportAccessCopied')
+                              : t('migrationStudio.detail.reportAccessCopy')}
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-outline btn-sm inline-flex items-center gap-2"
+                            onClick={() => revokeShareLinkMutation.mutate(link.id)}
+                            disabled={revokeShareLinkMutation.isPending}
+                          >
+                            {revokeShareLinkMutation.isPending ? (
+                              <Loader2 className="h-4 w-4 animate-spin" aria-hidden={true} />
+                            ) : (
+                              <Trash2 className="h-4 w-4" aria-hidden={true} />
+                            )}
+                            {revokeShareLinkMutation.isPending
+                              ? t('migrationStudio.detail.reportAccessRevoking')
+                              : t('migrationStudio.detail.reportAccessRevoke')}
+                          </button>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-dashed border-gray-200 bg-gray-50/70 px-4 py-4">
+              <label htmlFor="share-link-expiry" className="block text-sm font-medium text-gray-700">
+                {t('migrationStudio.detail.reportAccessShareSelectLabel')}
+              </label>
+              <div className="mt-3 flex flex-wrap items-center gap-3">
+                <select
+                  id="share-link-expiry"
+                  className="input w-52"
+                  value={selectedShareExpiry}
+                  onChange={(event) => setSelectedShareExpiry(event.target.value)}
+                  aria-describedby="share-link-hint"
+                >
+                  <option value="24">{t('migrationStudio.detail.reportAccessShareOption24Hours')}</option>
+                  <option value="168">{t('migrationStudio.detail.reportAccessShareOption7Days')}</option>
+                  <option value="720">{t('migrationStudio.detail.reportAccessShareOption30Days')}</option>
+                </select>
+                <button
+                  type="button"
+                  className="btn btn-primary inline-flex items-center gap-2"
+                  onClick={() => createShareLinkMutation.mutate(Number(selectedShareExpiry))}
+                  disabled={createShareLinkMutation.isPending}
+                >
+                  {createShareLinkMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden={true} />
+                  ) : (
+                    <Link2 className="h-4 w-4" aria-hidden={true} />
+                  )}
+                  {createShareLinkMutation.isPending
+                    ? t('migrationStudio.detail.reportAccessGenerating')
+                    : t('migrationStudio.detail.reportAccessGenerate')}
+                </button>
+              </div>
+              <p className="mt-2 text-xs text-gray-500" id="share-link-hint">
+                {t('migrationStudio.detail.reportAccessShareHint')}
+              </p>
+            </div>
+
+            <div className="pt-4 border-t border-gray-100">
+              <h3 className="text-lg font-semibold text-gray-900">
+                {t('migrationStudio.detail.reportAccessDownloadHeading')}
+              </h3>
+              <p className="mt-1 text-sm text-gray-600 max-w-2xl">
+                {t('migrationStudio.detail.reportAccessDownloadDescription')}
+              </p>
+              <div className="mt-4">
+                <button
+                  type="button"
+                  className="btn btn-secondary inline-flex items-center gap-2"
+                  onClick={() => downloadReportMutation.mutate()}
+                  disabled={downloadReportMutation.isPending}
+                >
+                  {downloadReportMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden={true} />
+                  ) : (
+                    <Download className="h-4 w-4" aria-hidden={true} />
+                  )}
+                  {downloadReportMutation.isPending
+                    ? t('migrationStudio.detail.reportAccessDownloading')
+                    : t('migrationStudio.detail.reportAccessDownloadCta')}
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section className="card space-y-6">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <h2 className="text-xl font-semibold text-gray-900">{t('migrationStudio.detail.mirrorHeading')}</h2>
               <p className="mt-1 text-sm text-gray-600 max-w-2xl">
                 {t('migrationStudio.detail.mirrorDescription')}
               </p>
             </div>
-            {(isDraft || isPaused) && (
-              <button
-                type="button"
-                className="btn btn-primary flex items-center gap-2"
-                onClick={() => activateMutation.mutate()}
-                disabled={activateMutation.isPending}
-              >
-                {activateMutation.isPending ? (
-                  <Spinner size="sm" label={t('migrationStudio.import.actions.loading')} />
-                ) : (
-                  <>
-                    <Play className="h-4 w-4" aria-hidden={true} />
-                    {isPaused ? t('migrationStudio.actions.resume') : t('migrationStudio.actions.activate')}
-                  </>
-                )}
-              </button>
-            )}
-            {isActive && (
-              <button
-                type="button"
-                className="btn btn-secondary flex items-center gap-2"
-                onClick={() => pauseMutation.mutate()}
-                disabled={pauseMutation.isPending}
-              >
-                {pauseMutation.isPending ? (
-                  <Spinner size="sm" label={t('migrationStudio.import.actions.loading')} />
-                ) : (
-                  <>
-                    <PauseCircle className="h-4 w-4" aria-hidden={true} />
-                    {t('migrationStudio.actions.pause')}
-                  </>
-                )}
-              </button>
-            )}
+            <div className="flex flex-wrap items-center gap-2">
+              {(isDraft || isPaused) && (
+                <button
+                  type="button"
+                  className="btn btn-primary flex items-center gap-2"
+                  onClick={() => activateMutation.mutate()}
+                  disabled={activateMutation.isPending}
+                >
+                  {activateMutation.isPending ? (
+                    <Spinner size="sm" label={t('migrationStudio.import.actions.loading')} />
+                  ) : (
+                    <>
+                      <Play className="h-4 w-4" aria-hidden={true} />
+                      {isPaused ? t('migrationStudio.actions.resume') : t('migrationStudio.actions.activate')}
+                    </>
+                  )}
+                </button>
+              )}
+              {isActive && (
+                <button
+                  type="button"
+                  className="btn btn-secondary flex items-center gap-2"
+                  onClick={() => pauseMutation.mutate()}
+                  disabled={pauseMutation.isPending}
+                >
+                  {pauseMutation.isPending ? (
+                    <Spinner size="sm" label={t('migrationStudio.import.actions.loading')} />
+                  ) : (
+                    <>
+                      <PauseCircle className="h-4 w-4" aria-hidden={true} />
+                      {t('migrationStudio.actions.pause')}
+                    </>
+                  )}
+                </button>
+              )}
+            </div>
           </div>
 
           <div>
-            <label htmlFor="mirror-percent" className="block text-sm font-medium text-gray-700">
+            <label
+              htmlFor="mirror-percent"
+              className="block text-sm font-medium text-gray-700"
+              id="mirror-percent-label"
+            >
               {t('migrationStudio.detail.mirrorPercentLabel')}
             </label>
             <div className="mt-3">
@@ -381,6 +971,7 @@ export default function MigrationExperimentPage() {
                 value={mirrorPercent}
                 onChange={(event) => setMirrorPercent(Number(event.target.value))}
                 className="w-full"
+                aria-labelledby="mirror-percent-label"
               />
             </div>
             <div className="mt-3 flex items-center gap-3">
@@ -396,6 +987,7 @@ export default function MigrationExperimentPage() {
                 }}
                 className="input w-28"
                 aria-describedby="mirror-percent-helper"
+                aria-labelledby="mirror-percent-label"
               />
               <span className="text-sm text-gray-500" id="mirror-percent-helper">
                 {t('migrationStudio.detail.mirrorPercentHelper')}
@@ -413,36 +1005,48 @@ export default function MigrationExperimentPage() {
 
             <div className="mt-6 grid grid-cols-1 gap-6 sm:grid-cols-2">
               <GuardrailField
+                id="latency-budget"
                 label={t('migrationStudio.detail.latencyLabel')}
                 suffix={t('migrationStudio.detail.latencySuffix')}
                 value={guardrailState.latency_budget_ms}
-                onChange={(value) => setGuardrailState((current) => ({ ...current, latency_budget_ms: value }))}
+                onChange={(value) =>
+                  setGuardrailState((current) => ({ ...current, latency_budget_ms: value }))
+                }
                 inputMode="numeric"
                 min={0}
               />
               <GuardrailField
+                id="revenue-floor"
                 label={t('migrationStudio.detail.revenueLabel')}
                 suffix={t('migrationStudio.detail.revenueSuffix')}
                 value={guardrailState.revenue_floor_percent}
-                onChange={(value) => setGuardrailState((current) => ({ ...current, revenue_floor_percent: value }))}
+                onChange={(value) =>
+                  setGuardrailState((current) => ({ ...current, revenue_floor_percent: value }))
+                }
                 inputMode="decimal"
                 min={0}
                 step="0.1"
               />
               <GuardrailField
+                id="error-rate"
                 label={t('migrationStudio.detail.errorRateLabel')}
-                suffix={t('migrationStudio.detail.revenueSuffix')}
+                suffix={t('migrationStudio.detail.errorRateSuffix')}
                 value={guardrailState.max_error_rate_percent}
-                onChange={(value) => setGuardrailState((current) => ({ ...current, max_error_rate_percent: value }))}
+                onChange={(value) =>
+                  setGuardrailState((current) => ({ ...current, max_error_rate_percent: value }))
+                }
                 inputMode="decimal"
                 min={0}
                 step="0.1"
               />
               <GuardrailField
+                id="min-impressions"
                 label={t('migrationStudio.detail.minImpressionsLabel')}
                 suffix={t('migrationStudio.detail.minImpressionsSuffix')}
                 value={guardrailState.min_impressions}
-                onChange={(value) => setGuardrailState((current) => ({ ...current, min_impressions: value }))}
+                onChange={(value) =>
+                  setGuardrailState((current) => ({ ...current, min_impressions: value }))
+                }
                 inputMode="numeric"
                 min={0}
               />
@@ -486,6 +1090,8 @@ export default function MigrationExperimentPage() {
                       ? 'border-amber-200 bg-amber-50 text-amber-800'
                       : 'border-emerald-200 bg-emerald-50 text-emerald-700'
                   }`}
+                  role={guardrailResult.shouldPause ? 'alert' : 'status'}
+                  aria-live={guardrailResult.shouldPause ? 'assertive' : 'polite'}
                 >
                   {guardrailResult.shouldPause ? (
                     <AlertTriangle className="h-4 w-4" aria-hidden={true} />
@@ -510,6 +1116,8 @@ export default function MigrationExperimentPage() {
               )}
             </div>
           </div>
+        </section>
+
         <section className="card flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 className="text-lg font-semibold text-gray-900">
@@ -524,45 +1132,446 @@ export default function MigrationExperimentPage() {
             {t('migrationStudio.detail.backToOverview')}
           </Link>
         </section>
-          </div>
-        </section>
       </main>
     </div>
   )
 }
 
 function GuardrailField({
+  id,
   label,
   suffix,
   value,
-  min,
-  step,
   onChange,
   inputMode,
+  min,
+  step,
 }: {
+  id: string
   label: string
+  suffix: string
+  value: string
+  onChange: (value: string) => void
   inputMode?: InputHTMLAttributes<HTMLInputElement>['inputMode']
   min?: number
   step?: string
-  value: string
-  inputMode?: React.HTMLAttributes<HTMLInputElement>['inputMode']
-  onChange: (value: string) => void
 }) {
+  const suffixId = `${id}-suffix`
+
   return (
-    <label className="block">
-      <span className="text-sm font-medium text-gray-700">{label}</span>
-          type="number"
+    <div>
+      <label className="block text-sm font-medium text-gray-700" htmlFor={id}>
+        {label}
+      </label>
+      <div className="mt-2 flex items-center gap-2">
         <input
-          step={step}
-          min={min}
+          id={id}
+          type="number"
           inputMode={inputMode}
-          pattern="[0-9,.]*"
+          min={min}
+          step={step}
           className="input"
           value={value}
           onChange={(event) => onChange(event.target.value)}
+          aria-describedby={suffixId}
         />
-        <span className="text-sm text-gray-500">{suffix}</span>
+        <span className="text-sm text-gray-500" id={suffixId}>
+          {suffix}
+        </span>
       </div>
-    </label>
+    </div>
   )
+}
+
+function MetricComparisonCard({ metric }: { metric: MigrationExperimentMetric }) {
+  const { label, description, unit, control, test, uplift, sample_size: sampleSize } = metric
+  const { Icon, className: upliftClassName, label: upliftLabel } = getUpliftDisplay(uplift)
+
+  return (
+    <article className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h3 className="text-sm font-semibold text-gray-900">{label}</h3>
+          {description && <p className="mt-1 text-xs text-gray-500">{description}</p>}
+        </div>
+        <div className={`inline-flex items-center gap-1 text-sm font-semibold ${upliftClassName}`}>
+          <Icon className="h-4 w-4" aria-hidden={true} />
+          <span>{upliftLabel}</span>
+        </div>
+      </div>
+
+      <dl className="mt-4 grid grid-cols-1 gap-4 text-sm sm:grid-cols-3">
+        <div>
+          <dt className="text-xs uppercase tracking-wide text-gray-400">
+            {t('migrationStudio.detail.metricsControlLabel')}
+          </dt>
+          <dd className="mt-1 font-medium text-gray-900">{formatMetricValue(control, unit)}</dd>
+        </div>
+        <div>
+          <dt className="text-xs uppercase tracking-wide text-gray-400">
+            {t('migrationStudio.detail.metricsTestLabel')}
+          </dt>
+          <dd className="mt-1 font-medium text-gray-900">{formatMetricValue(test, unit)}</dd>
+        </div>
+        <div>
+          <dt className="text-xs uppercase tracking-wide text-gray-400">
+            {t('migrationStudio.detail.metricsUpliftLabel')}
+          </dt>
+          <dd className={`mt-1 font-semibold ${upliftClassName}`}>{upliftLabel}</dd>
+        </div>
+      </dl>
+
+      {sampleSize && (sampleSize.control || sampleSize.test) ? (
+        <p className="mt-3 text-xs text-gray-500">
+          {t('migrationStudio.detail.metricsSample', {
+            control: formatNumber(sampleSize.control ?? 0, { maximumFractionDigits: 0 }),
+            test: formatNumber(sampleSize.test ?? 0, { maximumFractionDigits: 0 }),
+          })}
+        </p>
+      ) : null}
+    </article>
+  )
+}
+
+function MetricTimeseriesDashboardCard({ metric }: { metric: MigrationExperimentMetricTimeseries }) {
+  const controlLabel = t('migrationStudio.detail.metricsTimeseriesControl')
+  const testLabel = t('migrationStudio.detail.metricsTimeseriesTest')
+  const latestControl = getLatestTimeseriesValue(metric.points, 'control')
+  const latestTest = getLatestTimeseriesValue(metric.points, 'test')
+  const latestTimestamp = getLatestTimestamp(metric.points)
+  const delta = formatTimeseriesDelta(latestControl?.value ?? null, latestTest?.value ?? null, metric.unit)
+
+  return (
+    <article className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm space-y-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-semibold text-gray-900">{metric.label}</h3>
+          {latestTimestamp && (
+            <p className="mt-1 text-xs text-gray-500">
+              {t('migrationStudio.detail.metricsDashboardsLatest', {
+                date: formatDate(latestTimestamp),
+              })}
+            </p>
+          )}
+        </div>
+        {delta ? (
+          <span className={`text-xs font-semibold ${delta.className}`}>
+            ∆ {delta.label}
+          </span>
+        ) : null}
+      </div>
+
+      <div className="flex flex-wrap gap-4 text-xs text-gray-500">
+        <SeriesLegendSwatch
+          color={CONTROL_SERIES_COLOR}
+          label={controlLabel}
+          value={formatMetricValue(latestControl?.value ?? null, metric.unit)}
+        />
+        <SeriesLegendSwatch
+          color={TEST_SERIES_COLOR}
+          label={testLabel}
+          value={formatMetricValue(latestTest?.value ?? null, metric.unit)}
+        />
+      </div>
+
+      <MetricTimeseriesChart
+        metric={metric}
+        height={200}
+        showLegend={false}
+        showTooltip={false}
+        showDots={false}
+        dataTestId="metric-timeseries-mini-chart"
+      />
+    </article>
+  )
+}
+
+function MetricTimeseriesChart({
+  metric,
+  height = 320,
+  showLegend = true,
+  showTooltip = true,
+  showDots = true,
+  dataTestId = 'metric-timeseries-chart',
+}: {
+  metric: MigrationExperimentMetricTimeseries
+  height?: number
+  showLegend?: boolean
+  showTooltip?: boolean
+  showDots?: boolean
+  dataTestId?: string
+}) {
+  const controlLabel = t('migrationStudio.detail.metricsTimeseriesControl')
+  const testLabel = t('migrationStudio.detail.metricsTimeseriesTest')
+  const latestControlPoint = getLatestTimeseriesValue(metric.points, 'control')
+  const latestTestPoint = getLatestTimeseriesValue(metric.points, 'test')
+  const summaryDate = latestControlPoint?.timestamp ?? latestTestPoint?.timestamp ?? null
+  const accessibleControl = formatMetricValue(latestControlPoint?.value ?? null, metric.unit)
+  const accessibleTest = formatMetricValue(latestTestPoint?.value ?? null, metric.unit)
+  const summaryId = `timeseries-summary-${metric.id}-${dataTestId}`
+  const summaryCopy = latestControlPoint || latestTestPoint
+    ? summaryDate
+      ? t('migrationStudio.detail.metricsTimeseriesChartSummary', {
+          label: metric.label,
+          control: accessibleControl,
+          test: accessibleTest,
+          date: formatDate(summaryDate),
+        })
+      : t('migrationStudio.detail.metricsTimeseriesChartSummaryNoDate', {
+          label: metric.label,
+          control: accessibleControl,
+          test: accessibleTest,
+        })
+    : t('migrationStudio.detail.metricsTimeseriesChartSummaryUnavailable', {
+        label: metric.label,
+      })
+
+  const chartData = metric.points.map((point) => {
+    const normalizedControl = normalizeTimeseriesValue(point.control, metric.unit)
+    const normalizedTest = normalizeTimeseriesValue(point.test, metric.unit)
+    return {
+      timestamp: point.timestamp,
+      label: formatDate(point.timestamp, { month: 'short', day: 'numeric' }),
+      control: normalizedControl,
+      test: normalizedTest,
+      rawControl: point.control,
+      rawTest: point.test,
+    }
+  })
+
+  const gradientSuffix = `${metric.id}-${dataTestId}`
+  const controlGradientId = `controlGradient-${gradientSuffix}`
+  const testGradientId = `testGradient-${gradientSuffix}`
+
+  return (
+    <figure aria-labelledby={summaryId} className="w-full">
+      <figcaption id={summaryId} className="sr-only">
+        {summaryCopy}
+      </figcaption>
+      <div className="w-full" style={{ height }} data-testid={dataTestId} aria-hidden="true">
+        <ResponsiveContainer width="100%" height="100%">
+        <AreaChart data={chartData} margin={{ top: 10, right: 24, left: 0, bottom: 0 }}>
+          <defs>
+            <linearGradient id={controlGradientId} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%" stopColor={CONTROL_SERIES_COLOR} stopOpacity={0.35} />
+              <stop offset="95%" stopColor={CONTROL_SERIES_COLOR} stopOpacity={0} />
+            </linearGradient>
+            <linearGradient id={testGradientId} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%" stopColor={TEST_SERIES_COLOR} stopOpacity={0.35} />
+              <stop offset="95%" stopColor={TEST_SERIES_COLOR} stopOpacity={0} />
+            </linearGradient>
+          </defs>
+          <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+          <XAxis dataKey="label" stroke="#6b7280" fontSize={12} tickLine={false} />
+          <YAxis
+            stroke="#6b7280"
+            fontSize={12}
+            tickLine={false}
+            tickFormatter={(value) => formatTimeseriesAxisTick(value as number, metric.unit)}
+          />
+          {showTooltip ? (
+            <Tooltip
+              contentStyle={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '8px' }}
+              labelFormatter={(label) => formatDate(label as string)}
+              formatter={(value: any, name: any, payload: any) => {
+                if (!payload?.payload) {
+                  return [value ?? '—', name]
+                }
+                const rawValue = name === controlLabel ? payload.payload.rawControl : payload.payload.rawTest
+                return [formatMetricValue(rawValue ?? null, metric.unit), name]
+              }}
+            />
+          ) : null}
+          {showLegend ? <Legend /> : null}
+          <Area
+            type="monotone"
+            dataKey="control"
+            name={controlLabel}
+            stroke={CONTROL_SERIES_COLOR}
+            strokeWidth={2}
+            fill={`url(#${controlGradientId})`}
+            connectNulls
+            dot={showDots ? { r: 3, fill: CONTROL_SERIES_COLOR } : false}
+          />
+          <Area
+            type="monotone"
+            dataKey="test"
+            name={testLabel}
+            stroke={TEST_SERIES_COLOR}
+            strokeWidth={2}
+            fill={`url(#${testGradientId})`}
+            connectNulls
+            dot={showDots ? { r: 3, fill: TEST_SERIES_COLOR } : false}
+          />
+        </AreaChart>
+      </ResponsiveContainer>
+      </div>
+    </figure>
+  )
+}
+
+function SeriesLegendSwatch({
+  color,
+  label,
+  value,
+}: {
+  color: string
+  label: string
+  value: string
+}) {
+  return (
+    <span className="inline-flex items-center gap-2">
+      <span className="flex items-center gap-1.5">
+        <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: color }} aria-hidden={true} />
+        <span className="text-xs font-medium text-gray-500">{label}</span>
+      </span>
+      <span className="text-xs font-semibold text-gray-900">{value}</span>
+    </span>
+  )
+}
+
+function getLatestTimeseriesValue(
+  points: MigrationExperimentTimeseriesPoint[],
+  key: 'control' | 'test'
+): { value: number; timestamp: string } | null {
+  for (let index = points.length - 1; index >= 0; index -= 1) {
+    const point = points[index]
+    const rawValue = point[key]
+    if (rawValue === null || rawValue === undefined || Number.isNaN(rawValue)) {
+      continue
+    }
+    return { value: rawValue, timestamp: point.timestamp }
+  }
+  return null
+}
+
+function getLatestTimestamp(points: MigrationExperimentTimeseriesPoint[]): string | null {
+  const fromControl = getLatestTimeseriesValue(points, 'control')
+  if (fromControl) return fromControl.timestamp
+  const fromTest = getLatestTimeseriesValue(points, 'test')
+  return fromTest ? fromTest.timestamp : null
+}
+
+function formatTimeseriesDelta(
+  control: number | null,
+  test: number | null,
+  unit: MigrationMetricUnit
+): { label: string; className: string } | null {
+  if (
+    control === null ||
+    control === undefined ||
+    test === null ||
+    test === undefined ||
+    Number.isNaN(control) ||
+    Number.isNaN(test)
+  ) {
+    return null
+  }
+
+  const diff = test - control
+  if (!Number.isFinite(diff)) {
+    return null
+  }
+
+  if (diff === 0) {
+    return {
+      label: formatMetricValue(0, unit),
+      className: 'text-slate-500',
+    }
+  }
+
+  const formatted = formatMetricValue(Math.abs(diff), unit)
+  const prefix = diff > 0 ? '+' : '-'
+
+  return {
+    label: `${prefix}${formatted}`,
+    className: diff > 0 ? 'text-emerald-600' : 'text-rose-600',
+  }
+}
+
+function formatMetricValue(value: number | null, unit: MigrationMetricUnit): string {
+  if (value === null || value === undefined || Number.isNaN(value)) {
+    return '—'
+  }
+
+  switch (unit) {
+    case 'currency_cents':
+      return formatCurrency(value)
+    case 'percent':
+      return formatPercentage(value, 1)
+    case 'milliseconds':
+      return `${formatNumber(value, { maximumFractionDigits: 0 })} ms`
+    case 'ratio':
+      return formatNumber(value, { minimumFractionDigits: 2, maximumFractionDigits: 4 })
+    case 'count':
+      return formatNumber(value, { maximumFractionDigits: 0 })
+    default:
+      return formatNumber(value)
+  }
+}
+
+function normalizeTimeseriesValue(value: number | null, unit: MigrationMetricUnit): number | null {
+  if (value === null || value === undefined || Number.isNaN(value)) {
+    return null
+  }
+
+  switch (unit) {
+    case 'currency_cents':
+      return value / 100
+    default:
+      return value
+  }
+}
+
+function formatTimeseriesAxisTick(value: number | null, unit: MigrationMetricUnit): string {
+  if (value === null || value === undefined || Number.isNaN(value)) {
+    return '—'
+  }
+
+  switch (unit) {
+    case 'currency_cents':
+      return formatCurrency(Math.round(value * 100))
+    case 'percent':
+      return formatPercentage(value, 0)
+    case 'milliseconds':
+      return `${formatNumber(value, { maximumFractionDigits: 0 })}`
+    case 'ratio':
+      return formatNumber(value, { minimumFractionDigits: 2, maximumFractionDigits: 3 })
+    case 'count':
+      return formatNumber(value, { maximumFractionDigits: 0 })
+    default:
+      return formatNumber(value)
+  }
+}
+
+function getUpliftDisplay(uplift: number | null): {
+  label: string
+  className: string
+  Icon: typeof TrendingUp
+} {
+  if (uplift === null || uplift === undefined || Number.isNaN(uplift)) {
+    return { label: '—', className: 'text-slate-500', Icon: Minus }
+  }
+
+  if (uplift > 0) {
+    return {
+      label: `+${formatPercentage(uplift, 1)}`,
+      className: 'text-emerald-600',
+      Icon: TrendingUp,
+    }
+  }
+
+  if (uplift < 0) {
+    return {
+      label: `-${formatPercentage(Math.abs(uplift), 1)}`,
+      className: 'text-rose-600',
+      Icon: TrendingDown,
+    }
+  }
+
+  return {
+    label: formatPercentage(0, 1),
+    className: 'text-slate-500',
+    Icon: Minus,
+  }
 }

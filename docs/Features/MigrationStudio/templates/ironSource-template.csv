@@ -1,0 +1,4 @@
+network,instance_id,instance_name,waterfall_position,ecpm_cents
+ironSource,is-rv-template,Rewarded Video,1,275
+ironSource,is-int-template,Interstitial,2,180
+ironSource,is-banner-template,Banner,3,95
