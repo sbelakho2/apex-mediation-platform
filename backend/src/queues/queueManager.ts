@@ -165,6 +165,8 @@ class QueueManager {
         pattern?: string; // Cron pattern
         every?: number; // Interval in milliseconds
       };
+      removeOnComplete?: boolean | number | { age?: number; count?: number };
+      removeOnFail?: boolean | number | { age?: number; count?: number };
     }
   ): Promise<Job<T> | null> {
     const queue = this.queues.get(queueName);

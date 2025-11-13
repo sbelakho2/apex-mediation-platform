@@ -7,9 +7,24 @@ import { Pool } from 'pg';
 import Stripe from 'stripe';
 import { logger } from '../utils/logger';
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
-  apiVersion: '2025-10-29.clover',
-});
+let stripeClient: Stripe | null = null;
+
+const getStripeClient = (): Stripe => {
+  if (stripeClient) {
+    return stripeClient;
+  }
+
+  const secretKey = process.env.STRIPE_SECRET_KEY;
+  if (!secretKey) {
+    throw new Error('Stripe secret key not configured');
+  }
+
+  stripeClient = new Stripe(secretKey, {
+    apiVersion: '2025-10-29.clover',
+  });
+
+  return stripeClient;
+};
 
 const db = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -72,6 +87,8 @@ export class ReconciliationService {
     const timestamp = new Date().toISOString();
 
     logger.info('Starting billing reconciliation', { reconciliationId });
+
+  const stripe = getStripeClient();
 
     // Get all active subscriptions with Stripe IDs
     const subscriptions = await db.query(

@@ -3,12 +3,13 @@ import type { Application, NextFunction, Request, Response } from 'express';
 
 // Mock auth to inject a default user unless overridden per-test
 jest.mock('../../middleware/auth', () => ({
-  authenticate: jest.fn((req: Request & { user?: any }, _res: Response, next: NextFunction) => {
-    if (!('noauth' in req.headers)) {
-      req.user = { publisherId: 'pub-1', userId: 'user-1' };
+  authenticate: jest.fn((_req: Request & { user?: any }, _res: Response, next: NextFunction) => {
+    if (!('noauth' in _req.headers)) {
+      _req.user = { publisherId: 'pub-1', userId: 'user-1' };
     }
     next();
   }),
+  authorize: jest.fn(() => (_req: Request, _res: Response, next: NextFunction) => next()),
 }));
 
 // Mock ClickHouse executeQuery

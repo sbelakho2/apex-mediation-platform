@@ -44,7 +44,11 @@ export async function trackingRateLimiter(req: Request, res: Response, next: Nex
     if (current > MAX_REQ) {
       try { trackingRateLimitedTotal.inc(); } catch {}
       const ttl = await redis.ttl(key);
-      res.setHeader('Retry-After', String(Math.max(1, ttl)));
+      const retryAfter = Math.max(
+        1,
+        typeof ttl === 'number' && ttl > 0 ? ttl : Math.ceil(WINDOW_MS / 1000)
+      );
+      res.setHeader('Retry-After', String(retryAfter));
       return res.status(429).send('rate_limited');
     }
     return next();

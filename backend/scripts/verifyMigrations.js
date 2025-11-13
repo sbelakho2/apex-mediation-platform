@@ -6,6 +6,29 @@ const { createClient } = require('@clickhouse/client');
 
 function log(msg){ process.stdout.write(`${msg}\n`); }
 
+function resolveClickHouseUrl(){
+  if (process.env.CLICKHOUSE_URL) {
+    return process.env.CLICKHOUSE_URL;
+  }
+
+  const host = (process.env.CLICKHOUSE_HOST || '').trim();
+  const port = process.env.CLICKHOUSE_PORT || '8123';
+
+  if (!host) {
+    return `http://localhost:${port}`;
+  }
+
+  let normalized = host.replace(/\/$/, '');
+  if (!normalized.startsWith('http://') && !normalized.startsWith('https://')) {
+    normalized = `http://${normalized}`;
+  }
+  const afterScheme = normalized.split('://')[1] ?? normalized;
+  if (!/:[0-9]+$/.test(afterScheme)) {
+    normalized = `${normalized}:${port}`;
+  }
+  return normalized;
+}
+
 async function pgCheck() {
   const cs = process.env.DATABASE_URL;
   if (!cs) throw new Error('DATABASE_URL not set');
@@ -24,7 +47,7 @@ async function pgCheck() {
 
 async function chCheck() {
   const ch = createClient({
-    host: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+    url: resolveClickHouseUrl(),
     database: process.env.CLICKHOUSE_DATABASE || 'apexmediation',
     username: process.env.CLICKHOUSE_USER || 'default',
     password: process.env.CLICKHOUSE_PASSWORD || '',

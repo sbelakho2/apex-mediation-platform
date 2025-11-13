@@ -6,9 +6,24 @@ import { Pool } from 'pg';
 
 const router = Router();
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
-  apiVersion: '2025-10-29.clover',
-});
+let stripeClient: Stripe | null = null;
+
+const getStripeClient = (): Stripe => {
+  if (stripeClient) {
+    return stripeClient;
+  }
+
+  const secretKey = process.env.STRIPE_SECRET_KEY;
+  if (!secretKey) {
+    throw new Error('Stripe secret key not configured');
+  }
+
+  stripeClient = new Stripe(secretKey, {
+    apiVersion: '2025-10-29.clover',
+  });
+
+  return stripeClient;
+};
 
 const db = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -33,6 +48,7 @@ router.post('/stripe', async (req: Request, res: Response) => {
   let event: Stripe.Event;
 
   try {
+    const stripe = getStripeClient();
     // Verify webhook signature
     event = stripe.webhooks.constructEvent(
       req.body,

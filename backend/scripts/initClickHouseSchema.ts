@@ -11,6 +11,29 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
+const resolveClickHouseUrl = (): string => {
+  if (process.env.CLICKHOUSE_URL) {
+    return process.env.CLICKHOUSE_URL;
+  }
+
+  const host = process.env.CLICKHOUSE_HOST?.trim();
+  const port = process.env.CLICKHOUSE_PORT || '8123';
+
+  if (!host) {
+    return `http://localhost:${port}`;
+  }
+
+  let normalized = host.replace(/\/$/, '');
+  if (!normalized.startsWith('http://') && !normalized.startsWith('https://')) {
+    normalized = `http://${normalized}`;
+  }
+  const afterScheme = normalized.split('://')[1] ?? normalized;
+  if (!/:[0-9]+$/.test(afterScheme)) {
+    normalized = `${normalized}:${port}`;
+  }
+  return normalized;
+};
+
 async function initializeSchema() {
   console.log('🚀 Starting ClickHouse schema initialization...\n');
 
@@ -23,7 +46,7 @@ async function initializeSchema() {
     
     // First, create client without database to create the database itself
     const tempClient = createClient({
-      host: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+      url: resolveClickHouseUrl(),
       username: process.env.CLICKHOUSE_USER || 'default',
       password: process.env.CLICKHOUSE_PASSWORD || '',
       application: 'apexmediation-api-init',
@@ -39,7 +62,7 @@ async function initializeSchema() {
 
     // Now connect with the database specified
     client = createClient({
-      host: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+      url: resolveClickHouseUrl(),
       username: process.env.CLICKHOUSE_USER || 'default',
       password: process.env.CLICKHOUSE_PASSWORD || '',
       database: database,

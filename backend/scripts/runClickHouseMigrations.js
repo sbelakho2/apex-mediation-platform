@@ -5,12 +5,34 @@ const fs = require('node:fs');
 const fsp = require('node:fs/promises');
 const crypto = require('node:crypto');
 const { createClient } = require('@clickhouse/client');
+function resolveClickHouseUrl(){
+  if (process.env.CLICKHOUSE_URL) {
+    return process.env.CLICKHOUSE_URL;
+  }
 
-const CH_URL = process.env.CLICKHOUSE_URL || 'http://localhost:8123';
+  const host = (process.env.CLICKHOUSE_HOST || '').trim();
+  const port = process.env.CLICKHOUSE_PORT || '8123';
+
+  if (!host) {
+    return `http://localhost:${port}`;
+  }
+
+  let normalized = host.replace(/\/$/, '');
+  if (!normalized.startsWith('http://') && !normalized.startsWith('https://')) {
+    normalized = `http://${normalized}`;
+  }
+  const afterScheme = normalized.split('://')[1] ?? normalized;
+  if (!/:[0-9]+$/.test(afterScheme)) {
+    normalized = `${normalized}:${port}`;
+  }
+  return normalized;
+}
+
+const CH_URL = resolveClickHouseUrl();
 const CH_DB = process.env.CLICKHOUSE_DATABASE || 'apexmediation';
 
 const client = createClient({
-  host: CH_URL,
+  url: CH_URL,
   database: CH_DB,
   username: process.env.CLICKHOUSE_USER || 'default',
   password: process.env.CLICKHOUSE_PASSWORD || '',

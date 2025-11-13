@@ -144,6 +144,40 @@ class RedisClient {
   }
 
   /**
+   * Direct setEx helper for call sites that already serialize values
+   */
+  async setEx(key: string, ttl: number, value: string): Promise<boolean> {
+    if (!this.client || !this.isConnected) {
+      logger.warn('Redis not connected, skipping cache setEx', { key });
+      return false;
+    }
+
+    try {
+      await this.client.setEx(key, ttl, value);
+      return true;
+    } catch (error) {
+      logger.error('Redis setEx error', { error, key });
+      return false;
+    }
+  }
+
+  /**
+   * Get remaining time-to-live for a key in seconds
+   */
+  async ttl(key: string): Promise<number | null> {
+    if (!this.client || !this.isConnected) {
+      return null;
+    }
+
+    try {
+      return await this.client.ttl(key);
+    } catch (error) {
+      logger.error('Redis TTL error', { error, key });
+      return null;
+    }
+  }
+
+  /**
    * Delete key from cache
    */
   async del(key: string): Promise<boolean> {

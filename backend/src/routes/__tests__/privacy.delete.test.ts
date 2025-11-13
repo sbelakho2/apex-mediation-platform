@@ -5,6 +5,7 @@ import privacyRoutes from '../../routes/privacy.routes'
 // Mock authenticate middleware to inject a user context
 jest.mock('../../middleware/auth', () => ({
   authenticate: (_req: any, _res: any, next: any) => next(),
+  authorize: () => (_req: any, _res: any, next: any) => next(),
 }))
 
 // Spy on queueManager.addJob

@@ -1,5 +1,28 @@
 import { ClickHouseClient, createClient } from '@clickhouse/client';
 
+const resolveClickHouseUrl = (): string => {
+  if (process.env.CLICKHOUSE_URL) {
+    return process.env.CLICKHOUSE_URL;
+  }
+
+  const host = process.env.CLICKHOUSE_HOST?.trim();
+  const port = process.env.CLICKHOUSE_PORT || '8123';
+
+  if (!host) {
+    return `http://localhost:${port}`;
+  }
+
+  let normalized = host.replace(/\/$/, '');
+  if (!normalized.startsWith('http://') && !normalized.startsWith('https://')) {
+    normalized = `http://${normalized}`;
+  }
+  const afterScheme = normalized.split('://')[1] ?? normalized;
+  if (!/:[0-9]+$/.test(afterScheme)) {
+    normalized = `${normalized}:${port}`;
+  }
+  return normalized;
+};
+
 /**
  * Integration tests for ClickHouse write operations and rollback behavior
  * Tests data integrity and error handling in analytics pipeline
@@ -11,7 +34,7 @@ describe('ClickHouse Write and Rollback', () => {
 
   beforeAll(async () => {
     client = createClient({
-      host: process.env.CLICKHOUSE_HOST || 'http://localhost:8123',
+      url: resolveClickHouseUrl(),
       database: process.env.CLICKHOUSE_DATABASE || 'apexmediation',
       username: process.env.CLICKHOUSE_USER || 'default',
       password: process.env.CLICKHOUSE_PASSWORD || '',

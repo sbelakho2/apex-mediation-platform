@@ -2,6 +2,29 @@ import request from 'supertest';
 import express, { Application } from 'express';
 import { createClient, ClickHouseClient } from '@clickhouse/client';
 
+const resolveClickHouseUrl = (): string => {
+  if (process.env.CLICKHOUSE_URL) {
+    return process.env.CLICKHOUSE_URL;
+  }
+
+  const host = process.env.CLICKHOUSE_HOST?.trim();
+  const port = process.env.CLICKHOUSE_PORT || '8123';
+
+  if (!host) {
+    return `http://localhost:${port}`;
+  }
+
+  let normalized = host.replace(/\/$/, '');
+  if (!normalized.startsWith('http://') && !normalized.startsWith('https://')) {
+    normalized = `http://${normalized}`;
+  }
+  const afterScheme = normalized.split('://')[1] ?? normalized;
+  if (!/:[0-9]+$/.test(afterScheme)) {
+    normalized = `${normalized}:${port}`;
+  }
+  return normalized;
+};
+
 /**
  * Integration tests for transparency metrics API
  * Tests metric collection, aggregation, and retrieval
@@ -15,7 +38,7 @@ describe('Transparency Metrics Integration', () => {
   beforeAll(async () => {
     // Set up test ClickHouse client
     clickhouse = createClient({
-      host: process.env.CLICKHOUSE_HOST || 'http://localhost:8123',
+      url: resolveClickHouseUrl(),
       database: process.env.CLICKHOUSE_DATABASE || 'apexmediation',
     });
 

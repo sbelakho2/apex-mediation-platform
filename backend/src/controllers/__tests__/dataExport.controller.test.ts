@@ -16,6 +16,7 @@ jest.mock('../../middleware/auth', () => ({
     req.user = { publisherId: 'pub-123', userId: 'user-123', email: 'test@example.com' };
     next();
   }),
+  authorize: jest.fn(() => (_req: Request, _res: Response, next: NextFunction) => next()),
 }));
 
 jest.mock('../../services/dataExportService');

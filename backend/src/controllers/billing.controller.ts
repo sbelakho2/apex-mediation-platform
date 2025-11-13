@@ -2,7 +2,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { AppError } from '../middleware/errorHandler';
 import { logger } from '../utils/logger';
-import { usageMeteringService } from '../../services/billing/UsageMeteringService';
+import { usageMeteringService } from '../services/billing/UsageMeteringService';
 import { invoiceService } from '../services/invoiceService';
 import { reconciliationService } from '../services/reconciliationService';
 

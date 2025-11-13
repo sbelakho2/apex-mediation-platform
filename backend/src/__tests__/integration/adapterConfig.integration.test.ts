@@ -14,7 +14,11 @@ import {
   createTestAdapterConfig,
 } from '../helpers/testFixtures';
 
-describe('Adapter Config Integration Tests', () => {
+const describeIfDb = (process.env.SKIP_DB_SETUP === 'true'
+  ? describe.skip
+  : describe) as typeof describe;
+
+describeIfDb('Adapter Config Integration Tests', () => {
   let pool: Pool;
   let app: Application;
   let authToken: string;

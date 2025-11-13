@@ -5,16 +5,54 @@ import { Pool } from 'pg';
 import Stripe from 'stripe';
 import { createClient } from '@clickhouse/client';
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2025-10-29.clover',
-});
+let stripeClient: Stripe | null = null;
+
+const resolveClickHouseUrl = (): string => {
+  if (process.env.CLICKHOUSE_URL) {
+    return process.env.CLICKHOUSE_URL;
+  }
+
+  const host = process.env.CLICKHOUSE_HOST?.trim();
+  const port = process.env.CLICKHOUSE_PORT || '8123';
+
+  if (!host) {
+    return `http://localhost:${port}`;
+  }
+
+  let normalized = host.replace(/\/$/, '');
+  if (!normalized.startsWith('http://') && !normalized.startsWith('https://')) {
+    normalized = `http://${normalized}`;
+  }
+  const afterScheme = normalized.split('://')[1] ?? normalized;
+  if (!/:[0-9]+$/.test(afterScheme)) {
+    normalized = `${normalized}:${port}`;
+  }
+  return normalized;
+};
+
+const getStripeClient = (): Stripe => {
+  if (stripeClient) {
+    return stripeClient;
+  }
+
+  const secretKey = process.env.STRIPE_SECRET_KEY;
+  if (!secretKey) {
+    throw new Error('Stripe secret key not configured');
+  }
+
+  stripeClient = new Stripe(secretKey, {
+    apiVersion: '2025-10-29.clover',
+  });
+
+  return stripeClient;
+};
 
 const db = new Pool({
   connectionString: process.env.DATABASE_URL,
 });
 
 const clickhouse = createClient({
-  host: process.env.CLICKHOUSE_HOST || 'http://localhost:8123',
+  url: resolveClickHouseUrl(),
   username: process.env.CLICKHOUSE_USER || 'default',
   password: process.env.CLICKHOUSE_PASSWORD || '',
   database: process.env.CLICKHOUSE_DATABASE || 'apexmediation',
@@ -239,6 +277,8 @@ export class UsageMeteringService {
 
     for (const sub of subscriptions.rows) {
       try {
+        const stripe = getStripeClient();
+
         // Get yesterday's usage (idempotent - Stripe handles duplicates)
         const yesterday = new Date();
         yesterday.setDate(yesterday.getDate() - 1);

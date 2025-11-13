@@ -13,22 +13,36 @@ import logger from './logger';
 
 let client: ClickHouseClient | null = null;
 
-interface ClickHouseConfig {
-  host: string;
-  username?: string;
-  password?: string;
-  database?: string;
-  application?: string;
-  max_open_connections?: number;
-}
+const resolveClickHouseUrl = (): string => {
+  if (process.env.CLICKHOUSE_URL) {
+    return process.env.CLICKHOUSE_URL;
+  }
+
+  const host = process.env.CLICKHOUSE_HOST?.trim();
+  const port = process.env.CLICKHOUSE_PORT || '8123';
+
+  if (!host) {
+    return `http://localhost:${port}`;
+  }
+
+  let normalized = host.replace(/\/$/, '');
+  if (!normalized.startsWith('http://') && !normalized.startsWith('https://')) {
+    normalized = `http://${normalized}`;
+  }
+  const afterScheme = normalized.split('://')[1] ?? normalized;
+  if (!/:[0-9]+$/.test(afterScheme)) {
+    normalized = `${normalized}:${port}`;
+  }
+  return normalized;
+};
 
 /**
  * Initialize ClickHouse client connection
  */
 export const initializeClickHouse = async (): Promise<void> => {
   try {
-    const config: ClickHouseConfig = {
-      host: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+    const config = {
+      url: resolveClickHouseUrl(),
       username: process.env.CLICKHOUSE_USER || 'default',
       password: process.env.CLICKHOUSE_PASSWORD || '',
       database: process.env.CLICKHOUSE_DATABASE || 'apexmediation',
@@ -47,7 +61,7 @@ export const initializeClickHouse = async (): Promise<void> => {
     await result.json();
     logger.info('Successfully connected to ClickHouse', { 
       database: config.database,
-      host: config.host 
+      url: config.url, 
     });
   } catch (error) {
     logger.error('Failed to connect to ClickHouse', { error });

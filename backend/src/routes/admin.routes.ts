@@ -141,7 +141,7 @@ router.get('/health/red', async (_req: Request, res: Response) => {
       // @ts-ignore
       const r = await fetch(url.toString(), { headers: { ...authHeader } });
       if (!r.ok) return null;
-      const json = await r.json();
+  const json: any = await r.json();
       const v = json?.data?.result?.[0]?.value?.[1];
       const num = v != null ? Number(v) : null;
       return Number.isFinite(num) ? (num as number) : null;

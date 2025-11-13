@@ -9,7 +9,11 @@ import {
 } from '../helpers/testDatabase';
 import { createTestPublisher, createTestUser } from '../helpers/testFixtures';
 
-describe('Auth Integration Tests', () => {
+const describeIfDb = (process.env.SKIP_DB_SETUP === 'true'
+  ? describe.skip
+  : describe) as typeof describe;
+
+describeIfDb('Auth Integration Tests', () => {
   let pool: Pool;
   let app: Application;
 

@@ -24,8 +24,12 @@ export const authRateLimiter = async (req: Request, res: Response, next: NextFun
     }
 
     if (current > MAX_REQUESTS) {
-      const retryAfter = await redis.ttl(key);
-      res.setHeader('Retry-After', String(Math.max(1, retryAfter)));
+      const ttl = await redis.ttl(key);
+      const retryAfter = Math.max(
+        1,
+        typeof ttl === 'number' && ttl > 0 ? ttl : Math.ceil(WINDOW_MS / 1000)
+      );
+      res.setHeader('Retry-After', String(retryAfter));
       return res.status(429).json({
         success: false,
         error: 'Too many requests. Please try again later.',

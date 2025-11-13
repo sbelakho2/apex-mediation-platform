@@ -14,7 +14,11 @@ import {
   createTestPlacement,
 } from '../helpers/testFixtures';
 
-describe('Migration Studio Imports API', () => {
+const describeIfDb = (process.env.SKIP_DB_SETUP === 'true'
+  ? describe.skip
+  : describe) as typeof describe;
+
+describeIfDb('Migration Studio Imports API', () => {
   let pool: Pool;
   let app: Application;
   let authToken: string;

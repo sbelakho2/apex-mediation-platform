@@ -1,457 +1,336 @@
-/**
- * Unit tests for billing.controller.ts
- * 
- * Tests all billing API endpoints:
- * - GET /billing/usage/current
- * - GET /billing/invoices
- * - GET /billing/invoices/:id/pdf
- * - POST /billing/reconcile
- */
+import type { Request, Response, NextFunction } from 'express';
+import { AppError } from '../../middleware/errorHandler';
+import {
+  getCurrentUsage,
+  listInvoices,
+  getInvoicePDF,
+  reconcileBilling,
+} from '../billing.controller';
 
-import { Request, Response } from 'express';
-import { getCurrentUsage, listInvoices, getInvoicePDF, reconcileBilling } from '../../controllers/billing.controller';
+jest.mock('../../services/billing/UsageMeteringService', () => ({
+  usageMeteringService: {
+    getCurrentPeriodUsage: jest.fn(),
+    calculateOverages: jest.fn(),
+    getSubscriptionDetails: jest.fn(),
+  },
+}));
 
-// Mock dependencies
-jest.mock('../../services/usageMeteringService');
-jest.mock('../../services/invoiceService');
-jest.mock('../../services/reconciliationService');
+jest.mock('../../services/invoiceService', () => ({
+  invoiceService: {
+    listInvoices: jest.fn(),
+    getInvoice: jest.fn(),
+    generateInvoicePDF: jest.fn(),
+    generateInvoiceETag: jest.fn(),
+  },
+}));
 
-import { UsageMeteringService } from '../../services/usageMeteringService';
-import { InvoiceService } from '../../services/invoiceService';
-import { ReconciliationService } from '../../services/reconciliationService';
+jest.mock('../../services/reconciliationService', () => ({
+  reconciliationService: {
+    checkIdempotencyKey: jest.fn(),
+    storeIdempotencyKey: jest.fn(),
+    reconcile: jest.fn(),
+  },
+}));
 
-describe('Billing Controller', () => {
-  let mockRequest: Partial<Request>;
-  let mockResponse: Partial<Response>;
-  let mockUsageMeteringService: jest.Mocked<UsageMeteringService>;
-  let mockInvoiceService: jest.Mocked<InvoiceService>;
-  let mockReconciliationService: jest.Mocked<ReconciliationService>;
+import { usageMeteringService } from '../../services/billing/UsageMeteringService';
+import { invoiceService } from '../../services/invoiceService';
+import { reconciliationService } from '../../services/reconciliationService';
+
+type MockResponse = Response & {
+  status: jest.MockedFunction<Response['status']>;
+  json: jest.MockedFunction<Response['json']>;
+  setHeader: jest.Mock;
+  send: jest.Mock;
+  end: jest.Mock;
+};
+
+const createMockResponse = (): MockResponse => {
+  const res: Partial<MockResponse> = {};
+  res.status = jest.fn().mockReturnValue(res);
+  res.json = jest.fn().mockReturnValue(res);
+  res.setHeader = jest.fn();
+  res.send = jest.fn();
+  res.end = jest.fn();
+  return res as MockResponse;
+};
+
+const createMockRequest = (): Partial<Request> => ({
+  params: {},
+  query: {},
+  headers: {},
+  body: {},
+  user: {
+    userId: 'user-123',
+    publisherId: 'publisher-123',
+    email: 'billing@example.com',
+  },
+});
+
+const mockedUsageMetering = jest.mocked(usageMeteringService);
+const mockedInvoiceService = jest.mocked(invoiceService);
+const mockedReconciliationService = jest.mocked(reconciliationService);
+
+describe('billing.controller', () => {
+  let req: Partial<Request>;
+  let res: MockResponse;
+  let next: jest.MockedFunction<NextFunction>;
 
   beforeEach(() => {
-    mockRequest = {
-      query: {},
-      params: {},
-      headers: {},
-      user: { id: 'user-123', organizationId: 'org-123' },
-    };
-
-    mockResponse = {
-      status: jest.fn().mockReturnThis(),
-      json: jest.fn().mockReturnThis(),
-      set: jest.fn().mockReturnThis(),
-      send: jest.fn().mockReturnThis(),
-    };
-
-    mockUsageMeteringService = {
-      getCurrentUsage: jest.fn(),
-    } as any;
-
-    mockInvoiceService = {
-      listInvoices: jest.fn(),
-      generateInvoicePDF: jest.fn(),
-    } as any;
-
-    mockReconciliationService = {
-      reconcile: jest.fn(),
-      checkIdempotencyKey: jest.fn(),
-    } as any;
+    req = createMockRequest();
+    res = createMockResponse();
+    next = jest.fn();
+    jest.clearAllMocks();
   });
 
   describe('getCurrentUsage', () => {
-    it('should return current usage with 200 status', async () => {
-      const mockUsageData = {
-        current_period: {
-          start: '2025-11-01T00:00:00Z',
-          end: '2025-11-30T23:59:59Z',
-        },
-        usage: {
-          impressions: 150000,
-          clicks: 4500,
-          videostarts: 2000,
-        },
-        limits: {
-          impressions: 200000,
-          clicks: 10000,
-          videostarts: 5000,
-        },
-        overages: {
-          impressions: 0,
-          clicks: 0,
-          videostarts: 0,
-        },
-      };
+    it('returns usage details when user is present', async () => {
+      const usagePeriodStart = new Date('2025-11-01T00:00:00Z');
+      const usagePeriodEnd = new Date('2025-11-30T23:59:59Z');
 
-      mockUsageMeteringService.getCurrentUsage.mockResolvedValue(mockUsageData);
-      mockRequest.query = { organizationId: 'org-123' };
+      mockedUsageMetering.getCurrentPeriodUsage.mockResolvedValue({
+        customer_id: 'user-123',
+        impressions: 150_000,
+        api_calls: 4500,
+        data_transfer_gb: 42,
+        period_start: usagePeriodStart,
+        period_end: usagePeriodEnd,
+      } as any);
 
-      await getCurrentUsage(
-        mockRequest as Request,
-        mockResponse as Response,
-        mockUsageMeteringService
-      );
+      mockedUsageMetering.calculateOverages.mockResolvedValue({
+        impressions_overage: 5000,
+        impressions_overage_cost_cents: 400,
+        api_calls_overage: 0,
+        api_calls_overage_cost_cents: 0,
+        data_transfer_overage_gb: 0,
+        data_transfer_overage_cost_cents: 0,
+        total_overage_cost_cents: 400,
+      });
 
-      expect(mockResponse.status).toHaveBeenCalledWith(200);
-      expect(mockResponse.json).toHaveBeenCalledWith(mockUsageData);
-    });
+      mockedUsageMetering.getSubscriptionDetails.mockResolvedValue({
+        plan_type: 'studio',
+        included_impressions: 200_000,
+        included_api_calls: 10_000,
+        included_data_transfer_gb: 100,
+      });
 
-    it('should return 400 if organizationId is missing', async () => {
-      mockRequest.query = {};
+      await getCurrentUsage(req as Request, res, next);
 
-      await getCurrentUsage(
-        mockRequest as Request,
-        mockResponse as Response,
-        mockUsageMeteringService
-      );
-
-      expect(mockResponse.status).toHaveBeenCalledWith(400);
-      expect(mockResponse.json).toHaveBeenCalledWith(
+      expect(mockedUsageMetering.getCurrentPeriodUsage).toHaveBeenCalledWith('user-123');
+      expect(res.json).toHaveBeenCalledWith(
         expect.objectContaining({
-          error: 'bad_request',
-          message: expect.stringContaining('organizationId'),
+          success: true,
+          data: expect.objectContaining({
+            period: {
+              start: usagePeriodStart,
+              end: usagePeriodEnd,
+            },
+            plan: 'studio',
+          }),
         })
       );
+      expect(next).not.toHaveBeenCalled();
     });
 
-    it('should return 404 if organization not found', async () => {
-      mockUsageMeteringService.getCurrentUsage.mockRejectedValue(
-        new Error('Organization not found')
-      );
-      mockRequest.query = { organizationId: 'org-999' };
+    it('passes AppError to next when user is missing', async () => {
+      delete (req as any).user;
 
-      await getCurrentUsage(
-        mockRequest as Request,
-        mockResponse as Response,
-        mockUsageMeteringService
-      );
+      await getCurrentUsage(req as Request, res, next);
 
-      expect(mockResponse.status).toHaveBeenCalledWith(404);
-    });
-
-    it('should handle overages correctly', async () => {
-      const mockUsageDataWithOverages = {
-        current_period: {
-          start: '2025-11-01T00:00:00Z',
-          end: '2025-11-30T23:59:59Z',
-        },
-        usage: {
-          impressions: 250000,
-          clicks: 12000,
-          videostarts: 2000,
-        },
-        limits: {
-          impressions: 200000,
-          clicks: 10000,
-          videostarts: 5000,
-        },
-        overages: {
-          impressions: 50000,
-          clicks: 2000,
-          videostarts: 0,
-        },
-        overage_amount: 7500, // $75.00 in cents
-      };
-
-      mockUsageMeteringService.getCurrentUsage.mockResolvedValue(
-        mockUsageDataWithOverages
-      );
-      mockRequest.query = { organizationId: 'org-123' };
-
-      await getCurrentUsage(
-        mockRequest as Request,
-        mockResponse as Response,
-        mockUsageMeteringService
-      );
-
-      expect(mockResponse.status).toHaveBeenCalledWith(200);
-      const response = (mockResponse.json as jest.Mock).mock.calls[0][0];
-      expect(response.overages.impressions).toBe(50000);
-      expect(response.overages.clicks).toBe(2000);
-      expect(response.overage_amount).toBe(7500);
+      expect(next).toHaveBeenCalledWith(expect.any(AppError));
+      expect(res.json).not.toHaveBeenCalled();
     });
   });
 
   describe('listInvoices', () => {
-    it('should return paginated invoices with 200 status', async () => {
-      const mockInvoices = {
+    it('returns invoices with pagination metadata', async () => {
+      mockedInvoiceService.listInvoices.mockResolvedValue({
         invoices: [
           {
-            id: 'in_123',
-            number: 'INV-2025-001',
-            status: 'paid',
-            amount_due: 12500,
-            amount_paid: 12500,
+            id: 'inv-1',
+            invoice_number: 'INV-0001',
+            customer_id: 'user-123',
+            subscription_id: null,
+            invoice_date: '2025-11-01T00:00:00Z',
+            due_date: '2025-11-15T00:00:00Z',
+            amount_cents: 15_000,
+            tax_amount_cents: 0,
+            total_amount_cents: 15_000,
             currency: 'usd',
-            created: '2025-11-01T00:00:00Z',
+            status: 'paid',
+            paid_at: '2025-11-05T00:00:00Z',
+            stripe_invoice_id: 'stripe-1',
+            pdf_url: null,
+            line_items: [],
+            notes: null,
+            created_at: '2025-11-01T01:00:00Z',
+            updated_at: '2025-11-05T01:00:00Z',
           },
         ],
-        pagination: {
-          current_page: 1,
-          total_pages: 1,
-          total_count: 1,
-          has_more: false,
-        },
-      };
+        total: 1,
+      });
 
-      mockInvoiceService.listInvoices.mockResolvedValue(mockInvoices);
-      mockRequest.query = {
-        organizationId: 'org-123',
-        page: '1',
-        limit: '20',
-      };
+      req.query = { page: '1', limit: '20', status: 'paid' };
 
-      await listInvoices(
-        mockRequest as Request,
-        mockResponse as Response,
-        mockInvoiceService
-      );
+      await listInvoices(req as Request, res, next);
 
-      expect(mockResponse.status).toHaveBeenCalledWith(200);
-      expect(mockResponse.json).toHaveBeenCalledWith(mockInvoices);
-    });
-
-    it('should handle status filter', async () => {
-      mockRequest.query = {
-        organizationId: 'org-123',
-        status: 'open',
-      };
-
-      await listInvoices(
-        mockRequest as Request,
-        mockResponse as Response,
-        mockInvoiceService
-      );
-
-      expect(mockInvoiceService.listInvoices).toHaveBeenCalledWith(
-        expect.objectContaining({ status: 'open' })
-      );
-    });
-
-    it('should validate pagination parameters', async () => {
-      mockRequest.query = {
-        organizationId: 'org-123',
-        page: '0', // Invalid: must be >= 1
-        limit: '200', // Invalid: max is 100
-      };
-
-      await listInvoices(
-        mockRequest as Request,
-        mockResponse as Response,
-        mockInvoiceService
-      );
-
-      expect(mockResponse.status).toHaveBeenCalledWith(400);
-    });
-
-    it('should validate status enum', async () => {
-      mockRequest.query = {
-        organizationId: 'org-123',
-        status: 'invalid_status',
-      };
-
-      await listInvoices(
-        mockRequest as Request,
-        mockResponse as Response,
-        mockInvoiceService
-      );
-
-      expect(mockResponse.status).toHaveBeenCalledWith(400);
-      expect(mockResponse.json).toHaveBeenCalledWith(
+      expect(mockedInvoiceService.listInvoices).toHaveBeenCalledWith('user-123', 1, 20, {
+        status: 'paid',
+        from: undefined,
+        to: undefined,
+      });
+      expect(res.json).toHaveBeenCalledWith(
         expect.objectContaining({
-          message: expect.stringContaining('status'),
+          success: true,
+          data: expect.arrayContaining([
+            expect.objectContaining({ id: 'inv-1' }),
+          ]),
+          pagination: expect.objectContaining({ page: 1, pages: 1, total: 1 }),
         })
       );
+      expect(next).not.toHaveBeenCalled();
+    });
+
+    it('rejects invalid pagination input', async () => {
+      req.query = { page: '0', limit: '200' };
+
+      await listInvoices(req as Request, res, next);
+
+      expect(next).toHaveBeenCalledWith(expect.any(AppError));
+      expect(res.json).not.toHaveBeenCalled();
     });
   });
 
   describe('getInvoicePDF', () => {
-    it('should stream PDF with correct headers', async () => {
-      const mockPDFStream = Buffer.from('PDF_CONTENT');
-      const mockETag = 'etag-123';
+    const baseInvoice = {
+      id: 'inv-1',
+      invoice_number: 'INV-0001',
+      customer_id: 'user-123',
+      subscription_id: null,
+      invoice_date: '2025-11-01T00:00:00Z',
+      due_date: '2025-11-15T00:00:00Z',
+      amount_cents: 15_000,
+      tax_amount_cents: 0,
+      total_amount_cents: 15_000,
+      currency: 'usd',
+      status: 'paid' as const,
+      paid_at: '2025-11-05T00:00:00Z',
+      stripe_invoice_id: 'stripe-1',
+      pdf_url: null,
+      line_items: [],
+      notes: null,
+      created_at: '2025-11-01T01:00:00Z',
+      updated_at: '2025-11-05T01:00:00Z',
+    };
 
-      mockInvoiceService.generateInvoicePDF.mockResolvedValue({
-        stream: mockPDFStream,
-        etag: mockETag,
-      });
+    it('streams PDF and sets caching headers', async () => {
+      mockedInvoiceService.getInvoice.mockResolvedValue(baseInvoice as any);
+      mockedInvoiceService.generateInvoiceETag.mockReturnValue('etag-123');
+      const pdfBuffer = Buffer.from('pdf');
+      mockedInvoiceService.generateInvoicePDF.mockResolvedValue(pdfBuffer);
 
-      mockRequest.params = { id: 'in_123' };
+      req.params = { id: 'inv-1' };
 
-      await getInvoicePDF(
-        mockRequest as Request,
-        mockResponse as Response,
-        mockInvoiceService
-      );
+      await getInvoicePDF(req as Request, res, next);
 
-      expect(mockResponse.set).toHaveBeenCalledWith('Content-Type', 'application/pdf');
-      expect(mockResponse.set).toHaveBeenCalledWith('ETag', mockETag);
-      expect(mockResponse.set).toHaveBeenCalledWith(
+      expect(mockedInvoiceService.generateInvoicePDF).toHaveBeenCalledWith(baseInvoice);
+      expect(res.setHeader).toHaveBeenCalledWith('Content-Type', 'application/pdf');
+      expect(res.setHeader).toHaveBeenCalledWith(
         'Content-Disposition',
-        'attachment; filename="invoice-in_123.pdf"'
+        'attachment; filename="invoice-INV-0001.pdf"'
       );
-      expect(mockResponse.send).toHaveBeenCalledWith(mockPDFStream);
+      expect(res.send).toHaveBeenCalledWith(pdfBuffer);
+      expect(next).not.toHaveBeenCalled();
     });
 
-    it('should return 304 if ETag matches', async () => {
-      const mockETag = 'etag-123';
-      mockRequest.params = { id: 'in_123' };
-      mockRequest.headers = { 'if-none-match': mockETag };
+    it('returns 304 when client cache is fresh', async () => {
+      mockedInvoiceService.getInvoice.mockResolvedValue(baseInvoice as any);
+      mockedInvoiceService.generateInvoiceETag.mockReturnValue('etag-123');
 
-      mockInvoiceService.generateInvoicePDF.mockResolvedValue({
-        stream: Buffer.from(''),
-        etag: mockETag,
-      });
+      req.params = { id: 'inv-1' };
+      req.headers = { 'if-none-match': 'etag-123' };
 
-      await getInvoicePDF(
-        mockRequest as Request,
-        mockResponse as Response,
-        mockInvoiceService
-      );
+      await getInvoicePDF(req as Request, res, next);
 
-      expect(mockResponse.status).toHaveBeenCalledWith(304);
-      expect(mockResponse.send).toHaveBeenCalledWith();
+      expect(res.status).toHaveBeenCalledWith(304);
+      expect(res.end).toHaveBeenCalled();
+      expect(mockedInvoiceService.generateInvoicePDF).not.toHaveBeenCalled();
+      expect(next).not.toHaveBeenCalled();
     });
 
-    it('should return 404 if invoice not found', async () => {
-      mockInvoiceService.generateInvoicePDF.mockRejectedValue(
-        new Error('Invoice not found')
-      );
-      mockRequest.params = { id: 'in_999' };
+    it('propagates not-found via AppError', async () => {
+      mockedInvoiceService.getInvoice.mockResolvedValue(null as any);
+      req.params = { id: 'missing' };
 
-      await getInvoicePDF(
-        mockRequest as Request,
-        mockResponse as Response,
-        mockInvoiceService
-      );
+      await getInvoicePDF(req as Request, res, next);
 
-      expect(mockResponse.status).toHaveBeenCalledWith(404);
+      expect(next).toHaveBeenCalledWith(expect.any(AppError));
+      expect(res.send).not.toHaveBeenCalled();
     });
   });
 
   describe('reconcileBilling', () => {
-    it('should reconcile successfully with idempotency key', async () => {
-      const mockReconcileResult = {
-        status: 'completed',
-        summary: {
-          impressions_stripe: 100000,
-          impressions_clickhouse: 100000,
-          clicks_stripe: 3000,
-          clicks_clickhouse: 3001,
+    const baseResult = {
+      reconciliation_id: 'recon_1',
+      timestamp: new Date().toISOString(),
+      total_subscriptions_checked: 3,
+      discrepancies: [
+        {
+          customer_id: 'user-123',
+          stripe_customer_id: 'cus_123',
+          internal_usage: 1000,
+          stripe_usage: 990,
+          difference: 10,
+          difference_percentage: 1,
         },
-        discrepancies: [
-          {
-            metric: 'clicks',
-            stripe_value: 3000,
-            clickhouse_value: 3001,
-            diff: 1,
-            diff_percent: 0.033,
-          },
-        ],
-        audit_log_id: 'audit_123',
-      };
+      ],
+      total_discrepancy_cents: 100,
+      max_tolerated_discrepancy_percentage: 0.5,
+      within_tolerance: false,
+    };
 
-      mockReconciliationService.checkIdempotencyKey.mockResolvedValue(null);
-      mockReconciliationService.reconcile.mockResolvedValue(mockReconcileResult);
+    it('runs reconciliation when key is new', async () => {
+      mockedReconciliationService.checkIdempotencyKey.mockResolvedValue(null);
+      mockedReconciliationService.reconcile.mockResolvedValue(baseResult as any);
 
-      mockRequest.body = {
-        organization_id: 'org-123',
-        period_start: '2025-11-01T00:00:00Z',
-        period_end: '2025-11-30T23:59:59Z',
-      };
-      mockRequest.headers = {
-        'idempotency-key': 'reconcile-org-123-2025-11',
-      };
+      req.body = { idempotencyKey: 'reconcile-1234567890' };
 
-      await reconcileBilling(
-        mockRequest as Request,
-        mockResponse as Response,
-        mockReconciliationService
+      await reconcileBilling(req as Request, res, next);
+
+      expect(mockedReconciliationService.reconcile).toHaveBeenCalled();
+      expect(mockedReconciliationService.storeIdempotencyKey).toHaveBeenCalledWith(
+        'reconcile-1234567890',
+        baseResult
       );
-
-      expect(mockResponse.status).toHaveBeenCalledWith(200);
-      expect(mockResponse.json).toHaveBeenCalledWith(mockReconcileResult);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ success: true, data: baseResult })
+      );
+      expect(next).not.toHaveBeenCalled();
     });
 
-    it('should return cached result for duplicate idempotency key', async () => {
-      const cachedResult = { status: 'completed', cached: true };
-      mockReconciliationService.checkIdempotencyKey.mockResolvedValue(cachedResult);
+    it('returns cached result when key already processed', async () => {
+      mockedReconciliationService.checkIdempotencyKey.mockResolvedValue(baseResult as any);
 
-      mockRequest.body = {
-        organization_id: 'org-123',
-        period_start: '2025-11-01T00:00:00Z',
-        period_end: '2025-11-30T23:59:59Z',
-      };
-      mockRequest.headers = {
-        'idempotency-key': 'reconcile-org-123-2025-11',
-      };
+      req.body = { idempotencyKey: 'reconcile-1234567890' };
 
-      await reconcileBilling(
-        mockRequest as Request,
-        mockResponse as Response,
-        mockReconciliationService
-      );
+      await reconcileBilling(req as Request, res, next);
 
-      expect(mockResponse.status).toHaveBeenCalledWith(200);
-      expect(mockResponse.json).toHaveBeenCalledWith(cachedResult);
-      expect(mockReconciliationService.reconcile).not.toHaveBeenCalled();
-    });
-
-    it('should require idempotency key header', async () => {
-      mockRequest.body = {
-        organization_id: 'org-123',
-        period_start: '2025-11-01T00:00:00Z',
-        period_end: '2025-11-30T23:59:59Z',
-      };
-      mockRequest.headers = {}; // No idempotency key
-
-      await reconcileBilling(
-        mockRequest as Request,
-        mockResponse as Response,
-        mockReconciliationService
-      );
-
-      expect(mockResponse.status).toHaveBeenCalledWith(400);
-      expect(mockResponse.json).toHaveBeenCalledWith(
+      expect(mockedReconciliationService.reconcile).not.toHaveBeenCalled();
+      expect(res.json).toHaveBeenCalledWith(
         expect.objectContaining({
-          message: expect.stringContaining('Idempotency-Key'),
+          success: true,
+          data: baseResult,
+          message: 'Reconciliation already processed',
         })
       );
     });
 
-    it('should validate idempotency key length (min 16 chars)', async () => {
-      mockRequest.body = {
-        organization_id: 'org-123',
-        period_start: '2025-11-01T00:00:00Z',
-        period_end: '2025-11-30T23:59:59Z',
-      };
-      mockRequest.headers = {
-        'idempotency-key': 'short', // Too short
-      };
+    it('rejects requests without idempotency key', async () => {
+      req.body = {};
 
-      await reconcileBilling(
-        mockRequest as Request,
-        mockResponse as Response,
-        mockReconciliationService
-      );
+      await reconcileBilling(req as Request, res, next);
 
-      expect(mockResponse.status).toHaveBeenCalledWith(400);
-    });
-
-    it('should validate date formats', async () => {
-      mockRequest.body = {
-        organization_id: 'org-123',
-        period_start: 'invalid-date',
-        period_end: '2025-11-30T23:59:59Z',
-      };
-      mockRequest.headers = {
-        'idempotency-key': 'reconcile-org-123-2025-11',
-      };
-
-      await reconcileBilling(
-        mockRequest as Request,
-        mockResponse as Response,
-        mockReconciliationService
-      );
-
-      expect(mockResponse.status).toHaveBeenCalledWith(400);
+      expect(next).toHaveBeenCalledWith(expect.any(AppError));
+      expect(mockedReconciliationService.reconcile).not.toHaveBeenCalled();
     });
   });
 });

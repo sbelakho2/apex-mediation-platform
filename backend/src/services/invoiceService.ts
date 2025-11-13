@@ -8,9 +8,24 @@ import Stripe from 'stripe';
 import PDFDocument from 'pdfkit';
 import crypto from 'crypto';
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
-  apiVersion: '2025-10-29.clover',
-});
+let stripeClient: Stripe | null = null;
+
+const getStripeClient = (): Stripe => {
+  if (stripeClient) {
+    return stripeClient;
+  }
+
+  const secretKey = process.env.STRIPE_SECRET_KEY;
+  if (!secretKey) {
+    throw new Error('Stripe secret key not configured');
+  }
+
+  stripeClient = new Stripe(secretKey, {
+    apiVersion: '2025-10-29.clover',
+  });
+
+  return stripeClient;
+};
 
 const db = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -284,6 +299,7 @@ export class InvoiceService {
       amount_cents: number;
     }>
   ): Promise<string> {
+    const stripe = getStripeClient();
     // Get Stripe customer ID
     const customer = await db.query(
       `SELECT stripe_customer_id FROM users WHERE id = $1`,
@@ -327,6 +343,7 @@ export class InvoiceService {
    * Sync invoice from Stripe to database
    */
   async syncInvoiceFromStripe(stripeInvoiceId: string): Promise<void> {
+    const stripe = getStripeClient();
     const stripeInvoice = await stripe.invoices.retrieve(stripeInvoiceId);
 
     const lineItems = stripeInvoice.lines.data.map((line: any) => ({

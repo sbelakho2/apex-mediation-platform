@@ -34,8 +34,14 @@ router.post('/export', authenticate, async (req: Request, res: Response) => {
       removeOnFail: { age: 7 * 24 * 3600 },
     });
 
-    logger.info('Enqueued privacy export job', { jobId: job.id, tenantId, userId, format });
-    return res.status(202).json({ status: 'queued', jobId: job.id });
+    if (!job) {
+      logger.error('Queue unavailable for privacy export', { tenantId, userId });
+      return res.status(503).json({ error: 'Queue unavailable' });
+    }
+
+    const jobId = String(job.id);
+    logger.info('Enqueued privacy export job', { jobId, tenantId, userId, format });
+    return res.status(202).json({ status: 'queued', jobId });
   } catch (error: any) {
     logger.error('Failed to enqueue privacy export job', { error: error?.message });
     return res.status(500).json({ error: 'Failed to enqueue export' });
@@ -69,8 +75,14 @@ router.post('/delete', authenticate, async (req: Request, res: Response) => {
       removeOnFail: { age: 7 * 24 * 3600 },
     });
 
-    logger.info('Enqueued privacy delete job', { jobId: job.id, tenantId, userId });
-    return res.status(202).json({ status: 'queued', jobId: job.id });
+    if (!job) {
+      logger.error('Queue unavailable for privacy delete', { tenantId, userId });
+      return res.status(503).json({ error: 'Queue unavailable' });
+    }
+
+    const jobId = String(job.id);
+    logger.info('Enqueued privacy delete job', { jobId, tenantId, userId });
+    return res.status(202).json({ status: 'queued', jobId });
   } catch (error: any) {
     logger.error('Failed to enqueue privacy delete job', { error: error?.message });
     return res.status(500).json({ error: 'Failed to enqueue delete' });

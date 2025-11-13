@@ -11,6 +11,7 @@ jest.mock('../../middleware/auth', () => ({
     }
     next();
   }),
+  authorize: jest.fn(() => (_req: Request, _res: Response, next: NextFunction) => next()),
 }));
 
 // Mock ClickHouse executeQuery

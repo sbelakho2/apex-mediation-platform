@@ -5,10 +5,14 @@ import { createTestApp } from '../helpers/testApp';
 import { setupTestDatabase, teardownTestDatabase, cleanDatabase } from '../helpers/testDatabase';
 import { createTestPublisher, createTestUser } from '../helpers/testFixtures';
 
+const describeIfDb = (process.env.SKIP_DB_SETUP === 'true'
+  ? describe.skip
+  : describe) as typeof describe;
+
 /**
  * Integration tests for A/B Testing routes
  */
-describe('A/B Testing Integration', () => {
+describeIfDb('A/B Testing Integration', () => {
   let pool: Pool;
   let app: Application;
   let authToken: string;
