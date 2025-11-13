@@ -392,3 +392,71 @@ public class AppLovinAdapter: AdNetworkAdapter {
         isInitialized = false
     }
 }
+
+// MARK: - Example Unity Ads Adapter
+
+/// Example Unity Ads adapter implementation
+public class UnityAdsAdapter: AdNetworkAdapter {
+    public var networkName: String { "unity" }
+    public var version: String { "1.0.0" }
+    public var minSDKVersion: String { "1.0.0" }
+    
+    private var isInitialized = false
+    
+    public required init() {}
+    
+    public func initialize(config: [String : Any]) throws {
+        guard let gameId = config["game_id"] as? String, !gameId.isEmpty else {
+            throw AdapterError.loadFailed("game_id required")
+        }
+        // UnityAds.initialize(gameId)
+        isInitialized = true
+    }
+    
+    public func loadAd(
+        placement: String,
+        adType: AdType,
+        config: [String : Any],
+        completion: @escaping (Result<Ad, AdapterError>) -> Void
+    ) {
+        guard isInitialized else {
+            completion(.failure(.notInitialized))
+            return
+        }
+        guard supportsAdType(adType) else {
+            completion(.failure(.unsupportedAdType))
+            return
+        }
+        // Return a mock filled ad for testing purposes
+        let creative: Creative = .banner(
+            imageURL: "https://example.invalid/ad.png",
+            clickURL: "https://example.invalid/click",
+            width: 320,
+            height: 50
+        )
+        let ad = Ad(
+            adId: "mock-unity-\(placement)",
+            placement: placement,
+            adType: adType,
+            creative: creative,
+            networkName: networkName,
+            cpm: 1.05,
+            expiresAt: Date().addingTimeInterval(3600),
+            metadata: [:]
+        )
+        completion(.success(ad))
+    }
+    
+    public func supportsAdType(_ adType: AdType) -> Bool {
+        switch adType {
+        case .banner, .interstitial, .rewarded:
+            return true
+        default:
+            return false
+        }
+    }
+    
+    public func destroy() {
+        isInitialized = false
+    }
+}
