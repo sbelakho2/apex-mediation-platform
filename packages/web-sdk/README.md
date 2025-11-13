@@ -22,3 +22,10 @@ Notes
 - Fetch timeouts are enforced with AbortController (default 2000ms).
 - Response validation uses zod to ensure schema correctness.
 - Error taxonomy mirrors mobile SDKs (INIT_REQUIRED, TIMEOUT, NETWORK, BAD_RESPONSE, VALIDATION, NO_FILL, UNKNOWN).
+
+Supported networks
+- The Web SDK surfaces the list of parity networks with mobile/CTV via SUPPORTED_NETWORKS export.
+- Programmatic API:
+  - import { SUPPORTED_NETWORKS, getSupportedAdapters } from '@rivalapex/web-sdk'
+  - getSupportedAdapters() returns an array of 15 network identifiers: admob, applovin, unity, ironsource, facebook, vungle, chartboost, pangle, mintegral, adcolony, tapjoy, inmobi, fyber, smaato, amazon.
+- See also: docs/Adapters/SUPPORTED_NETWORKS.md in the repository for cross-platform details and code locations.

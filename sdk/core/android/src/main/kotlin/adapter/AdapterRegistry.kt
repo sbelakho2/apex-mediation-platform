@@ -105,7 +105,13 @@ class AdapterRegistry(
             "com.rivalapexmediation.adapter.vungle",
             "com.rivalapexmediation.adapter.chartboost",
             "com.rivalapexmediation.adapter.pangle",
-            "com.rivalapexmediation.adapter.mintegral"
+            "com.rivalapexmediation.adapter.mintegral",
+            "com.rivalapexmediation.adapter.adcolony",
+            "com.rivalapexmediation.adapter.tapjoy",
+            "com.rivalapexmediation.adapter.inmobi",
+            "com.rivalapexmediation.adapter.fyber",
+            "com.rivalapexmediation.adapter.smaato",
+            "com.rivalapexmediation.adapter.amazon"
         )
 
         for (packageName in adapterPackages) {

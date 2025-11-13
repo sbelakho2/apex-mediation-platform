@@ -148,16 +148,15 @@ Purpose
   - iOS: from sdk/core/ios: xcodebuild -scheme RivalApexMediationSDK -destination 'platform=iOS Simulator,name=iPhone 15' clean test
 - Acceptance criteria
   - Three adapters green; registry status accurate; sample shows mock load.
- - Status
-   - Done — Implemented adapters and diagnostics with tests:
-     - Android: Added reflective adapters at
-       - sdk/core/android/src/main/kotlin/com/rivalapexmediation/adapter/admob/Adapter.kt
-       - sdk/core/android/src/main/kotlin/com/rivalapexmediation/adapter/applovin/Adapter.kt
-       - sdk/core/android/src/main/kotlin/com/rivalapexmediation/adapter/unity/Adapter.kt
-       - Extended registry with diagnostics (registeredCount, getInitializationReport()).
-       - Tests: sdk/core/android/src/test/kotlin/adapter/AdapterRegistryTest.kt validates discovery, initialization, mocked loads, and diagnostics.
-     - iOS: Registered Unity in built-ins and added diagnostics API (getInitializationReport()); implemented UnityAdsAdapter mock; tests at sdk/core/ios/Tests/Adapters/AdaptersInventoryTests.swift validate counts, initialization, Unity mock load, and diagnostics.
-     - CI: Existing Android/iOS workflows execute these tests; artifacts/logs serve as evidence.
+  - Status
+    - Done — All SDKs now include a full set of 15 adapter stubs and documentation is updated:
+      - Networks covered (15): AdMob, AppLovin, Unity Ads, IronSource, Facebook (Meta Audience Network), Vungle, Chartboost, Pangle, Mintegral, AdColony, Tapjoy, InMobi, Fyber, Smaato, Amazon Publisher Services.
+      - Android (core): Reflective adapters added for all 15 under sdk/core/android/src/main/kotlin/com/rivalapexmediation/adapter/<network>/Adapter.kt; AdapterRegistry reflection list extended; diagnostics available; existing tests validate core flows for 3 and discovery for others.
+      - iOS/tvOS: Built-in adapters added for all 15 in AdapterRegistry (Swift types per network); registerBuiltInAdapters() registers each; diagnostics extended; unit tests remain green (Unity happy path) with discovery reflecting all.
+      - Android TV (CTV): Introduced lightweight adapter interface and registry covering all 15 within sdk/ctv/android-tv (metadata-only stubs), compiled by CI.
+      - Unity: Added Runtime/Adapters/AdapterRegistry.cs enumerating all 15 adapters with minimal stubs to satisfy compilation; Unity CI remains green.
+      - Web: Added packages/web-sdk/src/adapters.ts exporting SUPPORTED_NETWORKS (15) and getSupportedAdapters() to surface parity in docs/usage.
+      - Documentation: New docs/Adapters/SUPPORTED_NETWORKS.md lists all networks per platform with file paths and notes.
 
 8) Dashboard/UI wiring (website settings)
 - Scope/Path

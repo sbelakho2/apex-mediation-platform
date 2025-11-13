@@ -3,6 +3,7 @@ import { Errors, SdkError } from './errors';
 import { requestAuction, type AuctionClientConfig } from './auctionClient';
 import type { ConsentState, InitOptions, AdRequest, AdResponse, SdkEvent } from './types';
 import { ConsentSchema, AdRequestSchema } from './schemas';
+import { SUPPORTED_NETWORKS, getSupportedAdapters } from './adapters';
 
 type State = {
   initialized: boolean;
@@ -56,3 +57,4 @@ export function on(event: SdkEvent, handler: (payload?: any) => void) {
 
 export { Errors, SdkError };
 export type { ConsentState, InitOptions, AdRequest, AdResponse, SdkEvent };
+export { SUPPORTED_NETWORKS, getSupportedAdapters };

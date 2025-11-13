@@ -66,7 +66,19 @@ public final class AdapterRegistry {
         let builtIns: [String: AdNetworkAdapter.Type] = [
             "admob": AdMobAdapter.self,
             "applovin": AppLovinAdapter.self,
-            "unity": UnityAdsAdapter.self
+            "unity": UnityAdsAdapter.self,
+            "ironsource": IronSourceAdapter.self,
+            "facebook": FacebookAdapter.self,
+            "vungle": VungleAdapter.self,
+            "chartboost": ChartboostAdapter.self,
+            "pangle": PangleAdapter.self,
+            "mintegral": MintegralAdapter.self,
+            "adcolony": AdColonyAdapter.self,
+            "tapjoy": TapjoyAdapter.self,
+            "inmobi": InMobiAdapter.self,
+            "fyber": FyberAdapter.self,
+            "smaato": SmaatoAdapter.self,
+            "amazon": AmazonAdapter.self
         ]
         adapterClasses.merge(builtIns) { _, new in new }
     }
