@@ -31,15 +31,15 @@ CREATE TABLE IF NOT EXISTS migration_experiments (
     -- Metadata
     created_by UUID REFERENCES users(id),
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    
-    CONSTRAINT unique_experiment_per_placement UNIQUE(placement_id, status) 
-        WHERE status IN ('active', 'paused')
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX idx_migration_experiments_publisher ON migration_experiments(publisher_id);
 CREATE INDEX idx_migration_experiments_status ON migration_experiments(status);
 CREATE INDEX idx_migration_experiments_placement ON migration_experiments(placement_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_migration_experiments_active_unique
+    ON migration_experiments(placement_id, status)
+    WHERE status IN ('active', 'paused');
 
 -- Mappings table: maps incumbent adapters/instances to our system
 CREATE TABLE IF NOT EXISTS migration_mappings (

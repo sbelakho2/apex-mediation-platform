@@ -1,0 +1,67 @@
+name: Web SDK CI
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'packages/web-sdk/**'
+      - '.github/workflows/web-sdk.yml'
+  pull_request:
+    branches: [ main, develop ]
+    paths:
+      - 'packages/web-sdk/**'
+      - '.github/workflows/web-sdk.yml'
+
+jobs:
+  web-sdk:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/web-sdk
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies (workspace root)
+        working-directory: .
+        run: |
+          npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
+
+      - name: Test with coverage
+        run: npm run test -- --coverage
+
+      - name: Generate mock success trace artifact
+        run: npm run gen:mock-trace
+
+      - name: Upload dist bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-sdk-dist
+          path: packages/web-sdk/dist
+          if-no-files-found: error
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-sdk-coverage
+          path: packages/web-sdk/coverage
+          if-no-files-found: error
+
+      - name: Upload mock trace
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-sdk-mock-trace
+          path: packages/web-sdk/artifacts/mock-success-trace.json
+          if-no-files-found: error

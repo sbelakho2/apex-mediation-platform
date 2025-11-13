@@ -87,7 +87,6 @@ BEGIN
     END IF;
 END $$;
 
--- Create subscriptions table if not exists (from accounting system)
 CREATE TABLE IF NOT EXISTS subscriptions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     customer_id UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
@@ -118,10 +117,76 @@ CREATE TABLE IF NOT EXISTS subscriptions (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- Upgrade existing subscriptions table to match new billing schema
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM information_schema.tables 
+        WHERE table_schema = 'public' AND table_name = 'subscriptions'
+    ) THEN
+        -- Normalize legacy column names
+        IF EXISTS (
+            SELECT 1 FROM information_schema.columns 
+            WHERE table_schema = 'public' AND table_name = 'subscriptions' AND column_name = 'trial_end'
+        ) AND NOT EXISTS (
+            SELECT 1 FROM information_schema.columns 
+            WHERE table_schema = 'public' AND table_name = 'subscriptions' AND column_name = 'trial_end_date'
+        ) THEN
+            EXECUTE 'ALTER TABLE subscriptions RENAME COLUMN trial_end TO trial_end_date';
+        END IF;
+
+        -- Add newly required columns when missing
+        EXECUTE 'ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS plan_name TEXT NOT NULL DEFAULT ''Standard''';
+            EXECUTE 'ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS base_price_cents INTEGER NOT NULL DEFAULT 0';
+            EXECUTE 'ALTER TABLE subscriptions ALTER COLUMN base_price_cents DROP DEFAULT';
+            EXECUTE 'ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS currency TEXT NOT NULL DEFAULT ''USD''';
+            EXECUTE 'ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS included_impressions INTEGER NOT NULL DEFAULT 0';
+            EXECUTE 'ALTER TABLE subscriptions ALTER COLUMN included_impressions DROP DEFAULT';
+        EXECUTE 'ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS included_impressions INTEGER NOT NULL DEFAULT 0';
+        EXECUTE 'ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS included_api_calls INTEGER DEFAULT 100000';
+        EXECUTE 'ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS included_data_transfer_gb INTEGER DEFAULT 50';
+            EXECUTE 'ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS billing_interval TEXT NOT NULL DEFAULT ''monthly''';
+            EXECUTE 'ALTER TABLE subscriptions ALTER COLUMN billing_interval DROP DEFAULT';
+            EXECUTE 'ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS next_billing_date DATE NOT NULL DEFAULT CURRENT_DATE';
+            EXECUTE 'ALTER TABLE subscriptions ALTER COLUMN next_billing_date DROP DEFAULT';
+        EXECUTE 'ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS next_billing_date DATE NOT NULL DEFAULT CURRENT_DATE';
+        EXECUTE 'ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS payment_processor TEXT NOT NULL DEFAULT ''stripe''';
+        EXECUTE 'ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS paddle_subscription_id TEXT';
+        EXECUTE 'ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS failed_payment_count INTEGER NOT NULL DEFAULT 0';
+        EXECUTE 'ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS last_failed_payment_at TIMESTAMPTZ';
+        EXECUTE 'ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT ''{}''::jsonb';
+
+        -- Align constraint sets
+        EXECUTE 'ALTER TABLE subscriptions DROP CONSTRAINT IF EXISTS subscriptions_plan_type_check';
+        EXECUTE 'ALTER TABLE subscriptions ADD CONSTRAINT subscriptions_plan_type_check CHECK (plan_type IN (''indie'', ''studio'', ''enterprise''))';
+
+        EXECUTE 'ALTER TABLE subscriptions DROP CONSTRAINT IF EXISTS subscriptions_status_check';
+        EXECUTE 'ALTER TABLE subscriptions ADD CONSTRAINT subscriptions_status_check CHECK (status IN (''trial'', ''active'', ''past_due'', ''cancelled'', ''suspended''))';
+
+        EXECUTE 'ALTER TABLE subscriptions DROP CONSTRAINT IF EXISTS subscriptions_payment_processor_check';
+        EXECUTE 'ALTER TABLE subscriptions ADD CONSTRAINT subscriptions_payment_processor_check CHECK (payment_processor IN (''stripe'', ''paddle'', ''manual''))';
+    END IF;
+END $$;
+
 CREATE INDEX IF NOT EXISTS idx_subscriptions_customer_id ON subscriptions(customer_id);
 CREATE INDEX IF NOT EXISTS idx_subscriptions_status ON subscriptions(status);
-CREATE INDEX IF NOT EXISTS idx_subscriptions_next_billing_date ON subscriptions(next_billing_date);
+
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_schema = 'public' AND table_name = 'subscriptions' AND column_name = 'next_billing_date'
+    ) THEN
+        EXECUTE 'CREATE INDEX IF NOT EXISTS idx_subscriptions_next_billing_date ON subscriptions(next_billing_date)';
+    END IF;
+END $$;
+
 CREATE INDEX IF NOT EXISTS idx_subscriptions_stripe_id ON subscriptions(stripe_subscription_id) WHERE stripe_subscription_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_subscriptions_paddle_id ON subscriptions(paddle_subscription_id) WHERE paddle_subscription_id IS NOT NULL;
+
+-- Replace legacy usage_records aggregate table with event-style records
+DROP VIEW IF EXISTS customer_activity_summary;
+DROP TABLE IF EXISTS usage_records;
 
 -- Create usage_records table if not exists
 CREATE TABLE IF NOT EXISTS usage_records (
