@@ -25,17 +25,17 @@ Add to your HTML `<head>`:
 ### NPM
 
 ```bash
-npm install @apexmediation/web-sdk
+npm install @rivalapex/web-sdk
 ```
 
 ```javascript
-import ApexMediation from '@apexmediation/web-sdk';
+import ApexMediation from '@rivalapex/web-sdk';
 ```
 
 ### Yarn
 
 ```bash
-yarn add @apexmediation/web-sdk
+yarn add @rivalapex/web-sdk
 ```
 
 ---
@@ -282,7 +282,7 @@ import ApexMediation, {
     RewardedVideoAd,
     ApexMediationConfig,
     Reward
-} from '@apexmediation/web-sdk';
+} from '@rivalapex/web-sdk';
 
 // Initialize with config
 const config: ApexMediationConfig = {
@@ -429,7 +429,7 @@ Promise.all([
 
 ```jsx
 import { useEffect, useState } from 'react';
-import ApexMediation from '@apexmediation/web-sdk';
+import ApexMediation from '@rivalapex/web-sdk';
 
 function BannerAdComponent() {
     const [adLoaded, setAdLoaded] = useState(false);
@@ -472,7 +472,7 @@ export default BannerAdComponent;
 </template>
 
 <script>
-import ApexMediation from '@apexmediation/web-sdk';
+import ApexMediation from '@rivalapex/web-sdk';
 
 export default {
     name: 'BannerAd',
