@@ -20,11 +20,21 @@ import webhooksRoutes from './webhooks.routes';
 import adminRoutes from './admin.routes';
 import privacyRoutes from './privacy.routes';
 import migrationRoutes from './migration.routes';
+import keysRoutes from './keys.routes';
+import integrationsRoutes from './integrations.routes';
+import flagsRoutes from './flags.routes';
+import { killSwitchGuard } from '../middleware/featureFlags';
 
 const router = Router();
 
+// Feature flags kill-switch guard (applies to all /api/v1 routes with allowlist in middleware)
+router.use(killSwitchGuard);
+
 // Mount route modules
+router.use('/flags', flagsRoutes);
 router.use('/auth', authRoutes);
+router.use('/keys', keysRoutes);
+router.use('/integrations', integrationsRoutes);
 router.use('/meta', metaRoutes);
 router.use('/webhooks', webhooksRoutes);
 router.use('/revenue', revenueRoutes);

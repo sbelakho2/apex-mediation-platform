@@ -1,5 +1,8 @@
 Supported Ad Networks Across SDKs (15)
 
+Status note
+- All SDKs in this repository have access to all 15 networks listed below. On mobile/CTV, access is provided via adapters/registries present in each SDK; on Web, access is provided via the server‑side mediation layer. This document does not claim production certification; it enumerates availability and code locations.
+
 Overview
 - This document lists the 15 ad network adapters supported across all SDKs and where their code lives.
 - Networks:

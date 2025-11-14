@@ -152,3 +152,17 @@ export const migrationKillsTotal = new Counter({
   help: 'Total number of experiment kill switches triggered by severe violations',
   labelNames: ['reason'] as const,
 });
+
+// Authentication attempt counter
+export const authAttemptsTotal = new Counter({
+  name: 'auth_attempts_total',
+  help: 'Total number of authentication/login attempts',
+  labelNames: ['outcome'] as const, // outcome: success | failure | twofa_required
+});
+
+// 2FA events counter
+export const twofaEventsTotal = new Counter({
+  name: 'twofa_events_total',
+  help: 'Total number of 2FA events',
+  labelNames: ['event', 'outcome'] as const, // event: enroll|verify|login2fa|regen|disable
+});

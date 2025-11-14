@@ -9,6 +9,8 @@ type State = {
   initialized: boolean;
   consent?: ConsentState;
   cfg?: AuctionClientConfig;
+  debug?: boolean;
+  telemetryEnabled?: boolean;
 };
 
 const state: State = { initialized: false };
@@ -26,6 +28,8 @@ export function init(options: InitOptions) {
     sdkVersion: options.sdkVersion ?? '0.1.0',
   };
   state.initialized = true;
+  state.debug = Boolean(options.debug);
+  state.telemetryEnabled = options.telemetryEnabled !== false; // default true
 }
 
 export function setConsent(consent: ConsentState) {

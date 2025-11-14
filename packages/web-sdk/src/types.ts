@@ -12,6 +12,8 @@ export type InitOptions = {
   appId?: string;
   timeoutMs?: number; // default 2000ms
   sdkVersion?: string;
+  debug?: boolean; // enable verbose SDK logs (no PII)
+  telemetryEnabled?: boolean; // allow emitting lightweight telemetry events
 };
 
 export type AdRequest = {

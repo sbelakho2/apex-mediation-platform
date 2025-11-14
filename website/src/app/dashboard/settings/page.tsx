@@ -12,6 +12,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { useSearchParams } from 'next/navigation';
 import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { api } from '../../../lib/api';
 
 export default function SettingsPage() {
   const searchParams = useSearchParams();
@@ -323,6 +324,43 @@ function PaymentTab() {
 }
 
 function NotificationsTab() {
+  const [slackConnected, setSlackConnected] = useState<boolean | null>(null);
+  const [slackLoading, setSlackLoading] = useState(false);
+  const [slackError, setSlackError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    (async () => {
+      try {
+        const res = await api.get<{ connected: boolean }>('/api/v1/integrations/slack/status', { credentials: 'include' });
+        if (!isMounted) return;
+        if (res.success) setSlackConnected((res.data as any)?.connected === true);
+        else setSlackError(res.error || 'Failed to fetch Slack status');
+      } catch (e: any) {
+        if (!isMounted) return;
+        setSlackError(e?.message || 'Failed to fetch Slack status');
+      }
+    })();
+    return () => { isMounted = false; };
+  }, []);
+
+  const onConnectSlack = async () => {
+    setSlackLoading(true);
+    setSlackError(null);
+    try {
+      const res = await api.get<{ url: string }>('/api/v1/integrations/slack/connect', { credentials: 'include' });
+      if (res.success && (res.data as any)?.url) {
+        window.location.href = (res.data as any).url;
+      } else {
+        setSlackError(res.error || 'Unable to initiate Slack OAuth');
+      }
+    } catch (e: any) {
+      setSlackError(e?.message || 'Unable to initiate Slack OAuth');
+    } finally {
+      setSlackLoading(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="card p-6">
@@ -370,16 +408,160 @@ function NotificationsTab() {
           <p className="text-sm text-gray-700 mb-3">
             Get real-time notifications in your Slack workspace for critical events like fraud detection, revenue milestones, and system alerts.
           </p>
-          <button className="px-6 py-2 text-sm font-bold text-white bg-primary-blue rounded hover:bg-primary-blue/90">
-            Connect Slack Workspace
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              className="px-6 py-2 text-sm font-bold text-white bg-primary-blue rounded hover:bg-primary-blue/90 disabled:opacity-60"
+              onClick={onConnectSlack}
+              disabled={slackLoading}
+            >
+              {slackLoading ? 'Connecting…' : (slackConnected ? 'Reconnect Slack' : 'Connect Slack Workspace')}
+            </button>
+            {slackConnected === true && (
+              <span className="text-green-700 bg-green-100 px-2 py-1 rounded text-xs font-bold">CONNECTED</span>
+            )}
+            {slackError && (
+              <span className="text-red-700 text-xs">{slackError}</span>
+            )}
+          </div>
         </div>
       </div>
     </div>
   );
 }
 
+type ApiKey = {
+  id: string;
+  prefix: string;
+  last4: string;
+  createdAt: string;
+  lastUsedAt?: string | null;
+  revokedAt?: string | null;
+};
+
 function SecurityTab() {
+  const [enrollQR, setEnrollQR] = useState<string | null>(null);
+  const [maskedSecret, setMaskedSecret] = useState<string | null>(null);
+  const [token, setToken] = useState('');
+  const [twofaMsg, setTwofaMsg] = useState<string | null>(null);
+  const [backupCodes, setBackupCodes] = useState<string[] | null>(null);
+  const [loading2fa, setLoading2fa] = useState(false);
+
+  const [keys, setKeys] = useState<ApiKey[]>([]);
+  const [keysLoading, setKeysLoading] = useState(false);
+  const [keysError, setKeysError] = useState<string | null>(null);
+  const [newKeySecret, setNewKeySecret] = useState<string | null>(null);
+
+  const fetchKeys = async () => {
+    setKeysLoading(true);
+    setKeysError(null);
+    try {
+      const res = await api.get<{ keys: ApiKey[] }>('/api/v1/keys', { credentials: 'include' });
+      if (res.success) setKeys((res.data as any)?.keys ?? []);
+      else setKeysError(res.error || 'Failed to load API keys');
+    } catch (e: any) {
+      setKeysError(e?.message || 'Failed to load API keys');
+    } finally {
+      setKeysLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchKeys();
+  }, []);
+
+  const handleEnroll2FA = async () => {
+    setLoading2fa(true);
+    setTwofaMsg(null);
+    try {
+      const res = await api.post<{ otpauthUrl: string; qrDataUrl: string; maskedSecret: string }>(
+        '/api/v1/auth/2fa/enroll',
+        {},
+        { credentials: 'include' }
+      );
+      if (res.success) {
+        const d = res.data as any;
+        setEnrollQR(d.qrDataUrl);
+        setMaskedSecret(d.maskedSecret);
+      } else {
+        setTwofaMsg(res.error || 'Unable to start 2FA enrollment');
+      }
+    } catch (e: any) {
+      setTwofaMsg(e?.message || 'Unable to start 2FA enrollment');
+    } finally {
+      setLoading2fa(false);
+    }
+  };
+
+  const handleVerify2FA = async () => {
+    setLoading2fa(true);
+    setTwofaMsg(null);
+    setBackupCodes(null);
+    try {
+      const res = await api.post<{ backupCodes: string[] }>(
+        '/api/v1/auth/2fa/verify',
+        { token },
+        { credentials: 'include' }
+      );
+      if (res.success) {
+        setTwofaMsg('Two-factor authentication enabled');
+        setBackupCodes((res.data as any)?.backupCodes ?? []);
+      } else {
+        setTwofaMsg(res.error || 'Verification failed');
+      }
+    } catch (e: any) {
+      setTwofaMsg(e?.message || 'Verification failed');
+    } finally {
+      setLoading2fa(false);
+    }
+  };
+
+  const createKey = async (live = false) => {
+    try {
+      const res = await api.post<{ id: string; secret: string; prefix: string; last4: string }>(
+        '/api/v1/keys',
+        { live },
+        { credentials: 'include' }
+      );
+      if (res.success) {
+        const d = res.data as any;
+        setNewKeySecret(d.secret); // ephemeral display only
+        await fetchKeys();
+      } else {
+        setKeysError(res.error || 'Failed to create API key');
+      }
+    } catch (e: any) {
+      setKeysError(e?.message || 'Failed to create API key');
+    }
+  };
+
+  const rotateKey = async (id: string) => {
+    try {
+      const res = await api.post<{ id: string; secret: string; prefix: string; last4: string }>(
+        `/api/v1/keys/${id}/rotate`,
+        {},
+        { credentials: 'include' }
+      );
+      if (res.success) {
+        setNewKeySecret((res.data as any).secret);
+        await fetchKeys();
+      } else {
+        setKeysError(res.error || 'Failed to rotate key');
+      }
+    } catch (e: any) {
+      setKeysError(e?.message || 'Failed to rotate key');
+    }
+  };
+
+  const revokeKey = async (id: string) => {
+    try {
+      const res = await api.delete(`/api/v1/keys/${id}`, { credentials: 'include' });
+      if (!res.success && res.error) setKeysError(res.error);
+      await fetchKeys();
+    } catch (e: any) {
+      setKeysError(e?.message || 'Failed to revoke key');
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="card p-6">
@@ -424,31 +606,84 @@ function SecurityTab() {
           <p className="text-sm text-gray-700 mb-3">
             Add an extra layer of security to your account. When enabled, you'll need to enter a code from your phone in addition to your password.
           </p>
-          <button className="btn-primary-yellow px-6 py-2 text-sm">
-            Enable 2FA
-          </button>
+          <div className="flex items-center gap-3">
+            <button className="btn-primary-yellow px-6 py-2 text-sm disabled:opacity-60" onClick={handleEnroll2FA} disabled={loading2fa}>
+              {loading2fa ? 'Please wait…' : 'Enable 2FA'}
+            </button>
+            {twofaMsg && <span className="text-sm font-bold text-primary-blue">{twofaMsg}</span>}
+          </div>
         </div>
+        {enrollQR && (
+          <div className="bg-white border border-yellow-300 rounded p-4 mb-4">
+            <p className="text-sm text-gray-700 mb-2">Scan this QR with your authenticator app and enter the 6‑digit code. Secret: <span className="font-mono">{maskedSecret}</span></p>
+            <img src={enrollQR} alt="2FA QR" className="w-48 h-48 border" />
+            <div className="mt-3 flex items-center gap-2">
+              <input
+                type="text"
+                inputMode="numeric"
+                className="input w-40"
+                placeholder="123456"
+                value={token}
+                onChange={(e) => setToken(e.target.value)}
+              />
+              <button className="px-4 py-2 text-sm font-bold text-white bg-primary-blue rounded" onClick={handleVerify2FA} disabled={loading2fa}>
+                Verify
+              </button>
+            </div>
+          </div>
+        )}
+        {backupCodes && backupCodes.length > 0 && (
+          <div className="bg-green-50 border border-green-300 rounded p-4">
+            <p className="text-sm text-green-800 font-bold mb-2">Save these backup codes in a safe place:</p>
+            <ul className="grid grid-cols-2 gap-2 font-mono text-sm">
+              {backupCodes.map((c) => (
+                <li key={c} className="bg-white border px-2 py-1">{c}</li>
+              ))}
+            </ul>
+          </div>
+        )}
       </div>
 
       <div className="card p-6">
         <h2 className="text-primary-blue font-bold uppercase text-lg mb-6 border-b-2 border-sunshine-yellow pb-2">
           API Keys
         </h2>
-        <div className="space-y-4">
-          <APIKeyCard
-            name="Production API Key"
-            key_value="sk_live_abc123...xyz789"
-            lastUsed="2 minutes ago"
-          />
-          <APIKeyCard
-            name="Test API Key"
-            key_value="sk_test_def456...uvw012"
-            lastUsed="3 days ago"
-          />
+        <div className="space-y-3">
+          {keysLoading && <p className="text-sm text-gray-600">Loading keys…</p>}
+          {keysError && <p className="text-sm text-red-700">{keysError}</p>}
+          {newKeySecret && (
+            <div className="bg-yellow-50 border border-yellow-300 rounded p-3">
+              <p className="text-sm text-gray-800 mb-1 font-bold">New API key (copy now, it will not be shown again):</p>
+              <code className="text-xs bg-white border px-2 py-1 inline-block break-all">{newKeySecret}</code>
+              <div>
+                <button className="mt-2 text-xs text-primary-blue underline" onClick={() => setNewKeySecret(null)}>Dismiss</button>
+              </div>
+            </div>
+          )}
+          {keys.map((k) => (
+            <div key={k.id} className="border-2 border-gray-300 rounded p-4">
+              <div className="flex items-start justify-between mb-2">
+                <div>
+                  <p className="font-bold text-primary-blue">{k.prefix === 'sk_live' ? 'Production' : 'Test'} API Key</p>
+                  <p className="text-sm text-gray-600 font-mono">{k.prefix}_••••••••••••••••{k.last4}</p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <button className="text-sm font-bold text-primary-blue" onClick={() => rotateKey(k.id)}>Rotate</button>
+                  <button className="text-sm font-bold text-red-600 hover:text-red-700" onClick={() => revokeKey(k.id)}>Revoke</button>
+                </div>
+              </div>
+              <p className="text-xs text-gray-500">Created: {new Date(k.createdAt).toLocaleString()} {k.lastUsedAt ? `• Last used: ${new Date(k.lastUsedAt).toLocaleString()}` : ''}</p>
+            </div>
+          ))}
         </div>
-        <button className="mt-4 px-6 py-2 text-sm font-bold text-primary-blue border-2 border-primary-blue rounded hover:bg-primary-blue hover:text-white transition-colors">
-          + Generate New API Key
-        </button>
+        <div className="mt-4 flex gap-3">
+          <button className="px-4 py-2 text-sm font-bold text-primary-blue border-2 border-primary-blue rounded hover:bg-primary-blue hover:text-white transition-colors" onClick={() => createKey(false)}>
+            + Generate Test Key
+          </button>
+          <button className="px-4 py-2 text-sm font-bold text-primary-blue border-2 border-primary-blue rounded hover:bg-primary-blue hover:text-white transition-colors" onClick={() => createKey(true)}>
+            + Generate Production Key
+          </button>
+        </div>
       </div>
 
       <div className="card p-6">

@@ -15,6 +15,9 @@ import {
 import { isAuthTokenPayload } from '../types/auth';
 import crypto from 'crypto';
 import { setAuthCookies } from '../utils/cookies';
+import twofaService from '../services/twofa.service';
+import { authAttemptsTotal, twofaEventsTotal } from '../utils/prometheus';
+import { getFeatureFlags } from '../config/featureFlags';
 
 // Validation schemas
 export const loginSchema = z.object({
@@ -137,6 +140,14 @@ const issueRefreshToken = async (
   } as const;
 };
 
+// Temp 2FA token used for step-up authentication post-password verification
+const issueTemp2faToken = (payload: Pick<TokenPayload, 'userId' | 'email' | 'publisherId'>) => {
+  const token = jwt.sign({ ...payload, tokenType: '2fa' }, getAccessTokenSecret(), {
+    expiresIn: Math.max(1, ms('10m') / 1000),
+  });
+  return { token } as const;
+};
+
 /**
  * Login user and return JWT token
  */
@@ -152,12 +163,14 @@ export const login = async (
     const user = await findUserByEmail(email);
 
     if (!user) {
+      authAttemptsTotal.labels('failure').inc();
       throw new AppError('Invalid email or password', 401);
     }
 
     const passwordMatches = await bcrypt.compare(password, user.password_hash);
 
     if (!passwordMatches) {
+      authAttemptsTotal.labels('failure').inc();
       throw new AppError('Invalid email or password', 401);
     }
 
@@ -168,6 +181,16 @@ export const login = async (
       role: (user as any).role || 'publisher',
     };
 
+    // If 2FA is enabled OR enforced by feature flag, return step-up requirement with temp token
+    const flags = getFeatureFlags();
+    if (twofaService.isEnabled(user.id) || flags.enforce2fa) {
+      const temp = issueTemp2faToken({ userId: user.id, email, publisherId: user.publisher_id });
+      logger.info('2FA step-up required', { userId: user.id, email });
+      authAttemptsTotal.labels('twofa_required').inc();
+      res.json({ success: true, data: { twofaRequired: true, tempToken: temp.token } });
+      return;
+    }
+
     const accessToken = issueAccessToken(tokenPayload);
     const refreshToken = await issueRefreshToken(tokenPayload, {
       userAgent: req.get('user-agent') ?? undefined,
@@ -175,6 +198,7 @@ export const login = async (
     });
 
     logger.info(`User logged in: ${email}`);
+    authAttemptsTotal.labels('success').inc();
 
     // Set httpOnly cookies (access + refresh)
     setAuthCookies(res, {
@@ -202,11 +226,79 @@ export const login = async (
       },
     });
   } catch (error) {
+    if (!(error instanceof z.ZodError)) {
+      // count as failure for non-validation errors when thrown before increments
+      try { authAttemptsTotal.labels('failure').inc(); } catch {}
+    }
     if (error instanceof z.ZodError) {
       next(new AppError('Invalid request data', 400));
       return;
     }
 
+    next(error);
+  }
+};
+
+/**
+ * Complete 2FA step-up login using tempToken + code/backupCode
+ */
+export const login2fa = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const tempToken = String(req.body?.tempToken || '');
+    const code = String(req.body?.code || '');
+    if (!tempToken || !code) {
+      throw new AppError('tempToken and code are required', 400);
+    }
+    const decoded = jwt.verify(tempToken, getAccessTokenSecret()) as any;
+    if (!decoded || decoded.tokenType !== '2fa' || !decoded.userId) {
+      throw new AppError('Invalid temp token', 401);
+    }
+    const userId = decoded.userId as string;
+    const email = decoded.email as string;
+    const publisherId = decoded.publisherId as string;
+
+    const ok = await twofaService.verifyTokenOrBackupCode(userId, code);
+    if (!ok) throw new AppError('Invalid 2FA code', 401);
+
+    const tokenPayload: TokenPayload = {
+      userId,
+      publisherId,
+      email,
+      role: 'publisher',
+    };
+
+    const accessToken = issueAccessToken(tokenPayload);
+    const refreshToken = await issueRefreshToken(tokenPayload, {
+      userAgent: req.get('user-agent') ?? undefined,
+      ipAddress: req.ip,
+    });
+
+    logger.info('2FA step-up login success', { userId, email });
+    twofaEventsTotal.labels('login2fa', 'success').inc();
+
+    setAuthCookies(res, {
+      accessToken: accessToken.token,
+      accessExpiresInSeconds: accessToken.expiresInSeconds,
+      refreshToken: refreshToken.token,
+      refreshExpiresInSeconds: refreshToken.expiresInSeconds,
+    });
+
+    res.json({
+      success: true,
+      data: {
+        token: accessToken.token,
+        tokenExpiresIn: accessToken.expiresInSeconds,
+        refreshToken: refreshToken.token,
+        refreshTokenExpiresAt: refreshToken.expiresAt.toISOString(),
+        refreshTokenExpiresIn: refreshToken.expiresInSeconds,
+      },
+    });
+  } catch (error) {
+    try { twofaEventsTotal.labels('login2fa', 'failure').inc(); } catch {}
     next(error);
   }
 };

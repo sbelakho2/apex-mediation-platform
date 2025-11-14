@@ -42,6 +42,9 @@ jobs:
       - name: Test with coverage
         run: npm run test -- --coverage
 
+      - name: Generate Typedoc
+        run: npm run docs
+
       - name: Generate mock success trace artifact
         run: npm run gen:mock-trace
 
@@ -64,4 +67,11 @@ jobs:
         with:
           name: web-sdk-mock-trace
           path: packages/web-sdk/artifacts/mock-success-trace.json
+          if-no-files-found: error
+
+      - name: Upload typedoc site
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-sdk-typedoc
+          path: packages/web-sdk/typedoc
           if-no-files-found: error
