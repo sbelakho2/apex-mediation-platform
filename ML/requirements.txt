@@ -1,6 +1,7 @@
 # Core dependencies for ML data enrichment, feature engineering, and training
 numpy==1.26.4
 pandas==2.2.2
+dask[dataframe]==2024.2.0
 pyarrow==14.0.2
 scikit-learn==1.4.0
 scipy==1.11.4
