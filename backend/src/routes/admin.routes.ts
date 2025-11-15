@@ -94,8 +94,9 @@ router.post('/impersonate/start', async (req: Request, res: Response, next: Next
        VALUES ($1, $2, $3, $4, NOW())`,
       [orgId, actor, 'admin_impersonation_start', JSON.stringify({})]
     );
-  } catch {
+  } catch (e) {
     // best-effort audit write
+    void e;
   }
   // In a real implementation, set a signed cookie/header to indicate read-only impersonation context
   return res.json({ success: true, message: 'Impersonation started (read-only scaffold)' });
@@ -117,7 +118,7 @@ router.post('/impersonate/stop', async (req: Request, res: Response) => {
        VALUES ($1, $2, $3, $4, NOW())`,
       [orgId, actor, 'admin_impersonation_stop', JSON.stringify({})]
     );
-  } catch {}
+  } catch (e) { void e; }
   return res.json({ success: true, message: 'Impersonation stopped' });
 });
 

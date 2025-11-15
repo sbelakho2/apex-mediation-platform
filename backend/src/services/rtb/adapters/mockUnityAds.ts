@@ -40,12 +40,12 @@ export function mockUnityAds(): AdapterDefinition {
         };
       } catch (e: any) {
         if (e?.name === 'AbortError') {
-          try { rtbAdapterTimeoutsTotal.inc({ adapter: name }); } catch {}
+          try { rtbAdapterTimeoutsTotal.inc({ adapter: name }); } catch (e2) { void e2; }
           return { nobid: true, reason: 'TIMEOUT' };
         }
         return { nobid: true, reason: 'ERROR' };
       } finally {
-        try { end({ adapter: name }); } catch {}
+        try { end({ adapter: name }); } catch (e3) { void e3; }
       }
     },
   };

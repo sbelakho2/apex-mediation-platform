@@ -11,7 +11,9 @@ export interface TokenCookies {
 
 export function setAuthCookies(res: Response, tokens: TokenCookies) {
   const secure = bool(process.env.COOKIE_SECURE, process.env.NODE_ENV === 'production');
-  const sameSite: 'lax' | 'strict' | 'none' = (process.env.COOKIE_SAMESITE as any) || 'lax';
+  const sameSiteEnv = (process.env.COOKIE_SAMESITE || 'lax').toLowerCase();
+  const sameSite: 'lax' | 'strict' | 'none' =
+    sameSiteEnv === 'none' ? 'none' : sameSiteEnv === 'strict' ? 'strict' : 'lax';
   const domain = process.env.COOKIE_DOMAIN || undefined;
   const path = '/';
   const accessName = process.env.ACCESS_TOKEN_COOKIE_NAME || 'access_token';
@@ -38,7 +40,9 @@ export function setAuthCookies(res: Response, tokens: TokenCookies) {
 
 export function clearAuthCookies(res: Response) {
   const secure = bool(process.env.COOKIE_SECURE, process.env.NODE_ENV === 'production');
-  const sameSite: 'lax' | 'strict' | 'none' = (process.env.COOKIE_SAMESITE as any) || 'lax';
+  const sameSiteEnv = (process.env.COOKIE_SAMESITE || 'lax').toLowerCase();
+  const sameSite: 'lax' | 'strict' | 'none' =
+    sameSiteEnv === 'none' ? 'none' : sameSiteEnv === 'strict' ? 'strict' : 'lax';
   const domain = process.env.COOKIE_DOMAIN || undefined;
   const path = '/';
   const accessName = process.env.ACCESS_TOKEN_COOKIE_NAME || 'access_token';

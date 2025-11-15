@@ -1,10 +1,10 @@
-import { OpenAPIRegistry, OpenAPIGenerator } from '@asteasolutions/zod-to-openapi';
+import { OpenAPIRegistry, OpenApiGeneratorV3 } from '@asteasolutions/zod-to-openapi';
 import { loginSchema, registerSchema, refreshSchema } from '../controllers/auth.controller';
 import { AuctionRequestSchema } from '../schemas/rtb';
 
-let cachedDoc: any | null = null;
+let cachedDoc: Record<string, unknown> | null = null;
 
-export function getOpenAPIDocument() {
+export function getOpenAPIDocument(): Record<string, unknown> {
   if (cachedDoc) return cachedDoc;
 
   const registry = new OpenAPIRegistry();
@@ -95,11 +95,15 @@ export function getOpenAPIDocument() {
     method: 'get',
     path: `/creative`,
     tags: ['rtb'],
-    request: {
-      query: {
-        token: { description: 'Signed delivery token', required: true, schema: { type: 'string' } },
-      } as any,
-    },
+    parameters: [
+      {
+        in: 'query',
+        name: 'token',
+        required: true,
+        schema: { type: 'string' },
+        description: 'Signed delivery token',
+      },
+    ],
     responses: {
       302: { description: 'Redirect to asset' },
       400: { description: 'Invalid token' },
@@ -112,16 +116,22 @@ export function getOpenAPIDocument() {
       method: 'get',
       path: `/t/${ev}`,
       tags: ['rtb'],
-      request: {
-        query: {
-          token: { description: 'Signed tracking token', required: true, schema: { type: 'string' } },
-        } as any,
-      },
-      responses: ev === 'imp' ? { 204: { description: 'Tracked' }, 400: { description: 'Invalid token' } } : { 302: { description: 'Redirect after click' }, 400: { description: 'Invalid token' } },
+      parameters: [
+        {
+          in: 'query',
+          name: 'token',
+          required: true,
+          schema: { type: 'string' },
+          description: 'Signed tracking token',
+        },
+      ],
+      responses: ev === 'imp'
+        ? { 204: { description: 'Tracked' }, 400: { description: 'Invalid token' } }
+        : { 302: { description: 'Redirect after click' }, 400: { description: 'Invalid token' } },
     });
   }
 
-  const generator = new OpenAPIGenerator(registry.definitions, '3.0.0');
+  const generator = new OpenApiGeneratorV3(registry.definitions);
   const doc = generator.generateDocument({
     openapi: '3.0.0',
     info: {

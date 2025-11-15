@@ -12,4 +12,6 @@ module.exports = {
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1',
   },
+  // Ignore built output to prevent duplicate manual mocks (__mocks__) from dist
+  modulePathIgnorePatterns: ['<rootDir>/dist/'],
 };

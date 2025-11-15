@@ -1,3 +1,4 @@
+/* eslint-disable no-empty */
 import request from 'supertest';
 import type { Application, NextFunction, Request, Response } from 'express';
 import { generateKeyPairSync } from 'crypto';

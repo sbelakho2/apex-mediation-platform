@@ -126,7 +126,7 @@ export interface MigrationEvent {
   arm?: ExperimentArm;
   user_identifier?: string;
   placement_id?: string;
-  event_data: Record<string, any>;
+  event_data: Record<string, unknown>;
   reason?: string;
   triggered_by?: string;
   created_at: Date;
@@ -139,8 +139,8 @@ export interface MigrationAuditLog {
   action: string;
   resource_type: string;
   resource_id?: string;
-  old_value?: Record<string, any>;
-  new_value?: Record<string, any>;
+  old_value?: Record<string, unknown>;
+  new_value?: Record<string, unknown>;
   ip_address?: string;
   user_agent?: string;
   created_at: Date;
@@ -212,7 +212,7 @@ export interface ActivateExperimentRequest {
 export interface ImportMappingsRequest {
   experiment_id: string;
   source: 'csv' | 'api'; // 'ironSource' | 'MAX' for API source
-  data: any; // CSV parsed data or API response
+  data: unknown; // CSV parsed data or API response
 }
 
 export interface ConfirmMappingRequest {

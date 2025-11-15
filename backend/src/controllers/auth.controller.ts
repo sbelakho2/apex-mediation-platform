@@ -163,14 +163,14 @@ export const login = async (
     const user = await findUserByEmail(email);
 
     if (!user) {
-      authAttemptsTotal.labels('failure').inc();
+      try { authAttemptsTotal.labels('failure').inc(); } catch (e) { void e; }
       throw new AppError('Invalid email or password', 401);
     }
 
     const passwordMatches = await bcrypt.compare(password, user.password_hash);
 
     if (!passwordMatches) {
-      authAttemptsTotal.labels('failure').inc();
+      try { authAttemptsTotal.labels('failure').inc(); } catch (e) { void e; }
       throw new AppError('Invalid email or password', 401);
     }
 
@@ -183,10 +183,10 @@ export const login = async (
 
     // If 2FA is enabled OR enforced by feature flag, return step-up requirement with temp token
     const flags = getFeatureFlags();
-    if (twofaService.isEnabled(user.id) || flags.enforce2fa) {
+  if ((await twofaService.isEnabled(user.id)) || flags.enforce2fa) {
       const temp = issueTemp2faToken({ userId: user.id, email, publisherId: user.publisher_id });
       logger.info('2FA step-up required', { userId: user.id, email });
-      authAttemptsTotal.labels('twofa_required').inc();
+      try { authAttemptsTotal.labels('twofa_required').inc(); } catch (e) { void e; }
       res.json({ success: true, data: { twofaRequired: true, tempToken: temp.token } });
       return;
     }
@@ -198,7 +198,7 @@ export const login = async (
     });
 
     logger.info(`User logged in: ${email}`);
-    authAttemptsTotal.labels('success').inc();
+    try { authAttemptsTotal.labels('success').inc(); } catch (e) { void e; }
 
     // Set httpOnly cookies (access + refresh)
     setAuthCookies(res, {
@@ -228,7 +228,7 @@ export const login = async (
   } catch (error) {
     if (!(error instanceof z.ZodError)) {
       // count as failure for non-validation errors when thrown before increments
-      try { authAttemptsTotal.labels('failure').inc(); } catch {}
+      try { authAttemptsTotal.labels('failure').inc(); } catch (e) { void e; }
     }
     if (error instanceof z.ZodError) {
       next(new AppError('Invalid request data', 400));
@@ -298,7 +298,7 @@ export const login2fa = async (
       },
     });
   } catch (error) {
-    try { twofaEventsTotal.labels('login2fa', 'failure').inc(); } catch {}
+    try { twofaEventsTotal.labels('login2fa', 'failure').inc(); } catch (e) { void e; }
     next(error);
   }
 };

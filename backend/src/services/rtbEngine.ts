@@ -104,7 +104,13 @@ export const executeBid = async (request: BidRequest): Promise<BidResponse | nul
       },
     };
   } finally {
-    try { end(); } catch {}
+    try {
+      // ensure the histogram timer is closed; swallow any metrics errors but keep block non-empty
+      end();
+    } catch (e) {
+      // Metrics collection failure should not impact response
+      void e; // explicitly reference error to satisfy no-empty rule
+    }
   }
 };
 

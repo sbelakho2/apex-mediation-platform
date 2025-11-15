@@ -43,7 +43,7 @@ export const isFeatureEnabled = (feature: keyof FeatureFlags): boolean => {
  * Middleware to guard routes based on feature flags
  */
 export const requireFeature = (feature: keyof FeatureFlags) => {
-  return (_req: any, res: any, next: any) => {
+  return (_req: import('express').Request, res: import('express').Response, next: import('express').NextFunction) => {
     if (!isFeatureEnabled(feature)) {
       return res.status(404).json({
         success: false,

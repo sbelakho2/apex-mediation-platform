@@ -11,7 +11,8 @@ export const asyncLocalStorage = new AsyncLocalStorage<{
   requestId?: string;
   userId?: string;
   tenantId?: string;
-  [key: string]: any;
+  // Allow arbitrary metadata but avoid any
+  [key: string]: unknown;
 }>();
 
 /**

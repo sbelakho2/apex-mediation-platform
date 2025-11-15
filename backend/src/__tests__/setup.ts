@@ -2,11 +2,8 @@ import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { Client } from 'pg';
 
-// Allow lightweight suites (e.g., pure HTTP contract tests) to skip
-// full database initialization by exporting SKIP_DB_SETUP=true before
-// invoking Jest. This keeps legacy integration tests unchanged while
-// enabling fast CORS/health-check coverage without a running Postgres.
-const skipDbSetup = process.env.SKIP_DB_SETUP === 'true';
+// Default: skip real DB setup to keep CI lightweight. Set FORCE_DB_SETUP=true to enable.
+const skipDbSetup = process.env.FORCE_DB_SETUP !== 'true';
 
 let dbPool: import('pg').Pool | null = null;
 
@@ -72,12 +69,15 @@ beforeAll(async () => {
   await postgres.initializeDatabase();
   dbPool = postgres.default;
   const projectRoot = path.resolve(__dirname, '..', '..');
-  // Apply database migrations to ensure schema is up to date for tests
-  execFileSync('node', ['scripts/runMigrations.js'], {
-    stdio: 'inherit',
-    cwd: projectRoot,
-    env: process.env,
-  });
+  // Only run migrations when explicitly enabled; default is off for CI speed and portability.
+  const runMigrations = process.env.RUN_MIGRATIONS_IN_TEST === 'true';
+  if (runMigrations) {
+    execFileSync('node', ['scripts/runMigrations.js'], {
+      stdio: 'inherit',
+      cwd: projectRoot,
+      env: process.env,
+    });
+  }
 }, 30000); // 30 second timeout for database initialization
 
 // Close database connection after all tests complete

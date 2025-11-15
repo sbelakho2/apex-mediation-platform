@@ -1,26 +1,15 @@
 import { Request, Response, NextFunction } from 'express';
 import { randomBytes } from 'crypto';
+import bcrypt from 'bcryptjs';
 import logger from '../utils/logger';
+import { AppDataSource } from '../database';
+import { ApiKey } from '../database/entities/apiKey.entity';
+import { User } from '../database/entities/user.entity';
 
-type ApiKeyRecord = {
-  id: string;
-  secret: string; // full secret (never log)
-  prefix: string; // sk_live or sk_test
-  last4: string;
-  createdAt: string;
-  lastUsedAt?: string | null;
-  revokedAt?: string | null;
-};
+const apiKeyRepository = AppDataSource.getRepository(ApiKey);
+const userRepository = AppDataSource.getRepository(User);
 
-// In-memory store keyed by userId for sandbox readiness
-const store: Map<string, ApiKeyRecord[]> = new Map();
-
-function ensureList(userId: string): ApiKeyRecord[] {
-  if (!store.has(userId)) store.set(userId, []);
-  return store.get(userId)!;
-}
-
-const redact = (k: ApiKeyRecord) => ({
+const redact = (k: ApiKey) => ({
   id: k.id,
   prefix: k.prefix,
   last4: k.last4,
@@ -29,68 +18,82 @@ const redact = (k: ApiKeyRecord) => ({
   revokedAt: k.revokedAt ?? null,
 });
 
-const genId = () => randomBytes(8).toString('hex');
 const genSecret = (prefix: 'sk_live' | 'sk_test') => `${prefix}_${randomBytes(24).toString('hex')}`;
 
 export async function listKeys(req: Request, res: Response, _next: NextFunction) {
-  const userId = req.user?.userId || 'anon';
-  const items = ensureList(userId).map(redact);
-  return res.json({ data: { keys: items } });
+  const userId = req.user?.userId;
+  if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+  const keys = await apiKeyRepository.find({ where: { user: { id: userId } } });
+  return res.json({ data: { keys: keys.map(redact) } });
 }
 
 export async function createKey(req: Request, res: Response, _next: NextFunction) {
-  const userId = req.user?.userId || 'anon';
-  const list = ensureList(userId);
+  const userId = req.user?.userId;
+  if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+  const user = await userRepository.findOneBy({ id: userId });
+  if (!user) return res.status(404).json({ error: 'User not found' });
+
   const live = Boolean(req.body?.live);
   const prefix = live ? 'sk_live' : 'sk_test';
   const secret = genSecret(prefix as any);
-  const rec: ApiKeyRecord = {
-    id: genId(),
-    secret,
+  const secretHash = await bcrypt.hash(secret, 10);
+
+  const newKey = apiKeyRepository.create({
+    user,
+    secret: secretHash,
     prefix,
     last4: secret.slice(-4),
-    createdAt: new Date().toISOString(),
-    lastUsedAt: null,
-    revokedAt: null,
-  };
-  list.push(rec);
-  logger.info('API key created', { userId, prefix, last4: rec.last4, id: rec.id });
-  return res.status(201).json({ data: { id: rec.id, secret: rec.secret, prefix: rec.prefix, last4: rec.last4 } });
+  });
+
+  await apiKeyRepository.save(newKey);
+
+  logger.info('API key created', { userId, prefix, last4: newKey.last4, id: newKey.id });
+  return res.status(201).json({ data: { id: newKey.id, secret, prefix: newKey.prefix, last4: newKey.last4 } });
 }
 
 export async function rotateKey(req: Request, res: Response, _next: NextFunction) {
-  const userId = req.user?.userId || 'anon';
-  const id = req.params.id;
-  const list = ensureList(userId);
-  const idx = list.findIndex(k => k.id === id);
-  if (idx === -1) return res.status(404).json({ error: 'Not found' });
+  const userId = req.user?.userId;
+  if (!userId) return res.status(401).json({ error: 'Unauthorized' });
 
-  const old = list[idx];
-  old.revokedAt = new Date().toISOString();
-  const secret = genSecret(old.prefix as any);
-  const rotated: ApiKeyRecord = {
-    id: genId(),
-    secret,
-    prefix: old.prefix,
+  const { id } = req.params;
+  const key = await apiKeyRepository.findOne({ where: { id, user: { id: userId } } });
+  if (!key) return res.status(404).json({ error: 'Not found' });
+
+  key.revokedAt = new Date();
+  await apiKeyRepository.save(key);
+
+  const live = key.prefix === 'sk_live';
+  const prefix = live ? 'sk_live' : 'sk_test';
+  const secret = genSecret(prefix as any);
+  const secretHash = await bcrypt.hash(secret, 10);
+
+  const newKey = apiKeyRepository.create({
+    user: key.user,
+    secret: secretHash,
+    prefix,
     last4: secret.slice(-4),
-    createdAt: new Date().toISOString(),
-    lastUsedAt: null,
-    revokedAt: null,
-  };
-  list.push(rotated);
-  logger.info('API key rotated', { userId, idOld: old.id, idNew: rotated.id, prefix: rotated.prefix, last4: rotated.last4 });
-  return res.json({ data: { id: rotated.id, secret: rotated.secret, prefix: rotated.prefix, last4: rotated.last4 } });
+  });
+
+  await apiKeyRepository.save(newKey);
+  
+  logger.info('API key rotated', { userId, idOld: key.id, idNew: newKey.id, prefix: newKey.prefix, last4: newKey.last4 });
+  return res.json({ data: { id: newKey.id, secret, prefix: newKey.prefix, last4: newKey.last4 } });
 }
 
 export async function deleteKey(req: Request, res: Response, _next: NextFunction) {
-  const userId = req.user?.userId || 'anon';
-  const id = req.params.id;
-  const list = ensureList(userId);
-  const idx = list.findIndex(k => k.id === id);
-  if (idx === -1) return res.status(404).json({ error: 'Not found' });
-  const rec = list[idx];
-  rec.revokedAt = new Date().toISOString();
-  list.splice(idx, 1);
+  const userId = req.user?.userId;
+  if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+  
+  const { id } = req.params;
+  const key = await apiKeyRepository.findOne({ where: { id, user: { id: userId } } });
+  if (!key) return res.status(404).json({ error: 'Not found' });
+
+  key.revokedAt = new Date();
+  await apiKeyRepository.save(key);
+
   logger.info('API key deleted', { userId, id });
   return res.status(204).send();
 }
+

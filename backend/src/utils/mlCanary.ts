@@ -7,6 +7,7 @@
 
 import { getFeatureFlags } from './featureFlags';
 import crypto from 'crypto';
+import type { Request, Response, NextFunction } from 'express';
 
 export interface ModelSelection {
   version: string;
@@ -74,10 +75,19 @@ export const getModelEndpoint = (modelName: string, selection: ModelSelection): 
  * 
  * @param modelName - Name of the model being used
  */
+type RequestWithModel = Request & {
+  user?: { userId?: string };
+  modelSelection?: ModelSelection;
+  modelEndpoint?: string;
+};
+
 export const withModelSelection = (modelName: string) => {
-  return (req: any, _res: any, next: any) => {
+  return (req: RequestWithModel, _res: Response, next: NextFunction) => {
     // Use user ID or generate request ID for consistent routing
-    const requestId = req.user?.userId || req.headers['x-request-id'] || crypto.randomUUID();
+    const headerId = Array.isArray(req.headers['x-request-id'])
+      ? req.headers['x-request-id'][0]
+      : req.headers['x-request-id'];
+    const requestId = (req.user?.userId || headerId || crypto.randomUUID()) as string;
     
     // Select model version
     const modelSelection = selectModelVersion(requestId, modelName);

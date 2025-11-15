@@ -45,7 +45,7 @@ module.exports = {
       },
     },
     {
-      files: ['**/__tests__/**/*.test.ts'],
+      files: ['**/__tests__/**/*.ts', '**/__tests__/**/*.tsx'],
       env: {
         jest: true,
       },
@@ -57,6 +57,12 @@ module.exports = {
         '@typescript-eslint/no-unsafe-argument': 'off',
         '@typescript-eslint/unbound-method': 'off',
         '@typescript-eslint/no-explicit-any': 'off',
+        '@typescript-eslint/no-unused-vars': 'off',
+        '@typescript-eslint/triple-slash-reference': 'off',
+        '@typescript-eslint/ban-ts-comment': 'off',
+        'no-empty': 'off',
+        'no-extra-semi': 'off',
+        '@typescript-eslint/no-var-requires': 'off',
       },
     },
     {

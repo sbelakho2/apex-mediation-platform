@@ -4,6 +4,7 @@ const query = jest.fn();
 const connect = jest.fn();
 const end = jest.fn();
 const on = jest.fn();
+const initializeDatabase = jest.fn(async () => {});
 
 const mockPool = {
   query,
@@ -14,5 +15,5 @@ const mockPool = {
 
 const getClient = jest.fn(() => connect());
 
-export { query, getClient };
+export { query, getClient, initializeDatabase };
 export default mockPool;

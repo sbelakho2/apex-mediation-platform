@@ -7,7 +7,7 @@ import payoutRoutes from './payout.routes';
 import analyticsRoutes from './analytics.routes';
 import reportingRoutes from './reporting.routes';
 import rtbRoutes from './rtb.routes';
-import authRoutes from './auth.routes';
+import authRoutes from './auth';
 import skadnetworkRoutes from './skadnetwork.routes';
 import consentRoutes from './consent.routes';
 import abTestingRoutes from './abTesting.routes';

@@ -173,7 +173,7 @@ export async function runAuction(input: AuctionInput, baseUrl: string): Promise<
       }
 
       if (!migration || mode === 'mirroring') {
-        try { rtbNoFillTotal.inc(metricLabels); } catch {}
+        try { rtbNoFillTotal.inc(metricLabels); } catch (e) { void e; }
       }
 
       if (migration && mode === 'shadow') {
@@ -243,7 +243,7 @@ export async function runAuction(input: AuctionInput, baseUrl: string): Promise<
     const click = `${baseUrl}/t/click?token=${encodeURIComponent(clickToken)}`;
     const creativeUrl = `${baseUrl}/creative?token=${encodeURIComponent(deliveryToken)}`;
 
-    try { rtbWinsTotal.inc({ adapter: winner.adapter, ...metricLabels }); } catch {}
+    try { rtbWinsTotal.inc({ adapter: winner.adapter, ...metricLabels }); } catch (e) { void e; }
 
     if (migration) {
       await recordOutcome('win', {
@@ -301,7 +301,7 @@ export async function runAuction(input: AuctionInput, baseUrl: string): Promise<
     }
     throw error;
   } finally {
-    try { end(); } catch {}
+    try { end(); } catch (e) { void e; }
   }
 }
 

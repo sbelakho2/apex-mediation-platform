@@ -1,4 +1,4 @@
-import axios, { AxiosInstance, InternalAxiosRequestConfig } from 'axios';
+import axios, { AxiosInstance, InternalAxiosRequestConfig, AxiosRequestConfig } from 'axios';
 import { getRequestContext } from '../middleware/requestContext';
 
 /**
@@ -9,7 +9,7 @@ import { getRequestContext } from '../middleware/requestContext';
  * @param additionalConfig - Additional axios configuration
  * @returns Configured axios instance
  */
-export function createHttpClient(baseURL?: string, additionalConfig?: any): AxiosInstance {
+export function createHttpClient(baseURL?: string, additionalConfig?: AxiosRequestConfig): AxiosInstance {
   const client = axios.create({
     baseURL,
     timeout: 10000,

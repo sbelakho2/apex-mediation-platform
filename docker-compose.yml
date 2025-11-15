@@ -5,20 +5,24 @@ services:
     build:
       context: ./backend
     ports:
-      - "4000:4000"
+      - "8080:8080" # Aligned with fly.toml
     environment:
       - NODE_ENV=development
       - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/apexmediation
       - REDIS_URL=redis://redis:6379
       - CLICKHOUSE_URL=http://clickhouse:8123
-      - JWT_SECRET=change-me
+      - JWT_SECRET=${JWT_SECRET:-change-me-in-production}
       - JWT_EXPIRES_IN=7d
+      - PORT=8080
     depends_on:
       - postgres
       - redis
       - clickhouse
     networks:
       - ad-stack
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
 
   console:
     build:
@@ -27,11 +31,30 @@ services:
       - "3000:3000"
     environment:
       - NODE_ENV=development
-      - NEXT_PUBLIC_API_URL=http://localhost:4000/api/v1
+      - NEXT_PUBLIC_API_URL=http://localhost:8080/api/v1
     depends_on:
       - backend
     networks:
       - ad-stack
+    volumes:
+      - ./console:/app
+      - /app/node_modules
+
+  website:
+    build:
+      context: ./website
+    ports:
+      - "3001:3000"
+    environment:
+      - NODE_ENV=development
+      - NEXT_PUBLIC_API_URL=http://localhost:8080/api/v1
+    depends_on:
+      - backend
+    networks:
+      - ad-stack
+    volumes:
+      - ./website:/app
+      - /app/node_modules
 
   postgres:
     image: postgres:16-alpine
@@ -63,6 +86,8 @@ services:
       - CLICKHOUSE_DB=analytics
       - CLICKHOUSE_USER=default
       - CLICKHOUSE_PASSWORD=
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
     networks:
       - ad-stack
 
@@ -105,3 +130,4 @@ networks:
 
 volumes:
   postgres-data:
+  clickhouse-data:

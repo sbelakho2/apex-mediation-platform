@@ -8,7 +8,7 @@ import { logger } from './utils/logger';
 import { errorHandler } from './middleware/errorHandler';
 import { requestContextMiddleware } from './middleware/requestContext';
 import apiRoutes from './routes';
-import { initializeDatabase } from './utils/postgres';
+import { initializeDatabase } from './database';
 import { initializeClickHouse, checkClickHouseHealth } from './utils/clickhouse';
 import { redis } from './utils/redis';
 import { initializeQueues, shutdownQueues, queueManager } from './queues/queueInitializer';

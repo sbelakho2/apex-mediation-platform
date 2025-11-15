@@ -54,7 +54,7 @@ async function recordEvent(kind: 'imp' | 'click', claims: any, req: Request) {
         const queue = (queueManager as any).getQueue ? (queueManager as any).getQueue(QueueName.ANALYTICS_INGEST) : null;
         if (queue) {
           await queue.add(kind, { kind, payload }, { removeOnComplete: true, removeOnFail: { age: 3600 } });
-          try { analyticsEventsEnqueuedTotal.inc({ kind }); } catch {}
+          try { analyticsEventsEnqueuedTotal.inc({ kind }); } catch (e) { void e; }
           return; // enqueued successfully
         }
       } catch (e) {
@@ -90,7 +90,7 @@ export async function trackImpression(req: Request, res: Response) {
         if (exists) return res.status(204).send();
         await redis.setEx(key, 600, '1');
       }
-    } catch {}
+    } catch (e) { void e; }
 
     await recordEvent('imp', claims, req);
     return res.status(204).send();
@@ -114,7 +114,7 @@ export async function trackClick(req: Request, res: Response) {
         if (exists) return res.redirect(302, '/');
         await redis.setEx(key, 600, '1');
       }
-    } catch {}
+    } catch (e) { void e; }
 
     await recordEvent('click', claims, req);
     // Redirect to advertiser landing if available in token (optional)

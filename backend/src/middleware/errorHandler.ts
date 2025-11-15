@@ -23,12 +23,12 @@ export const errorHandler = (
 ) => {
   // CSRF errors (from csurf)
   if ((err as any).code === 'EBADCSRFTOKEN') {
-    try { errorCounter.inc({ type: 'operational' }); } catch {}
+    try { errorCounter.inc({ type: 'operational' }); } catch (e) { void e; }
     logger.warn('CSRF token mismatch', { path: req.path, method: req.method });
     return res.status(403).json({ success: false, error: 'Invalid CSRF token' });
   }
   if (err instanceof AppError) {
-    try { errorCounter.inc({ type: 'operational' }); } catch {}
+    try { errorCounter.inc({ type: 'operational' }); } catch (e2) { void e2; }
     logger.error(`${err.statusCode} - ${err.message}`, {
       stack: err.stack,
       path: req.path,
@@ -42,7 +42,7 @@ export const errorHandler = (
   }
 
   // Unexpected errors
-  try { errorCounter.inc({ type: 'unexpected' }); } catch {}
+  try { errorCounter.inc({ type: 'unexpected' }); } catch (e3) { void e3; }
   logger.error('Unexpected error:', {
     error: err.message,
     stack: err.stack,

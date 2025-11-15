@@ -18,7 +18,7 @@ export async function trackingRateLimiter(req: Request, res: Response, next: Nex
   try {
     // Count HEADs (allowed, quick return 204 for /t/imp)
     if (req.method === 'HEAD') {
-      try { trackingHeadTotal.inc(); } catch {}
+      try { trackingHeadTotal.inc(); } catch (e) { void e; }
       return res.status(204).send();
     }
 
@@ -28,7 +28,7 @@ export async function trackingRateLimiter(req: Request, res: Response, next: Nex
     const blockRe = process.env.TRACK_UA_BLOCK_RE;
     const allowRe = process.env.TRACK_UA_ALLOW_RE;
     if (blockRe && matches(blockRe, ua) && !(allowRe && matches(allowRe, ua))) {
-      try { trackingBlockedTotal.inc({ reason: 'ua_block' }); } catch {}
+      try { trackingBlockedTotal.inc({ reason: 'ua_block' }); } catch (e) { void e; }
       return res.status(400).send('blocked');
     }
 
@@ -42,7 +42,7 @@ export async function trackingRateLimiter(req: Request, res: Response, next: Nex
       await redis.expire(key, Math.ceil(WINDOW_MS / 1000));
     }
     if (current > MAX_REQ) {
-      try { trackingRateLimitedTotal.inc(); } catch {}
+      try { trackingRateLimitedTotal.inc(); } catch (e) { void e; }
       const ttl = await redis.ttl(key);
       const retryAfter = Math.max(
         1,
