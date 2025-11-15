@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import { registerDefaultAdapters, getAdaptersForFormat } from './adapterRegistry';
 import { AdapterBid, AdapterBidRequest, AdapterDefinition } from './adapters/types';
 import { auctionLatencySeconds, rtbErrorsTotal, rtbNoFillTotal, rtbWinsTotal } from '../../utils/prometheus';
+import { safeInc } from '../../utils/metrics';
 import type { ExperimentArm, ExperimentMode } from '../../types/migration';
 import { signToken } from '../../utils/signing';
 import { recordShadowOutcome, OutcomeStatus, CandidateBidSnapshot } from './shadowRecorder';
@@ -173,7 +174,7 @@ export async function runAuction(input: AuctionInput, baseUrl: string): Promise<
       }
 
       if (!migration || mode === 'mirroring') {
-        try { rtbNoFillTotal.inc(metricLabels); } catch (e) { void e; }
+        safeInc(rtbNoFillTotal, metricLabels);
       }
 
       if (migration && mode === 'shadow') {
@@ -243,7 +244,7 @@ export async function runAuction(input: AuctionInput, baseUrl: string): Promise<
     const click = `${baseUrl}/t/click?token=${encodeURIComponent(clickToken)}`;
     const creativeUrl = `${baseUrl}/creative?token=${encodeURIComponent(deliveryToken)}`;
 
-    try { rtbWinsTotal.inc({ adapter: winner.adapter, ...metricLabels }); } catch (e) { void e; }
+    safeInc(rtbWinsTotal, { adapter: winner.adapter, ...metricLabels });
 
     if (migration) {
       await recordOutcome('win', {

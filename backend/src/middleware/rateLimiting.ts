@@ -1,6 +1,8 @@
 import rateLimit from 'express-rate-limit';
 import type { Request } from 'express';
 
+type ReqWithUser = Request & { user?: { publisherId?: string } };
+
 /**
  * Read-only rate limiter for Transparency API.
  * Defaults can be overridden per publisher via env variables.
@@ -22,15 +24,17 @@ function getPublisherOverride(publisherId?: string): number | undefined {
 function keyGenerator(req: Request): string {
   // Combine publisher and IP to spread load fairly while still scoping by tenant
   // Fallbacks ensure deterministic key even if user missing in some tests
-  const pub = (req as any).user?.publisherId || 'anon';
-  const ip = (req.ip || req.headers['x-forwarded-for']?.toString().split(',')[0] || req.socket.remoteAddress || 'unknown');
+  const pub = (req as ReqWithUser).user?.publisherId || 'anon';
+  const xfwd = req.headers['x-forwarded-for'];
+  const firstXfwd = Array.isArray(xfwd) ? xfwd[0] : xfwd;
+  const ip = (req.ip || (firstXfwd ? firstXfwd.split(',')[0] : '') || req.socket.remoteAddress || 'unknown');
   return `${pub}:${ip}`;
 }
 
 export const readOnlyRateLimit = rateLimit({
   windowMs: 60 * 1000,
   limit: (req: Request) => {
-    const pub = (req as any).user?.publisherId as string | undefined;
+    const pub = (req as ReqWithUser).user?.publisherId;
     const override = getPublisherOverride(pub);
     const def = Number(process.env.TRANSPARENCY_RATE_LIMIT_RPM_DEFAULT || 120);
     return override ?? def;
@@ -43,7 +47,7 @@ export const readOnlyRateLimit = rateLimit({
 export const keysRateLimit = rateLimit({
   windowMs: 60 * 1000,
   limit: (req: Request) => {
-    const pub = (req as any).user?.publisherId as string | undefined;
+    const pub = (req as ReqWithUser).user?.publisherId;
     const override = getPublisherOverride(pub);
     const def = Number(process.env.TRANSPARENCY_RATE_LIMIT_RPM_KEYS || 300);
     // Use the higher of per-publisher override and keys default to not punish large clients

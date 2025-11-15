@@ -22,7 +22,8 @@ export const errorHandler = (
   _next: NextFunction
 ) => {
   // CSRF errors (from csurf)
-  if ((err as any).code === 'EBADCSRFTOKEN') {
+  const anyErr = err as unknown as { code?: string };
+  if (anyErr && anyErr.code === 'EBADCSRFTOKEN') {
     try { errorCounter.inc({ type: 'operational' }); } catch (e) { void e; }
     logger.warn('CSRF token mismatch', { path: req.path, method: req.method });
     return res.status(403).json({ success: false, error: 'Invalid CSRF token' });

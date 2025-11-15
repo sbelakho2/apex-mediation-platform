@@ -9,6 +9,8 @@ import { asyncLocalStorage, logger } from '../utils/logger';
  * - Adds requestId to response headers
  * - Extracts userId and tenantId from authenticated requests
  */
+type ReqWithUser = Request & { user?: { id?: string; userId?: string; tenantId?: string } };
+
 export function requestContextMiddleware(req: Request, res: Response, next: NextFunction) {
   // Generate or use existing request ID
   const requestId = (req.headers['x-request-id'] as string) || randomUUID();
@@ -17,8 +19,9 @@ export function requestContextMiddleware(req: Request, res: Response, next: Next
   res.setHeader('x-request-id', requestId);
   
   // Extract user context from authenticated requests
-  const userId = (req as any).user?.id || (req as any).user?.userId;
-  const tenantId = (req as any).user?.tenantId || (req as any).tenant?.id;
+  const r = req as ReqWithUser & { tenant?: { id?: string } };
+  const userId = r.user?.id || r.user?.userId;
+  const tenantId = r.user?.tenantId || r.tenant?.id;
   
   // Store context in async local storage
   const context = {
@@ -53,7 +56,7 @@ export function getRequestContext() {
  * Helper to create a child logger with additional context
  * Example: const log = createContextLogger({ operation: 'billing' });
  */
-export function createContextLogger(additionalContext: Record<string, any>) {
+export function createContextLogger(additionalContext: Record<string, unknown>) {
   const context = asyncLocalStorage.getStore() || {};
   return logger.child({ ...context, ...additionalContext });
 }

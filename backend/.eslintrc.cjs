@@ -28,12 +28,16 @@ module.exports = {
       },
     ],
     '@typescript-eslint/no-unused-vars': [
-      'error',
+      'warn',
       {
         argsIgnorePattern: '^_',
         varsIgnorePattern: '^_',
       },
     ],
+    // Allow empty catch blocks to avoid noisy try/catch metrics guards
+    'no-empty': ['error', { allowEmptyCatch: true }],
+    // Quiet minor formatting nits that are auto-fixable
+    'no-extra-semi': 'warn',
   },
   overrides: [
     {

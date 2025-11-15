@@ -28,7 +28,8 @@ export const authenticate = async (
       token = authHeader.substring(7);
     } else {
       const cookieName = process.env.ACCESS_TOKEN_COOKIE_NAME || 'access_token';
-      token = (req as any).cookies?.[cookieName] || null;
+      const cookies = (req as Request & { cookies?: Record<string, string | undefined> }).cookies;
+      token = (cookies && cookies[cookieName]) ? String(cookies[cookieName]) : null;
     }
 
     if (!token) {
@@ -68,7 +69,7 @@ export const authenticate = async (
  */
 export const authorize = (roles: Array<'admin' | 'publisher' | 'readonly'>) => {
   return (req: Request, _res: Response, next: NextFunction) => {
-    const role = (req.user as any)?.role || 'publisher';
+    const role = req.user?.role ?? 'publisher';
     if (!roles.includes(role)) {
       return next(new AppError('Forbidden', 403));
     }

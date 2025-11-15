@@ -139,10 +139,10 @@ router.get('/health/red', async (_req: Request, res: Response) => {
     try {
       const url = new URL('/api/v1/query', base);
       url.searchParams.set('query', expr);
-      // @ts-ignore
+      // @ts-expect-error Node 18+ provides global fetch at runtime; type may be missing depending on tsconfig lib targets
       const r = await fetch(url.toString(), { headers: { ...authHeader } });
       if (!r.ok) return null;
-  const json: any = await r.json();
+      const json: any = await r.json();
       const v = json?.data?.result?.[0]?.value?.[1];
       const num = v != null ? Number(v) : null;
       return Number.isFinite(num) ? (num as number) : null;

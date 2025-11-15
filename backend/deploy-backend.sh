@@ -81,11 +81,16 @@ echo ""
 echo "🏗️  Building Docker image..."
 cd "$(dirname "$0")"
 
-# Update fly.toml with environment-specific settings
-if [ "$ENVIRONMENT" == "production" ]; then
-  sed -i.bak "s/app = .*/app = \"$APP_NAME\"/" fly.toml
-  sed -i.bak "s/min_machines_running = .*/min_machines_running = $MIN_MACHINES/" fly.toml
-  rm fly.toml.bak
+# Update fly.toml with environment-specific settings (optional)
+# To avoid mutating tracked config files, this step is gated.
+# Set ALLOW_TOML_MUTATION=true if you explicitly want to rewrite fly.toml.
+if [ "$ENVIRONMENT" == "production" ] && [ "$ALLOW_TOML_MUTATION" == "true" ]; then
+  echo "⚠️  Mutating fly.toml in-place as ALLOW_TOML_MUTATION=true"
+  sed -i.bak "s/app = .*/app = \"$APP_NAME\"/" fly.toml || true
+  sed -i.bak "s/min_machines_running = .*/min_machines_running = $MIN_MACHINES/" fly.toml || true
+  rm -f fly.toml.bak || true
+else
+  echo "ℹ️  Skipping in-place fly.toml edits (recommended). Use runtime env/overlays instead."
 fi
 
 echo "✅ Docker image built"

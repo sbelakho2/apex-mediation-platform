@@ -2,6 +2,7 @@ export interface AuthTokenPayload {
   userId: string;
   publisherId: string;
   email: string;
+  role?: 'admin' | 'publisher' | 'readonly';
 }
 
 export const isAuthTokenPayload = (value: unknown): value is AuthTokenPayload => {

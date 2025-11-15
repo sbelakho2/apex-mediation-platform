@@ -7,13 +7,14 @@ services:
     ports:
       - "8080:8080" # Aligned with fly.toml
     environment:
-      - NODE_ENV=development
-      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/apexmediation
-      - REDIS_URL=redis://redis:6379
-      - CLICKHOUSE_URL=http://clickhouse:8123
+      - NODE_ENV=${NODE_ENV:-development}
+      - DATABASE_URL=${DATABASE_URL:-postgresql://postgres:postgres@postgres:5432/apexmediation}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379}
+      - CLICKHOUSE_URL=${CLICKHOUSE_URL:-http://clickhouse:8123}
       - JWT_SECRET=${JWT_SECRET:-change-me-in-production}
-      - JWT_EXPIRES_IN=7d
-      - PORT=8080
+      - JWT_EXPIRES_IN=${JWT_EXPIRES_IN:-7d}
+      - PORT=${PORT:-8080}
+      - CORS_ALLOWLIST=${CORS_ALLOWLIST:-http://localhost:3000,http://localhost:3001}
     depends_on:
       - postgres
       - redis
@@ -23,6 +24,9 @@ services:
     volumes:
       - ./backend:/app
       - /app/node_modules
+    profiles:
+      - dev
+      - full
 
   console:
     build:
@@ -30,8 +34,8 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - NODE_ENV=development
-      - NEXT_PUBLIC_API_URL=http://localhost:8080/api/v1
+      - NODE_ENV=${NODE_ENV:-development}
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8080/api/v1}
     depends_on:
       - backend
     networks:
@@ -39,6 +43,9 @@ services:
     volumes:
       - ./console:/app
       - /app/node_modules
+    profiles:
+      - dev
+      - full
 
   website:
     build:
@@ -46,8 +53,8 @@ services:
     ports:
       - "3001:3000"
     environment:
-      - NODE_ENV=development
-      - NEXT_PUBLIC_API_URL=http://localhost:8080/api/v1
+      - NODE_ENV=${NODE_ENV:-development}
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8080/api/v1}
     depends_on:
       - backend
     networks:
@@ -55,13 +62,16 @@ services:
     volumes:
       - ./website:/app
       - /app/node_modules
+    profiles:
+      - dev
+      - full
 
   postgres:
     image: postgres:16-alpine
     environment:
-      - POSTGRES_DB=apexmediation
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=${POSTGRES_DB:-apexmediation}
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
     ports:
       - "5432:5432"
     volumes:
@@ -69,6 +79,9 @@ services:
       - ./backend/migrations:/docker-entrypoint-initdb.d
     networks:
       - ad-stack
+    profiles:
+      - dev
+      - full
 
   redis:
     image: redis:7-alpine
@@ -76,6 +89,9 @@ services:
       - "6379:6379"
     networks:
       - ad-stack
+    profiles:
+      - dev
+      - full
 
   clickhouse:
     image: clickhouse/clickhouse-server:23.9
@@ -90,6 +106,8 @@ services:
       - clickhouse-data:/var/lib/clickhouse
     networks:
       - ad-stack
+    profiles:
+      - full
 
   ml-train:
     build:

@@ -2,6 +2,7 @@ import { Job } from 'bullmq';
 import { insertBatch } from '../../utils/clickhouse';
 import logger from '../../utils/logger';
 import { analyticsEventsFailedTotal, analyticsEventsWrittenTotal } from '../../utils/prometheus';
+import { safeInc } from '../../utils/metrics';
 
 type AnalyticsIngestJob = {
   kind: 'imp' | 'click';
@@ -27,9 +28,9 @@ async function flush(kind: 'imp' | 'click') {
   if (items.length === 0) return;
   try {
     await insertBatch(kind === 'imp' ? 'impressions' : 'clicks', items);
-    try { analyticsEventsWrittenTotal.inc({ kind }, items.length); } catch (e2) { void e2; }
+    safeInc(analyticsEventsWrittenTotal, { kind }, items.length);
   } catch (e) {
-    try { analyticsEventsFailedTotal.inc({ kind }, items.length); } catch (e3) { void e3; }
+    safeInc(analyticsEventsFailedTotal, { kind }, items.length);
     logger.warn('Analytics batch insert failed', { kind, count: items.length, error: (e as Error).message });
   }
 }

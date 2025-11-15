@@ -1,4 +1,4 @@
-/// <reference path="../types/express.d.ts" />
+// Types are augmented via ../types/express.d.ts; no triple-slash needed
 import { Request, Response, NextFunction } from 'express';
 import { AppError } from '../middleware/errorHandler';
 import { logger } from '../utils/logger';

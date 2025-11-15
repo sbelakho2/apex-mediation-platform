@@ -34,6 +34,19 @@ Comprehensive background job processing system using BullMQ for handling asynchr
    - Add/remove jobs
    - Pause/resume queues
    - Clean old jobs
+   
+## Queue naming rules
+
+Important: Do not use colon (:) characters in BullMQ queue names. Some Redis deployments and client tooling treat colons as namespace delimiters which can cause errors like "Queue name cannot contain :" in certain environments.
+
+- Use hyphen (-) or underscore (_) instead. Examples: `analytics-aggregation`, `analytics_ingest`.
+- Current code uses names with colons for development parity (e.g., `analytics:ingest`). For sandbox, this is acceptable because queues are transient. For production, plan a short maintenance window to drain and recreate queues with colon-free names. See Migration Notes below.
+
+Migration Notes (when normalizing names):
+- Drain existing queues (`queue.pause` + wait for workers to finish) and stop workers.
+- Recreate queues with new names and deploy workers with matching names.
+- Keep both old and new workers briefly if zero-downtime is required; remove old after drain completes.
+- Update dashboards/alerts to point at the new queue names.
 
 ## Queue Types
 

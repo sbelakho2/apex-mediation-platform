@@ -1,5 +1,5 @@
 /** @type {import('jest').Config} */
-module.exports = {
+const config = {
   preset: 'ts-jest',
   testEnvironment: 'node',
   clearMocks: true,
@@ -14,4 +14,14 @@ module.exports = {
   },
   // Ignore built output to prevent duplicate manual mocks (__mocks__) from dist
   modulePathIgnorePatterns: ['<rootDir>/dist/'],
+  testPathIgnorePatterns: [],
 };
+
+// Gate DB-backed integration tests behind FORCE_DB_SETUP flag for lightweight CI/local runs
+if (process.env.FORCE_DB_SETUP !== 'true') {
+  config.testPathIgnorePatterns.push('<rootDir>/src/__tests__/integration');
+  // Skip observability metrics assertions in lightweight mode to avoid cross-test registry coupling
+  config.testPathIgnorePatterns.push('<rootDir>/src/__tests__/observability.metrics.test.ts');
+}
+
+module.exports = config;

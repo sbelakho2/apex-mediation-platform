@@ -1,5 +1,6 @@
 import { AdapterDefinition, AdapterBidRequest, AdapterBid, NoBid, AuctionContext } from './types';
 import { rtbAdapterLatencySeconds, rtbAdapterTimeoutsTotal } from '../../../utils/prometheus';
+import { safeInc } from '../../../utils/metrics';
 
 const makeAbortError = () => { const e: any = new Error('Aborted'); e.name = 'AbortError'; return e; };
 const sleep = (ms: number, signal?: AbortSignal) => new Promise<void>((resolve, reject) => {
@@ -44,7 +45,7 @@ export function mockAdmob(): AdapterDefinition {
         };
       } catch (e: any) {
         if ((e as any)?.name === 'AbortError') {
-          try { rtbAdapterTimeoutsTotal.inc({ adapter: name }); } catch (e2) { void e2; }
+          safeInc(rtbAdapterTimeoutsTotal, { adapter: name });
           return { nobid: true, reason: 'TIMEOUT' };
         }
         return { nobid: true, reason: 'ERROR' };

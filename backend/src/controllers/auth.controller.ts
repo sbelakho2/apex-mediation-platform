@@ -278,7 +278,7 @@ export const login2fa = async (
     });
 
     logger.info('2FA step-up login success', { userId, email });
-    twofaEventsTotal.labels('login2fa', 'success').inc();
+    try { twofaEventsTotal.labels('login2fa', 'success').inc(); } catch (e) { void e; }
 
     setAuthCookies(res, {
       accessToken: accessToken.token,

@@ -3,17 +3,28 @@ import csurf from 'csurf';
 
 const bool = (v: string | undefined, dflt = false) => (v == null ? dflt : v === '1' || v.toLowerCase?.() === 'true');
 
+// Resolve SameSite setting safely
+function resolveSameSite(): 'lax' | 'strict' | 'none' {
+  const v = (process.env.COOKIE_SAMESITE || 'lax').toLowerCase();
+  return v === 'none' ? 'none' : v === 'strict' ? 'strict' : 'lax';
+}
+
 // Double-submit cookie strategy: httpOnly auth cookies + readable XSRF-TOKEN cookie
 const baseCsurf = csurf({
   cookie: {
     key: process.env.CSRF_COOKIE_NAME || 'XSRF-TOKEN',
     httpOnly: false, // must be readable by browser JS
-    sameSite: (process.env.COOKIE_SAMESITE as any) || 'lax',
+    sameSite: resolveSameSite(),
     secure: bool(process.env.COOKIE_SECURE, process.env.NODE_ENV === 'production'),
     domain: process.env.COOKIE_DOMAIN || undefined,
     path: '/',
   },
-  value: (req: Request) => req.headers['x-csrf-token'] as string || (req as any).body?._csrf || '',
+  value: (req: Request) => {
+    const hdr = req.headers['x-csrf-token'];
+    if (typeof hdr === 'string' && hdr) return hdr;
+    const body = (req as unknown as { body?: { _csrf?: string } }).body;
+    return body?._csrf || '';
+  },
 });
 
 // Wrapper that ignores CSRF for specific auth acquisition endpoints (login/register/refresh)
@@ -22,16 +33,19 @@ export function csrfProtection(req: Request, res: Response, next: NextFunction) 
   const method = req.method.toUpperCase();
   const apiVersion = process.env.API_VERSION || 'v1';
   const authAcquire = new RegExp(`^/api/${apiVersion}/auth/(login|register|refresh)$`);
-  if (method === 'POST' && authAcquire.test(path)) {
+  const flagsPath = new RegExp(`^/api/${apiVersion}/flags`);
+  // Exempt CSRF for auth acquisition endpoints and ops-only feature flag toggles
+  if (method === 'POST' && (authAcquire.test(path) || flagsPath.test(path))) {
     return next();
   }
-  return (baseCsurf as any)(req, res, next);
+  return (baseCsurf as unknown as (req: Request, res: Response, next: NextFunction) => void)(req, res, next);
 }
 
 // Helper route handler to set token cookie explicitly
 export function issueCsrfToken(req: Request, res: Response, _next: NextFunction) {
   // When using csurf, req.csrfToken() will set the cookie via the configured cookie options
-  const token = (req as any).csrfToken ? (req as any).csrfToken() : '';
+  const maybeTokenFn = (req as unknown as { csrfToken?: () => string }).csrfToken;
+  const token = typeof maybeTokenFn === 'function' ? maybeTokenFn() : '';
   res.json({ success: true, token });
 }
 
