@@ -298,7 +298,10 @@ export default function BillingSettingsPage() {
               <FileText className="h-6 w-6 text-gray-400" aria-hidden="true" />
             </div>
             <div className="pt-4 border-t border-gray-100 space-y-4">
-              <label className="flex items-start gap-3 cursor-pointer">
+              <label
+                className="flex items-start gap-3 cursor-pointer"
+                aria-label="Toggle payment receipt emails"
+              >
                 <input
                   type="checkbox"
                   checked={preferences.send_receipts}
@@ -317,7 +320,10 @@ export default function BillingSettingsPage() {
                 </div>
               </label>
 
-              <label className="flex items-start gap-3 cursor-pointer">
+              <label
+                className="flex items-start gap-3 cursor-pointer"
+                aria-label="Toggle monthly invoice emails"
+              >
                 <input
                   type="checkbox"
                   checked={preferences.send_invoices}
@@ -331,12 +337,15 @@ export default function BillingSettingsPage() {
                 <div>
                   <p className="text-sm font-medium text-gray-900">Monthly Invoices</p>
                   <p className="text-xs text-gray-600">
-                    Get invoices emailed automatically when they're generated
+                    Get invoices emailed automatically when they&apos;re generated
                   </p>
                 </div>
               </label>
 
-              <label className="flex items-start gap-3 cursor-pointer">
+              <label
+                className="flex items-start gap-3 cursor-pointer"
+                aria-label="Toggle usage alert emails"
+              >
                 <input
                   type="checkbox"
                   checked={preferences.send_usage_alerts}
@@ -364,7 +373,7 @@ export default function BillingSettingsPage() {
               <div className="text-sm text-blue-900">
                 <p className="font-medium mb-1">Need to upgrade or change your plan?</p>
                 <p>
-                  Use Stripe's billing portal to manage your subscription, or{' '}
+                  Use Stripe&apos;s billing portal to manage your subscription, or{' '}
                   <a href="mailto:billing@apexmediation.com" className="underline font-medium">
                     contact sales
                   </a>{' '}

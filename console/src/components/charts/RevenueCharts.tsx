@@ -17,6 +17,11 @@ interface ChartProps {
   height?: number
 }
 
+interface DateFormattedChartProps extends ChartProps {
+  formatDateLabel?: (value: string) => string
+  formatTooltipLabel?: (value: string) => string
+}
+
 // Revenue Line Chart
 export function RevenueLineChart({ data, height = 300 }: ChartProps) {
   return (
@@ -55,7 +60,15 @@ export function RevenueLineChart({ data, height = 300 }: ChartProps) {
 }
 
 // Revenue Area Chart
-export function RevenueAreaChart({ data, height = 300 }: ChartProps) {
+export function RevenueAreaChart({ data, height = 300, formatDateLabel, formatTooltipLabel }: DateFormattedChartProps) {
+  const axisFormatter = (value: string | number) =>
+    formatDateLabel
+      ? formatDateLabel(String(value))
+      : new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+
+  const tooltipLabelFormatter = (label: string) =>
+    formatTooltipLabel ? formatTooltipLabel(label) : new Date(label).toLocaleDateString()
+
   return (
     <ResponsiveContainer width="100%" height={height}>
       <AreaChart data={data}>
@@ -70,7 +83,7 @@ export function RevenueAreaChart({ data, height = 300 }: ChartProps) {
           dataKey="date" 
           stroke="#6b7280"
           fontSize={12}
-          tickFormatter={(value) => new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+          tickFormatter={(value) => axisFormatter(value)}
         />
         <YAxis 
           stroke="#6b7280"
@@ -79,7 +92,7 @@ export function RevenueAreaChart({ data, height = 300 }: ChartProps) {
         />
         <Tooltip 
           contentStyle={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '8px' }}
-          labelFormatter={(label) => new Date(label).toLocaleDateString()}
+          labelFormatter={(label) => tooltipLabelFormatter(String(label))}
           formatter={(value: number) => [formatCurrency(value), 'Revenue']}
         />
         <Area 
@@ -131,7 +144,15 @@ export function ImpressionsBarChart({ data, height = 300 }: ChartProps) {
 }
 
 // eCPM Line Chart
-export function EcpmLineChart({ data, height = 300 }: ChartProps) {
+export function EcpmLineChart({ data, height = 300, formatDateLabel, formatTooltipLabel }: DateFormattedChartProps) {
+  const axisFormatter = (value: string | number) =>
+    formatDateLabel
+      ? formatDateLabel(String(value))
+      : new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+
+  const tooltipLabelFormatter = (label: string) =>
+    formatTooltipLabel ? formatTooltipLabel(label) : new Date(label).toLocaleDateString()
+
   return (
     <ResponsiveContainer width="100%" height={height}>
       <LineChart data={data}>
@@ -140,7 +161,7 @@ export function EcpmLineChart({ data, height = 300 }: ChartProps) {
           dataKey="date" 
           stroke="#6b7280"
           fontSize={12}
-          tickFormatter={(value) => new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+          tickFormatter={(value) => axisFormatter(value)}
         />
         <YAxis 
           stroke="#6b7280"
@@ -149,7 +170,7 @@ export function EcpmLineChart({ data, height = 300 }: ChartProps) {
         />
         <Tooltip 
           contentStyle={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '8px' }}
-          labelFormatter={(label) => new Date(label).toLocaleDateString()}
+          labelFormatter={(label) => tooltipLabelFormatter(String(label))}
           formatter={(value: number) => [`$${value.toFixed(2)}`, 'eCPM']}
         />
         <Legend />

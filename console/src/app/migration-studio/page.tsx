@@ -38,6 +38,8 @@ const statusBadgeStyles: Record<MigrationExperiment['status'], string> = {
   archived: 'bg-slate-100 text-slate-400',
 }
 
+const EXPERIMENT_SKELETON_KEYS = ['experiment-skeleton-1', 'experiment-skeleton-2']
+
 export default function MigrationStudioPage() {
   const [selectedPlacement, setSelectedPlacement] = useState<string>('')
   const [showImportWizard, setShowImportWizard] = useState<boolean>(false)
@@ -59,7 +61,7 @@ export default function MigrationStudioPage() {
     },
   })
 
-  const placements = placementsQuery.data ?? []
+  const placements = useMemo(() => placementsQuery.data ?? [], [placementsQuery.data])
 
   useEffect(() => {
     if (!selectedPlacement && placements.length > 0) {
@@ -67,7 +69,7 @@ export default function MigrationStudioPage() {
     }
   }, [placements, selectedPlacement])
 
-  const currentExperiments = experimentsQuery.data ?? []
+  const currentExperiments = useMemo(() => experimentsQuery.data ?? [], [experimentsQuery.data])
   const activeExperiment = currentExperiments.find((experiment) => experiment.status === 'active')
 
   const banners = useMemo((): Banner[] => {
@@ -475,8 +477,8 @@ function EmptyState() {
 function ExperimentsSkeleton() {
   return (
     <div className="space-y-4">
-      {Array.from({ length: 2 }).map((_, index) => (
-        <div key={index} className="card animate-pulse">
+      {EXPERIMENT_SKELETON_KEYS.map((key) => (
+        <div key={key} className="card animate-pulse">
           <div className="h-5 w-24 bg-gray-200 rounded" />
           <div className="mt-3 h-6 w-48 bg-gray-200 rounded" />
           <div className="mt-2 h-4 w-64 bg-gray-200 rounded" />

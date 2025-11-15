@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { type ChangeEvent, useCallback, useState } from 'react'
 import { reconcileBilling } from '@/lib/billing'
 
 export default function AdminBillingOpsPage() {
@@ -10,7 +10,15 @@ export default function AdminBillingOpsPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  async function triggerReconcile() {
+  const handleInvoiceIdChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
+    setInvoiceId(event.target.value)
+  }, [])
+
+  const handleEmailChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
+    setEmail(event.target.value)
+  }, [])
+
+  const triggerReconcile = useCallback(async () => {
     try {
       setLoading(true)
       setError(null)
@@ -23,7 +31,7 @@ export default function AdminBillingOpsPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -49,14 +57,14 @@ export default function AdminBillingOpsPage() {
             className="border rounded px-3 py-2"
             placeholder="Invoice ID"
             value={invoiceId}
-            onChange={(e) => setInvoiceId(e.target.value)}
+            onChange={handleInvoiceIdChange}
           />
           <input
             className="border rounded px-3 py-2"
             placeholder="Email"
             type="email"
             value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            onChange={handleEmailChange}
           />
         </div>
         <button

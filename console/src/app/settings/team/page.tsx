@@ -150,34 +150,42 @@ export default function TeamSettingsPage() {
                 required
               />
             </div>
-            <div>
-              <label className="label">Role</label>
+            <fieldset>
+              <legend className="label">Role</legend>
               <div className="space-y-2">
                 {(['admin', 'developer', 'finance'] as const).map((r) => (
-                  <label
-                    key={r}
-                    className={`card cursor-pointer border transition ${
-                      role === r ? 'border-primary-500 ring-2 ring-primary-100' : ''
-                    }`}
-                  >
-                    <div className="flex items-start gap-3">
-                      <input
-                        type="radio"
-                        name="role"
-                        value={r}
-                        checked={role === r}
-                        onChange={() => setRole(r)}
-                        className="mt-1"
+                  <div key={r}>
+                    <input
+                      id={`role-${r}`}
+                      type="radio"
+                      name="role"
+                      value={r}
+                      checked={role === r}
+                      onChange={() => setRole(r)}
+                      className="sr-only peer"
+                    />
+                    <label
+                      htmlFor={`role-${r}`}
+                      aria-label={`Select ${r} role`}
+                      className={`card cursor-pointer border transition flex items-start gap-3 ${
+                        role === r ? 'border-primary-500 ring-2 ring-primary-100' : ''
+                      }`}
+                    >
+                      <span
+                        aria-hidden={true}
+                        className={`mt-1 inline-flex h-4 w-4 rounded-full border ${
+                          role === r ? 'border-primary-600 bg-primary-600' : 'border-gray-300'
+                        }`}
                       />
-                      <div>
+                      <span>
                         <p className="text-sm font-semibold capitalize text-gray-900">{r}</p>
                         <p className="text-xs text-gray-600 mt-1">{roleDescriptions[r]}</p>
-                      </div>
-                    </div>
-                  </label>
+                      </span>
+                    </label>
+                  </div>
                 ))}
               </div>
-            </div>
+            </fieldset>
             <div className="flex items-center gap-3">
               <button
                 type="button"

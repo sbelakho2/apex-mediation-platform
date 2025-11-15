@@ -18,30 +18,38 @@ export function useFeatures(options: Options = {}) {
   const [features, setFeatures] = useState<Features | null>(options.fallback || null)
   const [loading, setLoading] = useState<boolean>(true)
   const [error, setError] = useState<Error | null>(null)
+  const baseUrl = process.env.NEXT_PUBLIC_API_URL || ''
 
   useEffect(() => {
-    let cancelled = false
+    const controller = new AbortController()
     async function load() {
       setLoading(true)
       try {
-        const res = await fetch('/api/v1/meta/features', { cache: 'no-store' })
+        const base = baseUrl ? baseUrl.replace(/\/$/, '') : ''
+        const endpoint = base ? `${base}/api/v1/meta/features` : '/api/v1/meta/features'
+        const res = await fetch(endpoint, {
+          cache: 'no-store',
+          signal: controller.signal,
+          credentials: 'include',
+        })
         if (!res.ok) throw new Error(`Failed to load features: ${res.status}`)
         const json = await res.json()
-        if (!cancelled) {
-          setFeatures(json?.data ?? null)
-          setError(null)
-        }
+        setFeatures(json?.data ?? null)
+        setError(null)
       } catch (e: any) {
-        if (!cancelled) setError(e)
+        if (e?.name === 'AbortError') return
+        setError(e instanceof Error ? e : new Error('Failed to load features'))
       } finally {
-        if (!cancelled) setLoading(false)
+        if (!controller.signal.aborted) {
+          setLoading(false)
+        }
       }
     }
     load()
     return () => {
-      cancelled = true
+      controller.abort()
     }
-  }, [])
+  }, [baseUrl])
 
   return { features, loading, error }
 }

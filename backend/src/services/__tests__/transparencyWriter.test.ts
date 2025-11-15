@@ -1,4 +1,4 @@
-import { describe, expect, it, jest } from '@jest/globals';
+import { describe, expect, it, jest, afterEach } from '@jest/globals';
 import type { MockedFunction } from 'jest-mock';
 import { generateKeyPairSync } from 'crypto';
 import type { OpenRTBBidRequest, OpenRTBBidResponse, Bid } from '../../types/openrtb.types';
@@ -9,6 +9,17 @@ import {
   type ClickHouseClient,
   type ClickHouseInsertArgs,
 } from '../transparencyWriter';
+import { emitOpsAlert } from '../../utils/opsAlert';
+
+jest.mock('../../utils/opsAlert', () => ({
+  emitOpsAlert: jest.fn(),
+}));
+
+const emitOpsAlertMock = emitOpsAlert as jest.MockedFunction<typeof emitOpsAlert>;
+
+afterEach(() => {
+  jest.clearAllMocks();
+});
 
 function makeRequest(): OpenRTBBidRequest {
   return {
@@ -202,6 +213,7 @@ describe('TransparencyWriter', () => {
     expect(metricsAfterFailures.breaker_open).toBe(true);
     expect(metricsAfterFailures.failure_streak).toBe(2);
     expect(metricsAfterFailures.breaker_cooldown_remaining_ms).toBe(1000);
+  expect(emitOpsAlertMock.mock.calls.some(([event]) => event === 'transparency_breaker_open')).toBe(true);
 
     const callCountBeforeSkip = insertMock.mock.calls.length;
     await writer.recordAuction(request, result, new Date('2025-11-09T12:00:00.000Z'));
@@ -215,6 +227,7 @@ describe('TransparencyWriter', () => {
     const metricsAfterCooldown = writer.getMetrics();
     expect(metricsAfterCooldown.breaker_open).toBe(false);
     expect(metricsAfterCooldown.failure_streak).toBe(0);
+  expect(emitOpsAlertMock.mock.calls.some(([event]) => event === 'transparency_breaker_closed')).toBe(true);
 
     await writer.recordAuction(request, result, new Date('2025-11-09T12:00:00.000Z'));
     expect(insertMock.mock.calls.length).toBe(callCountBeforeSkip + 2);
@@ -245,6 +258,40 @@ describe('TransparencyWriter', () => {
     expect(metrics.failure_streak).toBe(1);
     expect(metrics.breaker_open).toBe(false);
     expect(metrics.breaker_cooldown_remaining_ms).toBe(0);
+  });
+
+  it('emits ops alerts and tracks last failure metadata for ClickHouse errors', async () => {
+    let currentTime = 2500;
+    const { writer, insertMock } = makeWriter({
+      retryAttempts: 0,
+      breakerThreshold: 5,
+      nowProvider: () => currentTime,
+    });
+
+    insertMock.mockRejectedValue(makeClickHouseError(503));
+
+    const request = makeRequest();
+    const result = makeAuctionResult(makeBid('alpha', 2.5), makeResponse(makeBid('alpha', 2.5)));
+
+    await writer.recordAuction(request, result, new Date('2025-11-09T12:00:00.000Z'));
+
+    expect(emitOpsAlertMock).toHaveBeenCalledWith(
+      'transparency_clickhouse_failure',
+      'warning',
+      expect.objectContaining({
+        request_id: request.id,
+        stage: 'auctions',
+        status: 503,
+        transient: true,
+        failure_streak: 1,
+      })
+    );
+
+    const metrics = writer.getMetrics();
+    expect(metrics.last_failure_at_ms).toBe(currentTime);
+    expect(metrics.last_failure_stage).toBe('auctions');
+    expect(metrics.last_failure_partial).toBe(false);
+    expect(metrics.last_success_at_ms).toBeNull();
   });
 
   it('canonicalizes payload deterministically for signing', () => {

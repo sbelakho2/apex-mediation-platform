@@ -399,5 +399,13 @@
         "dismiss": "Back to Migration Studio"
       }
     }
+  },
+  "ui": {
+    "copyButton": {
+      "copy": "Copy",
+      "copied": "Copied",
+      "tooltip": "Copy to clipboard",
+      "error": "Unable to copy. Please copy manually."
+    }
   }
 }

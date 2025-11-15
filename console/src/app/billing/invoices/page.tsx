@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { listInvoices, InvoicesListResponse } from '@/lib/billing'
 import Link from 'next/link'
 import {
@@ -19,11 +19,7 @@ export default function InvoicesListPage() {
   const [page, setPage] = useState(1)
   const [statusFilter, setStatusFilter] = useState<string>('all')
 
-  useEffect(() => {
-    loadInvoices()
-  }, [page, statusFilter])
-
-  const loadInvoices = async () => {
+  const loadInvoices = useCallback(async () => {
     try {
       setLoading(true)
       setError(null)
@@ -38,7 +34,11 @@ export default function InvoicesListPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [page, statusFilter])
+
+  useEffect(() => {
+    loadInvoices()
+  }, [loadInvoices])
 
   // Status visuals provided by StatusBadge component
 

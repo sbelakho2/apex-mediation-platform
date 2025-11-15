@@ -18,6 +18,8 @@ import {
 } from 'lucide-react'
 import type { Placement } from '@/types'
 
+const PLACEMENT_SKELETON_KEYS = ['placement-skeleton-1', 'placement-skeleton-2', 'placement-skeleton-3', 'placement-skeleton-4', 'placement-skeleton-5']
+
 export default function PlacementsPage() {
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'paused' | 'archived'>('all')
@@ -207,8 +209,8 @@ function EmptyState() {
 function PlacementListSkeleton() {
   return (
     <div className="grid grid-cols-1 gap-4">
-      {Array.from({ length: 5 }).map((_, i) => (
-        <div key={i} className="card">
+      {PLACEMENT_SKELETON_KEYS.map((key) => (
+        <div key={key} className="card">
           <div className="animate-pulse">
             <div className="flex items-start justify-between">
               <div className="flex-1 space-y-3">

@@ -6,6 +6,8 @@ import { ArrowLeft } from 'lucide-react'
 import { transparencyApi, type TransparencyAuction, type VerifyResult } from '../../../../lib/transparency'
 import { CopyButton, VerifyBadge, Skeleton } from '../../../../components/ui'
 
+const AUCTION_DETAIL_OVERVIEW_SKELETON_KEYS = ['auction-overview-1', 'auction-overview-2', 'auction-overview-3', 'auction-overview-4']
+
 export default function TransparencyAuctionDetailPage({ params }: { params: { auction_id: string } }) {
   const { auction_id } = params
   const [auction, setAuction] = useState<TransparencyAuction | null>(null)
@@ -230,8 +232,8 @@ function AuctionDetailSkeleton() {
       <div className="card">
         <Skeleton width="w-48" height="h-6" className="mb-4" />
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i}>
+          {AUCTION_DETAIL_OVERVIEW_SKELETON_KEYS.map((key) => (
+            <div key={key}>
               <Skeleton width="w-24" height="h-4" className="mb-2" />
               <Skeleton width="w-full" height="h-5" />
             </div>

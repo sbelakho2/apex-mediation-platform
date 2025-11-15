@@ -2,20 +2,38 @@
 
 import { useQuery } from '@tanstack/react-query'
 import { fraudApi } from '@/lib/api'
-import { formatNumber, formatPercentage, getSeverityColor } from '@/lib/utils'
+import { formatNumber, formatPercentage } from '@/lib/utils'
 import { AlertTriangle, Shield, ShieldCheck, TrendingUp } from 'lucide-react'
 import Link from 'next/link'
+import { useFeatures } from '@/lib/useFeatures'
 
 interface FraudWidgetProps {
   publisherId: string
 }
 
+const DEFAULT_WARNING_THRESHOLD = 0.02
+const DEFAULT_CRITICAL_THRESHOLD = 0.05
+const FRAUD_WARNING_THRESHOLD = Number(process.env.NEXT_PUBLIC_FRAUD_RATE_WARNING ?? DEFAULT_WARNING_THRESHOLD)
+const FRAUD_CRITICAL_THRESHOLD = Number(
+  process.env.NEXT_PUBLIC_FRAUD_RATE_CRITICAL ?? DEFAULT_CRITICAL_THRESHOLD
+)
+const FRAUD_FEATURE_FALLBACK = process.env.NEXT_PUBLIC_FRAUD_DETECTION_ENABLED !== 'false'
+
 export function FraudWidget({ publisherId }: FraudWidgetProps) {
+  const { features } = useFeatures()
   const { data: fraudStats, isLoading } = useQuery({
     queryKey: ['fraud-stats', publisherId],
     queryFn: () => fraudApi.getStats(publisherId, { window: '24h' }).then(res => res.data),
     enabled: !!publisherId,
   })
+
+  const warningThreshold = Number.isFinite(FRAUD_WARNING_THRESHOLD)
+    ? FRAUD_WARNING_THRESHOLD
+    : DEFAULT_WARNING_THRESHOLD
+  const criticalThreshold = Number.isFinite(FRAUD_CRITICAL_THRESHOLD)
+    ? FRAUD_CRITICAL_THRESHOLD
+    : DEFAULT_CRITICAL_THRESHOLD
+  const fraudDashboardEnabled = features?.fraudDetection ?? FRAUD_FEATURE_FALLBACK
 
   if (isLoading) {
     return <FraudWidgetSkeleton />
@@ -33,7 +51,17 @@ export function FraudWidget({ publisherId }: FraudWidgetProps) {
     )
   }
 
-  const fraudRateStatus = fraudStats.fraudRate > 0.05 ? 'critical' : fraudStats.fraudRate > 0.02 ? 'warning' : 'normal'
+  const fraudRateStatus =
+    fraudStats.fraudRate >= criticalThreshold
+      ? 'critical'
+      : fraudStats.fraudRate >= warningThreshold
+        ? 'warning'
+        : 'normal'
+  const lastUpdatedDate = fraudStats.lastUpdated ? new Date(fraudStats.lastUpdated) : null
+  const lastUpdatedLabel =
+    lastUpdatedDate && !Number.isNaN(lastUpdatedDate.getTime())
+      ? lastUpdatedDate.toLocaleString()
+      : 'Not available'
 
   return (
     <div className="card h-full">
@@ -89,7 +117,8 @@ export function FraudWidget({ publisherId }: FraudWidgetProps) {
             </span>
           </div>
           <p className="mt-2 text-xs text-gray-500">
-            Thresholds: normal &lt; 2%, moderate 2-5%, critical &gt; 5% over the selected reporting window.
+            Thresholds: normal &lt; {formatPercentage(warningThreshold, 0)}, moderate between {formatPercentage(warningThreshold, 0)}-
+            {formatPercentage(criticalThreshold, 0)}, critical &gt; {formatPercentage(criticalThreshold, 0)} over the selected window.
           </p>
         </section>
 
@@ -111,17 +140,29 @@ export function FraudWidget({ publisherId }: FraudWidgetProps) {
           </div>
           <div className="flex items-center justify-between text-xs text-gray-400">
             <span>Last updated</span>
-            <span>{new Date(fraudStats.lastUpdated).toLocaleString()}</span>
+            <span>{lastUpdatedLabel}</span>
           </div>
         </section>
 
-        <Link
-          href="/fraud"
-          className="btn btn-outline w-full gap-2 py-2.5 text-sm leading-tight flex flex-wrap items-center justify-center text-center whitespace-normal"
-        >
-          <ShieldCheck className="h-4 w-4" aria-hidden="true" />
-          View Fraud Dashboard
-        </Link>
+        {fraudDashboardEnabled ? (
+          <Link
+            href="/fraud"
+            className="btn btn-outline w-full gap-2 py-2.5 text-sm leading-tight flex flex-wrap items-center justify-center text-center whitespace-normal"
+          >
+            <ShieldCheck className="h-4 w-4" aria-hidden="true" />
+            View Fraud Dashboard
+          </Link>
+        ) : (
+          <button
+            type="button"
+            disabled
+            className="btn btn-outline w-full gap-2 py-2.5 text-sm leading-tight flex flex-wrap items-center justify-center text-center whitespace-normal cursor-not-allowed opacity-60"
+            aria-disabled="true"
+          >
+            <Shield className="h-4 w-4" aria-hidden="true" />
+            Fraud dashboard disabled for this tenant
+          </button>
+        )}
       </div>
     </div>
   )

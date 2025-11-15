@@ -218,11 +218,14 @@ function EmptyState() {
   )
 }
 
+const SKELETON_CARD_KEYS = ['card-1', 'card-2', 'card-3', 'card-4'] as const
+const SKELETON_METRIC_KEYS = ['metric-1', 'metric-2', 'metric-3', 'metric-4'] as const
+
 function AdaptersSkeleton() {
   return (
     <div className="grid grid-cols-1 gap-4">
-      {Array.from({ length: 4 }).map((_, index) => (
-        <div key={index} className="card">
+      {SKELETON_CARD_KEYS.map((cardKey) => (
+        <div key={cardKey} className="card">
           <div className="animate-pulse space-y-4">
             <div className="flex items-center gap-3">
               <div className="h-10 w-10 rounded-lg bg-gray-200" />
@@ -232,8 +235,8 @@ function AdaptersSkeleton() {
               </div>
             </div>
             <div className="flex flex-wrap justify-between gap-4">
-              {Array.from({ length: 4 }).map((__, metricIndex) => (
-                <div key={metricIndex} className="h-10 w-24 rounded bg-gray-200" />
+              {SKELETON_METRIC_KEYS.map((metricKey) => (
+                <div key={metricKey} className="h-10 w-24 rounded bg-gray-200" />
               ))}
             </div>
           </div>

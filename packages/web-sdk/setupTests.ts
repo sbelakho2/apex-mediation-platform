@@ -1,3 +1,4 @@
+import { server } from './tests/msw/server';
 
 // Establish API mocking before all tests.
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));

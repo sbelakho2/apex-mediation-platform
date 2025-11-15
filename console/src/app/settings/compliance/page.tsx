@@ -1,14 +1,71 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import Link from 'next/link'
-import { useForm } from 'react-hook-form'
+import { Controller, useForm, useWatch } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { settingsApi } from '@/lib/api'
-import { ArrowLeft, Globe, Shield, Save, AlertCircle, CheckCircle } from 'lucide-react'
+import {
+  ArrowLeft,
+  Globe,
+  Save,
+  AlertCircle,
+  CheckCircle,
+  Eye,
+  EyeOff,
+  Trash2,
+  X,
+} from 'lucide-react'
 import type { ComplianceSettings } from '@/types'
+import { useDebouncedValue } from '@/lib/hooks'
+import {
+  COMMON_SENSITIVE_CATEGORY_SUGGESTIONS,
+  ISO_COUNTRY_CODES,
+  ISO_COUNTRY_LABELS,
+  ISO_COUNTRY_SET,
+  type IsoCountryCode,
+} from '@/constants/geo'
+
+type EncryptedConsentPayload = { cipher: ArrayBuffer; iv: Uint8Array } | { fallback: string }
+
+const toggleFieldNames = ['gdprEnabled', 'ccpaEnabled', 'coppaMode', 'autoBlock', 'euTrafficOnly'] as const
+
+const slugifyCategory = (value: string) =>
+  value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+
+const formatCategoryLabel = (slug: string) =>
+  slug
+    .split('-')
+    .filter(Boolean)
+    .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
+    .join(' ') || slug.toUpperCase()
+
+const hasWebCryptoSupport = () => typeof window !== 'undefined' && !!window.crypto?.subtle
+
+const isoCountryCodeSchema = z
+  .string()
+  .trim()
+  .transform((value) => value.toUpperCase())
+  .refine((value) => /^[A-Z]{2}$/.test(value), {
+    message: 'Use ISO 3166-1 alpha-2 codes (e.g., US, DE).',
+  })
+  .refine((value) => ISO_COUNTRY_SET.has(value as IsoCountryCode), {
+    message: 'Unknown ISO country code.',
+  })
+
+const categorySlugSchema = z
+  .string()
+  .trim()
+  .min(2, 'Enter at least two characters.')
+  .max(60, 'Category labels must be 60 characters or fewer.')
+  .transform((value) => slugifyCategory(value))
+  .refine((value) => value.length >= 2, { message: 'Category slugs must contain letters or numbers.' })
 
 const complianceSchema = z.object({
   gdprEnabled: z.boolean(),
@@ -21,14 +78,37 @@ const complianceSchema = z.object({
   aggregatedDataDays: z.coerce.number().min(1).max(730),
   userDataDays: z.coerce.number().min(1).max(90),
   euTrafficOnly: z.boolean(),
-  blockedCountries: z.string(),
-  sensitiveCategories: z.string(),
+  blockedCountries: z.preprocess((val) => {
+    // Allow the UI to send either a comma-separated string or an array.
+    if (typeof val === 'string') {
+      return (val as string)
+        .split(',')
+        .map((c) => (c || '').trim().toUpperCase())
+        .filter(Boolean)
+    }
+    return val
+  }, z
+    .array(isoCountryCodeSchema)
+    .max(250, 'Limit blocked countries to 250 entries.')
+    .refine((codes) => new Set(codes).size === codes.length, { message: 'Duplicate country codes are not allowed.' })),
+  sensitiveCategories: z.preprocess((val) => {
+    if (typeof val === 'string') {
+      return (val as string)
+        .split(',')
+        .map((c) => slugifyCategory(c || ''))
+        .filter(Boolean)
+    }
+    return val
+  }, z
+    .array(categorySlugSchema)
+    .max(200, 'Limit blocked categories to 200 entries.')
+    .refine((values) => new Set(values).size === values.length, { message: 'Duplicate categories are not allowed.' })),
 })
-
 type ComplianceFormValues = z.infer<typeof complianceSchema>
 
 export default function ComplianceSettingsPage() {
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+  const [showConsent, setShowConsent] = useState(false)
 
   const { data, isLoading } = useQuery({
     queryKey: ['settings', 'compliance'],
@@ -51,8 +131,8 @@ export default function ComplianceSettingsPage() {
       aggregatedDataDays: 365,
       userDataDays: 30,
       euTrafficOnly: false,
-      blockedCountries: '',
-      sensitiveCategories: '',
+      blockedCountries: [],
+      sensitiveCategories: [],
     },
   })
 
@@ -64,19 +144,35 @@ export default function ComplianceSettingsPage() {
         coppaMode: data.coppaMode,
         consentProvider: data.consentManagement.provider ?? '',
         autoBlock: data.consentManagement.autoBlock,
-        consentString: data.consentManagement.consentString ?? '',
+        // Do NOT pre-fill the consent string to avoid exposing it in the DOM/history
+        consentString: '',
         rawEventsDays: data.dataRetention.rawEventsDays,
         aggregatedDataDays: data.dataRetention.aggregatedDataDays,
         userDataDays: data.dataRetention.userDataDays,
         euTrafficOnly: data.regionalSettings.euTrafficOnly,
-        blockedCountries: data.regionalSettings.blockedCountries.join(', '),
-        sensitiveCategories: data.regionalSettings.sensitiveCategories.join(', '),
+        blockedCountries: data.regionalSettings.blockedCountries,
+        sensitiveCategories: data.regionalSettings.sensitiveCategories,
       })
     }
   }, [data, form])
 
   const updateMutation = useMutation({
     mutationFn: async (values: ComplianceFormValues) => {
+      // Accept either arrays or comma-separated strings for the two list fields.
+      const blockedCountries = Array.isArray(values.blockedCountries)
+        ? values.blockedCountries.map((c) => String(c).trim().toUpperCase()).filter(Boolean)
+        : String(values.blockedCountries || '')
+            .split(',')
+            .map((c) => c.trim().toUpperCase())
+            .filter(Boolean)
+
+      const sensitiveCategories = Array.isArray(values.sensitiveCategories)
+        ? values.sensitiveCategories.map((c) => String(c).trim()).filter(Boolean)
+        : String(values.sensitiveCategories || '')
+            .split(',')
+            .map((c) => slugifyCategory(c))
+            .filter(Boolean)
+
       await settingsApi.updateComplianceSettings({
         gdprEnabled: values.gdprEnabled,
         ccpaEnabled: values.ccpaEnabled,
@@ -93,8 +189,8 @@ export default function ComplianceSettingsPage() {
         },
         regionalSettings: {
           euTrafficOnly: values.euTrafficOnly,
-          blockedCountries: values.blockedCountries.split(',').map((c) => c.trim()).filter(Boolean),
-          sensitiveCategories: values.sensitiveCategories.split(',').map((c) => c.trim()).filter(Boolean),
+          blockedCountries,
+          sensitiveCategories,
         },
       })
     },
@@ -102,6 +198,31 @@ export default function ComplianceSettingsPage() {
     onSuccess: () => setMessage({ type: 'success', text: 'Compliance settings updated successfully.' }),
     onError: () => setMessage({ type: 'error', text: 'Failed to update compliance settings. Please try again.' }),
   })
+
+  // Debounced autosave for quick toggle changes so repeated toggles don't spam mutations
+  const toggleValues = useWatch({ control: form.control, name: toggleFieldNames as any })
+  const autosaveTimer = useRef<number | null>(null)
+  const toggleKey = useMemo(() => JSON.stringify(toggleValues), [toggleValues])
+
+  useEffect(() => {
+    // Only trigger autosave for toggle changes; avoid when mutation already pending
+    if (updateMutation.isPending) return
+    // clear any pending timer
+    if (autosaveTimer.current) {
+      window.clearTimeout(autosaveTimer.current)
+      autosaveTimer.current = null
+    }
+    autosaveTimer.current = window.setTimeout(() => {
+      updateMutation.mutate(form.getValues() as any)
+    }, 700)
+    return () => {
+      if (autosaveTimer.current) {
+        window.clearTimeout(autosaveTimer.current)
+        autosaveTimer.current = null
+      }
+    }
+    // stringify toggleValues to avoid referential instability in dependency
+  }, [toggleKey, form, updateMutation])
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -207,15 +328,26 @@ export default function ComplianceSettingsPage() {
               <label htmlFor="consentString" className="label">
                 IAB Consent String (Optional)
               </label>
-              <input
-                id="consentString"
-                type="text"
-                className="input"
-                placeholder="CPXs..."
-                {...form.register('consentString')}
-              />
+              <div className="relative">
+                <input
+                  id="consentString"
+                  type={showConsent ? 'text' : 'password'}
+                  className="input pr-10"
+                  placeholder="CPXs..."
+                  autoComplete="off"
+                  {...form.register('consentString')}
+                />
+                <button
+                  type="button"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500"
+                  onClick={() => setShowConsent((s) => !s)}
+                  aria-label={showConsent ? 'Hide consent string' : 'Show consent string'}
+                >
+                  {showConsent ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
               <p className="text-xs text-gray-500 mt-1">
-                Leave blank if using a CMP that injects the string automatically.
+                Leave blank if using a CMP that injects the string automatically. The value is masked here for privacy.
               </p>
             </div>
             <div className="flex items-center gap-3">
@@ -281,12 +413,33 @@ export default function ComplianceSettingsPage() {
               <label htmlFor="blockedCountries" className="label">
                 Blocked Countries
               </label>
-              <input
-                id="blockedCountries"
-                type="text"
-                className="input"
-                placeholder="RU, CN, KP"
-                {...form.register('blockedCountries')}
+              <Controller
+                control={form.control}
+                name="blockedCountries"
+                render={({ field }) => {
+                  const display = Array.isArray(field.value) ? field.value.join(', ') : ''
+                  return (
+                    <>
+                      <input
+                        id="blockedCountries"
+                        type="text"
+                        className="input"
+                        placeholder="RU, CN, KP"
+                        value={display}
+                        onChange={(e) => {
+                          const parsed = String(e.target.value)
+                            .split(',')
+                            .map((c) => (c || '').trim().toUpperCase())
+                            .filter(Boolean)
+                          field.onChange(parsed)
+                        }}
+                      />
+                      {form.formState.errors.blockedCountries && (
+                        <p className="text-sm text-danger-600 mt-1">{(form.formState.errors.blockedCountries as any).message}</p>
+                      )}
+                    </>
+                  )
+                }}
               />
               <p className="text-xs text-gray-500 mt-1">
                 ISO country codes separated by commas. Traffic from these regions will be rejected.
@@ -296,12 +449,33 @@ export default function ComplianceSettingsPage() {
               <label htmlFor="sensitiveCategories" className="label">
                 Blocked Ad Categories
               </label>
-              <input
-                id="sensitiveCategories"
-                type="text"
-                className="input"
-                placeholder="gambling, alcohol, dating"
-                {...form.register('sensitiveCategories')}
+              <Controller
+                control={form.control}
+                name="sensitiveCategories"
+                render={({ field }) => {
+                  const display = Array.isArray(field.value) ? field.value.join(', ') : ''
+                  return (
+                    <>
+                      <input
+                        id="sensitiveCategories"
+                        type="text"
+                        className="input"
+                        placeholder="gambling, alcohol, dating"
+                        value={display}
+                        onChange={(e) => {
+                          const parsed = String(e.target.value)
+                            .split(',')
+                            .map((c) => slugifyCategory(String(c || '').trim()))
+                            .filter(Boolean)
+                          field.onChange(parsed)
+                        }}
+                      />
+                      {form.formState.errors.sensitiveCategories && (
+                        <p className="text-sm text-danger-600 mt-1">{(form.formState.errors.sensitiveCategories as any).message}</p>
+                      )}
+                    </>
+                  )
+                }}
               />
               <p className="text-xs text-gray-500 mt-1">
                 IAB categories or custom keywords. Ads matching these will be automatically filtered.

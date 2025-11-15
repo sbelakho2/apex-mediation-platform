@@ -70,10 +70,12 @@ interface MetricSkeletonProps {
 }
 
 export function MetricCardSkeleton({ count = 4 }: MetricSkeletonProps) {
+  const skeletonKeys = Array.from({ length: count }, (_, index) => `metric-card-skeleton-${index}`)
+
   return (
     <>
-      {Array.from({ length: count }).map((_, i) => (
-        <div key={i} className="card">
+      {skeletonKeys.map((key) => (
+        <div key={key} className="card">
           <div className="animate-pulse">
             <div className="flex items-center justify-between mb-2">
               <div className="h-4 bg-gray-200 rounded w-20"></div>

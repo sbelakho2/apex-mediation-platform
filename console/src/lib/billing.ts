@@ -118,9 +118,11 @@ export async function listInvoices(params: InvoicesQueryParams = {}): Promise<In
 /**
  * Get a single invoice by ID
  */
-export async function getInvoice(invoiceId: string): Promise<Invoice> {
+export async function getInvoice(invoiceId: string, options: { signal?: AbortSignal } = {}): Promise<Invoice> {
   try {
-    const response: AxiosResponse<Invoice> = await apiClient.get(`/billing/invoices/${invoiceId}`)
+    const response: AxiosResponse<Invoice> = await apiClient.get(`/billing/invoices/${invoiceId}`, {
+      signal: options.signal,
+    })
     return response.data
   } catch (error) {
     throw new Error(handleApiError(error))

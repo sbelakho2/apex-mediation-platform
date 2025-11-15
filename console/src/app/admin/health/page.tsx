@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { apiClient } from '@/lib/api-client'
+import { useAdminGate } from '@/lib/useAdminGate'
 
 type MetaInfo = { name: string; version: string; environment: string }
 
@@ -14,7 +15,42 @@ type RedSummary = {
   timestamp: string
 }
 
+type ThresholdConfig = {
+  warn: number
+  crit: number
+}
+
+const safeNumber = (value: string | undefined, fallback: number): number => {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : fallback
+}
+
+const POLL_INTERVAL_MS = safeNumber(process.env.NEXT_PUBLIC_ADMIN_HEALTH_POLL_INTERVAL_MS, 30_000)
+
+const RED_THRESHOLDS: Record<'latency' | 'error' | 'timeouts', ThresholdConfig> = Object.freeze({
+  latency: {
+    warn: safeNumber(process.env.NEXT_PUBLIC_ADMIN_HEALTH_LATENCY_WARN, 0.5),
+    crit: safeNumber(process.env.NEXT_PUBLIC_ADMIN_HEALTH_LATENCY_CRIT, 1.0),
+  },
+  error: {
+    warn: safeNumber(process.env.NEXT_PUBLIC_ADMIN_HEALTH_ERROR_WARN, 0.01),
+    crit: safeNumber(process.env.NEXT_PUBLIC_ADMIN_HEALTH_ERROR_CRIT, 0.05),
+  },
+  timeouts: {
+    warn: safeNumber(process.env.NEXT_PUBLIC_ADMIN_HEALTH_TIMEOUT_WARN, 1),
+    crit: safeNumber(process.env.NEXT_PUBLIC_ADMIN_HEALTH_TIMEOUT_CRIT, 5),
+  },
+})
+
+const isAbortError = (error: unknown) => {
+  if (!error) return false
+  if ((error as any)?.code === 'ERR_CANCELED') return true
+  if (error instanceof DOMException && error.name === 'AbortError') return true
+  return false
+}
+
 export default function AdminHealthPage() {
+  const { isAdmin, isLoading: gateLoading } = useAdminGate()
   const [info, setInfo] = useState<MetaInfo | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -24,64 +60,85 @@ export default function AdminHealthPage() {
   const [redLoading, setRedLoading] = useState<boolean>(true)
 
   useEffect(() => {
-    let cancelled = false
+    if (!isAdmin) return
+    let active = true
+    const controller = new AbortController()
     async function load() {
       setLoading(true)
+      setError(null)
       try {
-        const res = await apiClient.get('/meta/info')
-        if (!cancelled) setInfo(res?.data?.data || null)
+        const res = await apiClient.get('/meta/info', { signal: controller.signal })
+        if (active) setInfo(res?.data?.data || null)
       } catch (e: any) {
-        if (!cancelled) setError(e?.message || 'Failed to load meta info')
+        if (isAbortError(e)) return
+        if (active) setError(e?.message || 'Failed to load meta info')
       } finally {
-        if (!cancelled) setLoading(false)
+        if (active) setLoading(false)
       }
     }
     load()
     return () => {
-      cancelled = true
+      active = false
+      controller.abort()
     }
-  }, [])
+  }, [isAdmin])
 
   useEffect(() => {
-    let cancelled = false
-    async function loadRed() {
-      setRedLoading(true)
+    if (!isAdmin) return
+    let active = true
+    let controller: AbortController | null = null
+
+    const loadRed = async (options: { initial?: boolean } = {}) => {
+      controller?.abort()
+      controller = new AbortController()
+      if (options.initial) setRedLoading(true)
       try {
-        const res = await apiClient.get('/admin/health/red')
-        if (!cancelled) {
+        const res = await apiClient.get('/admin/health/red', { signal: controller.signal })
+        if (active) {
           setRed(res?.data?.data || null)
           setRedError(null)
         }
       } catch (e: any) {
-        if (!cancelled) setRedError(e?.message || 'Failed to load RED metrics')
+        if (isAbortError(e)) return
+        if (active) setRedError(e?.message || 'Failed to load RED metrics')
       } finally {
-        if (!cancelled) setRedLoading(false)
+        if (options.initial && active) {
+          setRedLoading(false)
+        }
       }
     }
-    loadRed()
-    const id = setInterval(loadRed, 30_000)
+
+    loadRed({ initial: true })
+    const id = setInterval(() => loadRed(), POLL_INTERVAL_MS)
     return () => {
-      cancelled = true
+      active = false
+      controller?.abort()
       clearInterval(id)
     }
-  }, [])
+  }, [isAdmin])
 
   function redStatusColor(kind: 'latency' | 'error' | 'timeouts', v: number | null) {
     if (v == null || isNaN(v)) return 'bg-gray-100 text-gray-800 border-gray-200'
-    if (kind === 'latency') {
-      if (v > 1.0) return 'bg-red-100 text-red-800 border-red-200'
-      if (v > 0.5) return 'bg-yellow-100 text-yellow-800 border-yellow-200'
-      return 'bg-green-100 text-green-800 border-green-200'
-    }
-    if (kind === 'error') {
-      if (v > 0.05) return 'bg-red-100 text-red-800 border-red-200'
-      if (v > 0.01) return 'bg-yellow-100 text-yellow-800 border-yellow-200'
-      return 'bg-green-100 text-green-800 border-green-200'
-    }
-    // timeouts rps thresholds
-    if (v > 5) return 'bg-red-100 text-red-800 border-red-200'
-    if (v > 1) return 'bg-yellow-100 text-yellow-800 border-yellow-200'
+    const { warn, crit } = RED_THRESHOLDS[kind]
+    if (v >= crit) return 'bg-red-100 text-red-800 border-red-200'
+    if (v >= warn) return 'bg-yellow-100 text-yellow-800 border-yellow-200'
     return 'bg-green-100 text-green-800 border-green-200'
+  }
+
+  if (gateLoading) {
+    return (
+      <div className="bg-white border rounded-lg p-6 text-gray-700" role="status">
+        Checking admin permissions…
+      </div>
+    )
+  }
+
+  if (!isAdmin) {
+    return (
+      <div className="bg-white border rounded-lg p-6 text-gray-700" role="alert">
+        You need admin permissions to view health metrics. Redirecting…
+      </div>
+    )
   }
 
   return (

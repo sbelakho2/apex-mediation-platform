@@ -5,12 +5,29 @@ import { payoutApi } from '@/lib/api'
 import { formatCurrency } from '@/lib/utils'
 import { DollarSign, Calendar, CreditCard, Clock } from 'lucide-react'
 import Link from 'next/link'
+import { useSession } from '@/lib/useSession'
+import { PAYOUT_METHOD_LABELS, PAYOUT_STATUS_META } from '@/constants/payouts'
+import type { PayoutHistory } from '@/types'
 
 export function PayoutWidget() {
-  const { data: upcomingPayout, isLoading } = useQuery({
-    queryKey: ['upcoming-payout'],
-    queryFn: () => payoutApi.getUpcoming().then(res => res.data),
+  const { user, isLoading: sessionLoading } = useSession()
+  const publisherId = user?.publisherId
+
+  const {
+    data: upcomingPayout,
+    isLoading,
+  } = useQuery<PayoutHistory | null>({
+    queryKey: ['upcoming-payout', publisherId ?? 'all'],
+    enabled: !!user,
+    queryFn: ({ signal }) =>
+      payoutApi
+        .getUpcoming({ publisherId, signal })
+        .then((res) => res.data ?? null),
   })
+
+  if (sessionLoading || !user) {
+    return <PayoutWidgetSkeleton />
+  }
 
   if (isLoading) {
     return <PayoutWidgetSkeleton />
@@ -29,12 +46,8 @@ export function PayoutWidget() {
     )
   }
 
-  const statusColors = {
-    pending: 'bg-warning-100 text-warning-700',
-    processing: 'bg-blue-100 text-blue-700',
-    completed: 'bg-success-100 text-success-700',
-    failed: 'bg-danger-100 text-danger-700',
-  }
+  const statusMeta = PAYOUT_STATUS_META[upcomingPayout.status]
+  const methodLabel = PAYOUT_METHOD_LABELS[upcomingPayout.method] ?? upcomingPayout.method
 
   const daysUntilPayout = Math.ceil(
     (new Date(upcomingPayout.scheduledDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)
@@ -85,7 +98,7 @@ export function PayoutWidget() {
               <span className="text-sm">Payment Method</span>
             </div>
             <span className="badge badge-info uppercase font-semibold">
-              {upcomingPayout.method}
+              {methodLabel}
             </span>
           </div>
 
@@ -95,10 +108,10 @@ export function PayoutWidget() {
               <Clock className="w-4 h-4" />
               <span className="text-sm">Status</span>
             </div>
-            <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-              statusColors[upcomingPayout.status as keyof typeof statusColors]
-            }`}>
-              {upcomingPayout.status.toUpperCase()}
+            <span
+              className={`px-3 py-1 rounded-full text-xs font-semibold ${statusMeta.solidClass}`}
+            >
+              {statusMeta.label}
             </span>
           </div>
         </div>

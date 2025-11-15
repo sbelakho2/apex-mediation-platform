@@ -4,7 +4,7 @@
     "plugin:@next/next/recommended",
     "plugin:jsx-a11y/recommended"
   ],
-  "plugins": ["jsx-a11y"],
+  "plugins": ["jsx-a11y", "@typescript-eslint"],
   "rules": {
     // Accessibility Rules
     "jsx-a11y/alt-text": "error",
@@ -31,8 +31,7 @@
     "@next/next/no-html-link-for-pages": "error",
     
     // React Server Components (App Router)
-    "@next/next/no-async-client-component": "error",
-    "@next/next/no-client-import-in-server-component": "error",
+  "@next/next/no-async-client-component": "error",
     
     // Best Practices
     "no-console": ["warn", { "allow": ["warn", "error"] }],

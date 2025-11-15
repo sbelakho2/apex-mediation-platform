@@ -1,4 +1,9 @@
-"""CLI for downloading network enrichment data sources."""
+"""CLI for downloading network enrichment data sources.
+
+Adds optional manifest validation to satisfy FIX-06 preflight checks.
+Use --validate-manifests to validate any manifest JSON files under the
+output directory prior to fetching.
+"""
 
 from __future__ import annotations
 
@@ -7,6 +12,7 @@ from pathlib import Path
 from typing import Sequence
 
 from ml_pipelines.enrichment import DEFAULT_SOURCE_NAMES, fetch_sources
+from lib.manifest import validate_manifest, scan_for_manifests, ManifestError
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
@@ -44,6 +50,14 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Re-download files even if they exist locally",
     )
+    parser.add_argument(
+        "--validate-manifests",
+        action="store_true",
+        help=(
+            "Validate manifest JSON files under the output directory before fetching. "
+            "Fails fast on missing files or checksum mismatch (strict)."
+        ),
+    )
     return parser.parse_args(argv)
 
 
@@ -54,6 +68,17 @@ def run(argv: Sequence[str] | None = None) -> None:
         include_vpn = True
     elif args.no_vpn:
         include_vpn = False
+
+    # Optional manifest preflight validation
+    if args.validate_manifests:
+        manifests = scan_for_manifests(args.output)
+        for mpath in manifests:
+            try:
+                validate_manifest(mpath)
+                # simple progress output without adding a logging dep
+                print(f"[OK] manifest: {mpath}")
+            except ManifestError as e:
+                raise SystemExit(f"[ERROR] manifest invalid: {mpath}: {e}")
 
     fetch_sources(
         args.output,

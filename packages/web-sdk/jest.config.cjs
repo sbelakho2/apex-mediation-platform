@@ -5,6 +5,10 @@ module.exports = {
   rootDir: '.',
   testMatch: ['**/tests/**/*.test.ts'],
   setupFilesAfterEnv: ['<rootDir>/setupTests.ts'],
+  // Allow transforming ESM-only packages like msw for Jest
+  transformIgnorePatterns: [
+    '/node_modules/(?!(msw)/)'
+  ],
   transform: {
     '^.+\\.(ts|tsx)$': [
       'ts-jest',

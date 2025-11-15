@@ -11,6 +11,10 @@ export type InitOptions = {
   publisherId?: string;
   appId?: string;
   timeoutMs?: number; // default 2000ms
+  // Reliability controls (FIX-05)
+  maxRetries?: number; // default 2 for retryable errors (network/5xx)
+  retryBackoffBaseMs?: number; // default 100ms (exponential backoff base)
+  retryJitterMs?: number; // default +/-50ms jitter
   sdkVersion?: string;
   debug?: boolean; // enable verbose SDK logs (no PII)
   telemetryEnabled?: boolean; // allow emitting lightweight telemetry events

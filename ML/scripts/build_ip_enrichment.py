@@ -35,6 +35,9 @@ from pathlib import Path
 from typing import Iterable, Iterator, List, Sequence
 import ipaddress
 
+# FIX-06: optional manifest validation preflight
+from lib.manifest import validate_manifest, scan_for_manifests, ManifestError
+
 
 @dataclass(frozen=True)
 class NetworkEntry:
@@ -234,11 +237,56 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--cloud", type=Path, action="append", default=[], help="Path(s) to cloud provider range dumps (JSON or JSON.GZ)")
     parser.add_argument("--output-dir", type=Path, required=True, help="Destination directory for generated artifacts")
     parser.add_argument("--error-rate", type=float, default=0.001, help="Bloom filter target false-positive rate (default: 0.001)")
+    parser.add_argument(
+        "--validate-manifests",
+        action="store_true",
+        help=(
+            "Validate manifest JSON files before processing inputs. "
+            "If --manifest-dir is provided, scans that directory; otherwise attempts to validate "
+            "manifest files adjacent to the provided inputs."
+        ),
+    )
+    parser.add_argument(
+        "--manifest-dir",
+        type=Path,
+        default=None,
+        help="Directory that contains manifest JSON files to validate prior to processing",
+    )
     return parser.parse_args(argv)
 
 
 def main(argv: Sequence[str] | None = None) -> None:
     args = parse_args(argv)
+
+    # Optional manifest preflight validation (strict checksum by default)
+    if args.validate_manifests:
+        try:
+            to_validate: List[Path] = []
+            if args.manifest_dir:
+                to_validate = scan_for_manifests(args.manifest_dir)
+            else:
+                # Attempt to find companion manifests next to input files
+                inputs: List[Path] = []
+                for seq in (args.abuseipdb or []), (args.tor or []), (args.cloud or []):
+                    inputs.extend([Path(p) for p in seq])
+                for inp in inputs:
+                    parent = inp.parent
+                    # heuristics: *_manifest.json, *.manifest.json, or contains 'manifest'
+                    for cand in parent.glob("*manifest.json"):
+                        to_validate.append(cand)
+                    for cand in parent.glob("*.manifest.json"):
+                        to_validate.append(cand)
+                # de-dup
+                to_validate = sorted(set(p.resolve() for p in to_validate))
+
+            if not to_validate:
+                print("[WARN] No manifest files discovered for validation.")
+            for mpath in to_validate:
+                validate_manifest(mpath)
+                print(f"[OK] manifest: {mpath}")
+        except ManifestError as e:
+            raise SystemExit(f"[ERROR] manifest invalid: {e}")
+
     entries: List[NetworkEntry] = []
     if args.abuseipdb:
         entries.extend(load_abuseipdb(args.abuseipdb))

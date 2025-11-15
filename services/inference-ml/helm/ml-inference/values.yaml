@@ -5,7 +5,7 @@ replicaCount: 2
 image:
   repository: rivalapex/ml-inference
   pullPolicy: IfNotPresent
-  tag: "latest"
+  tag: ""
 
 imagePullSecrets: []
 nameOverride: ""
@@ -62,6 +62,8 @@ resources:
     cpu: 500m
     memory: 1Gi
 
+logLevel: INFO
+
 autoscaling:
   enabled: true
   minReplicas: 2
@@ -97,28 +99,48 @@ livenessProbe:
 
 readinessProbe:
   httpGet:
-    path: /health
+    path: /health/ready
     port: http
   initialDelaySeconds: 10
   periodSeconds: 5
   timeoutSeconds: 3
   failureThreshold: 3
 
-env:
-  - name: LOG_LEVEL
-    value: "INFO"
-  - name: MODEL_DIR
-    value: "/app/models"
-
-volumeMounts:
-  - name: models
-    mountPath: /app/models
+modelArtifacts:
+  baseDir: /app/models
+  mountPath: /app/models
+  requiredModels:
+    - fraud_detection
+    - ctr_prediction
+    - bid_optimization
+  versions:
+    fraud_detection: latest
+    ctr_prediction: latest
+    bid_optimization: latest
+  metadataFilename: metadata.json
+  pvc:
+    enabled: true
+    claimName: ml-models-pvc
     readOnly: true
 
-volumes:
-  - name: models
-    persistentVolumeClaim:
-      claimName: ml-models-pvc
+auth:
+  tenantHeader: X-Publisher-Id
+  allowedRoles:
+    - admin
+    - publisher
+    - readonly
+  audience: rival-backend
+  jwt:
+    secretName: inference-shared-secrets
+    secretKey: jwt-secret
+
+rateLimit:
+  maxRequests: 600
+  windowSeconds: 60
+
+extraEnv: []
+extraVolumeMounts: []
+extraVolumes: []
 
 serviceMonitor:
   enabled: true

@@ -1,28 +1,19 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { fraudApi } from '@/lib/api'
 import { useSession } from 'next-auth/react'
-import {
-  ShieldAlert,
-  AlertTriangle,
-  TrendingUp,
-  TrendingDown,
-  Shield,
-  Activity,
-  Ban,
-  Flag,
-  Eye,
-} from 'lucide-react'
+import { ShieldAlert, AlertTriangle, Shield, Activity, Ban, Flag } from 'lucide-react'
 import { formatNumber, formatPercentage } from '@/lib/utils'
 import type { FraudAlert, FraudStats } from '@/types'
+import Pagination from '@/components/ui/Pagination'
 
-const severityColors = {
-  low: 'text-blue-600 bg-blue-50 border-blue-200',
-  medium: 'text-yellow-600 bg-yellow-50 border-yellow-200',
-  high: 'text-orange-600 bg-orange-50 border-orange-200',
-  critical: 'text-danger-600 bg-danger-50 border-danger-200',
+const severityColors: Record<FraudAlert['severity'], string> = {
+  low: 'text-fraud-low bg-fraud-low-bg border-fraud-low-border',
+  medium: 'text-fraud-medium bg-fraud-medium-bg border-fraud-medium-border',
+  high: 'text-fraud-high bg-fraud-high-bg border-fraud-high-border',
+  critical: 'text-fraud-critical bg-fraud-critical-bg border-fraud-critical-border',
 }
 
 const alertTypeLabels = {
@@ -33,27 +24,81 @@ const alertTypeLabels = {
 }
 
 export default function FraudPage() {
-  const { data: session } = useSession()
-  const publisherId = session?.user?.publisherId || 'demo-pub-1'
+  const { data: session, status: sessionStatus } = useSession()
+  const publisherId = session?.user?.publisherId
   const [timeWindow, setTimeWindow] = useState<'1h' | '24h' | '7d' | '30d'>('24h')
+  const [severityFilter, setSeverityFilter] = useState<'all' | FraudAlert['severity']>('all')
+  const [page, setPage] = useState(1)
+  const pageSize = 10
+
+  useEffect(() => {
+    setPage(1)
+  }, [severityFilter])
 
   const { data: stats, isLoading: loadingStats } = useQuery({
     queryKey: ['fraud-stats', publisherId, timeWindow],
     queryFn: async () => {
+      if (!publisherId) throw new Error('Missing publisher context')
       const { data } = await fraudApi.getStats(publisherId, { window: timeWindow })
       return data
     },
+    enabled: Boolean(publisherId),
   })
 
   const { data: alertsData, isLoading: loadingAlerts } = useQuery({
     queryKey: ['fraud-alerts', publisherId],
     queryFn: async () => {
+      if (!publisherId) throw new Error('Missing publisher context')
       const { data } = await fraudApi.getAlerts(publisherId, { limit: 50 })
       return data
     },
+    enabled: Boolean(publisherId),
   })
 
-  const alerts = alertsData?.alerts || []
+  const alerts = useMemo(() => alertsData?.alerts ?? [], [alertsData?.alerts])
+
+  const filteredAlerts = useMemo(() => {
+    if (severityFilter === 'all') return alerts
+    return alerts.filter((alert) => alert.severity === severityFilter)
+  }, [alerts, severityFilter])
+
+  useEffect(() => {
+    setPage(1)
+  }, [alerts.length])
+
+  const totalPages = Math.max(1, Math.ceil(filteredAlerts.length / pageSize))
+  const paginatedAlerts = filteredAlerts.slice((page - 1) * pageSize, page * pageSize)
+
+  const topFraudTypeBadges = useMemo(() => {
+    if (!stats?.topFraudTypes) return []
+    return stats.topFraudTypes.map((type, idx) => ({
+      id: `${type || 'unknown'}-${idx}`,
+      label: type ?? 'Unknown pattern',
+    }))
+  }, [stats?.topFraudTypes])
+
+  if (sessionStatus === 'loading') {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-sm text-gray-600">Loading session...</div>
+      </div>
+    )
+  }
+
+  if (!publisherId) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="card max-w-md text-center">
+          <ShieldAlert className="h-10 w-10 text-primary-600 mx-auto mb-3" aria-hidden={true} />
+          <p className="text-lg font-semibold text-gray-900">Session required</p>
+          <p className="text-sm text-gray-600 mt-2">
+            We couldn&apos;t determine your publisher account. Please sign in again to view fraud
+            analytics.
+          </p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -188,13 +233,32 @@ export default function FraudPage() {
 
         {/* Recent alerts */}
         <div className="card">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-gray-900">Recent Alerts</h2>
-            {stats?.averageFraudScore !== undefined && stats?.averageFraudScore !== null && (
-              <span className="text-sm text-gray-600">
-                Avg Score: {stats.averageFraudScore.toFixed(2)}
-              </span>
-            )}
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-4">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900">Recent Alerts</h2>
+              {stats?.averageFraudScore !== undefined && stats?.averageFraudScore !== null && (
+                <span className="text-sm text-gray-600">
+                  Avg Score: {stats.averageFraudScore.toFixed(2)}
+                </span>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-3">
+              <label htmlFor="severity-filter" className="text-sm text-gray-700 self-center">
+                Severity
+              </label>
+              <select
+                id="severity-filter"
+                value={severityFilter}
+                onChange={(event) => setSeverityFilter(event.target.value as typeof severityFilter)}
+                className="text-sm border rounded px-2 py-1"
+              >
+                <option value="all">All</option>
+                <option value="low">Low</option>
+                <option value="medium">Medium</option>
+                <option value="high">High</option>
+                <option value="critical">Critical</option>
+              </select>
+            </div>
           </div>
 
           {loadingAlerts ? (
@@ -206,7 +270,7 @@ export default function FraudPage() {
                 </div>
               ))}
             </div>
-          ) : alerts.length === 0 ? (
+          ) : filteredAlerts.length === 0 ? (
             <div className="text-center py-12">
               <Shield className="h-12 w-12 text-gray-400 mx-auto mb-3" aria-hidden={true} />
               <p className="text-sm text-gray-600">No fraud alerts in the selected time window.</p>
@@ -214,10 +278,10 @@ export default function FraudPage() {
             </div>
           ) : (
             <div className="space-y-3">
-              {alerts.slice(0, 20).map((alert) => (
+              {paginatedAlerts.map((alert) => (
                 <div
                   key={alert.id}
-                  className={`p-4 border rounded-lg ${severityColors[alert.severity]}`}
+                  className={`p-4 border rounded-lg ${severityColors[alert.severity] || ''}`}
                 >
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
@@ -260,21 +324,27 @@ export default function FraudPage() {
                   </div>
                 </div>
               ))}
+              <Pagination
+                page={page}
+                totalPages={totalPages}
+                onPageChange={setPage}
+                className="pt-2"
+              />
             </div>
           )}
         </div>
 
         {/* Top fraud types */}
-        {stats?.topFraudTypes && stats.topFraudTypes.length > 0 && (
+        {topFraudTypeBadges.length > 0 && (
           <div className="card">
             <h2 className="text-lg font-semibold text-gray-900 mb-4">Top Fraud Patterns</h2>
             <div className="flex flex-wrap gap-2">
-              {stats.topFraudTypes.map((type, idx) => (
+              {topFraudTypeBadges.map((type) => (
                 <span
-                  key={idx}
+                  key={type.id}
                   className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium bg-gray-100 text-gray-700"
                 >
-                  {type}
+                  {type.label}
                 </span>
               ))}
             </div>

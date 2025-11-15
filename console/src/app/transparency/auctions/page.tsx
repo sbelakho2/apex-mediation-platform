@@ -6,6 +6,8 @@ import { transparencyApi, type TransparencyAuction } from '../../../lib/transpar
 import { useDebouncedValue, useQueryParams } from '../../../lib/hooks'
 import { VerifyBadge, Skeleton, CopyButton } from '../../../components/ui'
 
+const AUCTIONS_TABLE_SKELETON_KEYS = ['auctions-row-1', 'auctions-row-2', 'auctions-row-3', 'auctions-row-4', 'auctions-row-5']
+
 function formatCurrency(value: number, cur: string) {
   try {
     return new Intl.NumberFormat(undefined, { style: 'currency', currency: cur || 'USD', maximumFractionDigits: 4 }).format(value)
@@ -232,8 +234,8 @@ function AuctionsTableSkeleton() {
           </tr>
         </thead>
         <tbody>
-          {Array.from({ length: 5 }).map((_, i) => (
-            <tr key={i} className="border-t">
+          {AUCTIONS_TABLE_SKELETON_KEYS.map((key) => (
+            <tr key={key} className="border-t">
               <td className="px-3 py-2">
                 <Skeleton width="w-32" height="h-4" />
               </td>

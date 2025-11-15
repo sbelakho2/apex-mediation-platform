@@ -16,7 +16,7 @@ import { http, HttpResponse } from 'msw'
  */
 
 // Simple in-memory store for ETag simulation
-let etagStore: Record<string, string> = {}
+const etagStore: Record<string, string> = {}
 
 export const billingHandlers = [
   // Feature flag defaults for layout/navigation

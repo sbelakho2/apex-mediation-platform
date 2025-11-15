@@ -927,3 +927,5 @@ _Last updated: 2025-11-14 22:16 UTC_
 | 701 | FIX-11 | `src/utils/logger.ts` | File transports write inside container; ensure writable volume in distroless image. |
 | 702 | FIX-11 | `src/utils/prometheus.ts` | Metric cardinality (`route` label on http_requests_total) can explode if paths contain IDs; consider templating. |
 | 703 | FIX-11 | `src/utils/redis.ts` | `incr` throws when redis not ready (caller must catch). Consider instrumentation to avoid noisy warn logs when Redis intentionally disabled. |
+
+

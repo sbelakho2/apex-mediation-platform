@@ -1,119 +1,195 @@
 'use client'
 
-import { useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { useQuery } from '@tanstack/react-query'
 import { payoutApi } from '@/lib/api'
 import {
   DollarSign,
   Clock,
-  CheckCircle,
-  XCircle,
-  AlertCircle,
   Download,
   Calendar,
   CreditCard,
 } from 'lucide-react'
 import { formatCurrency, formatDate } from '@/lib/utils'
-import type { PayoutHistory } from '@/types'
+import type { PaginatedResponse, PayoutHistory } from '@/types'
+import { useSession } from '@/lib/useSession'
+import type { Role } from '@/lib/rbac'
+import { PAYOUT_METHOD_LABELS, PAYOUT_STATUS_META } from '@/constants/payouts'
 
-const statusConfig = {
-  pending: {
-    color: 'text-yellow-600 bg-yellow-50 border-yellow-200',
-    icon: Clock,
-    label: 'Pending',
-  },
-  processing: {
-    color: 'text-blue-600 bg-blue-50 border-blue-200',
-    icon: AlertCircle,
-    label: 'Processing',
-  },
-  completed: {
-    color: 'text-success-600 bg-success-50 border-success-200',
-    icon: CheckCircle,
-    label: 'Completed',
-  },
-  failed: {
-    color: 'text-danger-600 bg-danger-50 border-danger-200',
-    icon: XCircle,
-    label: 'Failed',
-  },
-}
+const PAYOUT_ALLOWED_ROLES: Role[] = ['admin', 'publisher']
 
-const methodLabels = {
-  stripe: 'Stripe',
-  paypal: 'PayPal',
-  wire: 'Wire Transfer',
+const escapeCsvValue = (value: string | number | null | undefined) => {
+  if (value === null || typeof value === 'undefined') return ''
+  const stringValue = String(value)
+  if (/[",\n]/.test(stringValue)) {
+    return `"${stringValue.replace(/"/g, '""')}"`
+  }
+  return stringValue
 }
 
 export default function PayoutsPage() {
+  const router = useRouter()
+  const { user, isLoading: sessionLoading } = useSession()
   const [page, setPage] = useState(1)
+  const [exportError, setExportError] = useState<string | null>(null)
   const pageSize = 20
+  const locale = typeof navigator !== 'undefined' ? navigator.language : 'en-US'
+  const publisherId = user?.publisherId
 
-  const { data: historyData, isLoading: loadingHistory } = useQuery({
-    queryKey: ['payout-history', page],
-    queryFn: async () => {
-      const { data } = await payoutApi.getHistory({ page, pageSize })
+  const dateFormatter = useMemo(
+    () =>
+      new Intl.DateTimeFormat(locale, {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+      }),
+    [locale]
+  )
+
+  const formatCsvDate = useCallback((value: string) => dateFormatter.format(new Date(value)), [
+    dateFormatter,
+  ])
+
+  const formatCsvCurrency = useCallback(
+    (amount: number, currency: string) =>
+      new Intl.NumberFormat(locale, { style: 'currency', currency }).format(amount),
+    [locale]
+  )
+
+  const userRole = (user?.role ?? 'publisher') as Role
+  const canView = !!user && PAYOUT_ALLOWED_ROLES.includes(userRole)
+
+  useEffect(() => {
+    if (!sessionLoading && !user) {
+      router.replace('/login')
+    }
+  }, [sessionLoading, user, router])
+
+  useEffect(() => {
+    if (!sessionLoading && user && !canView) {
+      router.replace('/403')
+    }
+  }, [sessionLoading, user, canView, router])
+
+  const {
+    data: historyData,
+    isLoading: loadingHistory,
+  } = useQuery<PaginatedResponse<PayoutHistory>>({
+    queryKey: ['payout-history', page, publisherId],
+    enabled: canView,
+    queryFn: async ({ signal }) => {
+      const { data } = await payoutApi.getHistory({ page, pageSize, publisherId, signal })
       return data
     },
   })
 
-  const { data: upcoming, isLoading: loadingUpcoming } = useQuery({
-    queryKey: ['payout-upcoming'],
-    queryFn: async () => {
-      const { data } = await payoutApi.getUpcoming()
+  const {
+    data: upcoming,
+    isLoading: loadingUpcoming,
+  } = useQuery<PayoutHistory | null>({
+    queryKey: ['payout-upcoming', publisherId],
+    enabled: canView,
+    queryFn: async ({ signal }) => {
+      const { data } = await payoutApi.getUpcoming({ publisherId, signal })
       return data
     },
   })
 
-  const history = historyData?.data || []
+  const history = useMemo<PayoutHistory[]>(() => historyData?.data ?? [], [historyData])
   const hasMore = historyData?.hasMore || false
+  const totalPages = useMemo(() => {
+    if (historyData?.total) {
+      const size = historyData.pageSize || pageSize
+      return Math.max(1, Math.ceil(historyData.total / size))
+    }
+    return hasMore ? page + 1 : historyData ? page : null
+  }, [hasMore, historyData, page, pageSize])
+  const canGoNext = totalPages ? page < totalPages : hasMore
+  const canGoPrev = page > 1
 
-  const handleExportCSV = () => {
-    const csvData = [
-      ['ID', 'Scheduled Date', 'Completed Date', 'Amount', 'Status', 'Method'],
-    ]
-    
-    if (history && history.length > 0) {
-      csvData.push(...history.map((payout) => [
-        payout.id,
-        new Date(payout.scheduledDate).toLocaleDateString(),
-        payout.completedDate ? new Date(payout.completedDate).toLocaleDateString() : 'N/A',
-        `${payout.amount.toFixed(2)} ${payout.currency}`,
-        payout.status,
-        payout.method,
-      ]))
-    }
-    
-    if (upcoming) {
-      csvData.push([])
-      csvData.push(['Upcoming Payout'])
-      csvData.push([
-        upcoming.id,
-        new Date(upcoming.scheduledDate).toLocaleDateString(),
-        'Pending',
-        `${upcoming.amount.toFixed(2)} ${upcoming.currency}`,
-        upcoming.status,
-        upcoming.method,
-      ])
-    }
-    
-    if (csvData.length === 1 && !upcoming) {
-      // No data to export
-      alert('No payout data available to export')
+  const handleExportCSV = useCallback(() => {
+    if ((!history || history.length === 0) && !upcoming) {
+      setExportError('No payout data available to export yet.')
       return
     }
-    
-    const csvContent = csvData.map(row => row.join(',')).join('\n')
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
-    const link = document.createElement('a')
-    const url = URL.createObjectURL(blob)
-    
-    link.setAttribute('href', url)
-    link.setAttribute('download', `payouts-export-${new Date().toISOString().split('T')[0]}.csv`)
-    link.style.visibility = 'hidden'
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
+
+    try {
+      const rows: string[][] = [
+        ['ID', 'Scheduled Date', 'Completed Date', 'Amount', 'Status', 'Method'],
+      ]
+
+      history.forEach((payout) => {
+        const statusMeta = PAYOUT_STATUS_META[payout.status]
+        const methodLabel = PAYOUT_METHOD_LABELS[payout.method] ?? payout.method
+        rows.push([
+          payout.id,
+          formatCsvDate(payout.scheduledDate),
+          payout.completedDate ? formatCsvDate(payout.completedDate) : '—',
+          formatCsvCurrency(payout.amount, payout.currency),
+          statusMeta.label,
+          methodLabel,
+        ])
+      })
+
+      if (upcoming) {
+        const upcomingStatus = PAYOUT_STATUS_META[upcoming.status]
+        const methodLabel = PAYOUT_METHOD_LABELS[upcoming.method] ?? upcoming.method
+        rows.push([])
+        rows.push(['Upcoming Payout'])
+        rows.push([
+          upcoming.id,
+          formatCsvDate(upcoming.scheduledDate),
+          'Pending',
+          formatCsvCurrency(upcoming.amount, upcoming.currency),
+          upcomingStatus.label,
+          methodLabel,
+        ])
+      }
+
+      const csvContent = rows.map((row) => row.map(escapeCsvValue).join(',')).join('\r\n')
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+      const url = URL.createObjectURL(blob)
+
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `payouts-export-${new Date().toISOString().split('T')[0]}.csv`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(url)
+      setExportError(null)
+    } catch (error) {
+      setExportError('Unable to export payouts right now. Please try again.')
+    }
+  }, [formatCsvCurrency, formatCsvDate, history, upcoming])
+
+  if (sessionLoading) {
+    return (
+      <div className="p-8">
+        <div className="max-w-4xl mx-auto">
+          <div className="animate-pulse space-y-4" role="status" aria-live="polite">
+            <div className="h-8 bg-gray-200 rounded w-1/3" />
+            <div className="h-48 bg-gray-200 rounded" />
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (!canView) {
+    return (
+      <div className="p-8">
+        <div className="max-w-4xl mx-auto">
+          <div className="bg-white border border-gray-200 rounded-lg p-6" role="alert">
+            <h2 className="text-lg font-semibold text-gray-900">Access restricted</h2>
+            <p className="text-sm text-gray-600 mt-2">
+              You do not have permission to view payouts. Contact an administrator if you believe this is a mistake.
+            </p>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -133,10 +209,21 @@ export default function PayoutsPage() {
                 </p>
               </div>
             </div>
-            <button onClick={handleExportCSV} className="btn btn-outline flex items-center gap-2">
-              <Download className="h-4 w-4" aria-hidden={true} />
-              Export CSV
-            </button>
+            <div className="flex flex-col items-end">
+              <button
+                type="button"
+                onClick={handleExportCSV}
+                className="btn btn-outline flex items-center gap-2"
+              >
+                <Download className="h-4 w-4" aria-hidden={true} />
+                Export CSV
+              </button>
+              {exportError && (
+                <p className="text-sm text-red-600 mt-2" role="alert">
+                  {exportError}
+                </p>
+              )}
+            </div>
           </div>
         </div>
       </header>
@@ -160,13 +247,18 @@ export default function PayoutsPage() {
                   Funds will be sent on {formatDate(upcoming.scheduledDate)}
                 </p>
               </div>
-              <span className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium border ${statusConfig[upcoming.status].color}`}>
-                {(() => {
-                  const Icon = statusConfig[upcoming.status].icon
-                  return <Icon className="h-4 w-4" aria-hidden={true} />
-                })()}
-                {statusConfig[upcoming.status].label}
-              </span>
+              {(() => {
+                const statusMeta = PAYOUT_STATUS_META[upcoming.status]
+                const Icon = statusMeta.icon
+                return (
+                  <span
+                    className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium border ${statusMeta.subtleClass}`}
+                  >
+                    <Icon className="h-4 w-4" aria-hidden={true} />
+                    {statusMeta.label}
+                  </span>
+                )
+              })()}
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 p-4 bg-white rounded-lg border">
               <div>
@@ -179,13 +271,15 @@ export default function PayoutsPage() {
                 <p className="text-sm text-gray-600">Payment Method</p>
                 <div className="flex items-center gap-2 mt-1">
                   <CreditCard className="h-5 w-5 text-gray-400" aria-hidden={true} />
-                  <p className="text-lg font-semibold text-gray-900">{methodLabels[upcoming.method]}</p>
+                  <p className="text-lg font-semibold text-gray-900">
+                    {PAYOUT_METHOD_LABELS[upcoming.method] ?? upcoming.method}
+                  </p>
                 </div>
               </div>
               <div>
                 <p className="text-sm text-gray-600">Expected Date</p>
                 <p className="text-lg font-semibold text-gray-900 mt-1">
-                  {new Date(upcoming.scheduledDate).toLocaleDateString()}
+                  {formatDate(upcoming.scheduledDate)}
                 </p>
               </div>
             </div>
@@ -247,11 +341,12 @@ export default function PayoutsPage() {
                   </thead>
                   <tbody className="divide-y">
                     {history.map((payout) => {
-                      const StatusIcon = statusConfig[payout.status].icon
+                      const statusMeta = PAYOUT_STATUS_META[payout.status]
+                      const StatusIcon = statusMeta.icon
                       return (
                         <tr key={payout.id} className="hover:bg-gray-50">
                           <td className="px-4 py-4 text-sm text-gray-900">
-                            {new Date(payout.scheduledDate).toLocaleDateString()}
+                            {formatDate(payout.scheduledDate)}
                           </td>
                           <td className="px-4 py-4 text-sm font-semibold text-gray-900">
                             {formatCurrency(payout.amount, payout.currency)}
@@ -259,21 +354,19 @@ export default function PayoutsPage() {
                           <td className="px-4 py-4 text-sm text-gray-600">
                             <div className="flex items-center gap-2">
                               <CreditCard className="h-4 w-4 text-gray-400" aria-hidden={true} />
-                              {methodLabels[payout.method]}
+                              {PAYOUT_METHOD_LABELS[payout.method] ?? payout.method}
                             </div>
                           </td>
                           <td className="px-4 py-4">
                             <span
-                              className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium border ${statusConfig[payout.status].color}`}
+                              className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium border ${statusMeta.subtleClass}`}
                             >
                               <StatusIcon className="h-3 w-3" aria-hidden={true} />
-                              {statusConfig[payout.status].label}
+                              {statusMeta.label}
                             </span>
                           </td>
                           <td className="px-4 py-4 text-sm text-gray-600">
-                            {payout.completedDate
-                              ? new Date(payout.completedDate).toLocaleDateString()
-                              : '—'}
+                            {payout.completedDate ? formatDate(payout.completedDate) : '—'}
                           </td>
                         </tr>
                       )
@@ -283,19 +376,22 @@ export default function PayoutsPage() {
               </div>
 
               {/* Pagination */}
-              {(page > 1 || hasMore) && (
+              {(canGoPrev || canGoNext) && (
                 <div className="flex items-center justify-between mt-6 pt-6 border-t">
                   <button
                     onClick={() => setPage(Math.max(1, page - 1))}
-                    disabled={page === 1}
+                    disabled={!canGoPrev}
                     className="btn btn-outline disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Previous
                   </button>
-                  <span className="text-sm text-gray-600">Page {page}</span>
+                  <span className="text-sm text-gray-600">
+                    Page {page}
+                    {totalPages ? ` of ${totalPages}` : ''}
+                  </span>
                   <button
-                    onClick={() => setPage(page + 1)}
-                    disabled={!hasMore}
+                    onClick={() => setPage((prev) => (totalPages ? Math.min(totalPages, prev + 1) : prev + 1))}
+                    disabled={!canGoNext}
                     className="btn btn-outline disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Next

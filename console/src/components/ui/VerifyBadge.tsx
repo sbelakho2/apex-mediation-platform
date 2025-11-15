@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { CheckCircle, XCircle, MinusCircle, AlertCircle } from 'lucide-react'
 import { transparencyApi, type VerifyResult } from '@/lib/transparency'
 import { Tooltip } from './Tooltip'
@@ -37,13 +37,7 @@ export function VerifyBadge({ auctionId, hasSigned = true, compact = false, auto
   const [error, setError] = useState<string | null>(null)
   const [loaded, setLoaded] = useState(false)
 
-  useEffect(() => {
-    if (autoLoad && hasSigned && !loaded) {
-      loadVerification()
-    }
-  }, [autoLoad, hasSigned, loaded])
-
-  const loadVerification = async () => {
+  const loadVerification = useCallback(async () => {
     if (loading || loaded) return
     
     setLoading(true)
@@ -57,7 +51,13 @@ export function VerifyBadge({ auctionId, hasSigned = true, compact = false, auto
     } finally {
       setLoading(false)
     }
-  }
+  }, [auctionId, loaded, loading])
+
+  useEffect(() => {
+    if (autoLoad && hasSigned && !loaded) {
+      void loadVerification()
+    }
+  }, [autoLoad, hasSigned, loaded, loadVerification])
 
   // Not signed
   if (!hasSigned) {

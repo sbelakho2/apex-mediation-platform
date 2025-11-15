@@ -10,6 +10,7 @@ import type { AuctionResult } from './openrtbEngine';
 import { canonicalizeForSignature, canonicalString } from './transparency/canonicalizer';
 export { canonicalizeForSignature } from './transparency/canonicalizer';
 import logger from '../utils/logger';
+import { emitOpsAlert } from '../utils/opsAlert';
 
 export type ClickHouseInsertArgs = {
   table: string;
@@ -75,6 +76,13 @@ const DEFAULT_RETRY_MAX_DELAY_MS = 250;
 const DEFAULT_BREAKER_THRESHOLD = 5;
 const DEFAULT_BREAKER_COOLDOWN_MS = 60_000;
 const TRANSIENT_ERROR_CODES = new Set(['ECONNRESET', 'ETIMEDOUT', 'EPIPE', 'ECONNREFUSED']);
+
+type SanitizedErrorInfo = {
+  message: string;
+  code?: string;
+  status?: number;
+  transient: boolean;
+};
 
 type CounterKey =
   | 'writes_attempted'
@@ -194,10 +202,17 @@ export class TransparencyWriter {
   private breakerClosedLogged = true;
   private warnedMissingKey = false;
   private warnedNoClient = false;
+  private lastFailureAt: number | null = null;
+  private lastFailureStage: 'auctions' | 'candidates' | null = null;
+  private lastFailureWasPartial = false;
+  private lastSuccessAt: number | null = null;
   private readonly promCounters: Partial<Record<CounterKey, PromCounterType<string>>>;
   private readonly promGauges: {
     breakerOpen?: PromGaugeType<string>;
     failureStreak?: PromGaugeType<string>;
+    breakerCooldownRemaining?: PromGaugeType<string>;
+    lastFailureTimestamp?: PromGaugeType<string>;
+    lastSuccessTimestamp?: PromGaugeType<string>;
   };
 
   constructor(options: TransparencyWriterOptions) {
@@ -230,9 +245,15 @@ export class TransparencyWriter {
     this.promGauges = {
       breakerOpen: createPromGauge('breaker_open', '1 when the transparency breaker is open, otherwise 0'),
       failureStreak: createPromGauge('failure_streak', 'Current transparency write consecutive failure streak'),
+      breakerCooldownRemaining: createPromGauge('breaker_cooldown_remaining_ms', 'Time remaining before breaker allows writes again'),
+      lastFailureTimestamp: createPromGauge('last_failure_timestamp_ms', 'Epoch millis of the last ClickHouse failure'),
+      lastSuccessTimestamp: createPromGauge('last_success_timestamp_ms', 'Epoch millis of the last successful ClickHouse write'),
     };
     this.promGauges.breakerOpen?.set(0);
     this.promGauges.failureStreak?.set(0);
+    this.promGauges.breakerCooldownRemaining?.set(0);
+    this.promGauges.lastFailureTimestamp?.set(0);
+    this.promGauges.lastSuccessTimestamp?.set(0);
   }
 
   private getClient(): ClickHouseClient | null {
@@ -340,12 +361,15 @@ export class TransparencyWriter {
     const now = this.now();
     this.refreshBreakerState(now);
     const breakerOpen = this.breakerOpenUntil !== null && now < this.breakerOpenUntil;
-    const cooldownRemaining = breakerOpen && this.breakerOpenUntil ? Math.max(0, this.breakerOpenUntil - now) : 0;
     return {
       ...this.counters,
       breaker_open: breakerOpen,
       failure_streak: this.consecutiveFailures,
-      breaker_cooldown_remaining_ms: breakerOpen ? cooldownRemaining : 0,
+      breaker_cooldown_remaining_ms: this.getBreakerCooldownRemaining(now),
+      last_failure_at_ms: this.lastFailureAt,
+      last_failure_stage: this.lastFailureStage,
+      last_failure_partial: this.lastFailureWasPartial,
+      last_success_at_ms: this.lastSuccessAt,
     };
   }
 
@@ -356,8 +380,10 @@ export class TransparencyWriter {
 
   private refreshBreakerState(now: number): void {
     if (this.breakerOpenUntil && now >= this.breakerOpenUntil) {
-      this.closeBreaker();
+      this.closeBreaker(now);
+      return;
     }
+    this.updateBreakerCooldownGauge(now);
   }
 
   private shouldSkipDueToBreaker(now: number): boolean {
@@ -367,9 +393,10 @@ export class TransparencyWriter {
     if (now < this.breakerOpenUntil) {
       this.incrementCounter('breaker_skipped');
       this.promGauges.breakerOpen?.set(1);
+      this.updateBreakerCooldownGauge(now);
       return true;
     }
-    this.closeBreaker();
+    this.closeBreaker(now);
     return false;
   }
 
@@ -389,9 +416,15 @@ export class TransparencyWriter {
     }
     this.breakerClosedLogged = false;
     this.promGauges.breakerOpen?.set(1);
+    this.updateBreakerCooldownGauge(now);
+    emitOpsAlert('transparency_breaker_open', 'critical', {
+      failures: this.consecutiveFailures,
+      threshold: this.breakerThreshold,
+      cooldown_ms: this.breakerCooldownMs,
+    });
   }
 
-  private closeBreaker(): void {
+  private closeBreaker(now: number = this.now()): void {
     if (!this.breakerOpenUntil) {
       return;
     }
@@ -407,6 +440,10 @@ export class TransparencyWriter {
     this.breakerOpenLogged = false;
     this.promGauges.breakerOpen?.set(0);
     this.promGauges.failureStreak?.set(this.consecutiveFailures);
+    this.updateBreakerCooldownGauge(now);
+    emitOpsAlert('transparency_breaker_closed', 'info', {
+      cooldown_ms: this.breakerCooldownMs,
+    });
   }
 
   private computeRetryDelay(): number {
@@ -470,28 +507,56 @@ export class TransparencyWriter {
     stage: 'auctions' | 'candidates',
     opts: { partial?: boolean } = {}
   ): void {
+    const now = this.now();
     this.incrementCounter('writes_failed');
     this.consecutiveFailures += 1;
     this.promGauges.failureStreak?.set(this.consecutiveFailures);
 
+    const sanitizedError = this.sanitizeClickHouseError(error);
+    this.lastFailureAt = now;
+    this.lastFailureStage = stage;
+    this.lastFailureWasPartial = opts.partial ?? false;
+    this.promGauges.lastFailureTimestamp?.set(now);
+
     logger.error('TransparencyWriter: failed to persist auction sample', {
-      error,
+      error: sanitizedError,
       requestId,
       stage,
       partial: opts.partial ?? false,
     });
 
+    const opsDetails: Record<string, unknown> = {
+      request_id: requestId,
+      stage,
+      partial: opts.partial ?? false,
+      failure_streak: this.consecutiveFailures,
+      threshold: this.breakerThreshold,
+      code: sanitizedError.code,
+      status: sanitizedError.status,
+      transient: sanitizedError.transient,
+    };
+    if (sanitizedError.message) {
+      opsDetails.message = sanitizedError.message.slice(0, 240);
+    }
+    emitOpsAlert('transparency_clickhouse_failure', sanitizedError.transient ? 'warning' : 'critical', opsDetails);
+
+    this.updateBreakerCooldownGauge(now);
+
     if (this.breakerThreshold > 0 && this.consecutiveFailures >= this.breakerThreshold) {
-      this.openBreaker(this.now());
+      this.openBreaker(now);
     }
   }
 
   private recordSuccess(): void {
+    const now = this.now();
     this.incrementCounter('writes_succeeded');
     this.consecutiveFailures = 0;
     this.promGauges.failureStreak?.set(0);
+    this.lastSuccessAt = now;
+    this.promGauges.lastSuccessTimestamp?.set(now);
+    this.updateBreakerCooldownGauge(now);
     if (this.breakerOpenUntil) {
-      this.closeBreaker();
+      this.closeBreaker(now);
     }
   }
 
@@ -736,6 +801,40 @@ export class TransparencyWriter {
       logger.error('TransparencyWriter: signing failed', { error });
       return null;
     }
+  }
+
+  private getBreakerCooldownRemaining(now: number): number {
+    if (!this.breakerOpenUntil || now >= this.breakerOpenUntil) {
+      return 0;
+    }
+    return Math.max(0, this.breakerOpenUntil - now);
+  }
+
+  private updateBreakerCooldownGauge(now: number): void {
+    this.promGauges.breakerCooldownRemaining?.set(this.getBreakerCooldownRemaining(now));
+  }
+
+  private sanitizeClickHouseError(error: unknown): SanitizedErrorInfo {
+    if (!error || typeof error !== 'object') {
+      return {
+        message: typeof error === 'string' ? error : 'Unknown transparency writer error',
+        transient: false,
+      };
+    }
+
+    const candidate = error as { message?: string; code?: string; statusCode?: number; status?: number };
+    const status = typeof candidate.statusCode === 'number'
+      ? candidate.statusCode
+      : typeof candidate.status === 'number'
+        ? candidate.status
+        : undefined;
+
+    return {
+      message: typeof candidate.message === 'string' ? candidate.message : 'Unknown transparency writer error',
+      code: typeof candidate.code === 'string' ? candidate.code : undefined,
+      status,
+      transient: this.isTransientError(error),
+    };
   }
 }
 

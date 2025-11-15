@@ -19,6 +19,9 @@ export function init(options: InitOptions) {
   const endpoint = options?.endpoint?.trim();
   if (!endpoint) throw Errors.invalidOptions('endpoint is required');
   const timeoutMs = Math.max(1, options.timeoutMs ?? 2000);
+  const maxRetries = Math.max(0, options.maxRetries ?? 2);
+  const retryBackoffBaseMs = Math.max(0, options.retryBackoffBaseMs ?? 100);
+  const retryJitterMs = Math.max(0, options.retryJitterMs ?? 50);
 
   state.cfg = {
     endpoint,
@@ -26,6 +29,9 @@ export function init(options: InitOptions) {
     publisherId: options.publisherId,
     appId: options.appId,
     sdkVersion: options.sdkVersion ?? '0.1.0',
+    maxRetries,
+    retryBackoffBaseMs,
+    retryJitterMs,
   };
   state.initialized = true;
   state.debug = Boolean(options.debug);

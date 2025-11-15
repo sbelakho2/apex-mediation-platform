@@ -85,7 +85,7 @@ export function ImportWizard({ placementId, onClose, onCompleted }: ImportWizard
       defaults[mapping.id] = mapping.our_adapter_id ?? ''
     })
     setAssignments(defaults)
-  }, [importResult?.import_id])
+  }, [importResult])
 
   const importMutation = useMutation({
     mutationFn: async () => {

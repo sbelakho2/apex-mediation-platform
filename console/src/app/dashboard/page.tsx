@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useSession } from 'next-auth/react'
 import { useQuery } from '@tanstack/react-query'
-import { useMemo, useState, type ChangeEvent } from 'react'
+import { useCallback, useMemo, useState, type ChangeEvent } from 'react'
 import { revenueApi } from '@/lib/api'
 import { formatCurrency, formatNumber, formatPercentage } from '@/lib/utils'
 import { MetricCard, MetricCardSkeleton } from '@/components/dashboard/MetricCard'
@@ -26,16 +26,27 @@ import type { LucideIcon } from 'lucide-react'
 
 export default function DashboardPage() {
   const { data: session } = useSession()
-  const defaultStart = useMemo(() => new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], [])
+  const locale = useMemo(() => (typeof navigator !== 'undefined' ? navigator.language : 'en-US'), [])
+  const defaultStart = useMemo(
+    () => new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    []
+  )
   const today = useMemo(() => new Date().toISOString().split('T')[0], [])
 
   const [dateRange, setDateRange] = useState({
     startDate: defaultStart,
     endDate: today,
   })
+  const [exportError, setExportError] = useState<string | null>(null)
 
-  const { data: revenueSummary, isLoading: loadingRevenue } = useQuery({
-    queryKey: ['revenue-summary', dateRange],
+  const {
+    data: revenueSummary,
+    isLoading: loadingRevenue,
+    isError: revenueError,
+    error: revenueSummaryError,
+    refetch: refetchRevenueSummary,
+  } = useQuery({
+    queryKey: ['revenue-summary', dateRange.startDate, dateRange.endDate],
     queryFn: async () => {
       const { data } = await revenueApi.getSummary({
         startDate: dateRange.startDate,
@@ -46,6 +57,8 @@ export default function DashboardPage() {
     },
   })
 
+  const revenueCurrency = (revenueSummary as { currency?: string } | null)?.currency ?? 'USD'
+
   const handlePresetChange = (preset: string) => {
     const [start, end] = preset.split('|')
     setDateRange({ startDate: start, endDate: end })
@@ -55,31 +68,64 @@ export default function DashboardPage() {
     handlePresetChange(event.target.value)
   }
 
-  const handleExportCSV = () => {
-    if (!revenueSummary) return
-    
-    const csvData = [
-      ['Metric', 'Value'],
-      ['Total Revenue', revenueSummary.totalRevenue.toFixed(2)],
-      ['Total Impressions', revenueSummary.totalImpressions.toString()],
-      ['Total Clicks', revenueSummary.totalClicks.toString()],
-      ['Average eCPM', revenueSummary.averageEcpm.toFixed(2)],
-      ['Average Fill Rate', (revenueSummary.averageFillRate * 100).toFixed(2) + '%'],
-      ['Date Range', `${dateRange.startDate} to ${dateRange.endDate}`],
-    ]
-    
-    const csvContent = csvData.map(row => row.join(',')).join('\n')
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
-    const link = document.createElement('a')
-    const url = URL.createObjectURL(blob)
-    
-    link.setAttribute('href', url)
-    link.setAttribute('download', `dashboard-export-${dateRange.startDate}-to-${dateRange.endDate}.csv`)
-    link.style.visibility = 'hidden'
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
+  const escapeCsvValue = (value: string | number | null | undefined) => {
+    if (value === null || typeof value === 'undefined') return ''
+    const stringValue = String(value)
+    if (/[",\n]/.test(stringValue)) {
+      return `"${stringValue.replace(/"/g, '""')}"`
+    }
+    return stringValue
   }
+
+  const handleExportCSV = useCallback(() => {
+    if (!revenueSummary) {
+      setExportError('Nothing to export yet. Try refreshing the dashboard data first.')
+      return
+    }
+
+    try {
+      const currencyFormatter = new Intl.NumberFormat(locale, {
+        style: 'currency',
+        currency: revenueCurrency,
+        maximumFractionDigits: 2,
+      })
+      const integerFormatter = new Intl.NumberFormat(locale, { maximumFractionDigits: 0 })
+      const percentFormatter = new Intl.NumberFormat(locale, {
+        style: 'percent',
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      })
+
+      const csvData = [
+        ['Metric', 'Value'],
+        ['Total Revenue', currencyFormatter.format(revenueSummary.totalRevenue ?? 0)],
+        ['Total Impressions', integerFormatter.format(revenueSummary.totalImpressions ?? 0)],
+        ['Total Clicks', integerFormatter.format(revenueSummary.totalClicks ?? 0)],
+        ['Average eCPM', currencyFormatter.format(revenueSummary.averageEcpm ?? 0)],
+        ['Average Fill Rate', percentFormatter.format(revenueSummary?.averageFillRate ?? 0)],
+        [
+          'Date Range',
+          `${dateRange.startDate} to ${dateRange.endDate}`,
+        ],
+      ]
+
+      const csvContent = csvData.map((row) => row.map(escapeCsvValue).join(',')).join('\r\n')
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+      const url = URL.createObjectURL(blob)
+
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `dashboard-export-${dateRange.startDate}-to-${dateRange.endDate}.csv`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(url)
+      setExportError(null)
+    } catch (error) {
+      console.error('Failed to export dashboard CSV', error)
+      setExportError('Unable to export dashboard data right now. Please try again in a moment.')
+    }
+  }, [dateRange.endDate, dateRange.startDate, locale, revenueCurrency, revenueSummary])
 
   const presets = useMemo(() => {
     const now = new Date()
@@ -94,13 +140,20 @@ export default function DashboardPage() {
     }
   }, [])
 
-  const revenueChange = revenueSummary?.revenueChangePercent ?? 12.5
-  const impressionsChange = revenueSummary?.impressionsChangePercent ?? 8.2
-  const ecpmChange = revenueSummary?.ecpmChangePercent ?? -3.1
-  const fillRateChange = revenueSummary?.fillRateChangePercent ?? 5.7
-
+  const ecpmChange = revenueSummary?.ecpmChangePercent
   const ecpmTrend: 'up' | 'down' | 'neutral' =
-    ecpmChange === 0 ? 'neutral' : ecpmChange > 0 ? 'up' : 'down'
+    typeof ecpmChange === 'number'
+      ? ecpmChange === 0
+        ? 'neutral'
+        : ecpmChange > 0
+          ? 'up'
+          : 'down'
+      : 'neutral'
+
+  const revenueSummaryErrorMessage =
+    revenueSummaryError instanceof Error
+      ? revenueSummaryError.message
+      : 'Unable to load revenue summary.'
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -128,10 +181,17 @@ export default function DashboardPage() {
                   <option value={presets.last90}>Last 90 days</option>
                 </select>
               </div>
-              <button type="button" onClick={handleExportCSV} className="btn btn-outline flex items-center gap-2">
-                <Download className="w-4 h-4" aria-hidden="true" />
-                Export CSV
-              </button>
+              <div className="flex flex-col gap-1">
+                <button type="button" onClick={handleExportCSV} className="btn btn-outline flex items-center gap-2">
+                  <Download className="w-4 h-4" aria-hidden="true" />
+                  Export CSV
+                </button>
+                {exportError && (
+                  <p className="text-xs text-danger-600" role="alert">
+                    {exportError}
+                  </p>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -143,23 +203,41 @@ export default function DashboardPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             {loadingRevenue ? (
               <MetricCardSkeleton count={4} />
+            ) : revenueError ? (
+              <div className="card border-danger-200 bg-danger-50 text-danger-900 col-span-full">
+                <div className="flex flex-col gap-3">
+                  <div>
+                    <h3 className="text-lg font-semibold">Revenue summary unavailable</h3>
+                    <p className="text-sm">{revenueSummaryErrorMessage}</p>
+                  </div>
+                  <div>
+                    <button
+                      type="button"
+                      className="btn btn-outline btn-sm"
+                      onClick={() => refetchRevenueSummary()}
+                    >
+                      Retry loading data
+                    </button>
+                  </div>
+                </div>
+              </div>
             ) : (
               <>
                 <MetricCard
                   title="Total Revenue"
-                  value={formatCurrency(revenueSummary?.totalRevenue || 0)}
-                  change={revenueChange}
+                  value={formatCurrency(revenueSummary?.totalRevenue || 0, revenueCurrency)}
+                  change={revenueSummary?.revenueChangePercent ?? undefined}
                   icon={<DollarSign className="w-5 h-5" />}
                 />
                 <MetricCard
                   title="Impressions"
                   value={formatNumber(revenueSummary?.totalImpressions || 0)}
-                  change={impressionsChange}
+                  change={revenueSummary?.impressionsChangePercent ?? undefined}
                   icon={<Eye className="w-5 h-5" />}
                 />
                 <MetricCard
                   title="eCPM"
-                  value={formatCurrency(revenueSummary?.averageEcpm || 0)}
+                  value={formatCurrency(revenueSummary?.averageEcpm || 0, revenueCurrency)}
                   change={ecpmChange}
                   icon={<TrendingUp className="w-5 h-5" />}
                   trend={ecpmTrend}
@@ -167,7 +245,7 @@ export default function DashboardPage() {
                 <MetricCard
                   title="Fill Rate"
                   value={formatPercentage(revenueSummary?.averageFillRate || 0)}
-                  change={fillRateChange}
+                  change={revenueSummary?.fillRateChangePercent ?? undefined}
                   icon={<MousePointer className="w-5 h-5" />}
                 />
               </>

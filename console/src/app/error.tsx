@@ -4,7 +4,7 @@ import React from 'react'
 
 export default function GlobalError({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
   return (
-    <html>
+    <html lang="en">
       <body>
         <div role="alert" aria-live="assertive" className="p-6">
           <h1 className="text-xl font-semibold">Something went wrong</h1>

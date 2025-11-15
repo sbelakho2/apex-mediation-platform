@@ -10,7 +10,10 @@ jest.mock('next/navigation', () => ({
 jest.mock('next/link', () => {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   const React = require('react')
-  return ({ href, children, ...props }: any) => React.createElement('a', { href, ...props }, children)
+  const MockLink = ({ href, children, ...props }: any) =>
+    React.createElement('a', { href, ...props }, children)
+  MockLink.displayName = 'MockNextLink'
+  return MockLink
 })
 
 const mockUseSession = jest.fn()

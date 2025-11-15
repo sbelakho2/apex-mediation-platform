@@ -1,7 +1,7 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { useParams } from 'next/navigation'
+import { useCallback, useEffect, useState } from 'react'
+import { useParams, useRouter } from 'next/navigation'
 import { getInvoice, downloadInvoicePDF, Invoice } from '@/lib/billing'
 import Link from 'next/link'
 import {
@@ -13,38 +13,73 @@ import {
   Clock,
   XCircle,
 } from 'lucide-react'
+import { useSession } from '@/lib/useSession'
 
 export default function InvoiceDetailPage() {
   const params = useParams()
   const invoiceId = params?.id as string
+  const router = useRouter()
+  const { user, isLoading: sessionLoading } = useSession()
 
   const [invoice, setInvoice] = useState<Invoice | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [downloading, setDownloading] = useState(false)
+  const [downloadError, setDownloadError] = useState<string | null>(null)
+
+  const userRole = user?.role ?? 'readonly'
+  const canViewInvoices = !!user && (userRole === 'admin' || userRole === 'publisher')
+
+  const loadInvoice = useCallback(
+    async (signal?: AbortSignal) => {
+      if (!invoiceId) return
+      try {
+        setLoading(true)
+        setError(null)
+        const data = await getInvoice(invoiceId, { signal })
+        if (signal?.aborted) return
+        setInvoice(data)
+      } catch (err) {
+        if (signal?.aborted) return
+        setError(err instanceof Error ? err.message : 'Failed to load invoice')
+      } finally {
+        if (signal?.aborted) return
+        setLoading(false)
+      }
+    },
+    [invoiceId]
+  )
 
   useEffect(() => {
-    if (invoiceId) {
-      loadInvoice()
+    if (!sessionLoading && !user) {
+      router.replace('/login')
     }
-  }, [invoiceId])
+  }, [sessionLoading, user, router])
 
-  const loadInvoice = async () => {
-    try {
-      setLoading(true)
-      setError(null)
-      const data = await getInvoice(invoiceId)
-      setInvoice(data)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load invoice')
-    } finally {
-      setLoading(false)
+  useEffect(() => {
+    if (sessionLoading || !user) return
+    if (!canViewInvoices) {
+      router.replace('/403')
     }
-  }
+  }, [sessionLoading, user, canViewInvoices, router])
+
+  useEffect(() => {
+    if (!invoiceId || sessionLoading || !canViewInvoices) {
+      return
+    }
+
+    const controller = new AbortController()
+    loadInvoice(controller.signal)
+    return () => {
+      controller.abort()
+    }
+  }, [invoiceId, sessionLoading, canViewInvoices, loadInvoice])
 
   const handleDownloadPDF = async () => {
     try {
+      if (!invoiceId) return
       setDownloading(true)
+      setDownloadError(null)
       const blobUrl = await downloadInvoicePDF(invoiceId)
       const link = document.createElement('a')
       link.href = blobUrl
@@ -54,7 +89,7 @@ export default function InvoiceDetailPage() {
       document.body.removeChild(link)
       URL.revokeObjectURL(blobUrl)
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to download PDF')
+      setDownloadError(err instanceof Error ? err.message : 'Failed to download PDF')
     } finally {
       setDownloading(false)
     }
@@ -100,6 +135,35 @@ export default function InvoiceDetailPage() {
       day: 'numeric',
     })
 
+  if (sessionLoading) {
+    return (
+      <div className="p-8">
+        <div className="max-w-4xl mx-auto">
+          <div className="animate-pulse space-y-6" role="status" aria-live="polite">
+            <div className="h-8 w-48 bg-gray-200 rounded" />
+            <div className="h-64 bg-gray-200 rounded-lg" />
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (!canViewInvoices) {
+    return (
+      <div className="p-8">
+        <div className="max-w-4xl mx-auto">
+          <div className="bg-white border border-gray-200 rounded-lg p-6" role="alert">
+            <h2 className="text-lg font-semibold text-gray-900">Access Restricted</h2>
+            <p className="text-sm text-gray-700 mt-2">
+              You do not have permission to view invoices. Please contact your administrator if you believe
+              this is an error.
+            </p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   if (loading) {
     return (
       <div className="p-8">
@@ -130,7 +194,9 @@ export default function InvoiceDetailPage() {
               <h3 className="font-semibold text-red-900">Error Loading Invoice</h3>
               <p className="text-sm text-red-700 mt-1">{error || 'Invoice not found'}</p>
               <button
-                onClick={loadInvoice}
+                onClick={() => {
+                  void loadInvoice()
+                }}
                 className="mt-3 text-sm font-medium text-red-700 hover:text-red-800"
               >
                 Try Again
@@ -186,6 +252,11 @@ export default function InvoiceDetailPage() {
               <Download className="h-4 w-4" />
               {downloading ? 'Downloading...' : 'Download PDF'}
             </button>
+            {downloadError && (
+              <p className="text-sm text-red-600 mt-2" role="alert" aria-live="assertive">
+                {downloadError}
+              </p>
+            )}
           </div>
 
           {/* Invoice Details Grid */}
@@ -253,8 +324,10 @@ export default function InvoiceDetailPage() {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {invoice.line_items.map((item, index) => (
-                    <tr key={index}>
+                  {invoice.line_items.map((item) => {
+                    const rowKey = `${item.description}-${item.quantity}-${item.amount}-${item.unit_amount}`
+                    return (
+                      <tr key={rowKey}>
                       <td className="px-6 py-4 text-sm font-medium text-gray-900">{item.description}</td>
                       <td className="px-6 py-4 text-sm text-gray-600 text-right">{item.quantity.toLocaleString()}</td>
                       <td className="px-6 py-4 text-sm text-gray-600 text-right">
@@ -263,8 +336,9 @@ export default function InvoiceDetailPage() {
                       <td className="px-6 py-4 text-sm font-semibold text-gray-900 text-right">
                         {formatCurrency(item.amount, invoice.currency)}
                       </td>
-                    </tr>
-                  ))}
+                      </tr>
+                    )
+                  })}
                 </tbody>
                 <tfoot className="bg-gray-50">
                   <tr>

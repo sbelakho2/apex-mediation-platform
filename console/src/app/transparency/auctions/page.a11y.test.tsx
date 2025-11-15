@@ -33,7 +33,13 @@ jest.mock('../../../lib/transparency', () => ({
 
 // Mock next/link to avoid act warnings from Link component internals
 jest.mock('next/link', () => {
-  return ({ children, href }: any) => <a href={href}>{children}</a>
+  const MockLink = ({ children, href, ...props }: any) => (
+    <a href={href} {...props}>
+      {children}
+    </a>
+  )
+  MockLink.displayName = 'MockNextLink'
+  return MockLink
 })
 
 describe('Transparency Auctions Page — a11y and keyboard navigation', () => {

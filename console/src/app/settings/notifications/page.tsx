@@ -207,10 +207,14 @@ export default function NotificationsSettingsPage() {
                   <p className="text-xs text-gray-500 mt-1">Separate multiple emails with commas.</p>
                 </div>
                 <div>
-                  <label className="label">Events to Monitor</label>
+                  <p className="label">Events to Monitor</p>
                   <div className="space-y-2">
                     {availableEvents.map((event) => (
-                      <label key={event.id} className="flex items-start gap-3 p-3 border rounded hover:bg-gray-50 cursor-pointer">
+                      <label
+                        key={event.id}
+                        className="flex items-start gap-3 p-3 border rounded hover:bg-gray-50 cursor-pointer"
+                        aria-label={`Toggle ${event.label} email alert`}
+                      >
                         <input
                           type="checkbox"
                           value={event.id}
@@ -271,10 +275,14 @@ export default function NotificationsSettingsPage() {
                   />
                 </div>
                 <div>
-                  <label className="label">Events to Monitor</label>
+                  <p className="label">Events to Monitor</p>
                   <div className="space-y-2">
                     {availableEvents.map((event) => (
-                      <label key={event.id} className="flex items-start gap-3 p-3 border rounded hover:bg-gray-50 cursor-pointer">
+                      <label
+                        key={event.id}
+                        className="flex items-start gap-3 p-3 border rounded hover:bg-gray-50 cursor-pointer"
+                        aria-label={`Toggle ${event.label} Slack alert`}
+                      >
                         <input
                           type="checkbox"
                           value={event.id}

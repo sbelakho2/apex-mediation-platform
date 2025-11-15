@@ -123,7 +123,9 @@ export default function MigrationExperimentPage() {
   const report = reportQuery.data ?? null
   const overallMetrics = report?.metrics?.overall ?? []
   const isReportEmpty = overallMetrics.length === 0
-  const timeseriesMetrics = report?.metrics?.timeseries ?? []
+  const timeseriesMetrics = useMemo(() => report?.metrics?.timeseries ?? [], [
+    report?.metrics?.timeseries,
+  ])
   const [selectedTimeseriesId, setSelectedTimeseriesId] = useState<string | null>(null)
   const hasTimeseries = timeseriesMetrics.length > 0
   const [selectedShareExpiry, setSelectedShareExpiry] = useState<string>('168')

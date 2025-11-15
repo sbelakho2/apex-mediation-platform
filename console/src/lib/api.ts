@@ -473,14 +473,34 @@ export const migrationApi = {
 }
 
 // Payout API
+type PayoutHistoryRequest = {
+  page?: number
+  pageSize?: number
+  publisherId?: string
+  signal?: AbortSignal
+}
+
+type UpcomingPayoutRequest = {
+  publisherId?: string
+  signal?: AbortSignal
+}
+
 export const payoutApi = {
-  getHistory: async (params?: { page?: number; pageSize?: number }) => {
+  getHistory: async (params: PayoutHistoryRequest = {}) => {
     if (USE_MOCK_API) return mockApiCall<PaginatedResponse<PayoutHistory>>('payout-history')
-    return apiClient.get<PaginatedResponse<PayoutHistory>>('/payouts/history', { params })
+    const { signal, ...query } = params
+    return apiClient.get<PaginatedResponse<PayoutHistory>>('/payouts/history', {
+      params: query,
+      signal,
+    })
   },
-  getUpcoming: async () => {
+  getUpcoming: async (params: UpcomingPayoutRequest = {}) => {
     if (USE_MOCK_API) return mockApiCall<PayoutHistory>('payout-upcoming')
-    return apiClient.get<PayoutHistory>('/payouts/upcoming')
+    const { signal, ...query } = params
+    return apiClient.get<PayoutHistory>('/payouts/upcoming', {
+      params: query,
+      signal,
+    })
   },
   updateMethod: (method: 'stripe' | 'paypal' | 'wire', details: Record<string, any>) =>
     apiClient.put('/payouts/method', { method, details }),
