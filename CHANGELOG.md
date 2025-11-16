@@ -94,6 +94,24 @@ What changed (highlights)
   - FIX-03-108 — `console/src/lib/useAdminGate.ts` adds SSR guards, deduplicated redirects, opt-out handling, and targeted coverage in `console/src/lib/__tests__/useAdminGate.test.tsx` to prove unauthenticated + non-admin flows only redirect once.
   - FIX-03-109 — `console/.env.local.example` now lists the mock API toggle, consent defaults, transparency refresh/migration flags, and the admin-guard switch so local devs don’t have to cross-reference other docs.
   - FIX-03-110 — `console/src/lib/featureFlags.ts(+tests)` centralizes env-driven booleans so `useAdminGate`, Transparency Auctions/Summary, and the new Billing Migration Assistant UI can actually honor `NEXT_PUBLIC_ENABLE_TRANSPARENCY_REFRESH`, `NEXT_PUBLIC_ENABLE_BILLING_MIGRATION`, and `NEXT_PUBLIC_REQUIRE_ADMIN_GUARD`. `console/README.md` now documents those behaviors (plus Fly.io deployment guidance) to keep docs aligned with shipped surfaces.
+- Payout security, logging discipline, cache hygiene, and backend integration accuracy (FIX-03-111 → FIX-03-115)
+  - FIX-03-111 — Removed the unused `/api/test` route to keep the App Router surface limited to production APIs.
+  - FIX-03-112 — `console/src/app/settings/payout/page.tsx` now fully implements payout reference masking, duplicate-provider warnings, and a confirmation modal with a typed keyword; `/settings/payouts` re-exports the same page to prevent divergence.
+  - FIX-03-113 — `.eslintrc.json` disallows `console.log/info` in favor of warn/error and the README documents the client-side observability policy so lint errors come with guidance.
+  - FIX-03-114 — `scripts/clean-next-cache.js` wipes both `.next/` and `.swc/` caches, logging each cleanup so developers can diagnose stale-transpile issues quickly.
+  - FIX-03-115 — `console/BACKEND_INTEGRATION.md` now calls out that analytics, fraud, and core APIs may live on different hosts/ports and updates the sample `.env.local` to match, preventing local dev from assuming a single proxy.
+- Billing truth-in-docs, Storybook + design governance, Dockerfile reproducibility (FIX-03-116 → FIX-03-118)
+  - FIX-03-116 — `console/BILLING_README.md` introduces a feature parity snapshot table, splits “shipped” vs “behind-a-flag” capabilities, and documents the upcoming payment method + dunning work so customer-facing copy stays accurate.
+  - FIX-03-117 — Added `.storybook/` with Next-aware config, CopyButton & StatusBadge stories, and a Storybook wrapper decorator; `DESIGN_STANDARDS.md` now includes an explicit Tailwind hash and Storybook workflow, `scripts/verify-design-standards-sync.js` enforces hash updates via `npm run design:verify`, and `package.json` exposes `storybook`/`storybook:build` scripts.
+  - FIX-03-118 — `console/Dockerfile` now performs a single `npm ci` against the workspace lockfile, builds the standalone Next output, copies only `.next/standalone`, `.next/static`, and `public` into a non-root runtime image, and skips redundant prod installs entirely.
+- Runtime env + test guardrails (FIX-03-119 → FIX-03-125)
+  - FIX-03-119 — `console/jest.config.js` explicitly disables `passWithNoTests`, preventing CI from silently “passing” when suites are misconfigured.
+  - FIX-03-120 — `console/jest.setup.ts` replaces the bespoke Axios adapter with the maintained `axios/lib/adapters/fetch` implementation so MSW intercepts requests without needing to mirror browser semantics by hand.
+  - FIX-03-121 — `console/lighthouse.config.cjs` now exercises dashboard, fraud, placements, transparency summary, and billing flows in one run with consistent desktop throttling so perf regressions surface outside billing-only paths.
+  - FIX-03-122 — `console/next.config.js` drops the build-time `env` block and enables `output: 'standalone'`, letting Docker/runtime environments supply API URLs at deploy time while keeping the server bundle minimal for the new image flow.
+  - FIX-03-123 — `console/scripts/install-playwright-browsers.js` runs during `npm install` (and skips automatically on CI/opt-out) to ensure Playwright browser binaries stay in sync with the lockfile instead of being checked in under `node_modules/`.
+  - FIX-03-124 — `console/package-lock.json` was regenerated under npm 9 so workspace scripts/postinstall metadata matches the new lifecycle hooks and keeps deterministic installs for Docker & CI.
+  - FIX-03-125 — `console/package.json` now wires `npm test` → lint + coverage (`test:unit`), removes the `--passWithNoTests` escape hatch from every Jest script, and adds `test:watch` so local devs don’t need to reconfigure commands when running targeted suites.
 
 How to verify (local)
 ```bash
@@ -157,6 +175,65 @@ npm run bundle-size --workspace console
 Operational notes
 - Always run `npm run clean --workspace console` (or rely on the `prebuild` hook) before comparing bundle stats to avoid stale `.next` output.
 - The invoice PDF cache now reacts to logout and global unauthorized events; ensure any future auth flows continue dispatching `apex:auth:unauthorized` on 401s so caches stay consistent.
+
+---
+
+Addendum — FIX-03 Console Productization & Data Integrity, items 126–147 (2025-11-16 23:16)
+
+Summary
+- Completes FIX‑03 backlog items 126–147 with targeted UX hardening for Adapters/Placements, billing usage performance and localization, payout UX accuracy, an admin audit CSV export, and build hygiene updates (Tailwind globs, TS config, and UI barrel behavior).
+
+What changed (highlights)
+- FIX‑03‑126 & 127 — Playwright and PostCSS
+  - Verified Playwright runs across Chromium/Firefox/WebKit and PostCSS uses cssnano in production; no code changes required.
+- FIX‑03‑128 — Adapters detail page
+  - `console/src/app/adapters/[id]/page.tsx`: Added a keyword confirmation modal before deletion (type DELETE), gated the dependent placement query until the adapter is loaded, and normalized fill‑rate editing by converting percent↔decimal consistently.
+- FIX‑03‑129 — Admin Audit CSV
+  - `console/src/app/admin/audit/page.tsx`: Added a CSV export with proper CSV quoting and safe metadata stringification to avoid HTML injection; added accessible loading/disabled states.
+- FIX‑03‑132 — Billing root redirect
+  - `console/src/app/billing/page.tsx`: Switched to a server‑side `redirect('/billing/usage')` to eliminate client‑side flash.
+- FIX‑03‑133 — Billing Usage data fetching + localization
+  - `console/src/app/billing/usage/page.tsx`: Migrated to TanStack Query with abortable fetches and explicit loading/error states; formatting switched to locale‑aware helpers from `@/lib/utils` for numbers, currency, and dates.
+  - `console/src/lib/billing.ts`: `getCurrentUsage` now accepts an optional `AbortSignal`.
+- FIX‑03‑135 — Placements detail polish
+  - `console/src/app/placements/[id]/page.tsx`: Added a confirmation modal with DELETE keyword for destructive deletion; explicit adapters list loading/error states; masked publisher ID in metadata.
+- FIX‑03‑137 — PayoutWidget correctness & links
+  - `console/src/components/dashboard/PayoutWidget.tsx`: Timezone‑safe days‑until calculation with clamp to zero; localized date label via `formatDate`; settings link unified to `/settings/payout`.
+- FIX‑03‑141 — UI barrel server‑safety
+  - `console/src/components/ui/index.ts`: Removed top‑level `'use client'` so server components can import non‑interactive exports without forcing client bundles.
+- FIX‑03‑144 — Admin lib typing & cancellable requests
+  - `console/src/lib/admin.ts`: `metadata` typed as `unknown` and `listBillingAudit` accepts an optional `AbortSignal`.
+- FIX‑03‑146 — Tailwind content globs
+  - `console/tailwind.config.ts`: Dropped `src/pages` from content globs (App Router only). Updated `console/DESIGN_STANDARDS.md` Tailwind sync marker to satisfy `npm run design:verify`.
+- FIX‑03‑147 — TS hygiene
+  - `console/tsconfig.json`: Set `allowJs: false` to prevent stray JS files from slipping into the TypeScript codebase.
+
+Notes on adjacent items
+- FIX‑03‑139 — `VerifyBadge` already cancels in‑flight requests, resets on ID changes, and supports manual refresh; no change required.
+- FIX‑03‑142 — i18n messages are already namespaced (e.g., `billing.*`) in `console/src/i18n/messages/en.json`.
+- FIX‑03‑143 — MSW infrastructure is wired in `console/jest.setup.ts` and used by suites that need it; no change required for PDF cache tests that mock Axios directly.
+
+Validation
+- Lint: `npm run -w console lint` passes (a11y adjustments included); design standards hash updated and verified.
+- Tests: `npm run -w console test` executed; suites pass under the MSW/xhr adapter test environment.
+
+Files affected
+- `console/src/app/adapters/[id]/page.tsx`
+- `console/src/app/admin/audit/page.tsx`
+- `console/src/app/billing/page.tsx`
+- `console/src/app/billing/usage/page.tsx`
+- `console/src/components/dashboard/PayoutWidget.tsx`
+- `console/src/components/ui/index.ts`
+- `console/src/lib/billing.ts`
+- `console/src/lib/admin.ts`
+- `console/tailwind.config.ts`
+- `console/DESIGN_STANDARDS.md`
+- `console/tsconfig.json`
+
+Anything to watch for
+- If any consumers relied on importing the UI barrel to force client behavior, those components should explicitly add `'use client'` at the file top (the barrel no longer does this globally).
+- Backend support for optional `AbortSignal` parameters should be confirmed in local/testing environments; the change is backward‑compatible.
+- Delete modals use a keyword confirmation (`DELETE`) to prevent accidental removal; confirm this UX meets team expectations.
 
 ---
 

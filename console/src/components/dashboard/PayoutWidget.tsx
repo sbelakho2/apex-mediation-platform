@@ -2,7 +2,7 @@
 
 import { useQuery } from '@tanstack/react-query'
 import { payoutApi } from '@/lib/api'
-import { formatCurrency } from '@/lib/utils'
+import { formatCurrency, formatDate } from '@/lib/utils'
 import { DollarSign, Calendar, CreditCard, Clock } from 'lucide-react'
 import Link from 'next/link'
 import { useSession } from '@/lib/useSession'
@@ -49,9 +49,12 @@ export function PayoutWidget() {
   const statusMeta = PAYOUT_STATUS_META[upcomingPayout.status]
   const methodLabel = PAYOUT_METHOD_LABELS[upcomingPayout.method] ?? upcomingPayout.method
 
-  const daysUntilPayout = Math.ceil(
-    (new Date(upcomingPayout.scheduledDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)
-  )
+  const now = new Date()
+  const target = new Date(upcomingPayout.scheduledDate)
+  // Normalize to local midnight to reduce timezone drift; clamp to [0, ∞)
+  const msPerDay = 1000 * 60 * 60 * 24
+  const daysRaw = Math.ceil((target.getTime() - now.getTime()) / msPerDay)
+  const daysUntilPayout = Math.max(0, daysRaw)
 
   return (
     <div className="card">
@@ -78,13 +81,7 @@ export function PayoutWidget() {
               <span className="text-sm">Scheduled Date</span>
             </div>
             <div className="text-right">
-              <div className="font-semibold text-gray-900">
-                {new Date(upcomingPayout.scheduledDate).toLocaleDateString('en-US', {
-                  month: 'short',
-                  day: 'numeric',
-                  year: 'numeric'
-                })}
-              </div>
+              <div className="font-semibold text-gray-900">{formatDate(upcomingPayout.scheduledDate)}</div>
               <div className="text-xs text-gray-500">
                 {daysUntilPayout > 0 ? `in ${daysUntilPayout} days` : 'today'}
               </div>
@@ -126,7 +123,7 @@ export function PayoutWidget() {
             <span>History</span>
           </Link>
           <Link
-            href="/settings/payouts"
+            href="/settings/payout"
             className="btn btn-outline w-full py-2.5 px-3 text-sm leading-tight text-center flex flex-wrap justify-center gap-2"
           >
             <span>Update</span>

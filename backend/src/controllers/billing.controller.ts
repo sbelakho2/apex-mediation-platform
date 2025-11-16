@@ -5,6 +5,7 @@ import { logger } from '../utils/logger';
 import { usageMeteringService } from '../services/billing/UsageMeteringService';
 import { invoiceService } from '../services/invoiceService';
 import { reconciliationService } from '../services/reconciliationService';
+import { migrationAssistantService } from '../services/billing/migrationAssistantService';
 
 /**
  * GET /api/v1/billing/usage/current
@@ -194,6 +195,50 @@ export const getInvoicePDF = async (
     res.send(pdfBuffer);
   } catch (error) {
     logger.error('Error generating invoice PDF', { error, userId: req.user?.userId, invoiceId: req.params.id });
+    next(error);
+  }
+};
+
+/**
+ * POST /api/v1/billing/migration/request
+ * Capture billing migration context for ops to review
+ */
+export const requestMigration = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const customerId = req.user?.userId;
+
+    if (!customerId) {
+      throw new AppError('User not authenticated', 401);
+    }
+
+    const { channel, notes } = req.body || {};
+
+    if (typeof notes !== 'string' || notes.trim().length < 20) {
+      throw new AppError('Provide migration notes with at least 20 characters of context.', 400);
+    }
+
+    const targetChannel = channel === 'production' ? 'production' : 'sandbox';
+
+    const request = await migrationAssistantService.createRequest({
+      customerId,
+      accountEmail: req.user?.email ?? null,
+      channel: targetChannel,
+      notes: notes.trim(),
+    });
+
+    res.status(202).json({
+      success: true,
+      data: request,
+    });
+  } catch (error) {
+    logger.error('Error handling billing migration request', {
+      error,
+      userId: req.user?.userId,
+    });
     next(error);
   }
 };

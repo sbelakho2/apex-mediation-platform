@@ -7,7 +7,7 @@ export interface AuditEntry {
   id: string
   organization_id: string
   event_type: string
-  metadata: any
+  metadata: unknown
   created_at: string
 }
 
@@ -105,9 +105,11 @@ export async function listBillingAudit(params?: {
   action?: string
   from?: string
   to?: string
+  signal?: AbortSignal
 }): Promise<AuditListResponse> {
   try {
-    const res = await apiClient.get('/admin/billing/audit', { params })
+    const { signal, ...rest } = params ?? {}
+    const res = await apiClient.get('/admin/billing/audit', { params: rest, signal })
     return res.data as AuditListResponse
   } catch (err) {
     throw new Error(handleApiError(err))

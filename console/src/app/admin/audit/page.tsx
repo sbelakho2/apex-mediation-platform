@@ -1,8 +1,27 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { listBillingAudit, type AuditEntry } from '@/lib/admin'
 import Pagination from '@/components/ui/Pagination'
+
+function escapeCsvField(value: unknown): string {
+  const s = String(value ?? '')
+  // Escape quotes and wrap in quotes if contains delimiter/newline
+  const escaped = s.replace(/"/g, '""')
+  if (/[",\n]/.test(escaped)) {
+    return `"${escaped}"`
+  }
+  return escaped
+}
+
+function sanitizeMetadata(meta: unknown): string {
+  try {
+    if (!meta) return ''
+    return JSON.stringify(meta)
+  } catch {
+    return ''
+  }
+}
 
 export default function AdminAuditPage() {
   const [data, setData] = useState<AuditEntry[]>([])
@@ -10,6 +29,7 @@ export default function AdminAuditPage() {
   const [totalPages, setTotalPages] = useState(1)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [downloading, setDownloading] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -39,6 +59,40 @@ export default function AdminAuditPage() {
       <div className="p-6">
         <h2 className="text-xl font-semibold text-gray-900">Billing Audit Log</h2>
         <p className="text-gray-600 mt-2">Recent audit entries from the billing_audit table.</p>
+        <div className="mt-4">
+          <button
+            className="btn btn-outline text-sm"
+            onClick={async () => {
+              setDownloading(true)
+              try {
+                const header = ['id', 'organization_id', 'event_type', 'created_at', 'metadata']
+                const rows = data.map((row) => [
+                  escapeCsvField(row.id),
+                  escapeCsvField(row.organization_id),
+                  escapeCsvField(row.event_type),
+                  escapeCsvField(row.created_at),
+                  escapeCsvField(sanitizeMetadata(row.metadata)),
+                ])
+                const csv = [header.join(','), ...rows.map((r) => r.join(','))].join('\n')
+                const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
+                const url = URL.createObjectURL(blob)
+                const a = document.createElement('a')
+                a.href = url
+                a.download = `billing_audit_page-${page}.csv`
+                document.body.appendChild(a)
+                a.click()
+                a.remove()
+                URL.revokeObjectURL(url)
+              } finally {
+                setDownloading(false)
+              }
+            }}
+            disabled={loading || downloading || data.length === 0}
+            aria-disabled={loading || downloading || data.length === 0}
+          >
+            {downloading ? 'Exporting…' : 'Download CSV'}
+          </button>
+        </div>
       </div>
       <div className="border-t">
         {loading ? (

@@ -5,6 +5,7 @@ import {
   listInvoices,
   getInvoicePDF,
   reconcileBilling,
+  requestMigration,
 } from '../billing.controller';
 
 jest.mock('../../services/billing/UsageMeteringService', () => ({
@@ -32,9 +33,16 @@ jest.mock('../../services/reconciliationService', () => ({
   },
 }));
 
+jest.mock('../../services/billing/migrationAssistantService', () => ({
+  migrationAssistantService: {
+    createRequest: jest.fn(),
+  },
+}));
+
 import { usageMeteringService } from '../../services/billing/UsageMeteringService';
 import { invoiceService } from '../../services/invoiceService';
 import { reconciliationService } from '../../services/reconciliationService';
+import { migrationAssistantService } from '../../services/billing/migrationAssistantService';
 
 type MockResponse = Response & {
   status: jest.MockedFunction<Response['status']>;
@@ -63,12 +71,13 @@ const createMockRequest = (): Partial<Request> => ({
     userId: 'user-123',
     publisherId: 'publisher-123',
     email: 'billing@example.com',
-  },
+  } as any,
 });
 
 const mockedUsageMetering = jest.mocked(usageMeteringService);
 const mockedInvoiceService = jest.mocked(invoiceService);
 const mockedReconciliationService = jest.mocked(reconciliationService);
+const mockedMigrationService = jest.mocked(migrationAssistantService);
 
 describe('billing.controller', () => {
   let req: Partial<Request>;
@@ -331,6 +340,49 @@ describe('billing.controller', () => {
 
       expect(next).toHaveBeenCalledWith(expect.any(AppError));
       expect(mockedReconciliationService.reconcile).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('requestMigration', () => {
+    beforeEach(() => {
+      mockedMigrationService.createRequest.mockResolvedValue({
+        requestId: 'req-123',
+        status: 'queued',
+        submittedAt: new Date().toISOString(),
+        channel: 'sandbox',
+        notesPreview: 'Need to migrate',
+      });
+    });
+
+    it('queues migration request when payload is valid', async () => {
+      req.body = {
+        channel: 'production',
+        notes: 'Need to migrate billing data next week.',
+      };
+
+      await requestMigration(req as Request, res, next);
+
+      expect(mockedMigrationService.createRequest).toHaveBeenCalledWith(
+        expect.objectContaining({
+          customerId: 'user-123',
+          channel: 'production',
+          notes: 'Need to migrate billing data next week.',
+        })
+      );
+      expect(res.status).toHaveBeenCalledWith(202);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ success: true })
+      );
+      expect(next).not.toHaveBeenCalled();
+    });
+
+    it('rejects when notes are missing or too short', async () => {
+      req.body = { channel: 'sandbox', notes: 'short' };
+
+      await requestMigration(req as Request, res, next);
+
+      expect(mockedMigrationService.createRequest).not.toHaveBeenCalled();
+      expect(next).toHaveBeenCalledWith(expect.any(AppError));
     });
   });
 });

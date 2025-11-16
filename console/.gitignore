@@ -41,3 +41,4 @@ next-env.d.ts
 
 # reports & artifacts
 bundle-report/
+storybook-static/

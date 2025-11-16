@@ -36,6 +36,12 @@ router.get('/invoices/:id', billingController.getInvoice);
 router.get('/invoices/:id/pdf', billingController.getInvoicePDF);
 
 /**
+ * POST /api/v1/billing/migration/request
+ * Capture migration assistant requests
+ */
+router.post('/migration/request', billingController.requestMigration);
+
+/**
  * POST /api/v1/billing/reconcile
  * Trigger billing reconciliation (admin only)
  */

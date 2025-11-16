@@ -137,8 +137,14 @@ Feature toggles mirror `.env.local.example`:
 
 - `NEXT_PUBLIC_USE_MOCK_API` swaps network calls for fixtures.
 - `NEXT_PUBLIC_ENABLE_TRANSPARENCY_REFRESH` controls whether manual refresh/retry buttons render on the Transparency Auctions + Summary pages (the queries still auto-refresh when disabled).
-- `NEXT_PUBLIC_ENABLE_BILLING_MIGRATION` reveals the beta Migration Assistant card inside billing settings so teams can submit migration context to ops.
+- `NEXT_PUBLIC_ENABLE_BILLING_MIGRATION` reveals the beta Migration Assistant card inside billing settings so teams can submit migration context to ops. Ensure the backend `POST /billing/migration/request` route (or an equivalent mock) is live before flipping this flag; the form fails hard on 404/500s.
 - `NEXT_PUBLIC_REQUIRE_ADMIN_GUARD` enforces `useAdminGate` redirects; set it to `false` to bypass redirects while keeping the rest of the hook stateful for local debugging.
+
+#### Migration Assistant prerequisites
+
+1. Run the backend workspace (`npm run dev --workspace backend`) or deploy the billing service so that `POST /api/v1/billing/migration/request` is reachable (the console API client proxies that as `/billing/migration/request`).
+2. If you do not have the backend handy, update `src/app/api/mock/route.ts` (or your MSW fixtures) to return a stub response for `POST /billing/migration/request` and launch the console with `NEXT_PUBLIC_USE_MOCK_API=true`.
+3. Keep the `MIGRATION_NOTES_MIN_LENGTH` (20 chars) enforcement in mind when demoing—the UI disables submit and shows inline validation until the threshold is satisfied.
 
 ### Development
 
@@ -163,6 +169,15 @@ npm run build
 
 # Start production server
 npm start
+
+# Clear build caches (.next + .swc) if you hit stale transpilation errors
+npm run clean
+
+### Storybook
+
+- `npm run storybook` – starts the React/Webpack 5 Storybook instance configured in `.storybook/main.ts` with the shared Babel loader so component stories behave the same as Next.js pages (no Next cache hooks involved).
+- `npm run storybook:build` – produces a static bundle in `console/storybook-static`. This now runs independently from Next build caches, but if you ever hit weird module resolution issues, run `npm run clean` first and then rebuild.
+- Common troubleshooting: confirm the aliases in `.storybook/main.ts` match `tsconfig.json`, and remember Storybook won’t automatically stand up the backend. Toggle `NEXT_PUBLIC_USE_MOCK_API=true` or start the backend services when stories depend on live APIs.
 ```
 
 ## API Integration
@@ -265,6 +280,16 @@ Extended Tailwind palette:
 - XSS protection (React auto-escaping)
 - Input validation (Zod schemas)
 - Secure API communication (HTTPS in production)
+
+## Client Observability & Debug Logging
+
+Console noise is intentionally limited so critical signals surface quickly:
+
+- The ESLint rule `no-console` blocks `console.log` and `console.info`; only `console.warn` (degraded UX) and `console.error` (fatal failures) are permitted in source code. Linting fails the build if other console methods slip through.
+- Use `console.warn` for recoverable states (e.g., feature-flagged surfaces falling back to skeletons) and pair each call with a user-facing affordance such as toasts or inline banners.
+- Reserve `console.error` for unrecoverable flows. The global error boundary (`src/app/error.tsx`) captures thrown client errors and forwards them to `/api/logs/client-error`, so additional errors should include actionable context (request IDs, feature flag values) instead of stack traces alone.
+- For deep local debugging, wrap temporary logs in `if (process.env.NODE_ENV !== 'production')` and remove them before merging; linting ensures production builds stay clean.
+- Telemetry destined for backend observability should go through dedicated APIs (e.g., `settingsApi`, `reportClientError`) instead of sprinkling console statements throughout components.
 
 ## Deployment
 

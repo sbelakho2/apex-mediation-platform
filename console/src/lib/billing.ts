@@ -175,9 +175,11 @@ export interface ReconciliationResult {
 /**
  * Get current usage and overages for the authenticated user
  */
-export async function getCurrentUsage(): Promise<UsageData> {
+export async function getCurrentUsage(options: { signal?: AbortSignal } = {}): Promise<UsageData> {
   try {
-    const response: AxiosResponse<UsageData> = await apiClient.get('/billing/usage/current')
+    const response: AxiosResponse<UsageData> = await apiClient.get('/billing/usage/current', {
+      signal: options.signal,
+    })
     return response.data
   } catch (error) {
     throw new Error(handleApiError(error))

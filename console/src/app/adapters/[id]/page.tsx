@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
@@ -30,6 +30,9 @@ export default function AdapterDetailPage({ params }: PageProps) {
   const { id } = params
   const router = useRouter()
   const queryClient = useQueryClient()
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false)
+  const [confirmText, setConfirmText] = useState('')
+  const CONFIRM_KEYWORD = 'DELETE'
 
   const { data: adapter, isLoading } = useQuery({
     queryKey: ['adapter', id],
@@ -117,7 +120,7 @@ export default function AdapterDetailPage({ params }: PageProps) {
             </div>
             <div className="flex flex-wrap gap-3">
               <button
-                onClick={() => deleteMutation.mutate()}
+                onClick={() => setConfirmDeleteOpen(true)}
                 className="btn btn-danger flex items-center gap-2"
                 disabled={deleteMutation.isPending}
               >
@@ -194,6 +197,50 @@ export default function AdapterDetailPage({ params }: PageProps) {
             </div>
           </form>
         </section>
+
+        {confirmDeleteOpen && (
+          <div role="dialog" aria-modal="true" className="fixed inset-0 z-50 flex items-center justify-center">
+            <div
+              className="absolute inset-0 bg-black/30"
+              role="button"
+              aria-label="Close confirmation dialog"
+              tabIndex={0}
+              onClick={() => setConfirmDeleteOpen(false)}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape' || e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault()
+                  setConfirmDeleteOpen(false)
+                }
+              }}
+            />
+            <div className="relative bg-white rounded-lg shadow-lg max-w-md w-full p-6">
+              <h3 className="text-lg font-semibold text-gray-900">Confirm deletion</h3>
+              <p className="text-sm text-gray-600 mt-2">
+                This will permanently remove the adapter &quot;{adapter.name}&quot;. Type <span className="font-mono">{CONFIRM_KEYWORD}</span> to
+                confirm.
+              </p>
+              <input
+                aria-label="Confirmation keyword"
+                className="input mt-4 w-full"
+                value={confirmText}
+                onChange={(e) => setConfirmText(e.target.value.toUpperCase())}
+                placeholder={CONFIRM_KEYWORD}
+              />
+              <div className="mt-6 flex items-center justify-end gap-3">
+                <button className="btn" onClick={() => setConfirmDeleteOpen(false)} disabled={deleteMutation.isPending}>
+                  Cancel
+                </button>
+                <button
+                  className="btn btn-danger"
+                  onClick={() => deleteMutation.mutate()}
+                  disabled={deleteMutation.isPending || confirmText !== CONFIRM_KEYWORD}
+                >
+                  {deleteMutation.isPending ? 'Deleting…' : 'Delete'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {placement && (
           <section className="card">

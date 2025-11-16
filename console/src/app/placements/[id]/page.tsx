@@ -28,6 +28,8 @@ export default function PlacementDetailPage({ params }: PageProps) {
   const router = useRouter()
   const queryClient = useQueryClient()
   const [deleteConfirm, setDeleteConfirm] = useState(false)
+  const [confirmText, setConfirmText] = useState('')
+  const CONFIRM_KEYWORD = 'DELETE'
 
   const { data: placement, isLoading } = useQuery({
     queryKey: ['placement', id],
@@ -37,7 +39,7 @@ export default function PlacementDetailPage({ params }: PageProps) {
     },
   })
 
-  const { data: adapters } = useQuery({
+  const { data: adapters, isLoading: adaptersLoading, isError: adaptersError, error: adaptersErrorObj } = useQuery({
     queryKey: ['adapters', id],
     queryFn: async () => {
       const { data } = await adapterApi.list(id)
@@ -167,7 +169,13 @@ export default function PlacementDetailPage({ params }: PageProps) {
 
         <section className="card">
           <h2 className="text-xl font-semibold text-gray-900 mb-4">Adapter Configuration</h2>
-          {adapters && adapters.length > 0 ? (
+          {adaptersLoading ? (
+            <div className="p-4 text-gray-600">Loading adapters…</div>
+          ) : adaptersError ? (
+            <div className="p-4 bg-red-50 border border-red-200 rounded text-sm text-red-700">
+              Failed to load adapters{adaptersErrorObj instanceof Error ? `: ${adaptersErrorObj.message}` : ''}
+            </div>
+          ) : adapters && adapters.length > 0 ? (
             <div className="space-y-3">
               {adapters.map((adapter) => (
                 <div
@@ -236,10 +244,55 @@ export default function PlacementDetailPage({ params }: PageProps) {
             </div>
             <div>
               <dt className="text-gray-500">Publisher ID</dt>
-              <dd className="font-mono text-xs text-gray-700">{placement.publisherId}</dd>
+              <dd className="font-mono text-xs text-gray-700" title={placement.publisherId}>
+                {maskId(placement.publisherId)}
+              </dd>
             </div>
           </dl>
         </section>
+
+        {deleteConfirm && (
+          <div role="dialog" aria-modal="true" className="fixed inset-0 z-50 flex items-center justify-center">
+            <div
+              className="absolute inset-0 bg-black/30"
+              role="button"
+              aria-label="Close confirmation dialog"
+              tabIndex={0}
+              onClick={() => setDeleteConfirm(false)}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape' || e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault()
+                  setDeleteConfirm(false)
+                }
+              }}
+            />
+            <div className="relative bg-white rounded-lg shadow-lg max-w-md w-full p-6">
+              <h3 className="text-lg font-semibold text-gray-900">Confirm deletion</h3>
+              <p className="text-sm text-gray-600 mt-2">
+                This will permanently remove the placement &quot;{placement.name}&quot; and its adapter configuration links. Type <span className="font-mono">{CONFIRM_KEYWORD}</span> to confirm.
+              </p>
+              <input
+                aria-label="Confirmation keyword"
+                className="input mt-4 w-full"
+                value={confirmText}
+                onChange={(e) => setConfirmText(e.target.value.toUpperCase())}
+                placeholder={CONFIRM_KEYWORD}
+              />
+              <div className="mt-6 flex items-center justify-end gap-3">
+                <button className="btn" onClick={() => setDeleteConfirm(false)} disabled={deleteMutation.isPending}>
+                  Cancel
+                </button>
+                <button
+                  className="btn btn-danger"
+                  onClick={() => deleteMutation.mutate()}
+                  disabled={deleteMutation.isPending || confirmText !== CONFIRM_KEYWORD}
+                >
+                  {deleteMutation.isPending ? 'Deleting…' : 'Delete'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </main>
     </div>
   )
@@ -275,6 +328,12 @@ function InfoCard({
       )}
     </div>
   )
+}
+
+function maskId(id: string): string {
+  if (!id) return ''
+  const visible = id.slice(-4)
+  return `••••••••-${visible}`
 }
 
 function PlacementDetailSkeleton() {

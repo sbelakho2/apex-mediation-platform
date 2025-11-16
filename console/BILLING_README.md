@@ -4,7 +4,20 @@
 
 The billing module provides usage tracking, invoice management, and reconciliation features for the ApexMediation console.
 
-## Features
+> This module is live in production; anything marked as "Planned" lives behind feature flags and must not be promised externally until the referenced FIX is complete.
+
+## Feature Parity Snapshot — 2025-11-16
+| Capability | Surface | Status | Notes |
+| --- | --- | --- | --- |
+| Usage tracking & overage detection | `/billing/usage`, `GET /api/v1/billing/usage/current` | ✅ Shipped | Data sourced from ClickHouse with hourly cache invalidation. |
+| Invoice management & PDFs | `/billing/invoices`, `/billing/invoices/[id]`, `GET /api/v1/billing/invoices*` | ✅ Shipped | Detail pages + PDF downloads in console, Stripe webhook sync in backend. |
+| Admin reconciliation | `/admin/billing`, `POST /api/v1/billing/reconcile` | ✅ Shipped | Requires admin role and acknowledgement prompt. |
+| Migration Assistant (beta) | `/billing/settings` (flag `NEXT_PUBLIC_ENABLE_BILLING_MIGRATION`), `POST /api/v1/billing/migration/request` | ✅ Pilot | Sends sandbox/production migration context to ops with request IDs and char-count validation. |
+| Payment method management | `/billing/payment-methods` (flagged), `POST /api/v1/billing/payment-methods/*` | ⏳ Planned (FIX-03-116 follow-up) | UI/API scaffolding complete; awaiting Stripe customer portal wiring + QA. |
+| Dunning management & retries | Console notifications + Stripe webhooks | ⏳ Planned (FIX-03-116 follow-up) | Playbooks documented; automation shipping under FIX-03-154. |
+| Usage forecasting & budgeting | `/billing/usage` projections | ⏳ Planned | Depends on analytics forecasting models (FIX-05 alignment). |
+
+## Features (Shipped)
 
 ### 1. Usage Tracking (`/billing/usage`)
 - Real-time usage metrics (impressions, API calls, data transfer)
@@ -30,6 +43,26 @@ The billing module provides usage tracking, invoice management, and reconciliati
 - Idempotent reconciliation operations
 - Audit trail for all reconciliation activities
 
+### 5. Migration Assistant (Feature Flag)
+- Appears inside `/billing/settings` when `NEXT_PUBLIC_ENABLE_BILLING_MIGRATION=true`.
+- Lets publishers submit sandbox vs production cutover context with a 20-character minimum.
+- Calls `POST /api/v1/billing/migration/request` (returns `{ requestId, status, submittedAt, channel, notesPreview }`).
+- Requires the backend route deployed (or MSW handler) before enabling the flag outside local/staging to avoid 404s.
+
+## Upcoming Enhancements (Behind Feature Flags)
+
+### Payment Method Management (`/billing/payment-methods`)
+- Entry point hidden unless `NEXT_PUBLIC_ENABLE_BILLING_PM` is true and backend exposes `/api/v1/billing/payment-methods`.
+- Allows customers to view the active funding source, rotate cards/bank accounts through Stripe’s Setup Intents, and mark backup methods.
+- Integrates with the payout confirmation modal patterns introduced in FIX-03-112 so sensitive actions require a confirmation keyword.
+- Backend dependencies: Stripe customer portal enablement + audit logging (#FIX-01-212).
+
+### Dunning & Collections
+- Reuses the admin reconciliation audit trail to surface delinquent subscriptions inside `/billing/usage` and `/admin/billing`.
+- Automates retry schedules (Day 0/3/7) with localized email/SaaS notifications and escalates to Slack via `billing_audit` triggers.
+- Each borrower CTA links to the invoice detail view with contextual messaging so support teams can act quickly.
+- Backend dependencies: Stripe event `invoice.payment_failed` handlers + notification templates (FIX-05-041).
+
 ## API Endpoints
 
 ### Usage
@@ -42,6 +75,9 @@ The billing module provides usage tracking, invoice management, and reconciliati
 
 ### Reconciliation
 - `POST /api/v1/billing/reconcile` - Trigger reconciliation (admin only)
+
+### Migration
+- `POST /api/v1/billing/migration/request` - Queue migration assistant tickets (requires `BILLING_ENABLED=true`)
 
 ### Feature Flags
 - `GET /api/v1/meta/features` - Get feature flags (public)
@@ -237,28 +273,15 @@ npm test -- integration/billing.test.ts
 - Review `billing_audit` for reconciliation errors
 - Verify idempotency key is unique
 
-## Roadmap
+## Delivery Roadmap
 
-### Phase 1 (Complete)
-- ✅ Usage tracking and overage calculation
-- ✅ Invoice list and detail pages
-- ✅ PDF invoice generation
-- ✅ Stripe webhook integration
-- ✅ Reconciliation service
+| Phase | Scope | Status |
+| --- | --- | --- |
+| 1 | Usage tracking, invoices, PDFs, Stripe webhook ingestion, reconciliation service | ✅ Complete |
+| 2 | Payment method management, subscription upgrades/downgrades, usage forecasting/budgeting, multi-currency, tax integration | 🚧 In progress — align with FIX-03-154 & FIX-05-020. |
+| 3 | Dunning workflows, credit/refund tooling, custom billing schedules, usage-based pricing tiers, analytics dashboard | 📝 Planned — requires data pipeline maturity (FIX-06) before scheduling. |
 
-### Phase 2 (Planned)
-- ⏳ Payment method management
-- ⏳ Subscription plan upgrades/downgrades
-- ⏳ Usage forecast and budgeting
-- ⏳ Multi-currency support
-- ⏳ Tax calculation integration
-
-### Phase 3 (Future)
-- ⏳ Dunning management for failed payments
-- ⏳ Credit management and refunds
-- ⏳ Custom billing schedules
-- ⏳ Usage-based pricing tiers
-- ⏳ Billing analytics dashboard
+> For any roadmap item marked 🚧 or 📝, reference `docs/Internal/Development/FIXES.md` before communicating timelines. Update this table whenever scope or status changes.
 
 ## Support
 

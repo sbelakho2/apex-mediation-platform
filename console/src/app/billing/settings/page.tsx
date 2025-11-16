@@ -39,6 +39,7 @@ interface BillingSettings {
 
 const MESSAGE_STORAGE_KEY = 'billing-settings:toast'
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+const MIGRATION_NOTES_MIN_LENGTH = 20
 
 export default function BillingSettingsPage() {
   const queryClient = useQueryClient()
@@ -194,12 +195,16 @@ export default function BillingSettingsPage() {
   })
 
   const trimmedMigrationNotes = migrationNotes.trim()
-  const migrationSubmitDisabled = migrationMutation.isPending || trimmedMigrationNotes.length === 0
+  const migrationSubmitDisabled =
+    migrationMutation.isPending || trimmedMigrationNotes.length < MIGRATION_NOTES_MIN_LENGTH
 
   const handleMigrationSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    if (!trimmedMigrationNotes) {
-      setMessage({ type: 'error', text: 'Add migration context before submitting a request.' })
+    if (trimmedMigrationNotes.length < MIGRATION_NOTES_MIN_LENGTH) {
+      setMessage({
+        type: 'error',
+        text: `Add at least ${MIGRATION_NOTES_MIN_LENGTH} characters of migration context before submitting.`,
+      })
       return
     }
     migrationMutation.mutate({ channel: migrationChannel, notes: trimmedMigrationNotes })
@@ -576,7 +581,10 @@ export default function BillingSettingsPage() {
                     className="w-full min-h-[120px] resize-y px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
                     placeholder="List existing billing IDs, expected cutover date, and any blockers."
                   />
-                  <p className="text-xs text-gray-500 mt-1">Share enough detail for ops to verify your request.</p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Share enough detail for ops to verify your request. Minimum {MIGRATION_NOTES_MIN_LENGTH} characters. Current:{' '}
+                    <span data-testid="migration-notes-length">{trimmedMigrationNotes.length}</span>
+                  </p>
                 </div>
                 <div className="flex items-center justify-end gap-3 border-t border-gray-100 pt-4">
                   <button

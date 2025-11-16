@@ -4,6 +4,7 @@ module.exports = {
   setupFilesAfterEnv: ['<rootDir>/jest.setup.ts'],
   roots: ['<rootDir>/src'],
   testMatch: ['**/*.test.ts', '**/*.test.tsx'],
+  passWithNoTests: false,
   transform: {
     '^.+\\.(js|jsx|ts|tsx)$': [
       'babel-jest',

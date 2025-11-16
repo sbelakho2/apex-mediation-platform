@@ -1,7 +1,8 @@
 # Ad Platform Console Design Standards
 
-**Version:** 1.0  
-**Last Updated:** 2025-11-01  
+**Version:** 1.1  
+**Last Updated:** 2025-11-16  
+Tailwind config sync: 09ad78bad4d0 *(validated via `npm run design:verify`)*  
 **Theme:** Aurora Slate — Tailwind-powered modern console
 
 > Inspired by the TPS Co-Pilot "Neo-Industrial Nightfall" system while optimized for a data-dense SaaS console built with Next.js 14 and Tailwind CSS. This document is authoritative for all UI/UX decisions across the console.
@@ -294,7 +295,17 @@ Usage:
 1. Proposals to adjust palette, typography, or core components require design review.
 2. Update this document with change rationale, version bump, and date.
 3. Communicate updates in project README or release notes.
-4. Add new components to a central Storybook (planned) for visual QA.
+4. Document new/updated components in the Storybook library for visual QA (`npm run storybook`).
+5. Re-run `npm run design:verify` whenever `tailwind.config.ts` changes; commit the updated hash to this doc.
+
+---
+
+## 📕 Storybook Component Library
+
+- **Location:** `.storybook/` configuration + stories colocated with components (e.g., `src/components/ui/*.stories.tsx`).
+- **Run locally:** `npm run storybook` (dev server on http://localhost:6006). Build static docs via `npm run storybook:build`.
+- **Scope:** Visual + a11y regression coverage for navigation primitives, billing widgets, forms, and tokens. Add at least one story per reusable component (CopyButton, StatusBadge, Tooltip, etc.).
+- **Tailwind tokens:** Storybook imports `src/app/globals.css` so every change to `tailwind.config.ts` immediately surfaces in the component library; the `design:verify` script enforces that this document reflects the latest token hash.
 
 ---
 

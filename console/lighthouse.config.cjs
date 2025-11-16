@@ -1,17 +1,29 @@
 /**
- * Lighthouse budgets for Console critical routes (Billing & Transparency)
+ * Lighthouse budgets for Console critical routes (dashboard, fraud, billing, transparency)
  * Run with: npm run lighthouse (ensure server is running)
  */
+
+const CRITICAL_ROUTES = [
+  'http://localhost:3000/dashboard',
+  'http://localhost:3000/fraud',
+  'http://localhost:3000/placements',
+  'http://localhost:3000/billing/usage',
+  'http://localhost:3000/billing/invoices',
+  'http://localhost:3000/billing/settings',
+  'http://localhost:3000/transparency',
+  'http://localhost:3000/transparency/summary',
+]
+
 module.exports = {
   ci: {
     collect: {
-      url: [
-        'http://localhost:3000/billing/usage',
-        'http://localhost:3000/billing/invoices',
-        'http://localhost:3000/billing/settings',
-        'http://localhost:3000/transparency',
-      ],
+      url: CRITICAL_ROUTES,
       numberOfRuns: 1,
+      settings: {
+        preset: 'desktop',
+        throttlingMethod: 'devtools',
+        formFactor: 'desktop',
+      },
     },
     assert: {
       assertions: {

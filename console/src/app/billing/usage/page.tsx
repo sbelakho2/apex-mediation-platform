@@ -1,30 +1,16 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { getCurrentUsage, UsageData } from '@/lib/billing'
+import { useQuery } from '@tanstack/react-query'
+import { getCurrentUsage, type UsageData } from '@/lib/billing'
 import { AlertCircle, TrendingUp, Database, Zap, HardDrive } from 'lucide-react'
+import { formatNumber, formatCurrency, formatDate } from '@/lib/utils'
 
 export default function BillingUsagePage() {
-  const [usage, setUsage] = useState<UsageData | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    loadUsage()
-  }, [])
-
-  const loadUsage = async () => {
-    try {
-      setLoading(true)
-      setError(null)
-      const data = await getCurrentUsage()
-      setUsage(data)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load usage data')
-    } finally {
-      setLoading(false)
-    }
-  }
+  const { data: usage, isLoading: loading, error, refetch } = useQuery<UsageData>({
+    queryKey: ['billing', 'usage', 'current'],
+    queryFn: ({ signal }) => getCurrentUsage({ signal }),
+    staleTime: 60 * 1000,
+  })
 
   if (loading) {
     return (
@@ -51,9 +37,9 @@ export default function BillingUsagePage() {
             <AlertCircle className="h-5 w-5 text-red-600 mt-0.5" />
             <div>
               <h3 className="font-semibold text-red-900">Error Loading Usage</h3>
-              <p className="text-sm text-red-700 mt-1">{error}</p>
+              <p className="text-sm text-red-700 mt-1">{(error as Error).message}</p>
               <button
-                onClick={loadUsage}
+                onClick={() => void refetch()}
                 className="mt-3 text-sm font-medium text-red-700 hover:text-red-800"
               >
                 Try Again
@@ -76,10 +62,6 @@ export default function BillingUsagePage() {
       </div>
     )
   }
-
-  const formatNumber = (num: number) => num.toLocaleString()
-  const formatCurrency = (amount: number) =>
-    new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount)
 
   const calculatePercentage = (used: number, limit: number) => {
     if (limit === 0) return 0
@@ -105,8 +87,7 @@ export default function BillingUsagePage() {
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Usage & Billing</h1>
           <p className="text-gray-600 mt-2">
-            Current period: {new Date(usage.current_period.start).toLocaleDateString()} -{' '}
-            {new Date(usage.current_period.end).toLocaleDateString()}
+            Current period: {formatDate(usage.current_period.start)} - {formatDate(usage.current_period.end)}
           </p>
           <p className="text-sm text-gray-500 mt-1">
             Plan: <span className="font-semibold">{usage.subscription.plan_type}</span>

@@ -2,16 +2,20 @@
 const fs = require('fs')
 const path = require('path')
 
-const target = path.resolve(process.cwd(), '.next')
+const targets = ['.next', '.swc']
 
 function removeDir(dirPath) {
   if (!fs.existsSync(dirPath)) {
-    console.log('[clean-next-cache] No .next artifacts found. Nothing to do.')
-    return
+    return false
   }
 
   fs.rmSync(dirPath, { recursive: true, force: true })
   console.log(`[clean-next-cache] Removed ${dirPath}`)
+  return true
 }
 
-removeDir(target)
+const removedAny = targets.map((dir) => path.resolve(process.cwd(), dir)).some(removeDir)
+
+if (!removedAny) {
+  console.log('[clean-next-cache] No Next.js or SWC artifacts found. Nothing to do.')
+}

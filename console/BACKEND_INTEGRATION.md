@@ -12,10 +12,10 @@ The console uses environment variables to configure API connections. Create a `.
 # Disable mock API to use real backend
 NEXT_PUBLIC_USE_MOCK_API=false
 
-# Backend API URL (all services use same base URL)
+# Backend API URLs (services may run on different hosts/ports)
 NEXT_PUBLIC_API_URL=http://localhost:4000/api/v1
-NEXT_PUBLIC_FRAUD_API_URL=http://localhost:4000/api/v1
-NEXT_PUBLIC_ANALYTICS_API_URL=http://localhost:4000/api/v1
+NEXT_PUBLIC_FRAUD_API_URL=http://localhost:4200/api/v1
+NEXT_PUBLIC_ANALYTICS_API_URL=http://localhost:4300/api/v1
 
 # NextAuth configuration
 NEXTAUTH_URL=http://localhost:3000
@@ -28,7 +28,12 @@ NEXT_PUBLIC_ENABLE_FRAUD_DETECTION=true
 
 ### Backend Requirements
 
-The backend must be running on port 4000 with the following services:
+Each service can sit behind its own host/port combination. The example above matches a typical local stack where:
+- Core API traffic goes through `localhost:4000`
+- Fraud service is proxied on `localhost:4200`
+- Analytics service is available on `localhost:4300`
+
+Make sure your `.env.local` entries point to the correct hosts for your environment (Fly, Docker, or local dev). Supporting infrastructure usually includes:
 - PostgreSQL (port 5432)
 - ClickHouse (port 8123)
 - Redis (port 6379)
@@ -157,7 +162,7 @@ export const apiClient = axios.create({
 })
 
 export const fraudApiClient = axios.create({
-  baseURL: BASE_URL,
+The console uses environment variables to configure API connections. Create a `.env.local` file (adjust hosts per environment):
   timeout: 10000,
 })
 
@@ -166,9 +171,11 @@ export const analyticsApiClient = axios.create({
   timeout: 10000,
 })
 ```
-
-All clients have interceptors that:
-- Add JWT token from localStorage to request headers
+# Updated API URLs
+# These may point at different origins depending on where each service lives.
+NEXT_PUBLIC_API_URL=http://localhost:4000/api/v1
+NEXT_PUBLIC_FRAUD_API_URL=http://localhost:5000/api/v1
+NEXT_PUBLIC_ANALYTICS_API_URL=http://localhost:6000/api/v1
 - Handle 401 errors by redirecting to login
 - Format errors consistently
 
