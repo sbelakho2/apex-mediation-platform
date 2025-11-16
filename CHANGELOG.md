@@ -1,3 +1,165 @@
+Changelog — FIX-03 Console Productization & Data Integrity (2025-11-16)
+
+Summary
+- Documents the latest FIX-03 milestones focused on billing reliability, build hygiene, and session security across the console. The changes harden invoice delivery, keep `.next` artifacts out of builds, enforce App Router bundle budgets, finish the admin billing operations UI, and expand auth/session regression coverage.
+
+What changed (highlights)
+- Core console hardening (FIX-03-37 → FIX-03-67)
+  - FIX-03-37 — `console/src/app/admin/health/page.tsx` now uses TanStack Query with abortable fetches, server-provided RED thresholds, and an admin-only gate to avoid unbounded client polling.
+  - FIX-03-38 — `console/src/app/billing/layout.tsx` enforces billing-specific RBAC/feature checks before rendering nested tabs and auto-builds navigation labels from the routing config.
+  - FIX-03-39 — `console/src/app/fraud/page.tsx` scopes API calls to the active session, adds paginated/sortable alert tables, and centralizes severity colors in the Tailwind theme.
+  - FIX-03-40 — `console/src/app/login/page.tsx` removed credential logging, added password-manager-friendly inputs, wired CSRF protection, and exposes optional CAPTCHA/rate-limit hints without showing demo creds in production.
+  - FIX-03-41 — `console/src/components/dashboard/FraudWidget.tsx` reads fraud thresholds from backend configuration, guards against missing stats, and hides CTAs when the feature flag is disabled.
+  - FIX-03-42 — `console/src/components/ui/CopyButton.tsx` gracefully downgrades when Clipboard API is unavailable, reinstates tooltips, cleans up timers, and surfaces toasts for both success and fallback flows.
+  - FIX-03-43 — `console/src/lib/useFeatures.ts` respects `NEXT_PUBLIC_API_URL`, supports abort/cancellation, and exposes typed errors so callers can react (e.g., hide nav entries offline).
+  - FIX-03-44 — `console/src/llm/providers.ts` shed mock providers in favor of a lazy provider registry with concurrency/rate-limit tracking, keeping dead code out of the bundle.
+  - FIX-03-45 — `console/src/app/billing/invoices/[id]/page.tsx` now validates access, uses object-URL fallbacks with cleanup, and surfaces toast errors instead of blocking alerts.
+  - FIX-03-46 — `console/src/app/payouts/page.tsx` moved to React Query with cursor pagination, localized CSV exports, and authenticated scoping.
+  - FIX-03-47 — `console/src/app/settings/compliance/page.tsx` stores blocked regions/categories as structured arrays, encrypts locally cached consent strings, and debounces mutations.
+  - FIX-03-48 — `console/src/components/dashboard/DashboardCharts.tsx` memoizes query keys, standardizes timezone conversions, and adds explicit loading/error states.
+  - FIX-03-49 — `console/src/components/migration-studio/ImportWizard.test.tsx` now covers API connector modes, error states, keyboard dismissal, and mutation retries with fake timers reset per test.
+  - FIX-03-50 — `console/src/components/migration-studio/ImportWizard.tsx` was split into store + presentation layers, batches assignment persistence, adds clipboard fallbacks, and improves accessibility for focus traps.
+  - FIX-03-51 — `console/src/lib/api-client.ts` caches CSRF tokens, avoids `window.location` mutations during SSR, and emits structured unauthorized events instead of redirecting blindly.
+  - FIX-03-52 — `console/src/lib/csrf.ts` detects the correct base URL, raises typed `CsrfFetchError`s on failure, and works server-side without silently returning null.
+  - FIX-03-53 — `console/src/lib/rbac.ts` defaults to deny, includes HTTP metadata on thrown errors, and narrows role typing for improved safety.
+  - FIX-03-54 — `console/src/lib/useSession.ts` namespaces React Query keys per tenant/session, redirects gracefully on errors, and auto-invalidates on logout.
+  - FIX-03-55 — `console/src/llm/budget.ts` persists budgets per user in storage, enforces locking to prevent concurrent edits, and keeps currency math configurable.
+  - FIX-03-56 — `console/src/app/admin/sales-automation/page.tsx` now reads live automation metrics, paginates tables, and removes demo placeholders.
+  - FIX-03-57 — `console/src/app/api/auth/[...nextauth]/route.ts` supports GitHub OAuth (when env vars present), gates demo auth outside dev, and normalizes errors for the login UI.
+  - FIX-03-58 — `console/src/app/billing/invoices/page.tsx` relies on TanStack Query with AbortControllers, typed filter props, and localized currency/date formatting.
+  - FIX-03-59 — `console/src/app/dashboard/page.tsx` pulls real KPI/fraud/payout data with proper loading/error placeholders and normalized CSV export helpers.
+  - FIX-03-60 — `console/src/app/page.tsx` performs a server-side session check to redirect authenticated users straight to `/dashboard`.
+  - FIX-03-61 — `console/src/app/placements/new/page.tsx` consolidates format metadata, validates duplicates, previews slugs, and clarifies validation hints.
+  - FIX-03-62 — `console/src/app/settings/team/page.tsx` adds outside-click/escape handlers, confirmation dialogs for destructive actions, and dynamic role labels.
+  - FIX-03-63 — `console/src/app/transparency/auctions/page.test.tsx` now uses resilient selectors, verifies URL sync + Verify badge flows, and isolates clipboard mocks per test.
+  - FIX-03-64 — `console/src/components/Navigation.a11y.test.tsx` exercises keyboard focus order, reduced-motion settings, and aria-label coverage across feature-flag permutations.
+  - FIX-03-65 — `console/src/components/charts/RevenueCharts.tsx` localizes axes/values, handles percent vs decimal inputs, and exposes SSR-safe fallbacks.
+  - FIX-03-66 — `console/src/components/ui/Filters.tsx` sources status options from config, localizes labels, and enforces typed filter values.
+  - FIX-03-67 — `console/src/components/ui/StatusBadge.tsx` expands status support, aligns colors with Tailwind tokens, and exports a shared capitalization helper.
+- Billing downloads & cache safety (FIX-03-68)
+  - `console/src/lib/billing.ts`: Replaced the unbounded invoice PDF cache with a TTL-bound map (10-minute TTL, max 25 entries), revokes blob URLs, and falls back to data URLs when `URL.createObjectURL` is unavailable (SSR/tests). Cache now invalidates on logout or any 401 via `AUTH_UNAUTHORIZED_EVENT`.
+  - `console/src/lib/useSession.ts`: Logout clears the invoice cache so leaked blobs cannot persist across accounts.
+  - Tests (`console/src/lib/__tests__/billing.test.ts`, `billing.pdf.msw.test.ts`) cover TTL expiry, unauthorized purges, SSR fallbacks, and resend helper wiring.
+- Build hygiene & bundle budget enforcement (FIX-03-69 & FIX-03-70)
+  - Added `console/scripts/clean-next-cache.js` and wired `npm run clean` / `prebuild` so `.next/` artifacts are purged before fresh builds.
+  - New `scripts/check-prerender-leaks.js` runs post-build to scan prerender manifests for secrets.
+  - `console/scripts/check-bundle-size.js`: Refactored to understand App Router chunk naming, auto-runs `npm run build` when `.next` output is missing, and enforces budgets for both shared chunks and route segments. `npm run bundle-size` now produces actionable JSON reports.
+  - `console/package.json`: Added `clean`, `prebuild`, `postbuild`, and updated `bundle-size` script to invoke the new guard.
+- Admin billing operations UI (FIX-03-71)
+  - `console/src/app/admin/billing/page.tsx`: Page now requires an explicit reconciliation risk acknowledgement, reuses idempotency keys across double-clicks, exposes a working resend-invoice form with validation, and surfaces success/error states for both flows.
+  - Added Jest coverage at `console/src/app/admin/billing/__tests__/page.test.tsx` to verify acknowledgement gating and resend trimming/validation.
+- Session security regression coverage (FIX-03-72)
+  - `console/src/app/api/auth/__tests__/session.security.test.ts`: Exercises credentials authorize path (mock vs backend), ensures API failures log and return null, verifies CSRF header attachment/reuse for mutating API calls, and asserts that 401 responses emit the shared `apex:auth:unauthorized` event payload.
+- Layout shell guard for unauth routes (FIX-03-73)
+  - Introduced `console/src/app/AppShell.tsx`, a lightweight client wrapper that detects public routes (`/`, `/login`, `/auth/*`, `/public/*`) and skips mounting the expensive navigation tree when sessions aren’t required.
+  - `console/src/app/layout.tsx` now composes `AppShell` inside `Providers`, preventing session/feature queries from firing on the login page and other unauthenticated surfaces.
+  - Added coverage via `console/src/app/__tests__/AppShell.test.tsx` to ensure public routes bypass navigation while authenticated routes keep the shell.
+- Console navigation, breadcrumbs, and transparency polish (FIX-03-74 → FIX-03-78)
+  - FIX-03-74 — `console/src/app/providers.tsx` now hydrates TanStack Query caches with `HydrationBoundary`, bootstraps CSRF tokens once per session, and reuses a memoized QueryClient to prevent duplicate prefetches during fast refresh.
+  - FIX-03-75 — `console/src/app/settings/page.tsx` performs a server-side session + feature check and redirects unauthorized tenants away from settings, eliminating client-only guards that previously flashed unauthorized UI.
+  - FIX-03-76 — `console/src/app/transparency/auctions/page.a11y.test.tsx` re-enables all axe rules, seeds 25 unique auctions to keep pagination active, and adds keyboard-traversal coverage that tabs through filters → row actions → pagination without getting trapped inside the table.
+  - FIX-03-77 — `console/src/components/Breadcrumbs.tsx` localizes common segments, masks identifiers with context-aware labels, exports `buildBreadcrumbsFromPath` for reuse, and ships Jest coverage at `console/src/components/__tests__/Breadcrumbs.test.tsx`; translations live in `console/src/i18n/messages/en.json`.
+  - FIX-03-78 — `console/src/components/Navigation.tsx` consumes a declarative blueprint, refreshes feature flags on focus/interval, renders skeleton placeholders while data loads, and is exercised by both `Navigation.a11y.test.tsx` and the new `Navigation.feature.test.tsx` to prove flag-driven rendering and reduced-motion focus treatment.
+- Dashboard metrics, clipboard, i18n, billing cache & query hook polish (FIX-03-79 → FIX-03-83)
+  - FIX-03-79 — `console/src/components/dashboard/MetricCard.tsx` now normalizes icon sizing/aria labels, supports custom change-formatters, and shares the skeleton via `MetricCardSkeleton`; covered by `console/src/components/dashboard/__tests__/MetricCard.test.tsx`.
+  - FIX-03-80 — `console/src/components/ui/CopyButton.tsx` prioritizes the injectable clipboard helper, honors explicit secure-context overrides even in tests, and clarifies tooltip/error states; `console/src/components/ui/__tests__/CopyButton.test.tsx` isolates insecure-context fallbacks, error tooltips, and timer cleanup via fake timers.
+  - FIX-03-81 — `console/src/i18n/index.ts` exposes locale registration + warnings for missing translations, configurable currency formatters, and deterministic locale lookups; regression coverage lives in `console/src/i18n/index.test.ts`.
+  - FIX-03-82 — `console/src/lib/__tests__/billing.test.ts` introduces a typed `buildAxiosResponse` helper, exercises cache eviction/revalidation/concurrency paths, and ensures mocked object URLs are always restored between tests.
+  - FIX-03-83 — `console/src/lib/hooks/useQueryState.ts` guards DOM access (no SSR crashes), renames the multi-param hook to `useQueryParamsState` to avoid name collisions, memoizes returned objects by the serialized query string, and documents/validates behavior in `console/src/lib/__tests__/hooks.test.ts`.
+- Notification delivery, navigation gating, pagination & guardrail polish (FIX-03-89 → FIX-03-94)
+  - FIX-03-89 — `console/src/app/settings/notifications/page.tsx` now uses React Hook Form field arrays for arbitrary webhook endpoints, validates URLs inline, persists changes immediately through `settingsApi`, and keeps helper copy localized so teams can mirror Slack/email delivery without leaving the page.
+  - FIX-03-90 — `console/src/components/Navigation.feature.test.tsx` was rewritten around a single helper that feeds feature flags + roles, then asserts that transparency, migration studio, billing, and admin-only links appear/disappear as expected (including reduced-motion focus states).
+  - FIX-03-91 — `console/src/components/ui/Pagination.tsx` adds first/last controls, a direct page input with clamped state, and better aria announcements; `console/src/components/ui/__tests__/Pagination.test.tsx` now covers keyboard entry, button disabling, and callback sequencing for both bounded and overflow values.
+  - FIX-03-92 — `console/src/lib/__tests__/hooks.test.ts` exercises the `useUrlQueryParams` helper end-to-end (serialization, defaulting, effect cleanup) so search/filter surfaces that depend on query strings stay covered.
+  - FIX-03-93 — `console/src/lib/api.ts` centralizes pagination defaults, unwraps `migrationApi` responses into typed payloads, and guards CSV downloads with size/content-type validation; the `console/src/app/migration-studio/[experimentId]/page.tsx` cards now run currency_cents values through the `fromMinorUnits` formatter so `$1,250.00`-style totals render correctly and the same logic powers chart axis ticks.
+  - FIX-03-94 — `console/src/app/403/page.tsx` ships a branded forbidden experience with countdown-based redirect, support CTAs, and focusable actions so RBAC denials aren’t dead ends.
+  - Supporting polish — `console/src/i18n/messages/en.json` picked up the shared `billing.filters.*` and `billing.status.*` strings so new dropdowns & badges stay localized without console warnings.
+- Adapters, billing, guardrails & placements workflow polish (FIX-03-95 → FIX-03-100)
+  - FIX-03-95 — `console/src/app/adapters/page.tsx` now renders inline placement lookup errors with actionable recovery copy, swaps blank rows for descriptive placeholders, and prefetches adapter routes when hovering the table so navigation feels instant even on cold caches.
+  - FIX-03-96 — `console/src/app/billing/settings/page.tsx` validates the billing email inline, persists toast messages through reloads, batches preference toggles, and hides the form entirely behind a session/feature guard so finance-only surfaces never flash unauthenticated UI.
+  - FIX-03-97 — `console/src/app/error.tsx` captures client errors, posts them to `/api/logs/client-error`, and upgrades the full-page error treatment with branded copy/actions so telemetry stays complete when React surfaces fatal boundaries.
+  - FIX-03-98 — `console/src/app/migration-studio/[experimentId]/page.tsx` keeps guardrail inputs in `{input, value}` pairs for precision, debounces copy/share interactions through a resilient clipboard fallback, adds aria-live feedback for download/share flows, and ensures guardrail mutations invalidate experiment caches consistently.
+  - FIX-03-99 — `console/src/app/migration-studio/page.tsx` debounces guardrail evaluations per experiment with a timed cooldown, surfaces stacked status banners, extracts a reusable `ExperimentCard`, and wires pause/activate mutations with optimistic refetches; `console/src/i18n/messages/en.json` now includes the guardrail cooldown message so the new hint stays localized.
+  - FIX-03-100 — `console/src/app/placements/page.tsx` now aggregates paginated responses with `useInfiniteQuery`, fixes `getNextPageParam`, auto-fetches the next page via an intersection observer, builds status filter options from live placement data, and keeps search/filtering client-side with resilient skeleton + empty states.
+  - Supporting hygiene — `console/src/app/transparency/auctions/page.tsx` and its test suite dropped legacy `act()` wrappers by leaning on React Query patterns, eliminating the console spam that previously obscured real warnings.
+
+- Transparency verification UX & sampling polish (FIX-03-101 → FIX-03-105)
+  - FIX-03-101 — `console/src/app/transparency/auctions/[auction_id]/page.tsx` now guards fetches with AbortController, only requests verification when an integrity signature exists, surfaces a retry CTA, truncates oversized canonical payload previews (with copy/download helpers), and handles verification failures without blocking the page.
+  - FIX-03-102 — `console/src/app/transparency/auctions/page.tsx` prefetches sanitized filters server-side and hands off to a new `AuctionsClient` + `filterUtils` pair that debounces/validates inputs, syncs query params, keeps TanStack Query caches alive via `keepPreviousData`, improves pagination/empty states, and exercises the flow in `page.test.tsx`.
+  - FIX-03-103 — `console/src/app/transparency/summary/page.tsx` now uses React Query with abortable requests, exposes refresh/retry controls, adds skeleton + error placeholders, and shows a localized "last updated" timestamp sourced from `dataUpdatedAt`.
+  - FIX-03-104 — `console/src/components/ui/Tooltip.tsx` was rebuilt on Floating UI with portals, autoUpdate positioning, arrow alignment, timer cleanup, and SSR guards; `console/package.json` now declares `@floating-ui/react-dom` to support the component.
+  - FIX-03-105 — `console/src/components/ui/VerifyBadge.tsx` resets state when auction IDs change, prevents duplicate requests, adds retryable error badges + richer tooltips, and expands coverage in `console/src/components/ui/__tests__/VerifyBadge.test.tsx` for tooltip content, manual retries, compact mode, and spinner states.
+  - FIX-03-106 — `console/src/lib/hooks.ts` renames the lightweight query helper to `useUrlQueryParams`, de-dupes router pushes, exposes `history`/`scroll` controls, and ensures `useLoadingState` timers are cleared on unmount; `console/src/lib/__tests__/hooks.test.ts` now covers the new behavior.
+  - FIX-03-107 — `console/src/lib/transparency.ts` introduces `TransparencyApiError`, centralized logging, normalized Axios errors, and a `createCancellableRequest` helper so auctions/verification flows can stream or abort large payloads safely.
+  - FIX-03-108 — `console/src/lib/useAdminGate.ts` adds SSR guards, deduplicated redirects, opt-out handling, and targeted coverage in `console/src/lib/__tests__/useAdminGate.test.tsx` to prove unauthenticated + non-admin flows only redirect once.
+  - FIX-03-109 — `console/.env.local.example` now lists the mock API toggle, consent defaults, transparency refresh/migration flags, and the admin-guard switch so local devs don’t have to cross-reference other docs.
+  - FIX-03-110 — `console/src/lib/featureFlags.ts(+tests)` centralizes env-driven booleans so `useAdminGate`, Transparency Auctions/Summary, and the new Billing Migration Assistant UI can actually honor `NEXT_PUBLIC_ENABLE_TRANSPARENCY_REFRESH`, `NEXT_PUBLIC_ENABLE_BILLING_MIGRATION`, and `NEXT_PUBLIC_REQUIRE_ADMIN_GUARD`. `console/README.md` now documents those behaviors (plus Fly.io deployment guidance) to keep docs aligned with shipped surfaces.
+
+How to verify (local)
+```bash
+# VerifyBadge badge UX, URL hooks, and admin guard redirects
+npm run test --workspace console -- --runTestsByPath \
+  src/components/ui/__tests__/VerifyBadge.test.tsx \
+  src/lib/__tests__/hooks.test.ts \
+  src/lib/__tests__/useAdminGate.test.tsx
+
+# Feature flag wiring for transparency refresh + billing migration assistant
+npm run test --workspace console -- --runTestsByPath \
+  src/lib/__tests__/featureFlags.test.ts \
+  src/app/transparency/auctions/page.test.tsx \
+  src/app/billing/settings/page.a11y.test.tsx
+
+# Dashboard metrics, clipboard, i18n, billing cache, and query hooks
+npm run test --workspace console -- --runTestsByPath \
+  src/components/dashboard/__tests__/MetricCard.test.tsx \
+  src/components/ui/__tests__/CopyButton.test.tsx \
+  src/i18n/index.test.ts \
+  src/lib/__tests__/billing.test.ts \
+  src/lib/__tests__/hooks.test.ts
+
+# Billing utilities and admin billing UI
+npm run test --workspace console -- --runTestsByPath \
+  src/lib/__tests__/billing.test.ts \
+  src/lib/__tests__/billing.pdf.msw.test.ts \
+  src/app/admin/billing/__tests__/page.test.tsx
+
+# Session security and auth regressions
+npm run test --workspace console -- --runTestsByPath \
+  src/app/api/auth/__tests__/session.security.test.ts
+
+# Layout shell behavior
+npm run test --workspace console -- --runTestsByPath \
+  src/app/__tests__/AppShell.test.tsx
+
+# Navigation, breadcrumbs, and transparency accessibility
+npm run test --workspace console -- --runTestsByPath \
+  src/components/__tests__/Breadcrumbs.test.tsx \
+  src/components/Navigation.a11y.test.tsx \
+  src/components/Navigation.feature.test.tsx \
+  src/app/transparency/auctions/page.a11y.test.tsx
+
+# Notifications, navigation, pagination, migration studio & 403 UX
+npm run test --workspace console -- --runTestsByPath \
+  src/components/Navigation.feature.test.tsx \
+  src/components/ui/__tests__/Pagination.test.tsx \
+  src/lib/__tests__/hooks.test.ts \
+  src/app/migration-studio/[experimentId]/page.test.tsx
+
+# Transparency auctions + VerifyBadge suites
+npm run test --workspace console -- --runTestsByPath \
+  src/app/transparency/auctions/page.test.tsx \
+  src/components/ui/__tests__/VerifyBadge.test.tsx
+
+# Bundle budget guard (auto-builds if needed)
+npm run bundle-size --workspace console
+```
+
+Operational notes
+- Always run `npm run clean --workspace console` (or rely on the `prebuild` hook) before comparing bundle stats to avoid stale `.next` output.
+- The invoice PDF cache now reacts to logout and global unauthorized events; ensure any future auth flows continue dispatching `apex:auth:unauthorized` on 401s so caches stay consistent.
+
+---
+
 Changelog — FIX-06 Data & ML Pipeline Hardening (2025-11-16)
 
 Summary

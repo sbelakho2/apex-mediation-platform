@@ -1,7 +1,7 @@
 "use client"
 
 import Link from 'next/link'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { AlertTriangle, CheckCircle2, Info, PauseCircle } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
@@ -39,6 +39,7 @@ const statusBadgeStyles: Record<MigrationExperiment['status'], string> = {
 }
 
 const EXPERIMENT_SKELETON_KEYS = ['experiment-skeleton-1', 'experiment-skeleton-2']
+const GUARDRAIL_EVALUATE_COOLDOWN_MS = 4000
 
 export default function MigrationStudioPage() {
   const [selectedPlacement, setSelectedPlacement] = useState<string>('')
@@ -56,8 +57,8 @@ export default function MigrationStudioPage() {
     queryKey: ['migration-experiments', selectedPlacement],
     enabled: Boolean(selectedPlacement),
     queryFn: async () => {
-      const { data } = await migrationApi.listExperiments({ placementId: selectedPlacement })
-      return (data?.data ?? []) as MigrationExperiment[]
+      if (!selectedPlacement) return []
+      return migrationApi.listExperiments({ placementId: selectedPlacement })
     },
   })
 
@@ -70,46 +71,41 @@ export default function MigrationStudioPage() {
   }, [placements, selectedPlacement])
 
   const currentExperiments = useMemo(() => experimentsQuery.data ?? [], [experimentsQuery.data])
-  const activeExperiment = currentExperiments.find((experiment) => experiment.status === 'active')
-
   const banners = useMemo((): Banner[] => {
     if (!selectedPlacement) return []
 
-    const active = currentExperiments.find((experiment) => experiment.status === 'active')
-    const paused = currentExperiments.find((experiment) => experiment.status === 'paused')
-    const draft = currentExperiments.find((experiment) => experiment.status === 'draft')
+    const activeExperiments = currentExperiments.filter((experiment) => experiment.status === 'active')
+    const pausedExperiments = currentExperiments.filter((experiment) => experiment.status === 'paused')
+    const draftExperiments = currentExperiments.filter((experiment) => experiment.status === 'draft')
 
-    const activeBanner: Banner | null = active
-      ? {
-          id: `active-${active.id}`,
-          tone: 'success',
-          title: t('migrationStudio.status.active.title', {
-            mirrorPercent: active.mirror_percent,
-            experiment: active.name,
-          }),
-          description: t('migrationStudio.status.active.description', {
-            experiment: active.name,
-          }),
-        }
-      : null
+    const activeBanners: Banner[] = activeExperiments.map((experiment) => ({
+      id: `active-${experiment.id}`,
+      tone: 'success',
+      title: t('migrationStudio.status.active.title', {
+        mirrorPercent: experiment.mirror_percent,
+        experiment: experiment.name,
+      }),
+      description: t('migrationStudio.status.active.description', {
+        experiment: experiment.name,
+      }),
+    }))
 
-    const pausedBanner: Banner | null = paused
-      ? {
-          id: `paused-${paused.id}`,
-          tone: 'warning',
-          title: t('migrationStudio.status.paused.title'),
-          description: t('migrationStudio.status.paused.description'),
-        }
-      : null
+    const pausedBanners: Banner[] = pausedExperiments.map((experiment) => ({
+      id: `paused-${experiment.id}`,
+      tone: 'warning',
+      title: t('migrationStudio.status.paused.title'),
+      description: t('migrationStudio.status.paused.description'),
+    }))
 
-    const draftBanner: Banner | null = !active && !paused && draft
-      ? {
-          id: `draft-${draft.id}`,
+    const shouldShowDraft = activeExperiments.length === 0 && pausedExperiments.length === 0
+    const draftBanners: Banner[] = shouldShowDraft
+      ? draftExperiments.map((experiment) => ({
+          id: `draft-${experiment.id}`,
           tone: 'info',
           title: t('migrationStudio.status.draft.title'),
           description: t('migrationStudio.status.draft.description'),
-        }
-      : null
+        }))
+      : []
 
     const defaultBanner: Banner = {
       id: 'default',
@@ -118,9 +114,8 @@ export default function MigrationStudioPage() {
       description: t('migrationStudio.status.none.description'),
     }
 
-    return [activeBanner, pausedBanner, draftBanner]
-      .filter((banner): banner is Banner => Boolean(banner))
-      .concat(activeBanner || pausedBanner || draftBanner ? [] : [defaultBanner])
+    const computedBanners = [...activeBanners, ...pausedBanners, ...draftBanners]
+    return computedBanners.length > 0 ? computedBanners : [defaultBanner]
   }, [currentExperiments, selectedPlacement])
 
   const guardrailSummary = (experiment: MigrationExperiment) => {
@@ -147,27 +142,77 @@ export default function MigrationStudioPage() {
   const [guardrailResult, setGuardrailResult] = useState<
     { experimentId: string; shouldPause: boolean; violations: string[] } | null
   >(null)
+  const guardrailCooldownTimers = useRef<Record<string, number>>({})
+  const [guardrailCooldowns, setGuardrailCooldowns] = useState<Record<string, boolean>>({})
 
   const guardrailMutation = useMutation({
-    mutationFn: async () => {
-      if (!activeExperiment) return null
-      const result = await migrationApi.evaluateGuardrails(activeExperiment.id)
+    mutationFn: async (experimentId: string) => {
+      const result = await migrationApi.evaluateGuardrails(experimentId)
       return {
-        experimentId: activeExperiment.id,
+        experimentId,
         ...result,
       }
     },
     onSuccess: (result) => {
-      if (result) {
-        if (result.shouldPause) {
-          void experimentsQuery.refetch()
-        }
-        setGuardrailResult(result)
-      } else {
+      if (!result) {
         setGuardrailResult(null)
+        return
       }
+
+      if (result.shouldPause) {
+        void experimentsQuery.refetch()
+      }
+      setGuardrailResult(result)
     },
   })
+
+  const clearGuardrailCooldown = (experimentId: string) => {
+    setGuardrailCooldowns((current) => {
+      if (!current[experimentId]) return current
+      const { [experimentId]: _omitted, ...rest } = current
+      return rest
+    })
+    if (typeof window !== 'undefined') {
+      const timerId = guardrailCooldownTimers.current[experimentId]
+      if (timerId) {
+        window.clearTimeout(timerId)
+        delete guardrailCooldownTimers.current[experimentId]
+      }
+    }
+  }
+
+  const startGuardrailCooldown = (experimentId: string) => {
+    if (typeof window === 'undefined') return
+    const timerId = window.setTimeout(() => {
+      clearGuardrailCooldown(experimentId)
+    }, GUARDRAIL_EVALUATE_COOLDOWN_MS)
+    guardrailCooldownTimers.current[experimentId] = timerId
+    setGuardrailCooldowns((current) => ({
+      ...current,
+      [experimentId]: true,
+    }))
+  }
+
+  const handleEvaluateGuardrails = (experimentId: string) => {
+    if (guardrailCooldowns[experimentId] || guardrailMutation.isPending) {
+      return
+    }
+    startGuardrailCooldown(experimentId)
+    guardrailMutation.mutate(experimentId, {
+      onError: () => {
+        clearGuardrailCooldown(experimentId)
+      },
+    })
+  }
+
+  useEffect(() => {
+    return () => {
+      if (typeof window === 'undefined') return
+      Object.values(guardrailCooldownTimers.current).forEach((timerId) => {
+        window.clearTimeout(timerId)
+      })
+    }
+  }, [])
 
   const activateMutation = useMutation({
     mutationFn: async ({
@@ -192,13 +237,14 @@ export default function MigrationStudioPage() {
   })
 
   const pauseMutation = useMutation({
-    mutationFn: async () => {
-      if (!activeExperiment) return
-      await migrationApi.pauseExperiment(activeExperiment.id, t('migrationStudio.status.paused.title'))
+    mutationFn: async (experimentId: string) => {
+      await migrationApi.pauseExperiment(experimentId, t('migrationStudio.status.paused.title'))
     },
-    onSuccess: () => {
+    onSuccess: (_, experimentId) => {
       void experimentsQuery.refetch()
-      setGuardrailResult(null)
+      setGuardrailResult((current) =>
+        current && current.experimentId === experimentId ? null : current
+      )
     },
   })
 
@@ -305,140 +351,38 @@ export default function MigrationStudioPage() {
           ) : (
             <div className="space-y-4">
               {currentExperiments.map((experiment) => {
-                const badgeClass = statusBadgeStyles[experiment.status]
                 const guardrailItems = guardrailSummary(experiment)
-                const isActive = experiment.status === 'active'
-                const isPaused = experiment.status === 'paused'
-                const isDraft = experiment.status === 'draft'
-                const mirrorControlPercent = Math.min(
-                  20,
-                  Math.max(1, experiment.mirror_percent || 5)
-                )
+                const mirrorControlPercent = Math.min(20, Math.max(1, experiment.mirror_percent || 5))
+                const guardrailResultForExperiment =
+                  guardrailResult && guardrailResult.experimentId === experiment.id ? guardrailResult : null
+
                 return (
-                  <article key={experiment.id} className="card">
-                    <div className="flex flex-wrap items-start justify-between gap-4">
-                      <div>
-                        <div className="flex items-center gap-3">
-                          <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${badgeClass}`}>
-                            {experiment.status}
-                          </span>
-                          <span className="text-xs uppercase tracking-wider text-gray-400">
-                            {t('migrationStudio.experiments.mirrorPercent')}: {experiment.mirror_percent}%
-                          </span>
-                        </div>
-                        <h3 className="mt-3 text-lg font-semibold text-gray-900">{experiment.name}</h3>
-                        {experiment.description && (
-                          <p className="mt-2 text-sm text-gray-600 max-w-2xl">{experiment.description}</p>
-                        )}
-                      </div>
-                      <div className="text-right text-sm text-gray-500">
-                        <p>{t('migrationStudio.experiments.statusLabel')}: {experiment.status}</p>
-                        <p className="mt-1">
-                          {t('migrationStudio.experiments.updated', {
-                            date: formatDate(experiment.updated_at),
-                          })}
-                        </p>
-                        {experiment.mode && (
-                          <p className="mt-1 text-xs text-gray-400 uppercase tracking-wide">
-                            {t('migrationStudio.messages.mode', { mode: experiment.mode })}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                    {guardrailItems.length > 0 && (
-                      <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-gray-600">
-                        <PauseCircle className="h-4 w-4 text-amber-500" aria-hidden={true} />
-                        <span className="font-medium uppercase tracking-wide text-gray-500">
-                          {t('migrationStudio.experiments.guardrails')}:
-                        </span>
-                        {guardrailItems.map((item) => (
-                          <span key={item} className="inline-flex items-center rounded-full bg-gray-100 px-3 py-1">
-                            {item}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                    {(isActive || isPaused || isDraft) && (
-                      <div className="mt-4 flex flex-wrap items-center gap-3">
-                        {isActive && (
-                          <button
-                            type="button"
-                            className="btn btn-outline flex items-center gap-2"
-                            onClick={() => guardrailMutation.mutate()}
-                            disabled={guardrailMutation.isPending}
-                          >
-                            {guardrailMutation.isPending && (
-                              <Spinner size="sm" label={t('migrationStudio.actions.evaluateInFlight')} />
-                            )}
-                            {t('migrationStudio.actions.evaluate')}
-                          </button>
-                        )}
-                        {(isDraft || isPaused) && (
-                          <button
-                            type="button"
-                            className="btn btn-primary"
-                            onClick={() =>
-                              activateMutation.mutate({
-                                experimentId: experiment.id,
-                                mirrorPercent: mirrorControlPercent,
-                              })
-                            }
-                            disabled={activateMutation.isPending}
-                          >
-                            {activateMutation.isPending ? (
-                              <Spinner size="sm" label={t('migrationStudio.import.actions.loading')} />
-                            ) : isPaused ? (
-                              t('migrationStudio.actions.resume')
-                            ) : (
-                              t('migrationStudio.actions.activate')
-                            )}
-                          </button>
-                        )}
-                        {isActive && (
-                          <button
-                            type="button"
-                            className="btn btn-secondary"
-                            onClick={() => pauseMutation.mutate()}
-                            disabled={pauseMutation.isPending}
-                          >
-                            {pauseMutation.isPending ? (
-                              <Spinner size="sm" label={t('migrationStudio.import.actions.loading')} />
-                            ) : (
-                              t('migrationStudio.actions.pause')
-                            )}
-                          </button>
-                        )}
-                      </div>
-                    )}
-                    {guardrailResult && guardrailResult.experimentId === experiment.id && (
-                      <div className={`mt-4 rounded-lg border px-4 py-3 text-sm ${
-                        guardrailResult.shouldPause
-                          ? 'border-amber-200 bg-amber-50 text-amber-800'
-                          : 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                      }`}>
-                        <p className="font-medium">
-                          {guardrailResult.shouldPause
-                            ? t('migrationStudio.messages.guardrailPaused')
-                            : t('migrationStudio.messages.guardrailPassed')}
-                        </p>
-                        {guardrailResult.violations.length > 0 && (
-                          <ul className="mt-2 list-disc pl-5 text-xs">
-                            {guardrailResult.violations.map((violation) => (
-                              <li key={violation}>{violation}</li>
-                            ))}
-                          </ul>
-                        )}
-                      </div>
-                    )}
-                    <div className="mt-4">
-                      <Link
-                        href={`/migration-studio/${experiment.id}`}
-                        className="btn btn-ghost text-sm"
-                      >
-                        {t('migrationStudio.experiments.viewDetails')}
-                      </Link>
-                    </div>
-                  </article>
+                  <ExperimentCard
+                    key={experiment.id}
+                    experiment={experiment}
+                    guardrailItems={guardrailItems}
+                    badgeClass={statusBadgeStyles[experiment.status]}
+                    guardrailResult={guardrailResultForExperiment}
+                    onEvaluate={() => handleEvaluateGuardrails(experiment.id)}
+                    onActivate={() =>
+                      activateMutation.mutate({
+                        experimentId: experiment.id,
+                        mirrorPercent: mirrorControlPercent,
+                      })
+                    }
+                    onPause={() => pauseMutation.mutate(experiment.id)}
+                    isEvaluating={
+                      guardrailMutation.isPending && guardrailMutation.variables === experiment.id
+                    }
+                    isActivatePending={
+                      activateMutation.isPending &&
+                      activateMutation.variables?.experimentId === experiment.id
+                    }
+                    isPausePending={
+                      pauseMutation.isPending && pauseMutation.variables === experiment.id
+                    }
+                    isCooldownActive={guardrailCooldowns[experiment.id] ?? false}
+                  />
                 )
               })}
             </div>
@@ -486,5 +430,168 @@ function ExperimentsSkeleton() {
         </div>
       ))}
     </div>
+  )
+}
+
+type ExperimentCardProps = {
+  experiment: MigrationExperiment
+  guardrailItems: string[]
+  badgeClass: string
+  guardrailResult: { shouldPause: boolean; violations: string[] } | null
+  onEvaluate: () => void
+  onActivate: () => void
+  onPause: () => void
+  isEvaluating: boolean
+  isActivatePending: boolean
+  isPausePending: boolean
+  isCooldownActive: boolean
+}
+
+function ExperimentCard({
+  experiment,
+  guardrailItems,
+  badgeClass,
+  guardrailResult,
+  onEvaluate,
+  onActivate,
+  onPause,
+  isEvaluating,
+  isActivatePending,
+  isPausePending,
+  isCooldownActive,
+}: ExperimentCardProps) {
+  const isActive = experiment.status === 'active'
+  const isPaused = experiment.status === 'paused'
+  const isDraft = experiment.status === 'draft'
+  const evaluateDisabled = isEvaluating || isCooldownActive
+
+  return (
+    <article className="card">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-3">
+            <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${badgeClass}`}>
+              {experiment.status}
+            </span>
+            <span className="text-xs uppercase tracking-wider text-gray-400">
+              {t('migrationStudio.experiments.mirrorPercent')}: {experiment.mirror_percent}%
+            </span>
+          </div>
+          <h3 className="mt-3 text-lg font-semibold text-gray-900">{experiment.name}</h3>
+          {experiment.description && (
+            <p className="mt-2 text-sm text-gray-600 max-w-2xl">{experiment.description}</p>
+          )}
+        </div>
+        <div className="text-right text-sm text-gray-500">
+          <p>
+            {t('migrationStudio.experiments.statusLabel')}: {experiment.status}
+          </p>
+          <p className="mt-1">
+            {t('migrationStudio.experiments.updated', {
+              date: formatDate(experiment.updated_at),
+            })}
+          </p>
+          {experiment.mode && (
+            <p className="mt-1 text-xs text-gray-400 uppercase tracking-wide">
+              {t('migrationStudio.messages.mode', { mode: experiment.mode })}
+            </p>
+          )}
+        </div>
+      </div>
+      {guardrailItems.length > 0 && (
+        <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-gray-600">
+          <PauseCircle className="h-4 w-4 text-amber-500" aria-hidden={true} />
+          <span className="font-medium uppercase tracking-wide text-gray-500">
+            {t('migrationStudio.experiments.guardrails')}:
+          </span>
+          {guardrailItems.map((item) => (
+            <span key={item} className="inline-flex items-center rounded-full bg-gray-100 px-3 py-1">
+              {item}
+            </span>
+          ))}
+        </div>
+      )}
+      {(isActive || isPaused || isDraft) && (
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          {isActive && (
+            <div className="flex flex-col gap-1">
+              <button
+                type="button"
+                className="btn btn-outline flex items-center gap-2"
+                onClick={onEvaluate}
+                disabled={evaluateDisabled}
+              >
+                {isEvaluating && (
+                  <Spinner size="sm" label={t('migrationStudio.actions.evaluateInFlight')} />
+                )}
+                {t('migrationStudio.actions.evaluate')}
+              </button>
+              {isCooldownActive && !isEvaluating ? (
+                <span className="text-xs text-gray-500" role="status" aria-live="polite">
+                  {t('migrationStudio.messages.guardrailCooldown')}
+                </span>
+              ) : null}
+            </div>
+          )}
+          {(isDraft || isPaused) && (
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={onActivate}
+              disabled={isActivatePending}
+            >
+              {isActivatePending ? (
+                <Spinner size="sm" label={t('migrationStudio.import.actions.loading')} />
+              ) : isPaused ? (
+                t('migrationStudio.actions.resume')
+              ) : (
+                t('migrationStudio.actions.activate')
+              )}
+            </button>
+          )}
+          {isActive && (
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={onPause}
+              disabled={isPausePending}
+            >
+              {isPausePending ? (
+                <Spinner size="sm" label={t('migrationStudio.import.actions.loading')} />
+              ) : (
+                t('migrationStudio.actions.pause')
+              )}
+            </button>
+          )}
+        </div>
+      )}
+      {guardrailResult && (
+        <div
+          className={`mt-4 rounded-lg border px-4 py-3 text-sm ${
+            guardrailResult.shouldPause
+              ? 'border-amber-200 bg-amber-50 text-amber-800'
+              : 'border-emerald-200 bg-emerald-50 text-emerald-700'
+          }`}
+        >
+          <p className="font-medium">
+            {guardrailResult.shouldPause
+              ? t('migrationStudio.messages.guardrailPaused')
+              : t('migrationStudio.messages.guardrailPassed')}
+          </p>
+          {guardrailResult.violations.length > 0 && (
+            <ul className="mt-2 list-disc pl-5 text-xs">
+              {guardrailResult.violations.map((violation) => (
+                <li key={violation}>{violation}</li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+      <div className="mt-4">
+        <Link href={`/migration-studio/${experiment.id}`} className="btn btn-ghost text-sm">
+          {t('migrationStudio.experiments.viewDetails')}
+        </Link>
+      </div>
+    </article>
   )
 }

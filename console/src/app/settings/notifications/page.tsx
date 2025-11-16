@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { useForm } from 'react-hook-form'
+import { useForm, useFieldArray } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation, useQuery } from '@tanstack/react-query'
@@ -10,21 +10,79 @@ import { settingsApi } from '@/lib/api'
 import { ArrowLeft, BellRing, Save, Plus, Trash2, AlertCircle, CheckCircle } from 'lucide-react'
 import type { NotificationSettings, WebhookEndpoint } from '@/types'
 
-const notificationSchema = z.object({
-  emailEnabled: z.boolean(),
-  emailRecipients: z.string(),
-  emailEvents: z.array(z.string()),
-  slackEnabled: z.boolean(),
-  slackWebhook: z.string().url('Enter a valid Slack webhook URL').optional().or(z.literal('')),
-  slackChannel: z.string().optional().or(z.literal('')),
-  slackEvents: z.array(z.string()),
-  webhooksEnabled: z.boolean(),
-  digestEnabled: z.boolean(),
-  digestFrequency: z.enum(['daily', 'weekly', 'monthly']),
-  digestRecipients: z.string(),
-})
+const emailListToArray = (value: string) => value.split(',').map((email) => email.trim()).filter(Boolean)
+
+const notificationSchema = z
+  .object({
+    emailEnabled: z.boolean(),
+    emailRecipients: z.string(),
+    emailEvents: z.array(z.string()),
+    slackEnabled: z.boolean(),
+    slackWebhook: z.string().url('Enter a valid Slack webhook URL').optional().or(z.literal('')),
+    slackChannel: z.string().optional().or(z.literal('')),
+    slackEvents: z.array(z.string()),
+    webhooksEnabled: z.boolean(),
+    webhookEndpoints: z
+      .array(
+        z.object({
+          id: z.string(),
+          url: z.string().url('Enter a valid webhook URL'),
+          events: z.array(z.string()).min(1, 'Select at least one event'),
+          secret: z.string().optional(),
+          active: z.boolean().optional(),
+          createdAt: z.string().optional(),
+        })
+      )
+      .default([]),
+    digestEnabled: z.boolean(),
+    digestFrequency: z.enum(['daily', 'weekly', 'monthly']),
+    digestRecipients: z.string(),
+  })
+  .superRefine((values, ctx) => {
+    if (values.emailEnabled && emailListToArray(values.emailRecipients).length === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Provide at least one email recipient.',
+        path: ['emailRecipients'],
+      })
+    }
+
+    if (values.digestEnabled && emailListToArray(values.digestRecipients).length === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Provide at least one digest recipient.',
+        path: ['digestRecipients'],
+      })
+    }
+
+    if (values.slackEnabled && !values.slackWebhook) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Slack webhook URL is required when Slack integration is enabled.',
+        path: ['slackWebhook'],
+      })
+    }
+
+    if (values.webhooksEnabled && values.webhookEndpoints.length === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Add at least one webhook endpoint or disable custom webhooks.',
+        path: ['webhookEndpoints'],
+      })
+    }
+  })
 
 type NotificationFormValues = z.infer<typeof notificationSchema>
+type FormWebhookEndpoint = NotificationFormValues['webhookEndpoints'][number]
+
+const normalizeWebhookEndpoint = (endpoint: FormWebhookEndpoint): WebhookEndpoint => ({
+  id: endpoint.id,
+  url: endpoint.url,
+  events: endpoint.events,
+  secret: endpoint.secret ?? '••••••••',
+  active: endpoint.active ?? true,
+  createdAt: endpoint.createdAt ?? new Date().toISOString(),
+})
 
 const availableEvents = [
   { id: 'revenue_milestone', label: 'Revenue Milestones', description: 'Daily/weekly revenue targets' },
@@ -37,8 +95,8 @@ const availableEvents = [
 
 export default function NotificationsSettingsPage() {
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
-  const [webhooks, setWebhooks] = useState<WebhookEndpoint[]>([])
   const [newWebhook, setNewWebhook] = useState({ url: '', events: [] as string[] })
+  const [webhookError, setWebhookError] = useState<string | null>(null)
 
   const { data, isLoading } = useQuery({
     queryKey: ['settings', 'notifications'],
@@ -59,11 +117,27 @@ export default function NotificationsSettingsPage() {
       slackChannel: '',
       slackEvents: [],
       webhooksEnabled: false,
+      webhookEndpoints: [],
       digestEnabled: true,
       digestFrequency: 'weekly',
       digestRecipients: '',
     },
   })
+
+  const {
+    fields: webhookFields,
+    append: appendWebhookField,
+    remove: removeWebhookField,
+    replace: replaceWebhookFields,
+  } = useFieldArray({
+    control: form.control,
+    name: 'webhookEndpoints',
+  })
+
+  const webhookEndpointsErrorMessage =
+    form.formState.errors.webhookEndpoints && !Array.isArray(form.formState.errors.webhookEndpoints)
+      ? form.formState.errors.webhookEndpoints.message
+      : undefined
 
   useEffect(() => {
     if (data) {
@@ -76,11 +150,11 @@ export default function NotificationsSettingsPage() {
         slackChannel: data.slackIntegration.channel ?? '',
         slackEvents: data.slackIntegration.events,
         webhooksEnabled: data.webhooks.enabled,
+        webhookEndpoints: data.webhooks.endpoints || [],
         digestEnabled: data.digest.enabled,
         digestFrequency: data.digest.frequency,
         digestRecipients: data.digest.recipients.join(', '),
       })
-      setWebhooks(data.webhooks.endpoints || [])
     }
   }, [data, form])
 
@@ -100,7 +174,7 @@ export default function NotificationsSettingsPage() {
         },
         webhooks: {
           enabled: values.webhooksEnabled,
-          endpoints: webhooks,
+          endpoints: values.webhookEndpoints.map(normalizeWebhookEndpoint),
         },
         digest: {
           enabled: values.digestEnabled,
@@ -114,24 +188,71 @@ export default function NotificationsSettingsPage() {
     onError: () => setMessage({ type: 'error', text: 'Failed to update notification settings. Please try again.' }),
   })
 
-  const addWebhook = () => {
-    if (!newWebhook.url || newWebhook.events.length === 0) return
-    setWebhooks([
-      ...webhooks,
-      {
-        id: `wh_${Date.now()}`,
-        url: newWebhook.url,
-        events: newWebhook.events,
-        secret: '••••••••',
-        active: true,
-        createdAt: new Date().toISOString(),
-      },
-    ])
-    setNewWebhook({ url: '', events: [] })
+  const persistWebhooks = async (endpoints: FormWebhookEndpoint[]) => {
+    const normalized = endpoints.map(normalizeWebhookEndpoint)
+    try {
+      await settingsApi.updateNotificationSettings({
+        webhooks: {
+          enabled: form.getValues('webhooksEnabled'),
+          endpoints: normalized,
+        },
+      })
+      setMessage({ type: 'success', text: 'Webhook endpoints updated.' })
+    } catch (error) {
+      console.error('Failed to update webhooks', error)
+      setMessage({ type: 'error', text: 'Failed to update webhooks. Please try again.' })
+      throw error
+    }
   }
 
-  const removeWebhook = (id: string) => {
-    setWebhooks(webhooks.filter((wh) => wh.id !== id))
+  const addWebhook = async () => {
+    setWebhookError(null)
+    const trimmedUrl = newWebhook.url.trim()
+    if (!trimmedUrl) {
+      setWebhookError('Webhook URL is required.')
+      return
+    }
+    if (newWebhook.events.length === 0) {
+      setWebhookError('Select at least one event for the webhook.')
+      return
+    }
+
+    const currentEndpoints = form.getValues('webhookEndpoints') as FormWebhookEndpoint[]
+    if (currentEndpoints.some((endpoint) => endpoint.url.toLowerCase() === trimmedUrl.toLowerCase())) {
+      setWebhookError('Webhook URL must be unique.')
+      return
+    }
+
+    const endpoint: FormWebhookEndpoint = {
+      id: `wh_${Date.now()}`,
+      url: trimmedUrl,
+      events: [...newWebhook.events],
+      secret: '••••••••',
+      active: true,
+      createdAt: new Date().toISOString(),
+    }
+
+    const updated = [...currentEndpoints, endpoint]
+    appendWebhookField(endpoint)
+    setNewWebhook({ url: '', events: [] })
+
+    try {
+      await persistWebhooks(updated)
+    } catch (error) {
+      removeWebhookField(updated.length - 1)
+    }
+  }
+
+  const handleRemoveWebhook = async (index: number) => {
+    if (!window.confirm('Remove this webhook endpoint?')) return
+    const currentEndpoints = form.getValues('webhookEndpoints') as FormWebhookEndpoint[]
+    const updated = currentEndpoints.filter((_, idx) => idx !== index)
+    removeWebhookField(index)
+    try {
+      await persistWebhooks(updated)
+    } catch (error) {
+      replaceWebhookFields(currentEndpoints)
+    }
   }
 
   return (
@@ -316,7 +437,7 @@ export default function NotificationsSettingsPage() {
             {form.watch('webhooksEnabled') && (
               <>
                 <div className="space-y-4">
-                  {webhooks.map((wh) => (
+                  {webhookFields.map((wh, index) => (
                     <div key={wh.id} className="flex items-center gap-4 p-4 border rounded-lg">
                       <div className="flex-1">
                         <p className="text-sm font-medium text-gray-900">{wh.url}</p>
@@ -324,14 +445,18 @@ export default function NotificationsSettingsPage() {
                       </div>
                       <button
                         type="button"
-                        onClick={() => removeWebhook(wh.id)}
+                        onClick={() => handleRemoveWebhook(index)}
                         className="p-2 text-danger-600 hover:bg-danger-50 rounded"
+                        aria-label="Remove webhook"
                       >
                         <Trash2 className="h-4 w-4" aria-hidden={true} />
                       </button>
                     </div>
                   ))}
                 </div>
+                {webhookEndpointsErrorMessage && (
+                  <p className="text-sm text-danger-600">{webhookEndpointsErrorMessage}</p>
+                )}
                 <div className="border-t pt-4">
                   <p className="text-sm font-medium text-gray-900 mb-3">Add New Webhook</p>
                   <div className="space-y-3">
@@ -342,6 +467,7 @@ export default function NotificationsSettingsPage() {
                       value={newWebhook.url}
                       onChange={(e) => setNewWebhook({ ...newWebhook, url: e.target.value })}
                     />
+                    {webhookError && <p className="text-sm text-danger-600">{webhookError}</p>}
                     <div className="grid grid-cols-2 gap-2">
                       {availableEvents.map((event) => (
                         <label key={event.id} className="flex items-center gap-2 text-sm">
@@ -363,11 +489,7 @@ export default function NotificationsSettingsPage() {
                         </label>
                       ))}
                     </div>
-                    <button
-                      type="button"
-                      onClick={addWebhook}
-                      className="btn btn-outline flex items-center gap-2"
-                    >
+                    <button type="button" onClick={addWebhook} className="btn btn-outline flex items-center gap-2">
                       <Plus className="h-4 w-4" aria-hidden={true} />
                       Add Webhook
                     </button>

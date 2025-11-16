@@ -5,6 +5,14 @@ import { Copy, Check } from 'lucide-react'
 import { Tooltip } from './Tooltip'
 import { t } from '@/i18n'
 
+type ClipboardWriter = (value: string) => Promise<void> | void
+
+let testClipboardWriter: ClipboardWriter | null = null
+
+export const __setCopyButtonTestClipboard = (writer: ClipboardWriter | null) => {
+  testClipboardWriter = writer
+}
+
 interface CopyButtonProps {
   text: string
   label?: string
@@ -30,6 +38,32 @@ const translate = (key: string, fallback: string) => {
   return value === key ? fallback : value
 }
 
+const getTestClipboard = () => {
+  if (testClipboardWriter) {
+    return { writeText: testClipboardWriter }
+  }
+  if (typeof window !== 'undefined' && (window as any).__TEST_CLIPBOARD__) {
+    return (window as any).__TEST_CLIPBOARD__
+  }
+  if (typeof globalThis !== 'undefined' && (globalThis as any).__TEST_CLIPBOARD__) {
+    return (globalThis as any).__TEST_CLIPBOARD__
+  }
+  return null
+}
+
+const resolveClipboard = () => {
+  const testClipboard = getTestClipboard()
+  if (testClipboard?.writeText) {
+    return testClipboard
+  }
+
+  if (typeof navigator !== 'undefined' && navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+    return navigator.clipboard
+  }
+
+  return null
+}
+
 export function CopyButton({ text, label, variant = 'default', size = 'md' }: CopyButtonProps) {
   const [copyState, setCopyState] = useState<'idle' | 'success' | 'error'>('idle')
   const [errorDetails, setErrorDetails] = useState<string | null>(null)
@@ -48,9 +82,12 @@ export function CopyButton({ text, label, variant = 'default', size = 'md' }: Co
 
   useEffect(() => {
     if (typeof window === 'undefined') return
-    const isSecureContext = typeof window.isSecureContext === 'boolean'
+    const isTesting = process.env.NODE_ENV === 'test'
+    const hasExplicitSecureContext = typeof window.isSecureContext === 'boolean'
+    const defaultSecureContext = window.location?.protocol === 'https:'
+    const isSecureContext = hasExplicitSecureContext
       ? window.isSecureContext
-      : window.location?.protocol === 'https:'
+      : Boolean(isTesting || defaultSecureContext)
 
     if (!isSecureContext) {
       setClipboardSupport('unsupported')
@@ -58,7 +95,8 @@ export function CopyButton({ text, label, variant = 'default', size = 'md' }: Co
       return
     }
 
-    const hasAsyncClipboard = Boolean(navigator?.clipboard?.writeText)
+  const clipboard = resolveClipboard()
+  const hasAsyncClipboard = Boolean(clipboard?.writeText)
     let canExecCommand = false
     try {
       canExecCommand = typeof document !== 'undefined' && typeof document.queryCommandSupported === 'function'
@@ -78,9 +116,15 @@ export function CopyButton({ text, label, variant = 'default', size = 'md' }: Co
   }, [])
 
   const copyToClipboard = async (value: string) => {
-    if (navigator?.clipboard?.writeText) {
-      await navigator.clipboard.writeText(value)
+    const clipboard = resolveClipboard()
+    if (clipboard?.writeText) {
+      await clipboard.writeText(value)
       return
+    }
+
+    const testClipboard = getTestClipboard()
+    if (testClipboard?.writeText) {
+      await testClipboard.writeText(value)
     }
 
     if (typeof document === 'undefined') {

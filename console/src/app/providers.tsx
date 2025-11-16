@@ -1,12 +1,16 @@
 'use client'
 
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { HydrationBoundary, QueryClient, QueryClientProvider, type DehydratedState } from '@tanstack/react-query'
 import { SessionProvider } from 'next-auth/react'
-import { useState } from 'react'
-import { useEffect } from 'react'
-import { getCsrfToken } from '@/lib/csrf'
+import { useState, useEffect } from 'react'
+import { CsrfFetchError, getCsrfToken, readXsrfCookie } from '@/lib/csrf'
 
-export function Providers({ children }: { children: React.ReactNode }) {
+type ProvidersProps = {
+  children: React.ReactNode
+  dehydratedState?: DehydratedState | undefined
+}
+
+export function Providers({ children, dehydratedState }: ProvidersProps) {
   const [queryClient] = useState(
     () =>
       new QueryClient({
@@ -22,9 +26,11 @@ export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <SessionProvider>
       <QueryClientProvider client={queryClient}>
-        {/* Bootstrap CSRF token cookie on initial mount for mutating requests */}
-        <BootstrapCsrf />
-        {children}
+        <HydrationBoundary state={dehydratedState}>
+          {/* Bootstrap CSRF token cookie on initial mount for mutating requests */}
+          <BootstrapCsrf />
+          {children}
+        </HydrationBoundary>
       </QueryClientProvider>
     </SessionProvider>
   )
@@ -32,21 +38,32 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
 function BootstrapCsrf() {
   useEffect(() => {
+    if (typeof window === 'undefined') return
+    if (!navigator.cookieEnabled) return
+    if (readXsrfCookie()) return
+
+    const controller = new AbortController()
     let cancelled = false
+
     const prime = async () => {
       try {
-        await getCsrfToken()
+        await getCsrfToken({ signal: controller.signal })
       } catch (error) {
-        if (!cancelled) {
-          console.warn('[csrf] Unable to prime CSRF token', error)
+        if (cancelled) return
+        const status = error instanceof CsrfFetchError ? error.status : undefined
+        // Anonymous sessions may not have access yet—avoid noisy warnings.
+        if (status && status >= 400 && status < 500) {
+          return
         }
+        console.warn('[csrf] Unable to prime CSRF token', error)
       }
     }
-    if (typeof window !== 'undefined') {
-      void prime()
-    }
+
+    void prime()
+
     return () => {
       cancelled = true
+      controller.abort()
     }
   }, [])
   return null

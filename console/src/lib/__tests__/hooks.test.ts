@@ -1,5 +1,44 @@
 import { renderHook, act, waitFor } from '@testing-library/react'
-import { useDebouncedValue, useLoadingState } from '../hooks'
+import { useDebouncedValue, useLoadingState, useUrlQueryParams } from '../hooks'
+import { useQueryParamsState, useQueryState, useAllQueryParams } from '../hooks/useQueryState'
+
+const mockRouterReplace = jest.fn()
+const mockRouterPush = jest.fn()
+let mockPathname = '/tests'
+let mockSearchParamsString = ''
+
+const setMockSearchParams = (value: string) => {
+  mockSearchParamsString = value
+}
+
+jest.mock('next/navigation', () => ({
+  useRouter: () => ({
+    replace: mockRouterReplace,
+    push: mockRouterPush,
+  }),
+  usePathname: () => mockPathname,
+  useSearchParams: () => {
+    const params = new URLSearchParams(mockSearchParamsString)
+
+    return {
+      get: params.get.bind(params),
+      has: params.has.bind(params),
+      toString: () => params.toString(),
+      entries: params.entries.bind(params),
+      forEach: params.forEach.bind(params),
+      keys: params.keys.bind(params),
+      values: params.values.bind(params),
+      [Symbol.iterator]: params[Symbol.iterator].bind(params),
+    } as unknown as URLSearchParams
+  },
+}))
+
+beforeEach(() => {
+  mockRouterReplace.mockReset()
+  mockRouterPush.mockReset()
+  mockPathname = '/tests'
+  mockSearchParamsString = ''
+})
 
 describe('useDebouncedValue', () => {
   beforeEach(() => {
@@ -81,6 +120,55 @@ describe('useDebouncedValue', () => {
     await waitFor(() => {
       expect(result.current).toBe('updated')
     })
+  })
+})
+
+describe('useUrlQueryParams', () => {
+  it('reads current params and pushes updates', () => {
+    setMockSearchParams('page=1')
+
+    const { result } = renderHook(() => useUrlQueryParams())
+
+    expect(result.current.params?.get('page')).toBe('1')
+
+    act(() => {
+      result.current.updateParams({ page: 2, status: 'pending' })
+    })
+
+    expect(mockRouterReplace).toHaveBeenCalledWith('/tests?page=2&status=pending', {
+      scroll: false,
+    })
+  })
+
+  it('removes params when null/empty values provided', () => {
+    setMockSearchParams('page=2&status=pending')
+
+    const { result } = renderHook(() => useUrlQueryParams())
+
+    act(() => {
+      result.current.updateParams({ status: null, empty: '' })
+    })
+
+    expect(mockRouterReplace).toHaveBeenCalledWith('/tests?page=2', { scroll: false })
+  })
+
+  it('uses history push when requested and avoids duplicate updates', () => {
+    setMockSearchParams('page=2')
+
+    const { result } = renderHook(() => useUrlQueryParams())
+
+    act(() => {
+      result.current.updateParams({ page: 2 }, { history: 'push', scroll: true })
+    })
+
+    expect(mockRouterPush).not.toHaveBeenCalled()
+    expect(mockRouterReplace).not.toHaveBeenCalled()
+
+    act(() => {
+      result.current.updateParams({ page: 3 }, { history: 'push', scroll: true })
+    })
+
+    expect(mockRouterPush).toHaveBeenCalledWith('/tests?page=3', { scroll: true })
   })
 })
 
@@ -171,5 +259,108 @@ describe('useLoadingState', () => {
     await waitFor(() => {
       expect(result.current.isLoading).toBe(false)
     })
+  })
+})
+
+describe('useQueryState', () => {
+  it('returns default value when query param is missing', () => {
+    setMockSearchParams('')
+
+    const { result } = renderHook(() =>
+      useQueryState<'all' | 'pending' | 'paid'>('status', 'all')
+    )
+
+    expect(result.current[0]).toBe('all')
+  })
+
+  it('prefers URL values and prunes defaults when setting state', () => {
+    setMockSearchParams('status=pending&page=2')
+
+    const { result } = renderHook(() =>
+      useQueryState<'all' | 'pending' | 'paid'>('status', 'all')
+    )
+
+    expect(result.current[0]).toBe('pending')
+
+    act(() => {
+      result.current[1]('paid')
+    })
+
+    expect(mockRouterReplace).toHaveBeenCalledWith('/tests?status=paid&page=2', {
+      scroll: false,
+    })
+
+    act(() => {
+      result.current[1]('all')
+    })
+
+    expect(mockRouterReplace).toHaveBeenLastCalledWith('/tests?page=2', {
+      scroll: false,
+    })
+  })
+})
+
+describe('useQueryParamsState', () => {
+  const defaults: { status: string; page: string } = { status: 'all', page: '1' }
+
+  it('merges defaults with current URL params', () => {
+    setMockSearchParams('status=paid&page=3')
+
+    const { result } = renderHook(() => useQueryParamsState(defaults))
+
+    expect(result.current[0]).toEqual({ status: 'paid', page: '3' })
+  })
+
+  it('memoizes values while the query string is unchanged', () => {
+    setMockSearchParams('status=paid')
+
+    const { result, rerender } = renderHook(() => useQueryParamsState(defaults))
+
+    const initialValues = result.current[0]
+
+    rerender()
+    expect(result.current[0]).toBe(initialValues)
+
+    setMockSearchParams('status=paid&page=3')
+    rerender()
+
+    expect(result.current[0]).not.toBe(initialValues)
+    expect(result.current[0]).toEqual({ status: 'paid', page: '3' })
+  })
+
+  it('updates router when filters change and prunes defaults', () => {
+    setMockSearchParams('status=paid&page=3')
+
+    const { result } = renderHook(() => useQueryParamsState(defaults))
+
+    act(() => {
+      result.current[1]({ status: 'all', page: '2' })
+    })
+
+    expect(mockRouterReplace).toHaveBeenCalledWith('/tests?page=2', { scroll: false })
+
+    act(() => {
+      result.current[2]()
+    })
+
+    expect(mockRouterReplace).toHaveBeenLastCalledWith('/tests', { scroll: false })
+  })
+})
+
+describe('useAllQueryParams', () => {
+  it('returns a memoized map of query parameters', () => {
+    setMockSearchParams('status=paid&page=5')
+
+    const { result, rerender } = renderHook(() => useAllQueryParams())
+
+    expect(result.current).toEqual({ status: 'paid', page: '5' })
+
+    const initial = result.current
+    rerender()
+    expect(result.current).toBe(initial)
+
+    setMockSearchParams('page=1')
+    rerender()
+    expect(result.current).toEqual({ page: '1' })
   })
 })

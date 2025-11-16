@@ -4,10 +4,15 @@ export const dynamic = 'force-dynamic'
 
 import { NextResponse } from 'next/server'
 
+const allowMockApi = process.env.NODE_ENV !== 'production' && process.env.NEXT_PUBLIC_USE_MOCK_API === 'true'
+
 // Helper to generate random data
 const random = (min: number, max: number) => Math.floor(Math.random() * (max - min + 1)) + min
 const randomFloat = (min: number, max: number, decimals = 2) =>
   parseFloat((Math.random() * (max - min) + min).toFixed(decimals))
+
+const now = new Date()
+const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
 
 // Generate time series data
 function generateTimeSeries(days: number) {
@@ -22,7 +27,7 @@ function generateTimeSeries(days: number) {
       impressions: random(50000, 200000),
       clicks: random(500, 2000),
       ecpm: randomFloat(2, 8),
-      fillRate: randomFloat(75, 95),
+      fillRate: randomFloat(0.75, 0.95),
     })
   }
   return data
@@ -32,15 +37,16 @@ function generateTimeSeries(days: number) {
 const mockData = {
   revenueSummary: {
     totalRevenue: randomFloat(45000, 85000),
-    revenueChangePercent: randomFloat(-15, 25),
     totalImpressions: random(2000000, 5000000),
-    impressionsChangePercent: randomFloat(-10, 30),
-    averageEcpm: randomFloat(3.5, 7.5),
-    ecpmChangePercent: randomFloat(-8, 12),
-    averageFillRate: randomFloat(82, 94),
-    fillRateChangePercent: randomFloat(-5, 10),
     totalClicks: random(25000, 75000),
-    ctr: randomFloat(1.2, 3.5),
+    averageEcpm: randomFloat(3.5, 7.5),
+    averageFillRate: randomFloat(0.82, 0.94),
+    periodStart: thirtyDaysAgo.toISOString(),
+    periodEnd: now.toISOString(),
+    revenueChangePercent: randomFloat(-0.15, 0.25),
+    impressionsChangePercent: randomFloat(-0.1, 0.3),
+    ecpmChangePercent: randomFloat(-0.08, 0.12),
+    fillRateChangePercent: randomFloat(-0.05, 0.1),
   },
 
   revenueTimeSeries: generateTimeSeries(30),
@@ -51,39 +57,33 @@ const mockData = {
       name: 'Main Menu Banner',
       type: 'banner',
       status: 'active',
-      adUnitId: 'ca-app-pub-123/456',
-      revenue: randomFloat(5000, 15000),
-      impressions: random(500000, 1000000),
-      ecpm: randomFloat(4, 8),
-      fillRate: randomFloat(85, 95),
+      format: '320x50',
+      platformId: 'ios',
+      publisherId: 'pub_1',
       createdAt: '2024-01-15T10:00:00Z',
-      updatedAt: '2024-11-01T15:30:00Z',
+      updatedAt: now.toISOString(),
     },
     {
       id: 'plc_2',
       name: 'Gameplay Interstitial',
       type: 'interstitial',
       status: 'active',
-      adUnitId: 'ca-app-pub-123/789',
-      revenue: randomFloat(8000, 20000),
-      impressions: random(300000, 700000),
-      ecpm: randomFloat(8, 15),
-      fillRate: randomFloat(75, 90),
+      format: 'full-screen',
+      platformId: 'android',
+      publisherId: 'pub_1',
       createdAt: '2024-01-15T10:00:00Z',
-      updatedAt: '2024-11-01T15:30:00Z',
+      updatedAt: now.toISOString(),
     },
     {
       id: 'plc_3',
       name: 'Reward Video - Extra Lives',
       type: 'rewarded',
       status: 'active',
-      adUnitId: 'ca-app-pub-123/101',
-      revenue: randomFloat(12000, 25000),
-      impressions: random(200000, 500000),
-      ecpm: randomFloat(15, 30),
-      fillRate: randomFloat(80, 95),
+      format: 'rewarded',
+      platformId: 'ios',
+      publisherId: 'pub_1',
       createdAt: '2024-02-01T10:00:00Z',
-      updatedAt: '2024-11-01T15:30:00Z',
+      updatedAt: now.toISOString(),
     },
   ],
 
@@ -94,12 +94,13 @@ const mockData = {
       network: 'admob',
       status: 'active',
       priority: 1,
-      revenue: randomFloat(15000, 35000),
-      impressions: random(800000, 1500000),
       ecpm: randomFloat(5, 10),
-      fillRate: randomFloat(88, 96),
-      bidFloor: 2.5,
-      timeout: 3000,
+      fillRate: randomFloat(0.88, 0.96),
+      requestCount: random(900000, 1500000),
+      impressionCount: random(800000, 1400000),
+      placementId: 'plc_1',
+      createdAt: '2024-01-15T10:00:00Z',
+      updatedAt: now.toISOString(),
     },
     {
       id: 'adp_2',
@@ -107,12 +108,13 @@ const mockData = {
       network: 'applovin',
       status: 'active',
       priority: 2,
-      revenue: randomFloat(12000, 28000),
-      impressions: random(600000, 1200000),
       ecpm: randomFloat(4.5, 9),
-      fillRate: randomFloat(85, 93),
-      bidFloor: 2.0,
-      timeout: 3000,
+      fillRate: randomFloat(0.85, 0.93),
+      requestCount: random(700000, 1200000),
+      impressionCount: random(600000, 1100000),
+      placementId: 'plc_2',
+      createdAt: '2024-02-10T10:00:00Z',
+      updatedAt: now.toISOString(),
     },
     {
       id: 'adp_3',
@@ -120,12 +122,13 @@ const mockData = {
       network: 'facebook',
       status: 'active',
       priority: 3,
-      revenue: randomFloat(8000, 18000),
-      impressions: random(400000, 900000),
       ecpm: randomFloat(4, 8),
-      fillRate: randomFloat(78, 88),
-      bidFloor: 1.8,
-      timeout: 3000,
+      fillRate: randomFloat(0.78, 0.88),
+      requestCount: random(550000, 1000000),
+      impressionCount: random(450000, 850000),
+      placementId: 'plc_2',
+      createdAt: '2024-03-01T10:00:00Z',
+      updatedAt: now.toISOString(),
     },
     {
       id: 'adp_4',
@@ -133,61 +136,81 @@ const mockData = {
       network: 'ironsource',
       status: 'active',
       priority: 4,
-      revenue: randomFloat(6000, 15000),
-      impressions: random(300000, 700000),
       ecpm: randomFloat(3.5, 7),
-      fillRate: randomFloat(75, 85),
-      bidFloor: 1.5,
-      timeout: 3000,
+      fillRate: randomFloat(0.75, 0.85),
+      requestCount: random(400000, 800000),
+      impressionCount: random(350000, 650000),
+      placementId: 'plc_3',
+      createdAt: '2024-03-15T10:00:00Z',
+      updatedAt: now.toISOString(),
     },
   ],
 
   fraudStats: {
-    totalTraffic: random(2000000, 5000000),
-    fraudulentTraffic: random(10000, 50000),
-    fraudRate: randomFloat(0.5, 2.5),
-    blockedRevenue: randomFloat(500, 2500),
-    detectionMethods: {
-      givt: random(3000, 15000),
-      sivt: random(2000, 10000),
-      ml: random(3000, 15000),
-      anomaly: random(2000, 10000),
-    },
-    topIssues: [
-      { type: 'Bot Traffic', count: random(5000, 15000), severity: 'high' },
-      { type: 'Click Injection', count: random(2000, 8000), severity: 'critical' },
-      { type: 'SDK Spoofing', count: random(1000, 5000), severity: 'medium' },
-      { type: 'Device Farm', count: random(500, 2000), severity: 'high' },
-    ],
+    publisherId: 'pub_1',
+    timeWindow: '24h',
+    totalRequests: random(2000000, 5000000),
+    fraudRequests: random(10000, 50000),
+    fraudRate: randomFloat(0.005, 0.025),
+    givtDetections: random(3000, 15000),
+    sivtDetections: random(2000, 10000),
+    mlDetections: random(3000, 15000),
+    anomalyDetections: random(2000, 10000),
+    blockedRequests: random(5000, 20000),
+    flaggedRequests: random(1000, 5000),
+    averageFraudScore: randomFloat(35, 75),
+    topFraudTypes: ['Bot Traffic', 'Click Injection', 'SDK Spoofing'],
+    lastUpdated: now.toISOString(),
   },
 
   fraudAlerts: [
     {
       id: 'alert_1',
-      type: 'bot_traffic',
+      timestamp: new Date(now.getTime() - 2 * 60 * 60 * 1000).toISOString(),
+      alertType: 'givt',
       severity: 'high',
-      message: 'Unusual bot traffic detected from IP range 192.168.1.0/24',
-      timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
-      affectedImpressions: random(1000, 5000),
-      status: 'investigating',
+      publisherId: 'pub_1',
+      deviceId: 'device_botfarm',
+      ipAddress: '192.168.1.12',
+      fraudScore: randomFloat(70, 95),
+      detectionType: 'ml_based',
+      action: 'block',
+      metadata: {
+        message: 'Unusual bot traffic detected from IP range 192.168.1.0/24',
+        affectedImpressions: random(1000, 5000),
+      },
     },
     {
       id: 'alert_2',
-      type: 'click_injection',
+      timestamp: new Date(now.getTime() - 5 * 60 * 60 * 1000).toISOString(),
+      alertType: 'ml_fraud',
       severity: 'critical',
-      message: 'Click injection pattern detected on placement plc_2',
-      timestamp: new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString(),
-      affectedImpressions: random(500, 2000),
-      status: 'blocked',
+      publisherId: 'pub_1',
+      deviceId: 'placement_plc_2',
+      ipAddress: '10.10.0.5',
+      fraudScore: randomFloat(80, 98),
+      detectionType: 'ml_based',
+      action: 'block',
+      metadata: {
+        message: 'Click injection pattern detected on placement plc_2',
+        affectedImpressions: random(500, 2000),
+      },
     },
     {
       id: 'alert_3',
-      type: 'anomaly',
+      timestamp: new Date(now.getTime() - 12 * 60 * 60 * 1000).toISOString(),
+      alertType: 'anomaly',
       severity: 'medium',
-      message: 'Abnormal eCPM spike detected (+250% in last hour)',
-      timestamp: new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString(),
-      affectedImpressions: random(200, 1000),
-      status: 'resolved',
+      publisherId: 'pub_1',
+      deviceId: 'global',
+      ipAddress: '198.51.100.55',
+      fraudScore: randomFloat(45, 65),
+      detectionType: 'anomaly',
+      action: 'monitor',
+      metadata: {
+        message: 'Abnormal eCPM spike detected (+250% in last hour)',
+        affectedImpressions: random(200, 1000),
+      },
     },
   ],
 
@@ -249,6 +272,10 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
   const endpoint = searchParams.get('endpoint')
 
+  if (!allowMockApi) {
+    return NextResponse.json({ error: 'Mock API disabled' }, { status: 404 })
+  }
+
   // Simulate network delay
   await new Promise(resolve => setTimeout(resolve, random(100, 500)))
 
@@ -262,10 +289,11 @@ export async function GET(request: Request) {
       
       case 'placements':
         return NextResponse.json({
-          items: mockData.placements,
+          data: mockData.placements,
           total: mockData.placements.length,
           page: 1,
-          pageSize: 10,
+          pageSize: mockData.placements.length,
+          hasMore: false,
         })
       
       case 'adapters':
@@ -279,10 +307,11 @@ export async function GET(request: Request) {
       
       case 'payout-history':
         return NextResponse.json({
-          items: mockData.payoutHistory,
+          data: mockData.payoutHistory,
           total: mockData.payoutHistory.length,
           page: 1,
-          pageSize: 10,
+          pageSize: mockData.payoutHistory.length,
+          hasMore: false,
         })
       
       case 'payout-upcoming':

@@ -313,7 +313,7 @@ _Last updated: 2025-11-14 22:16 UTC_
 | 69 | FIX-03 | `console/.next/` | Directory should stay untracked except for inspection; stale caches can mask config changes (clear before benchmarking). Ensure secrets never land in prerender JSON. |
 | 70 | FIX-03 | `console/scripts/check-bundle-size.js` | Budget keys reference `pages/*` even though App Router is used—needs update for `app/` chunk naming; script requires `npm run build` first or exits 1. |
 | 71 | FIX-03 | `console/src/app/admin/billing/page.tsx` | Invoice/email inputs are unused (button disabled) so UI advertises a feature that doesn’t exist; manual reconcile lacks confirmation and always uses new idempotency key—even double-clicking will fire multiple backend jobs. |
-| 72 | FIX-03 | `console/src/app/api/auth/__tests__/session.security.test.ts` | Limited coverage (doesn’t assert authorize path, CSRF, or error events); relies on jest.resetModules which can mask caching issues elsewhere. |
+| 72 | FIX-03 | `console/src/app/api/auth/__tests__/session.security.test.ts` | Limited coverage (doesn’t assert authorize path, CSRF, or error events); relies on jest.resetModules which can mask caching issues elsewhere. | Test must be re-run afterwards.
 | 73 | FIX-03 | `console/src/app/layout.tsx` | Always renders navigation even on unauthenticated routes (e.g., `/login`); consider conditional shell when session absent. |
 | 74 | FIX-03 | `console/src/app/providers.tsx` | No query cache dehydrate support, so SSR data always re-fetches; CSRF bootstrap assumes API endpoint available even for anonymous sessions. |
 | 75 | FIX-03 | `console/src/app/settings/page.tsx` | Page is always client-rendered and assumes downstream routes enforce auth/feature gates; consider server-side redirect if user lacks access. |
@@ -352,13 +352,13 @@ _Last updated: 2025-11-14 22:16 UTC_
 | 108 | FIX-03 | `console/src/lib/useAdminGate.ts` | Effect runs on every render and calls `router.replace`, which can thrash history when user hovers between allowed/blocked pages; there’s no SSR guard so admin routes briefly render before redirect. |
 | 109 | FIX-03 | `console/.env.local.example` | Only includes public URLs; lacks flags like `NEXT_PUBLIC_USE_MOCK_API` referenced elsewhere—devs must cross-check BACKEND_INTEGRATION doc. |
 | 110 | FIX-03 | `console/README.md` | “Components (To Be Built)” section lists several TODO widgets/forms that still appear unimplemented—ensure roadmap aligns with reality; deployment guidance assumes Vercel/Docker but doesn’t mention Fly. |
-| 111 | FIX-03 | `console/src/app/api/test/route.ts` | Exposes static string publicly; ensure route is removed or locked down before shipping. |
+| 111 | FIX-03 | `console/src/app/api/test/route.ts` | Exposes static string publicly; ensure route is removed or locked down. |
 | 112 | FIX-03 | `console/src/app/settings/payout/page.tsx` | Account reference field is plain text with no masking besides placeholder; backup method dropdown allows same provider as primary without warning; no confirmation modal before saving sensitive banking changes. |
 | 113 | FIX-03 | `console/.eslintrc.json` | Disallows `console.log` except warn/error; ensure observability strategy documented for client debugging. |
 | 114 | FIX-03 | `console/.swc/` | Safe to delete when diagnosing weird transpilation bugs; should remain gitignored. |
 | 115 | FIX-03 | `console/BACKEND_INTEGRATION.md` | Assumes `/api/v1` proxied under same host even though console env defaults to mixed service URLs; keep in sync with backend route changes to avoid bitrot. |
-| 116 | FIX-03 | `console/BILLING_README.md` | Feature list includes future phases (payment method management, dunning) not yet implemented—ensure navigation hides unfinished pages. |
-| 117 | FIX-03 | `console/DESIGN_STANDARDS.md` | Mentions Storybook as “planned”; enforce updates whenever Tailwind config changes to avoid divergence. |
+| 116 | FIX-03 | `console/BILLING_README.md` | Feature list includes future phases (payment method management, dunning) not yet implemented—implement them. |
+| 117 | FIX-03 | `console/DESIGN_STANDARDS.md` | Mentions Storybook as “planned”-implement it; enforce updates whenever Tailwind config changes to avoid divergence. |
 | 118 | FIX-03 | `console/Dockerfile` | Final stage runs `npm install --omit=dev` after copying package files but not lockfile—risk of version drift; also duplicates dependency install instead of using `npm ci`. |
 | 119 | FIX-03 | `console/jest.config.js` | `jest --passWithNoTests` default may mask missing suites; ensure at least smoke tests exist. |
 | 120 | FIX-03 | `console/jest.setup.ts` | Custom axios adapter duplicates logic—keep in sync with browser behavior; ensure MSW handlers stay updated. |

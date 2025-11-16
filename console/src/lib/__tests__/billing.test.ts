@@ -5,17 +5,39 @@ import {
   getInvoice,
   downloadInvoicePDF,
   reconcileBilling,
+  resendInvoiceEmail,
   getFeatureFlags,
+  clearInvoicePdfCache,
+  INVOICE_PDF_CACHE_MAX_ENTRIES,
 } from '../billing'
 import { AxiosResponse } from 'axios'
 
 jest.mock('../api-client')
 
 const mockedApiClient = apiClient as jest.Mocked<typeof apiClient>
+const originalCreateObjectURL = global.URL.createObjectURL
+const originalRevokeObjectURL = global.URL.revokeObjectURL
+
+const buildAxiosResponse = <T>(overrides: Partial<AxiosResponse<T>> & { data: T }): AxiosResponse<T> => ({
+  data: overrides.data,
+  status: overrides.status ?? 200,
+  statusText: overrides.statusText ?? 'OK',
+  headers: overrides.headers ?? {},
+  config: overrides.config ?? ({} as any),
+  request: overrides.request,
+})
 
 describe('Billing API Client', () => {
   beforeEach(() => {
     jest.clearAllMocks()
+    clearInvoicePdfCache()
+    global.URL.createObjectURL = jest.fn(() => 'blob:mock-url')
+    global.URL.revokeObjectURL = jest.fn()
+  })
+
+  afterAll(() => {
+    global.URL.createObjectURL = originalCreateObjectURL
+    global.URL.revokeObjectURL = originalRevokeObjectURL
   })
 
   describe('getCurrentUsage', () => {
@@ -181,6 +203,70 @@ describe('Billing API Client', () => {
       expect(result).toBe(mockBlobURL)
       expect(global.URL.createObjectURL).toHaveBeenCalled()
     })
+
+    it('reuses cached urls when server returns 304 responses', async () => {
+      const etag = 'etag-123'
+      mockedApiClient.get
+        .mockResolvedValueOnce(
+          buildAxiosResponse({
+            data: new Blob(['first']),
+            headers: { etag },
+          })
+        )
+        .mockResolvedValueOnce(
+          buildAxiosResponse({
+            data: new Blob([]),
+            status: 304,
+          })
+        )
+      ;(global.URL.createObjectURL as jest.Mock)
+        .mockReturnValueOnce('blob:first')
+
+      const first = await downloadInvoicePDF('inv-1')
+      const second = await downloadInvoicePDF('inv-1')
+
+      expect(first).toBe('blob:first')
+      expect(second).toBe('blob:first')
+      const secondCallConfig = mockedApiClient.get.mock.calls[1][1]
+      expect(secondCallConfig?.headers?.['If-None-Match']).toBe(etag)
+    })
+
+    it('evicts the oldest cached url when exceeding the cache budget', async () => {
+      mockedApiClient.get.mockImplementation((url: string) => {
+        return Promise.resolve(
+          buildAxiosResponse({
+            data: new Blob([url]),
+          })
+        )
+      })
+
+      for (let i = 0; i < INVOICE_PDF_CACHE_MAX_ENTRIES + 1; i++) {
+        ;(global.URL.createObjectURL as jest.Mock).mockReturnValueOnce(`blob:${i}`)
+        await downloadInvoicePDF(`inv-${i}`)
+      }
+
+      expect(global.URL.revokeObjectURL).toHaveBeenCalledTimes(1)
+    })
+
+    it('supports concurrent downloads without corrupting cache state', async () => {
+      mockedApiClient.get.mockResolvedValue(
+        buildAxiosResponse({
+          data: new Blob(['concurrent']),
+        })
+      )
+      ;(global.URL.createObjectURL as jest.Mock)
+        .mockReturnValueOnce('blob:a')
+        .mockReturnValueOnce('blob:b')
+
+      const [first, second] = await Promise.all([
+        downloadInvoicePDF('inv-shared'),
+        downloadInvoicePDF('inv-shared'),
+      ])
+
+      expect(first).toBe('blob:a')
+      expect(second).toBe('blob:b')
+      expect(mockedApiClient.get).toHaveBeenCalledTimes(2)
+    })
   })
 
   describe('reconcileBilling', () => {
@@ -211,6 +297,25 @@ describe('Billing API Client', () => {
     })
   })
 
+  describe('resendInvoiceEmail', () => {
+    it('posts invoice resend payload to the billing API', async () => {
+      mockedApiClient.post.mockResolvedValue({} as AxiosResponse)
+
+      await resendInvoiceEmail({ invoiceId: 'inv_42', email: 'ops@example.com' })
+
+      expect(mockedApiClient.post).toHaveBeenCalledWith('/billing/invoices/resend', {
+        invoiceId: 'inv_42',
+        email: 'ops@example.com',
+      })
+    })
+
+    it('surfaces API errors to the caller', async () => {
+      mockedApiClient.post.mockRejectedValue(new Error('network'))
+
+      await expect(resendInvoiceEmail({ invoiceId: 'inv_1', email: 'ops@example.com' })).rejects.toThrow()
+    })
+  })
+
   describe('getFeatureFlags', () => {
     it('should fetch feature flags', async () => {
       const mockData = { billingEnabled: true }
@@ -222,12 +327,22 @@ describe('Billing API Client', () => {
       expect(result).toEqual({ billingEnabled: true })
     })
 
-    it('should return disabled if endpoint fails', async () => {
-      mockedApiClient.get.mockRejectedValue(new Error('Not found'))
+    it('should return disabled when endpoint returns 404', async () => {
+      mockedApiClient.get.mockRejectedValue({ response: { status: 404 } } as any)
 
       const result = await getFeatureFlags()
 
       expect(result).toEqual({ billingEnabled: false })
+    })
+
+    it('should surface network errors so regressions are visible', async () => {
+      const axiosLikeError = Object.assign(new Error('Service unavailable'), {
+        isAxiosError: true,
+        response: { status: 503, data: { message: 'Service unavailable' } },
+      })
+      mockedApiClient.get.mockRejectedValue(axiosLikeError)
+
+      await expect(getFeatureFlags()).rejects.toThrow()
     })
   })
 })

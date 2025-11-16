@@ -1,9 +1,10 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { FormEvent, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiClient } from '@/lib/api-client'
+import { useSession } from '@/lib/useSession'
 import {
   CreditCard,
   Mail,
@@ -13,7 +14,9 @@ import {
   CheckCircle2,
   Loader2,
   Settings as SettingsIcon,
+  GitCompare,
 } from 'lucide-react'
+import { isFeatureEnabled } from '@/lib/featureFlags'
 
 interface BillingSettings {
   plan: {
@@ -34,27 +37,113 @@ interface BillingSettings {
   stripe_customer_id: string | null
 }
 
+const MESSAGE_STORAGE_KEY = 'billing-settings:toast'
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
 export default function BillingSettingsPage() {
-  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const queryClient = useQueryClient()
+  const { user, isLoading: sessionLoading } = useSession({ redirectOnUnauthorized: true })
+
+  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+  const [billingEmail, setBillingEmail] = useState('')
+  const [emailError, setEmailError] = useState<string | null>(null)
+  const [preferences, setPreferences] = useState<BillingSettings['receipt_preferences']>({
+    send_receipts: true,
+    send_invoices: true,
+    send_usage_alerts: true,
+  })
+  const [initialPreferences, setInitialPreferences] = useState<BillingSettings['receipt_preferences']>({
+    send_receipts: true,
+    send_invoices: true,
+    send_usage_alerts: true,
+  })
+  const [migrationNotes, setMigrationNotes] = useState('')
+  const [migrationChannel, setMigrationChannel] = useState<'sandbox' | 'production'>('sandbox')
+  const dismissMessage = () => setMessage(null)
+  const billingMigrationEnabled = isFeatureEnabled('billingMigration')
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    try {
+      const cached = window.sessionStorage.getItem(MESSAGE_STORAGE_KEY)
+      if (cached) {
+        const parsed = JSON.parse(cached)
+        if (parsed?.type && parsed?.text) {
+          setMessage(parsed)
+        }
+      }
+    } catch {
+      // ignore malformed cache
+    }
+  }, [])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    if (message) {
+      window.sessionStorage.setItem(MESSAGE_STORAGE_KEY, JSON.stringify(message))
+    } else {
+      window.sessionStorage.removeItem(MESSAGE_STORAGE_KEY)
+    }
+  }, [message])
 
   // Fetch settings
-  const { data: settings, isLoading } = useQuery<BillingSettings>({
+  const {
+    data: settings,
+    isLoading,
+    isError: settingsError,
+    error: settingsErrorDetails,
+    refetch: refetchSettings,
+  } = useQuery<BillingSettings>({
     queryKey: ['billing', 'settings'],
     queryFn: async () => {
       const response = await apiClient.get('/billing/settings')
       return response.data
     },
+    enabled: !!user,
   })
+
+  const preferencesDirty = useMemo(() => {
+    return (
+      preferences.send_receipts !== initialPreferences.send_receipts ||
+      preferences.send_invoices !== initialPreferences.send_invoices ||
+      preferences.send_usage_alerts !== initialPreferences.send_usage_alerts
+    )
+  }, [initialPreferences, preferences])
+
+  const showLoading = sessionLoading || (!!user && isLoading)
+  const settingsErrorMessage =
+    settingsErrorDetails instanceof Error ? settingsErrorDetails.message : 'Failed to load billing settings.'
+
+  const validateEmail = (value: string) => EMAIL_PATTERN.test(value.trim())
+  const handleEmailSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (billingEmail === settings?.billing_email) return
+    if (!validateEmail(billingEmail)) {
+      setEmailError('Enter a valid billing email address')
+      setMessage({ type: 'error', text: 'Enter a valid billing email before saving.' })
+      return
+    }
+    emailMutation.mutate(billingEmail.trim())
+  }
+  const handlePreferencesSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!preferencesDirty) return
+    preferencesMutation.mutate(preferences)
+  }
+  const handleResetPreferences = () => {
+    setPreferences(initialPreferences)
+  }
 
   // Update billing email
   const emailMutation = useMutation({
     mutationFn: async (email: string) => {
       await apiClient.put('/billing/settings/email', { email })
     },
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['billing', 'settings'] })
       setMessage({ type: 'success', text: 'Billing email updated successfully' })
+      setEmailError(null)
+      setBillingEmail(variables)
     },
     onError: () => {
       setMessage({ type: 'error', text: 'Failed to update billing email' })
@@ -66,8 +155,9 @@ export default function BillingSettingsPage() {
     mutationFn: async (preferences: BillingSettings['receipt_preferences']) => {
       await apiClient.put('/billing/settings/preferences', preferences)
     },
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['billing', 'settings'] })
+      setInitialPreferences(variables)
       setMessage({ type: 'success', text: 'Receipt preferences updated' })
     },
     onError: () => {
@@ -89,28 +179,79 @@ export default function BillingSettingsPage() {
     },
   })
 
-  const [billingEmail, setBillingEmail] = useState('')
-  const [preferences, setPreferences] = useState<BillingSettings['receipt_preferences']>({
-    send_receipts: true,
-    send_invoices: true,
-    send_usage_alerts: true,
+  const migrationMutation = useMutation({
+    mutationFn: async (payload: { channel: string; notes: string }) => {
+      await apiClient.post('/billing/migration/request', payload)
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['billing', 'settings'] })
+      setMessage({ type: 'success', text: 'Migration request submitted. Our team will follow up shortly.' })
+      setMigrationNotes('')
+    },
+    onError: () => {
+      setMessage({ type: 'error', text: 'Failed to submit migration request' })
+    },
   })
+
+  const trimmedMigrationNotes = migrationNotes.trim()
+  const migrationSubmitDisabled = migrationMutation.isPending || trimmedMigrationNotes.length === 0
+
+  const handleMigrationSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!trimmedMigrationNotes) {
+      setMessage({ type: 'error', text: 'Add migration context before submitting a request.' })
+      return
+    }
+    migrationMutation.mutate({ channel: migrationChannel, notes: trimmedMigrationNotes })
+  }
 
   // Update local state when data loads
   useEffect(() => {
     if (settings) {
       setBillingEmail(settings.billing_email)
       setPreferences(settings.receipt_preferences)
+      setInitialPreferences(settings.receipt_preferences)
     }
   }, [settings])
 
-  if (isLoading) {
+  if (!sessionLoading && !user) {
+    return <UnauthorizedState />
+  }
+
+  if (showLoading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <Loader2 className="h-8 w-8 animate-spin text-primary-600" />
       </div>
     )
   }
+
+  if (settingsError) {
+    return (
+      <PageErrorState
+        title="We couldn’t fetch your billing settings"
+        description={settingsErrorMessage}
+        onRetry={() => refetchSettings()}
+      />
+    )
+  }
+
+  if (!settings) {
+    return (
+      <PageErrorState
+        title="Billing settings unavailable"
+        description="We couldn’t load your billing configuration. Please try again."
+        onRetry={() => refetchSettings()}
+      />
+    )
+  }
+
+  const disableEmailSubmit =
+    emailMutation.isPending ||
+    !billingEmail ||
+    billingEmail.trim() === settings.billing_email ||
+    !!emailError
+  const preferencesSubmitDisabled = !preferencesDirty || preferencesMutation.isPending
 
   return (
     <div className="bg-gray-50 min-h-screen">
@@ -147,7 +288,14 @@ export default function BillingSettingsPage() {
             ) : (
               <AlertCircle className="h-5 w-5 mt-0.5 flex-shrink-0" />
             )}
-            <p className="text-sm font-medium">{message.text}</p>
+            <p className="text-sm font-medium flex-1">{message.text}</p>
+            <button
+              type="button"
+              className="text-sm font-semibold underline"
+              onClick={dismissMessage}
+            >
+              Dismiss
+            </button>
           </div>
         )}
 
@@ -216,7 +364,7 @@ export default function BillingSettingsPage() {
               <button
                 type="button"
                 onClick={() => portalMutation.mutate()}
-                disabled={portalMutation.isPending || !settings?.stripe_customer_id}
+                disabled={portalMutation.isPending || !settings?.stripe_customer_id || !user}
                 className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 text-white text-sm font-medium rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition"
               >
                 {portalMutation.isPending ? (
@@ -251,15 +399,7 @@ export default function BillingSettingsPage() {
               </div>
               <Mail className="h-6 w-6 text-gray-400" aria-hidden="true" />
             </div>
-            <form
-              onSubmit={(e) => {
-                e.preventDefault()
-                if (billingEmail && billingEmail !== settings?.billing_email) {
-                  emailMutation.mutate(billingEmail)
-                }
-              }}
-              className="pt-4 border-t border-gray-100"
-            >
+            <form onSubmit={handleEmailSubmit} className="pt-4 border-t border-gray-100">
               <div className="flex items-end gap-3">
                 <div className="flex-1">
                   <label htmlFor="billing-email" className="block text-sm font-medium text-gray-700 mb-2">
@@ -270,14 +410,29 @@ export default function BillingSettingsPage() {
                     type="email"
                     required
                     value={billingEmail}
-                    onChange={(e) => setBillingEmail(e.target.value)}
+                    onChange={(e) => {
+                      const value = e.target.value
+                      setBillingEmail(value)
+                      if (emailError) {
+                        setEmailError(validateEmail(value) ? null : 'Enter a valid billing email address')
+                      }
+                    }}
+                    onBlur={() => {
+                      if (billingEmail && !validateEmail(billingEmail)) {
+                        setEmailError('Enter a valid billing email address')
+                      } else {
+                        setEmailError(null)
+                      }
+                    }}
+                    aria-invalid={emailError ? 'true' : 'false'}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                     placeholder="billing@example.com"
                   />
+                  {emailError && <p className="text-sm text-red-600 mt-1">{emailError}</p>}
                 </div>
                 <button
                   type="submit"
-                  disabled={emailMutation.isPending || billingEmail === settings?.billing_email}
+                  disabled={disableEmailSubmit}
                   className="px-4 py-2 bg-primary-600 text-white text-sm font-medium rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition"
                 >
                   {emailMutation.isPending ? 'Updating...' : 'Update'}
@@ -291,47 +446,33 @@ export default function BillingSettingsPage() {
             <div className="flex items-start justify-between mb-4">
               <div>
                 <h2 className="text-lg font-semibold text-gray-900 mb-1">Email Preferences</h2>
-                <p className="text-sm text-gray-600">
-                  Control which billing emails you receive
-                </p>
+                <p className="text-sm text-gray-600">Control which billing emails you receive</p>
               </div>
               <FileText className="h-6 w-6 text-gray-400" aria-hidden="true" />
             </div>
-            <div className="pt-4 border-t border-gray-100 space-y-4">
-              <label
-                className="flex items-start gap-3 cursor-pointer"
-                aria-label="Toggle payment receipt emails"
-              >
+            <form onSubmit={handlePreferencesSubmit} className="pt-4 border-t border-gray-100 space-y-4">
+              <label className="flex items-start gap-3 cursor-pointer" aria-label="Toggle payment receipt emails">
                 <input
                   type="checkbox"
                   checked={preferences.send_receipts}
-                  onChange={(e) => {
-                    const newPrefs = { ...preferences, send_receipts: e.target.checked }
-                    setPreferences(newPrefs)
-                    preferencesMutation.mutate(newPrefs)
-                  }}
+                  onChange={(e) =>
+                    setPreferences((prev) => ({ ...prev, send_receipts: e.target.checked }))
+                  }
                   className="mt-1 h-4 w-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
                 />
                 <div>
                   <p className="text-sm font-medium text-gray-900">Payment Receipts</p>
-                  <p className="text-xs text-gray-600">
-                    Receive confirmation emails when payments are processed
-                  </p>
+                  <p className="text-xs text-gray-600">Receive confirmation emails when payments are processed</p>
                 </div>
               </label>
 
-              <label
-                className="flex items-start gap-3 cursor-pointer"
-                aria-label="Toggle monthly invoice emails"
-              >
+              <label className="flex items-start gap-3 cursor-pointer" aria-label="Toggle monthly invoice emails">
                 <input
                   type="checkbox"
                   checked={preferences.send_invoices}
-                  onChange={(e) => {
-                    const newPrefs = { ...preferences, send_invoices: e.target.checked }
-                    setPreferences(newPrefs)
-                    preferencesMutation.mutate(newPrefs)
-                  }}
+                  onChange={(e) =>
+                    setPreferences((prev) => ({ ...prev, send_invoices: e.target.checked }))
+                  }
                   className="mt-1 h-4 w-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
                 />
                 <div>
@@ -342,29 +483,121 @@ export default function BillingSettingsPage() {
                 </div>
               </label>
 
-              <label
-                className="flex items-start gap-3 cursor-pointer"
-                aria-label="Toggle usage alert emails"
-              >
+              <label className="flex items-start gap-3 cursor-pointer" aria-label="Toggle usage alert emails">
                 <input
                   type="checkbox"
                   checked={preferences.send_usage_alerts}
-                  onChange={(e) => {
-                    const newPrefs = { ...preferences, send_usage_alerts: e.target.checked }
-                    setPreferences(newPrefs)
-                    preferencesMutation.mutate(newPrefs)
-                  }}
+                  onChange={(e) =>
+                    setPreferences((prev) => ({ ...prev, send_usage_alerts: e.target.checked }))
+                  }
                   className="mt-1 h-4 w-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
                 />
                 <div>
                   <p className="text-sm font-medium text-gray-900">Usage Alerts</p>
-                  <p className="text-xs text-gray-600">
-                    Notify me when approaching or exceeding plan limits
-                  </p>
+                  <p className="text-xs text-gray-600">Notify me when approaching or exceeding plan limits</p>
                 </div>
               </label>
-            </div>
+
+              <div className="flex items-center justify-end gap-3 pt-2 border-t border-gray-100 mt-6">
+                <button
+                  type="button"
+                  className="px-4 py-2 text-sm font-medium rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  onClick={handleResetPreferences}
+                  disabled={!preferencesDirty || preferencesMutation.isPending}
+                >
+                  Discard Changes
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-primary-600 text-white text-sm font-medium rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                  disabled={preferencesSubmitDisabled}
+                >
+                  {preferencesMutation.isPending ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
+            </form>
           </section>
+
+          {/* Migration Assistant */}
+          {billingMigrationEnabled && (
+            <section className="bg-white rounded-lg shadow-sm border border-dashed border-purple-200 p-6">
+              <div className="flex items-start justify-between mb-4">
+                <div>
+                  <h2 className="text-lg font-semibold text-gray-900 mb-1">Migration Assistant</h2>
+                  <p className="text-sm text-gray-600">
+                    Pilot tools for migrating legacy billing accounts into the unified workspace. Submit context and our
+                    ops team will provision the sandbox or production pipeline you select.
+                  </p>
+                </div>
+                <GitCompare className="h-6 w-6 text-purple-500" aria-hidden="true" />
+              </div>
+              <form onSubmit={handleMigrationSubmit} className="pt-4 border-t border-gray-100 space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label htmlFor="migration-channel" className="block text-sm font-medium text-gray-700 mb-2">
+                      Target pipeline
+                    </label>
+                    <select
+                      id="migration-channel"
+                      value={migrationChannel}
+                      onChange={(event) => setMigrationChannel(event.target.value as 'sandbox' | 'production')}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                    >
+                      <option value="sandbox">Sandbox validation</option>
+                      <option value="production">Production switchover</option>
+                    </select>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Sandbox migrations let you test invoices before touching live data.
+                    </p>
+                  </div>
+                  <div>
+                    <label htmlFor="migration-sla" className="block text-sm font-medium text-gray-700 mb-2">
+                      Desired timeline
+                    </label>
+                    <select
+                      id="migration-sla"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                      defaultValue="flexible"
+                      disabled
+                    >
+                      <option value="flexible">Flexible (default)</option>
+                    </select>
+                    <p className="text-xs text-gray-500 mt-1">SLA selection is coming soon.</p>
+                  </div>
+                </div>
+                <div>
+                  <label htmlFor="migration-notes" className="block text-sm font-medium text-gray-700 mb-2">
+                    Migration context
+                  </label>
+                  <textarea
+                    id="migration-notes"
+                    value={migrationNotes}
+                    onChange={(event) => setMigrationNotes(event.target.value)}
+                    className="w-full min-h-[120px] resize-y px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                    placeholder="List existing billing IDs, expected cutover date, and any blockers."
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Share enough detail for ops to verify your request.</p>
+                </div>
+                <div className="flex items-center justify-end gap-3 border-t border-gray-100 pt-4">
+                  <button
+                    type="button"
+                    className="px-4 py-2 text-sm font-medium rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                    onClick={() => setMigrationNotes('')}
+                    disabled={migrationMutation.isPending || trimmedMigrationNotes.length === 0}
+                  >
+                    Clear
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4 py-2 bg-purple-600 text-white text-sm font-medium rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={migrationSubmitDisabled}
+                  >
+                    {migrationMutation.isPending ? 'Sending…' : 'Request migration support'}
+                  </button>
+                </div>
+              </form>
+            </section>
+          )}
 
           {/* Help Text */}
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
@@ -384,6 +617,44 @@ export default function BillingSettingsPage() {
           </div>
         </div>
       </main>
+    </div>
+  )
+}
+
+function PageErrorState({
+  title,
+  description,
+  onRetry,
+}: {
+  title: string
+  description: string
+  onRetry: () => void
+}) {
+  return (
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center px-6">
+      <div className="card max-w-md text-center space-y-4">
+        <h2 className="text-xl font-semibold text-gray-900">{title}</h2>
+        <p className="text-sm text-gray-600">{description}</p>
+        <button type="button" className="btn btn-primary" onClick={onRetry}>
+          Retry loading settings
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function UnauthorizedState() {
+  return (
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center px-6">
+      <div className="card max-w-md text-center space-y-4">
+        <h2 className="text-xl font-semibold text-gray-900">Sign in required</h2>
+        <p className="text-sm text-gray-600">
+          You need to be authenticated to manage billing settings. Please sign in and try again.
+        </p>
+        <Link href="/login" className="btn btn-primary">
+          Go to login
+        </Link>
+      </div>
     </div>
   )
 }

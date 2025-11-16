@@ -2,19 +2,48 @@ import enMessages from './messages/en.json'
 
 type Messages = typeof enMessages
 type MessageKey = string
+type TranslateOptions = { fallback?: string }
+type CurrencyFormatOptions = Intl.NumberFormatOptions & { fromMinorUnits?: boolean }
+
+const messageCatalog: Record<string, Messages> = {
+  en: enMessages,
+}
 
 // Simple i18n implementation
 // TODO: Extend with additional locales and full pluralization support
 export class I18n {
   private messages: Messages
   private locale: string
+  private readonly catalogs: Record<string, Messages>
+  private readonly missingKeys = new Set<string>()
 
-  constructor(locale = 'en') {
+  constructor(locale = 'en', catalogs: Record<string, Messages> = messageCatalog) {
     this.locale = locale
-    this.messages = enMessages
+    this.catalogs = catalogs
+    this.messages = this.resolveLocaleMessages(locale)
   }
 
-  t(key: MessageKey, params?: Record<string, string | number>): string {
+  private resolveLocaleMessages(locale: string) {
+    return this.catalogs[locale] || this.catalogs.en
+  }
+
+  private formatString(value: string, params?: Record<string, string | number>) {
+    if (!params) return value
+    return Object.entries(params).reduce((str, [param, val]) => {
+      return str.replace(new RegExp(`{${param}}`, 'g'), String(val))
+    }, value)
+  }
+
+  private handleMissingTranslation(key: string, fallback?: string) {
+    if (!this.missingKeys.has(key)) {
+      this.missingKeys.add(key)
+      // eslint-disable-next-line no-console
+      console.warn(`[i18n] Missing translation for "${key}" in locale "${this.locale}"`)
+    }
+    return fallback ?? key
+  }
+
+  t(key: MessageKey, params?: Record<string, string | number>, options?: TranslateOptions): string {
     const keys = key.split('.')
     let value: any = this.messages
 
@@ -22,30 +51,35 @@ export class I18n {
       if (value && typeof value === 'object' && k in value) {
         value = value[k]
       } else {
-        return key // Return key if translation not found
+        return this.handleMissingTranslation(key, options?.fallback)
       }
     }
 
     if (typeof value !== 'string') {
-      return key
+      return this.handleMissingTranslation(key, options?.fallback)
     }
 
-    // Replace parameters
-    if (params) {
-      return Object.entries(params).reduce((str, [param, val]) => {
-        return str.replace(new RegExp(`{${param}}`, 'g'), String(val))
-      }, value)
-    }
+    return this.formatString(value, params)
+  }
 
-    return value
+  setLocale(locale: string) {
+    this.locale = locale
+    this.messages = this.resolveLocaleMessages(locale)
+  }
+
+  getLocale() {
+    return this.locale
   }
 
   // Format currency
-  formatCurrency(amount: number, currency = 'USD'): string {
+  formatCurrency(amount: number, currency = 'USD', options: CurrencyFormatOptions = {}): string {
+    const { fromMinorUnits = false, ...intlOptions } = options
+    const normalizedAmount = fromMinorUnits ? amount / 100 : amount
     return new Intl.NumberFormat(this.locale, {
       style: 'currency',
       currency,
-    }).format(amount / 100) // Assuming amounts in cents
+      ...intlOptions,
+    }).format(normalizedAmount)
   }
 
   // Format number
@@ -127,9 +161,18 @@ export class I18n {
 // Create singleton instance
 export const i18n = new I18n('en')
 
+export const registerLocaleMessages = (locale: string, messages: Messages) => {
+  messageCatalog[locale] = messages
+  if (i18n.getLocale() === locale) {
+    i18n.setLocale(locale)
+  }
+}
+
 // Export convenience functions
-export const t = (key: MessageKey, params?: Record<string, string | number>) => i18n.t(key, params)
-export const formatCurrency = (amount: number, currency = 'USD') => i18n.formatCurrency(amount, currency)
+export const t = (key: MessageKey, params?: Record<string, string | number>, options?: TranslateOptions) =>
+  i18n.t(key, params, options)
+export const formatCurrency = (amount: number, currency = 'USD', options?: CurrencyFormatOptions) =>
+  i18n.formatCurrency(amount, currency, options)
 export const formatNumber = (value: number, options?: Intl.NumberFormatOptions) => i18n.formatNumber(value, options)
 export const formatDate = (date: string | Date, options?: Intl.DateTimeFormatOptions) => i18n.formatDate(date, options)
 export const formatDateRange = (start: string | Date, end: string | Date) => i18n.formatDateRange(start, end)

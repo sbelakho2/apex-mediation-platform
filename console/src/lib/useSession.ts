@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import axios from 'axios'
 import { apiClient, AUTH_UNAUTHORIZED_EVENT } from './api-client'
+import { clearInvoicePdfCache } from './billing'
 import { readXsrfCookie } from './csrf'
 
 export type SessionUser = {
@@ -84,6 +85,7 @@ export function useSession(options?: UseSessionOptions) {
     },
     onSuccess: async () => {
       queryClient.setQueryData(sessionQueryKey, null)
+      clearInvoicePdfCache()
       await queryClient.invalidateQueries({ queryKey: sessionQueryKey })
       if (redirectOnLogout && typeof window !== 'undefined') {
         const nextPath = window.location.pathname + window.location.search + window.location.hash

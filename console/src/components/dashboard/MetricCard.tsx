@@ -1,13 +1,36 @@
 'use client'
 
+import React, { cloneElement, isValidElement, useMemo } from 'react'
 import { ArrowUpRight, ArrowDownRight } from 'lucide-react'
+import { Skeleton } from '@/components/ui'
+
+type IconProps = { className?: string; 'aria-hidden'?: boolean }
+type IconRenderable = React.ComponentType<IconProps> | React.ReactElement<Partial<IconProps>> | null
+
+const mergeClassNames = (...classes: Array<string | undefined>) => classes.filter(Boolean).join(' ')
 
 interface MetricCardProps {
   title: string
   value: string
   change?: number
-  icon: React.ReactNode
+  icon: IconRenderable
   trend?: 'up' | 'down' | 'neutral'
+  changeFormatter?: (value: number) => string
+  comparisonLabel?: string
+  iconLabel?: string
+}
+
+const renderIcon = (icon: IconRenderable) => {
+  if (!icon) return null
+  if (isValidElement(icon)) {
+    return cloneElement(icon, {
+      className: mergeClassNames('h-5 w-5', icon.props.className),
+      'aria-hidden': icon.props['aria-hidden'] ?? true,
+    })
+  }
+
+  const IconComponent = icon as React.ComponentType<IconProps>
+  return <IconComponent className="h-5 w-5" aria-hidden={true} />
 }
 
 export function MetricCard({
@@ -16,6 +39,9 @@ export function MetricCard({
   change,
   icon,
   trend,
+  changeFormatter,
+  comparisonLabel = 'vs last period',
+  iconLabel,
 }: MetricCardProps) {
   const resolvedTrend: 'up' | 'down' | 'neutral' =
     trend ??
@@ -34,6 +60,20 @@ export function MetricCard({
         ? 'text-danger-600'
         : 'text-gray-500'
 
+  const suffix = comparisonLabel?.trim() || ''
+  const changeText = useMemo(() => {
+    if (typeof change !== 'number') return null
+    const formatter = changeFormatter ?? ((value: number) => `${value.toFixed(1)}%`)
+    const formattedValue = formatter(Math.abs(change))
+    return suffix ? `${formattedValue} ${suffix}` : formattedValue
+  }, [change, changeFormatter, suffix])
+  const neutralComparisonText = suffix ? `No change ${suffix}` : 'No change'
+
+  const iconContent = useMemo(() => renderIcon(icon), [icon])
+  const iconAccessibilityProps = iconLabel
+    ? { role: 'img' as const, 'aria-label': iconLabel }
+    : { 'aria-hidden': true }
+
   return (
     <div className="card">
       <div className="flex items-start justify-between mb-3">
@@ -45,20 +85,19 @@ export function MetricCard({
             {value}
           </span>
         </div>
-        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary-50 text-primary-600">
-          {icon}
+        <div
+          className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary-50 text-primary-600"
+          {...iconAccessibilityProps}
+        >
+          {iconContent}
         </div>
       </div>
 
-      {typeof change === 'number' && (
+      {typeof change === 'number' && changeText && (
         <div className={`flex items-center text-sm font-medium ${trendColor}`}>
           {resolvedTrend === 'up' && <ArrowUpRight className="mr-1 h-4 w-4" aria-hidden="true" />}
           {resolvedTrend === 'down' && <ArrowDownRight className="mr-1 h-4 w-4" aria-hidden="true" />}
-          <span>
-            {resolvedTrend === 'neutral'
-              ? 'No change vs last period'
-              : `${Math.abs(change).toFixed(1)}% vs last period`}
-          </span>
+          <span>{resolvedTrend === 'neutral' ? neutralComparisonText : changeText}</span>
         </div>
       )}
     </div>
@@ -76,13 +115,13 @@ export function MetricCardSkeleton({ count = 4 }: MetricSkeletonProps) {
     <>
       {skeletonKeys.map((key) => (
         <div key={key} className="card">
-          <div className="animate-pulse">
-            <div className="flex items-center justify-between mb-2">
-              <div className="h-4 bg-gray-200 rounded w-20"></div>
-              <div className="h-8 w-8 bg-gray-200 rounded-lg"></div>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Skeleton width="w-24" height="h-4" variant="text" />
+              <Skeleton width="w-10" height="h-10" variant="circular" />
             </div>
-            <div className="h-8 bg-gray-200 rounded w-24 mb-2"></div>
-            <div className="h-4 bg-gray-200 rounded w-28"></div>
+            <Skeleton width="w-28" height="h-8" variant="rectangular" />
+            <Skeleton width="w-32" height="h-4" variant="text" />
           </div>
         </div>
       ))}

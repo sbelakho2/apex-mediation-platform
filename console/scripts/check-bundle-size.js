@@ -8,17 +8,21 @@
 
 const fs = require('fs');
 const path = require('path');
+const { spawnSync } = require('child_process');
 
 // Size budgets in KB
-const SIZE_BUDGETS = {
-  'pages/_app': 200,        // Main app bundle
-  'pages/index': 150,       // Homepage
-  'pages/dashboard': 250,   // Dashboard (can be larger)
-  'pages/signin': 100,      // Auth pages
-  'pages/signup': 100,
+const CHUNK_SIZE_BUDGETS = {
   'chunks/main': 300,       // Main chunk
   'chunks/framework': 200,  // React/Next framework
   'chunks/commons': 150,    // Common dependencies
+};
+
+const APP_ROUTE_BUDGETS = {
+  'app/page': 160,                   // Landing page
+  'app/dashboard/page': 320,         // Dashboard shell
+  'app/login/page': 120,             // Auth/login
+  'app/billing/page': 280,           // Billing overview
+  'app/transparency/auctions/page': 300, // Transparency data table
 };
 
 // Warning threshold (90% of budget)
@@ -55,8 +59,16 @@ function checkBundleSizes() {
   const staticDir = path.join(nextDir, 'static');
 
   if (!fs.existsSync(staticDir)) {
-    console.error('❌ .next/static directory not found. Run `npm run build` first.');
-    process.exit(1);
+    console.warn('⚙️  No build artifacts detected. Running `npm run build` before checking bundle sizes...');
+    const buildResult = spawnSync('npm', ['run', 'build'], { stdio: 'inherit' });
+    if (buildResult.status !== 0) {
+      console.error('❌ Unable to generate build artifacts required for bundle size reporting.');
+      process.exit(buildResult.status || 1);
+    }
+    if (!fs.existsSync(staticDir)) {
+      console.error('❌ .next/static directory still missing after build. Aborting bundle size check.');
+      process.exit(1);
+    }
   }
 
   console.log('📦 Checking bundle sizes...\n');
@@ -77,11 +89,16 @@ function checkBundleSizes() {
       totalSize += size;
 
       // Map to budget category
-      let category = 'chunks/main';
+      let category = null;
       if (file.includes('framework')) category = 'chunks/framework';
       else if (file.includes('commons')) category = 'chunks/commons';
+      else if (file.startsWith('main') || file.includes('main-app')) category = 'chunks/main';
 
-      const budget = SIZE_BUDGETS[category];
+      if (!category) {
+        continue;
+      }
+
+      const budget = CHUNK_SIZE_BUDGETS[category];
       if (budget) {
         const sizeKB = size / 1024;
         const percentOfBudget = (sizeKB / budget) * 100;
@@ -106,51 +123,62 @@ function checkBundleSizes() {
     }
   }
 
-  // Check page bundles
-  const pagesDir = path.join(staticDir, 'chunks', 'pages');
-  if (fs.existsSync(pagesDir)) {
-    const walkPages = (dir, prefix = '') => {
-      const files = fs.readdirSync(dir, { withFileTypes: true });
-      
-      for (const file of files) {
-        const fullPath = path.join(dir, file.name);
-        const relativePath = path.join(prefix, file.name);
+  // Check App Router server bundles
+  const appServerDir = path.join(nextDir, 'server', 'app');
+  if (fs.existsSync(appServerDir)) {
+    const walkAppRoutes = (dir, prefix = []) => {
+      const entries = fs.readdirSync(dir, { withFileTypes: true });
 
-        if (file.isDirectory()) {
-          walkPages(fullPath, relativePath);
-        } else if (file.name.endsWith('.js')) {
-          const size = fs.statSync(fullPath).size;
-          totalSize += size;
+      for (const entry of entries) {
+        const fullPath = path.join(dir, entry.name);
+        const nextPrefix = [...prefix, entry.name];
 
-          const pageName = relativePath.replace(/\.js$/, '');
-          const budget = SIZE_BUDGETS[`pages/${pageName}`];
-
-          if (budget) {
-            const sizeKB = size / 1024;
-            const percentOfBudget = (sizeKB / budget) * 100;
-
-            let status = '✅';
-            if (sizeKB > budget) {
-              status = '❌';
-              hasError = true;
-            } else if (sizeKB > budget * WARNING_THRESHOLD) {
-              status = '⚠️';
-              hasWarning = true;
-            }
-
-            results.push({
-              name: `pages/${pageName}`,
-              size: sizeKB,
-              budget,
-              status,
-              percentOfBudget,
-            });
-          }
+        if (entry.isDirectory()) {
+          walkAppRoutes(fullPath, nextPrefix);
+          continue;
         }
+
+        if (!entry.name.endsWith('.js') && !entry.name.endsWith('.mjs')) {
+          continue;
+        }
+
+        if (entry.name !== 'page.js' && entry.name !== 'page.mjs') {
+          continue;
+        }
+
+        const size = fs.statSync(fullPath).size;
+        totalSize += size;
+
+  const routeSegments = nextPrefix.slice(0, -1);
+  const routePath = routeSegments.length ? routeSegments.join('/') : '';
+  const routeKey = routePath ? `app/${routePath}/page` : 'app/page';
+        const budget = APP_ROUTE_BUDGETS[routeKey];
+
+        if (!budget) continue;
+
+        const sizeKB = size / 1024;
+        const percentOfBudget = (sizeKB / budget) * 100;
+
+        let status = '✅';
+        if (sizeKB > budget) {
+          status = '❌';
+          hasError = true;
+        } else if (sizeKB > budget * WARNING_THRESHOLD) {
+          status = '⚠️';
+          hasWarning = true;
+        }
+
+        results.push({
+          name: routeKey,
+          size: sizeKB,
+          budget,
+          status,
+          percentOfBudget,
+        });
       }
     };
 
-    walkPages(pagesDir);
+    walkAppRoutes(appServerDir);
   }
 
   // Print results

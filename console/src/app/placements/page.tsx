@@ -1,10 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
-import { useQuery } from '@tanstack/react-query'
+import { useInfiniteQuery } from '@tanstack/react-query'
 import { placementApi } from '@/lib/api'
-import { formatNumber } from '@/lib/utils'
 import { 
   Plus, 
   Search, 
@@ -22,28 +21,96 @@ const PLACEMENT_SKELETON_KEYS = ['placement-skeleton-1', 'placement-skeleton-2',
 
 export default function PlacementsPage() {
   const [search, setSearch] = useState('')
-  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'paused' | 'archived'>('all')
-  const [page, setPage] = useState(1)
+  const [statusFilter, setStatusFilter] = useState<string>('all')
   const pageSize = 20
+  const loadMoreRef = useRef<HTMLDivElement | null>(null)
 
-  const { data: placementsData, isLoading } = useQuery({
-    queryKey: ['placements', page, pageSize, statusFilter],
-    queryFn: async () => {
-      const { data } = await placementApi.list({ page, pageSize })
+  const {
+    data: placementsPages,
+    isLoading,
+    isFetchingNextPage,
+    hasNextPage,
+    fetchNextPage,
+  } = useInfiniteQuery({
+    queryKey: ['placements', pageSize],
+    initialPageParam: 1,
+    queryFn: async ({ pageParam }) => {
+      const { data } = await placementApi.list({ page: pageParam, pageSize })
       return data
     },
+    getNextPageParam: (lastPage) => (lastPage.hasMore ? lastPage.page + 1 : undefined),
   })
 
-  const filteredPlacements = placementsData?.data?.filter((placement) => {
-    const matchesSearch = search
-      ? placement.name.toLowerCase().includes(search.toLowerCase()) ||
-        placement.id.toLowerCase().includes(search.toLowerCase())
-      : true
+  const placements = useMemo(() => {
+    return placementsPages?.pages.flatMap((page) => page.data ?? []) ?? []
+  }, [placementsPages])
 
-    const matchesStatus = statusFilter === 'all' || placement.status === statusFilter
+  const knownStatuses = useMemo(() => {
+    const defaults: Array<{ value: string; label: string }> = [
+      { value: 'active', label: 'Active' },
+      { value: 'paused', label: 'Paused' },
+      { value: 'archived', label: 'Archived' },
+    ]
 
-    return matchesSearch && matchesStatus
-  }) || []
+    const dynamic = Array.from(
+      placements.reduce<Set<string>>((acc, placement) => {
+        if (placement.status) acc.add(placement.status)
+        return acc
+      }, new Set())
+    ).filter((status) => !defaults.some((option) => option.value === status))
+
+    const formattedDynamic = dynamic
+      .map((status) => ({
+        value: status,
+        label: status.replace(/_/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase()),
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label))
+
+    return [{ value: 'all', label: 'All Statuses' }, ...defaults, ...formattedDynamic]
+  }, [placements])
+
+  const handleLoadMore = useCallback(() => {
+    return fetchNextPage().catch(() => {
+      // noop — errors surface via query state
+    })
+  }, [fetchNextPage])
+
+  const filteredPlacements = useMemo(() => {
+    if (placements.length === 0) return []
+
+    return placements.filter((placement) => {
+      const matchesSearch = search
+        ? placement.name.toLowerCase().includes(search.toLowerCase()) ||
+          placement.id.toLowerCase().includes(search.toLowerCase())
+        : true
+
+      const matchesStatus = statusFilter === 'all' || placement.status === statusFilter
+
+      return matchesSearch && matchesStatus
+    })
+  }, [placements, search, statusFilter])
+
+  useEffect(() => {
+    if (!hasNextPage) return
+    const node = loadMoreRef.current
+    if (!node || typeof IntersectionObserver === 'undefined') return
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const [entry] = entries
+        if (entry.isIntersecting && hasNextPage && !isFetchingNextPage) {
+          void handleLoadMore()
+        }
+      },
+      { rootMargin: '200px' }
+    )
+
+    observer.observe(node)
+
+    return () => {
+      observer.unobserve(node)
+    }
+  }, [handleLoadMore, hasNextPage, isFetchingNextPage])
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -82,13 +149,14 @@ export default function PlacementsPage() {
               <Filter className="h-5 w-5 text-gray-500" aria-hidden="true" />
               <select
                 value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
-                className="input w-40"
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="input w-48"
               >
-                <option value="all">All Statuses</option>
-                <option value="active">Active</option>
-                <option value="paused">Paused</option>
-                <option value="archived">Archived</option>
+                {knownStatuses.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
               </select>
             </div>
           </div>
@@ -103,14 +171,21 @@ export default function PlacementsPage() {
                 <PlacementCard key={placement.id} placement={placement} />
               ))}
             </div>
-            {placementsData && placementsData.hasMore && (
-              <div className="mt-6 flex justify-center">
+            {hasNextPage && (
+              <div className="mt-6 flex flex-col items-center gap-2" ref={loadMoreRef}>
                 <button
-                  onClick={() => setPage((p) => p + 1)}
+                  type="button"
+                  onClick={() => void handleLoadMore()}
                   className="btn btn-outline"
+                  disabled={isFetchingNextPage}
                 >
-                  Load More
+                  {isFetchingNextPage ? 'Loading placements…' : 'Load More'}
                 </button>
+                <p className="text-xs text-gray-500" aria-live="polite">
+                  {isFetchingNextPage
+                    ? 'Fetching additional placements…'
+                    : 'Scroll to load more automatically'}
+                </p>
               </div>
             )}
           </>
@@ -123,7 +198,7 @@ export default function PlacementsPage() {
 }
 
 function PlacementCard({ placement }: { placement: Placement }) {
-  const statusColors = {
+  const statusColors: Record<string, string> = {
     active: 'bg-success-100 text-success-700',
     paused: 'bg-warning-100 text-warning-700',
     archived: 'bg-gray-100 text-gray-700',
@@ -157,8 +232,8 @@ function PlacementCard({ placement }: { placement: Placement }) {
             </div>
             <div className="flex items-center gap-2">
               <span className="text-sm text-gray-500">Status:</span>
-              <span className={`badge ${statusColors[placement.status]}`}>
-                {placement.status}
+              <span className={`badge ${statusColors[placement.status] ?? 'bg-gray-100 text-gray-700'}`}>
+                {placement.status.replace(/_/g, ' ')}
               </span>
             </div>
           </div>

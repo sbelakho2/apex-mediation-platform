@@ -3,6 +3,8 @@ import userEvent from '@testing-library/user-event'
 import { configureAxe } from 'jest-axe'
 import BillingSettingsPage from './page'
 
+const ORIGINAL_ENV = process.env
+
 function mockGetBillingSettings() {
   const globalKey = '__billingSettingsMock'
   const existing = (globalThis as Record<string, unknown>)[globalKey]
@@ -60,6 +62,19 @@ jest.mock('@/lib/api-client', () => ({
   },
 }))
 
+jest.mock('@/lib/useSession', () => ({
+  useSession: () => ({
+    user: {
+      userId: 'user-1',
+      publisherId: 'pub-1',
+      email: 'billing@test.dev',
+      role: 'admin',
+      permissions: ['billing:view', 'billing:manage'],
+    },
+    isLoading: false,
+  }),
+}))
+
 jest.mock('@tanstack/react-query', () => ({
   useQuery: jest.fn(() => ({
     data: mockGetBillingSettings(),
@@ -78,6 +93,15 @@ const axe = configureAxe({
   rules: {
     'color-contrast': { enabled: true },
   },
+})
+
+beforeEach(() => {
+  process.env = { ...ORIGINAL_ENV }
+  delete process.env.NEXT_PUBLIC_ENABLE_BILLING_MIGRATION
+})
+
+afterAll(() => {
+  process.env = ORIGINAL_ENV
 })
 
 describe('BillingSettingsPage Accessibility', () => {
@@ -181,6 +205,16 @@ describe('BillingSettingsPage Accessibility', () => {
     await user.tab()
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /update/i, hidden: false })).toHaveFocus()
+    })
+  })
+
+  it('reveals the migration assistant when the feature flag is enabled', async () => {
+    process.env.NEXT_PUBLIC_ENABLE_BILLING_MIGRATION = 'true'
+
+    render(<BillingSettingsPage />)
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: /migration assistant/i })).toBeInTheDocument()
     })
   })
 })

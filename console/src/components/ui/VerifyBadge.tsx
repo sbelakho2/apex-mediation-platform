@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
-import { CheckCircle, XCircle, MinusCircle, AlertCircle } from 'lucide-react'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { CheckCircle, XCircle, MinusCircle, AlertCircle, RefreshCcw } from 'lucide-react'
 import { transparencyApi, type VerifyResult } from '@/lib/transparency'
 import { Tooltip } from './Tooltip'
 import { Spinner } from './Spinner'
@@ -36,20 +36,51 @@ export function VerifyBadge({ auctionId, hasSigned = true, compact = false, auto
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [loaded, setLoaded] = useState(false)
+  const abortControllerRef = useRef<AbortController | null>(null)
+  const isMountedRef = useRef(true)
+  const previousAuctionRef = useRef(auctionId)
 
-  const loadVerification = useCallback(async () => {
-    if (loading || loaded) return
-    
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false
+      abortControllerRef.current?.abort()
+    }
+  }, [])
+
+  const loadVerification = useCallback(async ({ force = false }: { force?: boolean } = {}) => {
+    if (loading || (loaded && !force)) return
+
+    abortControllerRef.current?.abort()
+    const controller = new AbortController()
+    abortControllerRef.current = controller
+
     setLoading(true)
     setError(null)
+    setVerifyResult(null)
+    setLoaded(false)
+
+    const handleError = (e: unknown) => {
+      if (isAbortError(e)) return
+      console.error(`[VerifyBadge] Failed to verify auction ${auctionId}`, e)
+      setError(formatVerifyError(e))
+    }
+
     try {
-      const result = await transparencyApi.verify(auctionId)
+      const result = await transparencyApi.verify(auctionId, { signal: controller.signal })
+      if (controller.signal.aborted || !isMountedRef.current) return
       setVerifyResult(result)
       setLoaded(true)
-    } catch (e: any) {
-      setError(e?.message || 'Failed to verify')
+    } catch (e: unknown) {
+      if (!controller.signal.aborted) {
+        handleError(e)
+      }
     } finally {
-      setLoading(false)
+      if (!controller.signal.aborted && isMountedRef.current) {
+        setLoading(false)
+        if (abortControllerRef.current === controller) {
+          abortControllerRef.current = null
+        }
+      }
     }
   }, [auctionId, loaded, loading])
 
@@ -58,6 +89,45 @@ export function VerifyBadge({ auctionId, hasSigned = true, compact = false, auto
       void loadVerification()
     }
   }, [autoLoad, hasSigned, loaded, loadVerification])
+
+  useEffect(() => {
+    if (previousAuctionRef.current === auctionId) {
+      return
+    }
+
+    previousAuctionRef.current = auctionId
+    setVerifyResult(null)
+    setLoaded(false)
+    setError(null)
+    setLoading(false)
+    abortControllerRef.current?.abort()
+  }, [auctionId])
+
+  const showRefreshAction = hasSigned && loaded && !loading
+
+  const renderWithRefresh = (badge: React.ReactNode, tooltip?: React.ReactNode) => {
+    const badgeContent = tooltip ? <Tooltip content={tooltip}>{badge}</Tooltip> : badge
+
+    if (!showRefreshAction) return badgeContent
+
+    return (
+      <span className="inline-flex items-center gap-1.5">
+        {badgeContent}
+        <Tooltip content="Refresh verification status">
+          <button
+            type="button"
+            onClick={() => void loadVerification({ force: true })}
+            className={`inline-flex items-center justify-center rounded border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 transition-colors ${compact ? 'h-6 w-6' : 'px-2 py-1 text-xs font-medium'}`}
+            aria-label={`Refresh verification for auction ${auctionId}`}
+            disabled={loading}
+          >
+            <RefreshCcw className={compact ? 'h-3.5 w-3.5' : 'h-4 w-4'} aria-hidden="true" />
+            {!compact && <span className="ml-1">Refresh</span>}
+          </button>
+        </Tooltip>
+      </span>
+    )
+  }
 
   // Not signed
   if (!hasSigned) {
@@ -84,12 +154,17 @@ export function VerifyBadge({ auctionId, hasSigned = true, compact = false, auto
 
   // Error
   if (error) {
-    const tooltip = `Verification error: ${error}`
+    const tooltip = `${error} Click to retry.`
     const badge = (
-      <span className={`inline-flex items-center gap-1.5 ${compact ? 'px-2 py-0.5 text-xs' : 'px-2.5 py-1 text-sm'} rounded bg-red-100 text-red-600 font-medium`}>
+      <button
+        type="button"
+        onClick={() => void loadVerification()}
+        className={`inline-flex items-center gap-1.5 ${compact ? 'px-2 py-0.5 text-xs' : 'px-2.5 py-1 text-sm'} rounded bg-red-100 text-red-600 font-medium hover:bg-red-200 transition-colors`}
+        aria-label={compact ? `Retry verification for auction ${auctionId}` : undefined}
+      >
         <AlertCircle className={compact ? 'h-3 w-3' : 'h-4 w-4'} aria-hidden="true" />
-        {!compact && 'Error'}
-      </span>
+        {!compact && 'Retry verification'}
+      </button>
     )
     return <Tooltip content={tooltip}>{badge}</Tooltip>
   }
@@ -98,8 +173,9 @@ export function VerifyBadge({ auctionId, hasSigned = true, compact = false, auto
   if (!loaded && !autoLoad) {
     return (
       <button
-        onClick={loadVerification}
+        onClick={() => void loadVerification()}
         className={`inline-flex items-center gap-1.5 ${compact ? 'px-2 py-0.5 text-xs' : 'px-2.5 py-1 text-sm'} rounded bg-primary-50 text-primary-600 font-medium hover:bg-primary-100 transition-colors`}
+        aria-label={compact ? `Verify auction ${auctionId}` : undefined}
       >
         <CheckCircle className={compact ? 'h-3 w-3' : 'h-4 w-4'} aria-hidden="true" />
         {!compact && 'Verify'}
@@ -146,8 +222,27 @@ export function VerifyBadge({ auctionId, hasSigned = true, compact = false, auto
       </span>
     )
 
-    return <Tooltip content={config.tooltip}>{badge}</Tooltip>
+    return renderWithRefresh(badge, config.tooltip)
   }
 
   return null
+}
+
+function isAbortError(error: unknown) {
+  if (!error) return false
+  if (error instanceof DOMException && error.name === 'AbortError') return true
+  if (typeof error === 'object' && 'code' in (error as Record<string, unknown>)) {
+    return (error as { code?: string }).code === 'ERR_CANCELED'
+  }
+  return false
+}
+
+function formatVerifyError(error: unknown) {
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    return 'Offline. Check your connection and retry.'
+  }
+  if (error instanceof Error && /timeout/i.test(error.message)) {
+    return 'Verification timed out. Please try again.'
+  }
+  return 'Verification temporarily unavailable. Try again.'
 }

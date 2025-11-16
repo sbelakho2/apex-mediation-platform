@@ -1,11 +1,13 @@
 'use client'
 
-import { usePathname } from 'next/navigation'
 import Link from 'next/link'
 import { signOut } from 'next-auth/react'
+import { usePathname } from 'next/navigation'
+import { useEffect, useMemo, useState } from 'react'
 import { useSession as useCookieSession } from '@/lib/useSession'
 import { useFeatures } from '@/lib/useFeatures'
 import { t } from '@/i18n'
+import type { Role } from '@/lib/rbac'
 import {
   LayoutDashboard,
   Layout,
@@ -21,17 +23,33 @@ import {
   CreditCard,
   GitCompare,
 } from 'lucide-react'
-import { useMemo, useState } from 'react'
 
-const baseNavigation = [
-  { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { name: 'Placements', href: '/placements', icon: Layout },
-  { name: 'Adapters', href: '/adapters', icon: Layers },
-  { name: 'Analytics', href: '/analytics', icon: BarChart3 },
-  { name: 'Fraud Detection', href: '/fraud', icon: ShieldAlert },
-  { name: 'Payouts', href: '/payouts', icon: DollarSign },
-  { name: 'Settings', href: '/settings', icon: Settings },
+type FeatureFlagKey = 'transparency' | 'billing' | 'migrationStudio'
+type NavBlueprint = {
+  key: string
+  label: string
+  labelKey?: string
+  href: string
+  icon: typeof LayoutDashboard
+  featureFlag?: FeatureFlagKey
+  roles?: Role[]
+}
+
+const NAV_BLUEPRINT: NavBlueprint[] = [
+  { key: 'dashboard', label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+  { key: 'placements', label: 'Placements', href: '/placements', icon: Layout },
+  { key: 'migration-studio', label: 'Migration Studio', labelKey: 'migrationStudio.nav', href: '/migration-studio', icon: GitCompare, featureFlag: 'migrationStudio' },
+  { key: 'adapters', label: 'Adapters', href: '/adapters', icon: Layers },
+  { key: 'analytics', label: 'Analytics', href: '/analytics', icon: BarChart3 },
+  { key: 'transparency', label: 'Transparency', href: '/transparency/auctions', icon: ShieldCheck, featureFlag: 'transparency' },
+  { key: 'fraud', label: 'Fraud Detection', href: '/fraud', icon: ShieldAlert },
+  { key: 'payouts', label: 'Payouts', href: '/payouts', icon: DollarSign },
+  { key: 'billing', label: 'Billing', href: '/billing/usage', icon: CreditCard, featureFlag: 'billing' },
+  { key: 'settings', label: 'Settings', href: '/settings', icon: Settings },
+  { key: 'admin', label: 'Admin', href: '/admin/health', icon: Settings, roles: ['admin'] },
 ]
+
+const NAV_SKELETON_KEYS = ['nav-skeleton-1', 'nav-skeleton-2', 'nav-skeleton-3', 'nav-skeleton-4', 'nav-skeleton-5', 'nav-skeleton-6']
 
 export default function Navigation({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
@@ -49,43 +67,54 @@ export default function Navigation({ children }: { children: React.ReactNode }) 
     []
   )
 
-  const { features, loading: featuresLoading } = useFeatures({ fallback: featureFallbacks })
-  const resolvedFeatures = features ?? featureFallbacks
-  const showTransparency = Boolean(resolvedFeatures.transparency)
-  const showBilling = Boolean(resolvedFeatures.billing)
-  const showMigrationStudio = Boolean(resolvedFeatures.migrationStudio)
+  const { features, loading: featuresLoading, refresh: refreshFeatures } = useFeatures({ fallback: featureFallbacks })
+
+  const resolvedFeatures = useMemo(() => {
+    return {
+      transparency: featureFallbacks.transparency,
+      billing: featureFallbacks.billing,
+      migrationStudio: featureFallbacks.migrationStudio,
+      ...(features || {}),
+    }
+  }, [featureFallbacks.billing, featureFallbacks.migrationStudio, featureFallbacks.transparency, features])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const handleVisibility = () => {
+      if (document.hidden) return
+      refreshFeatures()
+    }
+    window.addEventListener('visibilitychange', handleVisibility)
+    window.addEventListener('focus', handleVisibility)
+    const intervalId = window.setInterval(handleVisibility, 60 * 1000)
+    return () => {
+      window.removeEventListener('visibilitychange', handleVisibility)
+      window.removeEventListener('focus', handleVisibility)
+      window.clearInterval(intervalId)
+    }
+  }, [refreshFeatures])
 
   const navigation = useMemo(() => {
-    const items = [
-      baseNavigation[0],
-      baseNavigation[1],
-      ...(showMigrationStudio
-        ? [{ name: t('migrationStudio.nav'), href: '/migration-studio', icon: GitCompare }]
-        : []),
-      baseNavigation[2],
-      baseNavigation[3],
-      ...(showTransparency ? [{ name: 'Transparency', href: '/transparency/auctions', icon: ShieldCheck }] : []),
-      baseNavigation[4],
-      baseNavigation[5],
-      ...(showBilling ? [{ name: 'Billing', href: '/billing/usage', icon: CreditCard }] : []),
-      baseNavigation[6],
-    ]
-    // Admin section (operators only)
-    if (user?.role === 'admin') {
-      items.push({ name: 'Admin', href: '/admin/health', icon: Settings })
-    }
-    return items
-  }, [showMigrationStudio, showTransparency, showBilling, user?.role])
+    const role: Role | undefined = user?.role as Role | undefined
+    return NAV_BLUEPRINT.filter((item) => {
+      if (item.roles && (!role || !item.roles.includes(role))) {
+        return false
+      }
+      if (item.featureFlag && !resolvedFeatures[item.featureFlag]) {
+        return false
+      }
+      return true
+    }).map((item) => ({
+      ...item,
+      name: resolveNavLabel(item),
+    }))
+  }, [resolvedFeatures, user?.role])
 
   // Don't show navigation on login page
   if (!pathname || pathname === '/login' || pathname === '/') return <>{children}</>
 
   if (sessionLoading || featuresLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <p className="text-sm text-gray-600">Loading workspace navigation…</p>
-      </div>
-    )
+    return <NavigationSkeleton />
   }
 
   // If session missing (logging out / unauthorized), defer to page-level redirects without flashing nav
@@ -157,7 +186,7 @@ export default function Navigation({ children }: { children: React.ReactNode }) 
               const Icon = item.icon as any
               return (
                 <Link
-                  key={item.name}
+                  key={item.key}
                   href={item.href}
                   onClick={() => setMobileMenuOpen(false)}
                   className={`
@@ -204,7 +233,9 @@ export default function Navigation({ children }: { children: React.ReactNode }) 
                 aria-busy={signingOut}
               >
                 <LogOut className="h-5 w-5" aria-hidden={true} />
-                {signingOut ? 'Signing Out…' : 'Sign Out'}
+                <span className="flex-1 text-left" aria-live="polite">
+                  {signingOut ? 'Signing Out…' : 'Sign Out'}
+                </span>
               </button>
           </div>
         </div>
@@ -214,6 +245,39 @@ export default function Navigation({ children }: { children: React.ReactNode }) 
       <div className="lg:pl-64">
         <div className="pt-16 lg:pt-0">{children}</div>
       </div>
+    </div>
+  )
+}
+
+function resolveNavLabel(item: NavBlueprint): string {
+  if (item.labelKey) {
+    const translated = t(item.labelKey)
+    if (translated && translated !== item.labelKey) {
+      return translated
+    }
+  }
+  return item.label
+}
+
+function NavigationSkeleton() {
+  return (
+    <div className="min-h-screen bg-gray-50 animate-pulse" role="status" aria-live="polite">
+      <div className="lg:hidden fixed top-0 left-0 right-0 z-50 bg-white border-b px-4 py-3 flex items-center justify-between">
+        <div className="h-8 w-32 bg-gray-200 rounded" />
+        <div className="h-8 w-8 bg-gray-200 rounded-full" />
+      </div>
+      <aside className="fixed top-0 left-0 bottom-0 w-64 bg-white border-r z-40 p-6 space-y-4 hidden lg:flex lg:flex-col">
+        <div className="h-10 w-full bg-gray-200 rounded" />
+        <div className="space-y-2">
+          {NAV_SKELETON_KEYS.map((key) => (
+            <div key={key} className="h-9 w-full bg-gray-100 rounded" />
+          ))}
+        </div>
+        <div className="mt-auto space-y-2">
+          <div className="h-8 bg-gray-100 rounded" />
+          <div className="h-10 bg-gray-100 rounded" />
+        </div>
+      </aside>
     </div>
   )
 }

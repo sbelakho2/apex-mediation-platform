@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
@@ -17,7 +17,10 @@ const adapterSchema = z.object({
   status: z.enum(['active', 'inactive', 'testing']),
   priority: z.coerce.number().int().min(1).max(100),
   ecpm: z.coerce.number().min(0),
-  fillRatePercent: z.coerce.number().min(0).max(100),
+  fillRatePercent: z.coerce
+    .number({ invalid_type_error: 'Enter a valid number between 0 and 100' })
+    .min(0, 'Fill rate must be between 0 and 100%')
+    .max(100, 'Fill rate must be between 0 and 100%'),
 })
 
 type AdapterFormValues = z.infer<typeof adapterSchema>
@@ -26,13 +29,22 @@ export default function NewAdapterPage() {
   const router = useRouter()
   const [formError, setFormError] = useState<string | null>(null)
 
-  const { data: placements, isLoading: loadingPlacements } = useQuery({
+  const {
+    data: placements,
+    isLoading: loadingPlacements,
+    isError: placementsError,
+    error: placementsErrorObject,
+    refetch: refetchPlacements,
+  } = useQuery({
     queryKey: ['placements', 'lookup'],
     queryFn: async () => {
       const { data } = await placementApi.list({ page: 1, pageSize: 200 })
       return data.data
     },
+    retry: 1,
   })
+
+  const placementOptions = useMemo(() => placements ?? [], [placements])
 
   const {
     register,
@@ -56,7 +68,7 @@ export default function NewAdapterPage() {
         status: values.status,
         priority: values.priority,
         ecpm: values.ecpm,
-        fillRate: Number((values.fillRatePercent / 100).toFixed(4)),
+        fillRate: Number(values.fillRatePercent.toFixed(2)),
       })
       return data
     },
@@ -139,15 +151,38 @@ export default function NewAdapterPage() {
                   <label htmlFor="placement" className="label">
                     Placement <span className="text-danger-600">*</span>
                   </label>
-                  <select id="placement" className="input" disabled={loadingPlacements} {...register('placementId')}>
-                    <option value="">Select placement</option>
-                    {placements?.map((placement) => (
+                  <select
+                    id="placement"
+                    className="input"
+                    disabled={loadingPlacements || placementsError}
+                    {...register('placementId')}
+                  >
+                    <option value="">
+                      {loadingPlacements ? 'Loading placements…' : 'Select placement'}
+                    </option>
+                    {placementOptions.map((placement) => (
                       <option key={placement.id} value={placement.id}>
                         {placement.name}
                       </option>
                     ))}
                   </select>
                   {errors.placementId && <p className="text-sm text-danger-600 mt-1">{errors.placementId.message}</p>}
+                  {placementsError && (
+                    <div className="mt-2 rounded-md border border-danger-200 bg-danger-50 p-3 text-sm text-danger-700" role="alert">
+                      <p className="font-medium">We couldn’t load placements.</p>
+                      <p className="mt-1">{placementsErrorObject instanceof Error ? placementsErrorObject.message : 'Please try again.'}</p>
+                      <button
+                        type="button"
+                        onClick={() => refetchPlacements()}
+                        className="mt-2 text-primary-700 underline"
+                      >
+                        Retry
+                      </button>
+                    </div>
+                  )}
+                  {!placementsError && !loadingPlacements && placementOptions.length === 0 && (
+                    <p className="text-xs text-warning-600 mt-1">No placements found. Create one before adding adapters.</p>
+                  )}
                   <p className="text-xs text-gray-500 mt-1">
                     Select the placement this adapter will compete within.
                   </p>
@@ -191,8 +226,18 @@ export default function NewAdapterPage() {
                   <label htmlFor="fillRate" className="label">
                     Expected Fill Rate (%) <span className="text-danger-600">*</span>
                   </label>
-                  <input id="fillRate" type="number" min={0} max={100} className="input" {...register('fillRatePercent')} />
+                  <input
+                    id="fillRate"
+                    type="number"
+                    min={0}
+                    max={100}
+                    step={0.1}
+                    className="input"
+                    placeholder="e.g., 72 for 72%"
+                    {...register('fillRatePercent')}
+                  />
                   {errors.fillRatePercent && <p className="text-sm text-danger-600 mt-1">{errors.fillRatePercent.message}</p>}
+                  <p className="text-xs text-gray-500 mt-1">Enter the expected percentage between 0 and 100. We’ll store it exactly as entered.</p>
                 </div>
               </div>
             </section>

@@ -1,10 +1,12 @@
 'use client'
 
+import { useEffect, useMemo, useState } from 'react'
 import { LineChart, Line, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 
 const FALLBACK_LOCALE = 'en-US'
 const FALLBACK_CURRENCY = 'USD'
 const FALLBACK_TIMEZONE = 'UTC'
+const ENV_DEFAULT_CURRENCY = process.env.NEXT_PUBLIC_DEFAULT_CURRENCY
 
 const sanitizeNumber = (value: number, fallback = 0) => (Number.isFinite(value) ? value : fallback)
 
@@ -29,6 +31,77 @@ const createCurrencyFormatter = (locale: string, currency: string, options?: Int
 
 const createNumberFormatter = (locale: string, options?: Intl.NumberFormatOptions) =>
   new Intl.NumberFormat(locale, options)
+
+const getBrowserLocale = () => {
+  if (typeof navigator !== 'undefined') {
+    if (Array.isArray(navigator.languages) && navigator.languages.length > 0) {
+      return navigator.languages[0]
+    }
+    if (navigator.language) {
+      return navigator.language
+    }
+  }
+  return FALLBACK_LOCALE
+}
+
+const getBrowserTimeZone = () => {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || FALLBACK_TIMEZONE
+  } catch {
+    return FALLBACK_TIMEZONE
+  }
+}
+
+const getBrowserCurrency = () => {
+  if (ENV_DEFAULT_CURRENCY) {
+    return ENV_DEFAULT_CURRENCY
+  }
+  try {
+    const formatter = new Intl.NumberFormat(undefined, {
+      style: 'currency',
+      currency: FALLBACK_CURRENCY,
+    })
+    return formatter.resolvedOptions().currency || FALLBACK_CURRENCY
+  } catch {
+    return FALLBACK_CURRENCY
+  }
+}
+
+const useChartEnvironment = (locale?: string, currency?: string, timeZone?: string) => {
+  const [isClient, setIsClient] = useState(false)
+
+  useEffect(() => {
+    setIsClient(true)
+  }, [])
+
+  return {
+    locale: locale || getBrowserLocale(),
+    currency: currency || getBrowserCurrency(),
+    timeZone: timeZone || getBrowserTimeZone(),
+    isClient,
+  }
+}
+
+const ChartSkeleton = ({ height }: { height: number }) => (
+  <div
+    className="w-full rounded-lg border border-dashed border-gray-200 bg-gray-50 animate-pulse"
+    style={{ height }}
+    data-testid="chart-skeleton"
+  />
+)
+
+const useNormalizedFillRateData = (data: RevenueData[]) =>
+  useMemo(() => {
+    const values = data.map((point) => sanitizeNumber(point.fillRate))
+    const requiresPercentNormalization = values.some((value) => value > 1.5)
+
+    return data.map((point) => ({
+      ...point,
+      normalizedFillRate: requiresPercentNormalization
+        ? sanitizeNumber(point.fillRate) / 100
+        : sanitizeNumber(point.fillRate),
+    }))
+  }, [data])
 
 interface RevenueData {
   date: string
@@ -56,20 +129,31 @@ interface DateFormattedChartProps extends ChartProps {
 export function RevenueLineChart({
   data,
   height = 300,
-  locale = FALLBACK_LOCALE,
-  currency = FALLBACK_CURRENCY,
-  timeZone = FALLBACK_TIMEZONE,
+  locale,
+  currency,
+  timeZone,
 }: ChartProps) {
-  const axisDateFormatter = new Intl.DateTimeFormat(locale, {
+  const {
+    locale: resolvedLocale,
+    currency: resolvedCurrency,
+    timeZone: resolvedTimeZone,
+    isClient,
+  } = useChartEnvironment(locale, currency, timeZone)
+
+  if (!isClient) {
+    return <ChartSkeleton height={height} />
+  }
+
+  const axisDateFormatter = new Intl.DateTimeFormat(resolvedLocale, {
     month: 'short',
     day: 'numeric',
-    timeZone,
+    timeZone: resolvedTimeZone,
   })
-  const tooltipDateFormatter = new Intl.DateTimeFormat(locale, {
+  const tooltipDateFormatter = new Intl.DateTimeFormat(resolvedLocale, {
     dateStyle: 'medium',
-    timeZone,
+    timeZone: resolvedTimeZone,
   })
-  const currencyFormatter = createCurrencyFormatter(locale, currency)
+  const currencyFormatter = createCurrencyFormatter(resolvedLocale, resolvedCurrency)
 
   return (
     <ResponsiveContainer width="100%" height={height}>
@@ -112,18 +196,29 @@ export function RevenueAreaChart({
   height = 300,
   formatDateLabel,
   formatTooltipLabel,
-  currency = FALLBACK_CURRENCY,
-  locale = FALLBACK_LOCALE,
-  timeZone = FALLBACK_TIMEZONE,
+  currency,
+  locale,
+  timeZone,
 }: DateFormattedChartProps) {
-  const axisDateFormatter = new Intl.DateTimeFormat(locale, {
+  const {
+    locale: resolvedLocale,
+    currency: resolvedCurrency,
+    timeZone: resolvedTimeZone,
+    isClient,
+  } = useChartEnvironment(locale, currency, timeZone)
+
+  if (!isClient) {
+    return <ChartSkeleton height={height} />
+  }
+
+  const axisDateFormatter = new Intl.DateTimeFormat(resolvedLocale, {
     month: 'short',
     day: 'numeric',
-    timeZone,
+    timeZone: resolvedTimeZone,
   })
-  const tooltipDateFormatter = new Intl.DateTimeFormat(locale, {
+  const tooltipDateFormatter = new Intl.DateTimeFormat(resolvedLocale, {
     dateStyle: 'medium',
-    timeZone,
+    timeZone: resolvedTimeZone,
   })
 
   const resolvedAxisFormatter = formatDateLabel
@@ -134,7 +229,7 @@ export function RevenueAreaChart({
     ? (label: string) => formatTooltipLabel(label)
     : (label: string) => formatDateValue(label, tooltipDateFormatter)
 
-  const currencyFormatter = createCurrencyFormatter(locale, currency)
+  const currencyFormatter = createCurrencyFormatter(resolvedLocale, resolvedCurrency)
 
   return (
     <ResponsiveContainer width="100%" height={height}>
@@ -180,19 +275,25 @@ export function RevenueAreaChart({
 export function ImpressionsBarChart({
   data,
   height = 300,
-  locale = FALLBACK_LOCALE,
-  timeZone = FALLBACK_TIMEZONE,
+  locale,
+  timeZone,
 }: ChartProps) {
-  const axisDateFormatter = new Intl.DateTimeFormat(locale, {
+  const { locale: resolvedLocale, timeZone: resolvedTimeZone, isClient } = useChartEnvironment(locale, undefined, timeZone)
+
+  if (!isClient) {
+    return <ChartSkeleton height={height} />
+  }
+
+  const axisDateFormatter = new Intl.DateTimeFormat(resolvedLocale, {
     month: 'short',
     day: 'numeric',
-    timeZone,
+    timeZone: resolvedTimeZone,
   })
-  const tooltipDateFormatter = new Intl.DateTimeFormat(locale, {
+  const tooltipDateFormatter = new Intl.DateTimeFormat(resolvedLocale, {
     dateStyle: 'medium',
-    timeZone,
+    timeZone: resolvedTimeZone,
   })
-  const numberFormatter = createNumberFormatter(locale, { maximumFractionDigits: 0 })
+  const numberFormatter = createNumberFormatter(resolvedLocale, { maximumFractionDigits: 0 })
 
   return (
     <ResponsiveContainer width="100%" height={height}>
@@ -232,18 +333,29 @@ export function EcpmLineChart({
   height = 300,
   formatDateLabel,
   formatTooltipLabel,
-  locale = FALLBACK_LOCALE,
-  currency = FALLBACK_CURRENCY,
-  timeZone = FALLBACK_TIMEZONE,
+  locale,
+  currency,
+  timeZone,
 }: DateFormattedChartProps) {
-  const axisDateFormatter = new Intl.DateTimeFormat(locale, {
+  const {
+    locale: resolvedLocale,
+    currency: resolvedCurrency,
+    timeZone: resolvedTimeZone,
+    isClient,
+  } = useChartEnvironment(locale, currency, timeZone)
+
+  if (!isClient) {
+    return <ChartSkeleton height={height} />
+  }
+
+  const axisDateFormatter = new Intl.DateTimeFormat(resolvedLocale, {
     month: 'short',
     day: 'numeric',
-    timeZone,
+    timeZone: resolvedTimeZone,
   })
-  const tooltipDateFormatter = new Intl.DateTimeFormat(locale, {
+  const tooltipDateFormatter = new Intl.DateTimeFormat(resolvedLocale, {
     dateStyle: 'medium',
-    timeZone,
+    timeZone: resolvedTimeZone,
   })
 
   const resolvedAxisFormatter = formatDateLabel
@@ -254,7 +366,7 @@ export function EcpmLineChart({
     ? (label: string) => formatTooltipLabel(label)
     : (label: string) => formatDateValue(label, tooltipDateFormatter)
 
-  const currencyFormatter = createCurrencyFormatter(locale, currency, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  const currencyFormatter = createCurrencyFormatter(resolvedLocale, resolvedCurrency, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
   return (
     <ResponsiveContainer width="100%" height={height}>
@@ -295,30 +407,37 @@ export function EcpmLineChart({
 export function FillRateLineChart({
   data,
   height = 300,
-  locale = FALLBACK_LOCALE,
-  timeZone = FALLBACK_TIMEZONE,
+  locale,
+  timeZone,
 }: ChartProps) {
-  const axisDateFormatter = new Intl.DateTimeFormat(locale, {
+  const { locale: resolvedLocale, timeZone: resolvedTimeZone, isClient } = useChartEnvironment(locale, undefined, timeZone)
+  const normalizedData = useNormalizedFillRateData(data)
+
+  if (!isClient) {
+    return <ChartSkeleton height={height} />
+  }
+
+  const axisDateFormatter = new Intl.DateTimeFormat(resolvedLocale, {
     month: 'short',
     day: 'numeric',
-    timeZone,
+    timeZone: resolvedTimeZone,
   })
-  const tooltipDateFormatter = new Intl.DateTimeFormat(locale, {
+  const tooltipDateFormatter = new Intl.DateTimeFormat(resolvedLocale, {
     dateStyle: 'medium',
-    timeZone,
+    timeZone: resolvedTimeZone,
   })
-  const percentFormatter = createNumberFormatter(locale, {
+  const percentFormatter = createNumberFormatter(resolvedLocale, {
     style: 'percent',
     maximumFractionDigits: 0,
   })
-  const percentTooltipFormatter = createNumberFormatter(locale, {
+  const percentTooltipFormatter = createNumberFormatter(resolvedLocale, {
     style: 'percent',
     maximumFractionDigits: 2,
   })
 
   return (
     <ResponsiveContainer width="100%" height={height}>
-      <LineChart data={data}>
+      <LineChart data={normalizedData}>
         <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
         <XAxis 
           dataKey="date" 
@@ -340,7 +459,7 @@ export function FillRateLineChart({
         <Legend />
         <Line 
           type="monotone" 
-          dataKey="fillRate" 
+          dataKey="normalizedFillRate" 
           stroke="#8b5cf6" 
           strokeWidth={2}
           dot={{ fill: '#8b5cf6', r: 4 }}
@@ -356,21 +475,32 @@ export function FillRateLineChart({
 export function CombinedMetricsChart({
   data,
   height = 300,
-  locale = FALLBACK_LOCALE,
-  currency = FALLBACK_CURRENCY,
-  timeZone = FALLBACK_TIMEZONE,
+  locale,
+  currency,
+  timeZone,
 }: ChartProps) {
-  const axisDateFormatter = new Intl.DateTimeFormat(locale, {
+  const {
+    locale: resolvedLocale,
+    currency: resolvedCurrency,
+    timeZone: resolvedTimeZone,
+    isClient,
+  } = useChartEnvironment(locale, currency, timeZone)
+
+  if (!isClient) {
+    return <ChartSkeleton height={height} />
+  }
+
+  const axisDateFormatter = new Intl.DateTimeFormat(resolvedLocale, {
     month: 'short',
     day: 'numeric',
-    timeZone,
+    timeZone: resolvedTimeZone,
   })
-  const tooltipDateFormatter = new Intl.DateTimeFormat(locale, {
+  const tooltipDateFormatter = new Intl.DateTimeFormat(resolvedLocale, {
     dateStyle: 'medium',
-    timeZone,
+    timeZone: resolvedTimeZone,
   })
-  const currencyFormatter = createCurrencyFormatter(locale, currency)
-  const numberFormatter = createNumberFormatter(locale)
+  const currencyFormatter = createCurrencyFormatter(resolvedLocale, resolvedCurrency)
+  const numberFormatter = createNumberFormatter(resolvedLocale)
 
   return (
     <ResponsiveContainer width="100%" height={height}>

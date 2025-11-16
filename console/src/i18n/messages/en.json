@@ -79,11 +79,7 @@
         "subtotal": "Subtotal",
         "tax": "Tax",
         "grandTotal": "Grand Total"
-      }
-    },
-    "settings": {
-      "title": "Billing Settings",
-      "description": "Manage your plan, payment method, and billing preferences",
+      },
       "currentPlan": {
         "title": "Current Plan",
         "description": "Your subscription tier and included usage limits",
@@ -136,6 +132,25 @@
     },
     "currency": {
       "usd": "USD"
+    },
+    "status": {
+      "paid": "Paid",
+      "open": "Open",
+      "draft": "Draft",
+      "void": "Void",
+      "uncollectible": "Uncollectible"
+    },
+    "filters": {
+      "statusLabel": "Status",
+      "statusAriaLabel": "Filter by invoice status",
+      "status": {
+        "all": "All statuses",
+        "open": "Open",
+        "paid": "Paid",
+        "void": "Void",
+        "uncollectible": "Uncollectible",
+        "draft": "Draft"
+      }
     },
     "common": {
       "loading": "Loading...",
@@ -199,6 +214,7 @@
       "guardrailPassed": "Guardrails look good",
       "guardrailPaused": "Guardrails triggered. Experiment paused.",
       "guardrailViolations": "Violations",
+      "guardrailCooldown": "Please wait a few seconds before running guardrails again.",
       "mode": "Mode: {mode}"
     },
     "detail": {
@@ -402,6 +418,40 @@
         "description": "Mappings are synced for placement {placement}. You can now finish configuring guardrails and start mirroring traffic.",
         "dismiss": "Back to Migration Studio"
       }
+    }
+  },
+  "breadcrumbs": {
+    "labels": {
+      "dashboard": "Dashboard",
+      "placements": "Placements",
+      "adapters": "Adapters",
+      "analytics": "Analytics",
+      "fraud": "Fraud Detection",
+      "payouts": "Payouts",
+      "settings": "Settings",
+      "settingsTeam": "Team Access",
+      "settingsCompliance": "Regional Compliance",
+      "settingsNotifications": "Notifications",
+      "billing": "Billing",
+      "billingUsage": "Usage",
+      "billingInvoices": "Invoices",
+      "billingSettings": "Billing Settings",
+      "transparency": "Transparency",
+      "transparencyAuctions": "Auctions",
+      "transparencySummary": "Summary",
+      "migrationStudio": "Migration Studio",
+      "admin": "Admin",
+      "adminHealth": "System Health",
+      "adminValueMultipliers": "Value Multipliers",
+      "adminSalesAutomation": "Sales Automation"
+    },
+    "identifiers": {
+      "invoice": "Invoice #{id}",
+      "auction": "Auction {id}",
+      "placement": "Placement {id}",
+      "adapter": "Adapter {id}",
+      "member": "Team Member {id}",
+      "record": "Record {id}"
     }
   },
   "ui": {

@@ -1,6 +1,8 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, type CSSProperties } from 'react'
+import { createPortal } from 'react-dom'
+import { useFloating, offset, flip, shift, arrow, autoUpdate } from '@floating-ui/react-dom'
 
 interface TooltipProps {
   content: string | React.ReactNode
@@ -24,9 +26,16 @@ interface TooltipProps {
  */
 export function Tooltip({ content, children, position = 'top', delay = 200 }: TooltipProps) {
   const [isVisible, setIsVisible] = useState(false)
+  const [isClient, setIsClient] = useState(false)
   // Store timers in refs so they are not tied to re-renders and can be cleared reliably
   const showTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const tooltipRef = useRef<HTMLDivElement>(null)
+  const arrowRef = useRef<HTMLDivElement | null>(null)
+
+  const { x, y, strategy, refs, placement, middlewareData } = useFloating({
+    placement: position,
+    middleware: [offset(8), flip({ padding: 8 }), shift({ padding: 8 }), arrow({ element: arrowRef })],
+    whileElementsMounted: autoUpdate,
+  })
 
   const handleMouseEnter = () => {
     if (showTimeoutRef.current) {
@@ -52,20 +61,6 @@ export function Tooltip({ content, children, position = 'top', delay = 200 }: To
     setIsVisible(false)
   }
 
-  const positionClasses = {
-    top: 'bottom-full left-1/2 -translate-x-1/2 mb-2',
-    bottom: 'top-full left-1/2 -translate-x-1/2 mt-2',
-    left: 'right-full top-1/2 -translate-y-1/2 mr-2',
-    right: 'left-full top-1/2 -translate-y-1/2 ml-2',
-  }
-
-  const arrowClasses = {
-    top: 'top-full left-1/2 -translate-x-1/2 border-t-gray-900',
-    bottom: 'bottom-full left-1/2 -translate-x-1/2 border-b-gray-900',
-    left: 'left-full top-1/2 -translate-y-1/2 border-l-gray-900',
-    right: 'right-full top-1/2 -translate-y-1/2 border-r-gray-900',
-  }
-
   // Clear timers on unmount and when delay changes
   useEffect(() => {
     return () => {
@@ -76,28 +71,63 @@ export function Tooltip({ content, children, position = 'top', delay = 200 }: To
     }
   }, [delay])
 
+  useEffect(() => {
+    setIsClient(true)
+    return () => setIsClient(false)
+  }, [])
+
+  const staticSide: Record<string, string> = {
+    top: 'bottom',
+    right: 'left',
+    bottom: 'top',
+    left: 'right',
+  }
+
+  const currentPlacement = placement.split('-')[0]
+  const arrowStyle: CSSProperties = {
+    left: middlewareData.arrow?.x != null ? `${middlewareData.arrow.x}px` : undefined,
+    top: middlewareData.arrow?.y != null ? `${middlewareData.arrow.y}px` : undefined,
+    [staticSide[currentPlacement] || 'top']: '-4px',
+  }
+
   return (
-    <div
-      className="relative inline-block"
+    <span
+      className="inline-flex"
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
       onFocus={handleFocus}
       onBlur={handleBlur}
+      ref={refs.setReference}
     >
       {children}
-      {isVisible && (
-        <div
-          ref={tooltipRef}
-          role="tooltip"
-          className={`absolute z-50 px-3 py-2 text-sm text-white bg-gray-900 rounded-lg shadow-lg whitespace-nowrap ${positionClasses[position]}`}
-        >
-          {content}
+      {isClient && isVisible && typeof document !== 'undefined' &&
+        createPortal(
           <div
-            className={`absolute w-0 h-0 border-4 border-transparent ${arrowClasses[position]}`}
-            aria-hidden="true"
-          />
-        </div>
-      )}
-    </div>
+            ref={refs.setFloating}
+            role="tooltip"
+            className="z-50 px-3 py-2 text-sm text-white bg-gray-900 rounded-lg shadow-lg whitespace-nowrap"
+            style={{
+              position: strategy,
+              top: y ?? 0,
+              left: x ?? 0,
+            }}
+          >
+            {content}
+            <div
+              ref={arrowRef}
+              className="absolute w-0 h-0 border-4 border-transparent"
+              style={{
+                ...arrowStyle,
+                borderTopColor: currentPlacement === 'bottom' ? '#111827' : 'transparent',
+                borderBottomColor: currentPlacement === 'top' ? '#111827' : 'transparent',
+                borderLeftColor: currentPlacement === 'right' ? '#111827' : 'transparent',
+                borderRightColor: currentPlacement === 'left' ? '#111827' : 'transparent',
+              }}
+              aria-hidden="true"
+            />
+          </div>,
+          document.body
+        )}
+    </span>
   )
 }

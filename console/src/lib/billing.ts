@@ -1,5 +1,91 @@
-import { apiClient, handleApiError } from './api-client'
-import { AxiosResponse } from 'axios'
+import { apiClient, handleApiError, AUTH_UNAUTHORIZED_EVENT } from './api-client'
+import type { AxiosResponse, AxiosError } from 'axios'
+
+export const INVOICE_PDF_CACHE_TTL_MS = 10 * 60 * 1000 // 10 minutes
+export const INVOICE_PDF_CACHE_MAX_ENTRIES = 25
+
+type PdfCacheEntry = {
+  invoiceId: string
+  etag?: string
+  url: string
+  expiresAt: number
+  revocable: boolean
+}
+
+const invoicePdfCache: Map<string, PdfCacheEntry> = new Map()
+
+let unauthorizedListenerRegistered = false
+
+const supportsObjectUrls = () => typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function'
+
+const registerUnauthorizedCacheInvalidation = () => {
+  if (unauthorizedListenerRegistered || typeof window === 'undefined') return
+  window.addEventListener(AUTH_UNAUTHORIZED_EVENT, clearInvoicePdfCache)
+  unauthorizedListenerRegistered = true
+}
+
+const revokeEntry = (entry?: PdfCacheEntry) => {
+  if (!entry?.revocable) return
+  try {
+    if (typeof URL !== 'undefined' && typeof URL.revokeObjectURL === 'function') {
+      URL.revokeObjectURL(entry.url)
+    }
+  } catch {}
+}
+
+const pruneExpiredEntries = () => {
+  const now = Date.now()
+  for (const [invoiceId, entry] of invoicePdfCache.entries()) {
+    if (entry.expiresAt <= now) {
+      revokeEntry(entry)
+      invoicePdfCache.delete(invoiceId)
+    }
+  }
+}
+
+const ensureCacheBudget = () => {
+  if (invoicePdfCache.size < INVOICE_PDF_CACHE_MAX_ENTRIES) return
+  const oldestKey = invoicePdfCache.keys().next().value as string | undefined
+  if (!oldestKey) return
+  const entry = invoicePdfCache.get(oldestKey)
+  revokeEntry(entry)
+  invoicePdfCache.delete(oldestKey)
+}
+
+const blobToDataUrl = async (blob: Blob): Promise<string> => {
+  if (typeof FileReader !== 'undefined') {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onerror = () => reject(reader.error)
+      reader.onloadend = () => resolve(String(reader.result))
+      reader.readAsDataURL(blob)
+    })
+  }
+
+  const arrayBuffer = await blob.arrayBuffer()
+  if (typeof Buffer !== 'undefined') {
+    const buffer = Buffer.from(arrayBuffer)
+    return `data:${blob.type || 'application/pdf'};base64,${buffer.toString('base64')}`
+  }
+
+  throw new Error('Unable to convert blob to data URL in this environment')
+}
+
+const createInvoiceObjectUrl = async (blob: Blob): Promise<{ url: string; revocable: boolean }> => {
+  if (supportsObjectUrls()) {
+    return { url: URL.createObjectURL(blob), revocable: typeof URL.revokeObjectURL === 'function' }
+  }
+
+  const dataUrl = await blobToDataUrl(blob)
+  return { url: dataUrl, revocable: false }
+}
+
+const touchCacheEntry = (invoiceId: string, entry: PdfCacheEntry) => {
+  invoicePdfCache.set(invoiceId, {
+    ...entry,
+    expiresAt: Date.now() + INVOICE_PDF_CACHE_TTL_MS,
+  })
+}
 
 /**
  * Billing API Client
@@ -141,11 +227,18 @@ export async function getInvoice(invoiceId: string, options: { signal?: AbortSig
  * Download invoice PDF
  * Returns a blob URL that can be used in an anchor tag or iframe
  */
-// Simple in-memory client-side cache for ETag → blob URL per invoice
-const invoicePdfCache: Map<string, { etag: string; url: string }> = new Map()
+export function clearInvoicePdfCache() {
+  for (const [invoiceId, entry] of invoicePdfCache.entries()) {
+    revokeEntry(entry)
+    invoicePdfCache.delete(invoiceId)
+  }
+}
 
 export async function downloadInvoicePDF(invoiceId: string): Promise<string> {
   try {
+    pruneExpiredEntries()
+    registerUnauthorizedCacheInvalidation()
+
     const cached = invoicePdfCache.get(invoiceId)
     const headers: Record<string, string> = {}
     if (cached?.etag) {
@@ -154,27 +247,34 @@ export async function downloadInvoicePDF(invoiceId: string): Promise<string> {
 
     const response = await apiClient.get(`/billing/invoices/${invoiceId}/pdf`, {
       responseType: 'blob',
-      // @ts-ignore axios accepts headers at this level
       headers,
       validateStatus: (s) => [200, 304].includes(s || 0),
     })
 
     if (response.status === 304 && cached) {
+      touchCacheEntry(invoiceId, cached)
       return cached.url
     }
 
-    const etag = String((response.headers as any)?.etag || '')
-    const blob = new Blob([response.data], { type: 'application/pdf' })
-    const objectUrl = URL.createObjectURL(blob)
-    if (etag) {
-      if (cached?.url && cached.url !== objectUrl) {
-        try {
-          URL.revokeObjectURL(cached.url)
-        } catch {}
-      }
-      invoicePdfCache.set(invoiceId, { etag, url: objectUrl })
+    if (cached && cached.url && !supportsObjectUrls()) {
+      // For data URLs we cannot differentiate stale values, so drop stale entry explicitly
+      invoicePdfCache.delete(invoiceId)
     }
-    return objectUrl
+
+    const etag = String((response.headers as any)?.etag || '') || undefined
+    const blob = new Blob([response.data], { type: 'application/pdf' })
+    const { url, revocable } = await createInvoiceObjectUrl(blob)
+
+    ensureCacheBudget()
+    const entry: PdfCacheEntry = {
+      invoiceId,
+      etag,
+      url,
+      revocable,
+      expiresAt: Date.now() + INVOICE_PDF_CACHE_TTL_MS,
+    }
+    invoicePdfCache.set(invoiceId, entry)
+    return url
   } catch (error) {
     throw new Error(handleApiError(error))
   }
@@ -200,6 +300,14 @@ export async function reconcileBilling(idempotencyKey: string): Promise<Reconcil
   }
 }
 
+export async function resendInvoiceEmail(payload: { invoiceId: string; email: string }) {
+  try {
+    await apiClient.post('/billing/invoices/resend', payload)
+  } catch (error) {
+    throw new Error(handleApiError(error))
+  }
+}
+
 /**
  * Check if billing features are enabled
  */
@@ -210,7 +318,10 @@ export async function getFeatureFlags(): Promise<{ billingEnabled: boolean }> {
       billingEnabled: response.data.billingEnabled || false,
     }
   } catch (error) {
-    // If feature endpoint doesn't exist, assume billing is disabled
-    return { billingEnabled: false }
+    const axiosError = error as AxiosError
+    if (axiosError?.response?.status === 404) {
+      return { billingEnabled: false }
+    }
+    throw new Error(handleApiError(error))
   }
 }

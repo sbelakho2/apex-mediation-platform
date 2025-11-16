@@ -20,44 +20,28 @@ Modern Next.js 14 web application providing publishers with a comprehensive dash
 ## Features
 
 ### Dashboard
-- Real-time revenue metrics
-- Impression and click statistics
-- eCPM and fill rate trends
-- Performance charts (daily/weekly/monthly)
-- Top-performing placements and adapters
+- Live revenue, impression, and fill-rate widgets backed by backend `/api/v1` data via TanStack Query
+- Time-series charts with locale-aware formatting and CSV export helpers
+- Fraud & payout widgets sharing normalized status badges and CTA links
 
-### Placement Management
-- Create, edit, and delete ad placements
-- Configure placement types (banner, interstitial, rewarded)
-- Platform-specific settings (iOS, Android, Unity)
-- Status management (active, paused, archived)
+### Placement & Adapter Management
+- Infinite-scroll placement list with client-side filters/search
+- Placement creation flow covering format metadata, duplicate validation, and slug previews
+- Adapter table with inline error states and instant navigation via prefetching
 
-### Adapter Configuration
-- Network adapter management
-- Priority-based waterfall configuration
-- Real-time performance metrics per adapter
-- A/B testing support
+### Transparency & Verification
+- Auctions list with debounced filters, URL syncing, Verify badge interactions, and manual refresh controls that only appear when `NEXT_PUBLIC_ENABLE_TRANSPARENCY_REFRESH=true`
+- Auction detail view showing canonical payloads, signature metadata, and retryable verification
+- Summary page surfacing sampling totals, publisher share averages, and refresh controls (also controlled by `NEXT_PUBLIC_ENABLE_TRANSPARENCY_REFRESH`)
 
-### Fraud Detection
-- Real-time fraud alerts dashboard
-- Fraud statistics (GIVT, SIVT, ML detections)
-- Pattern detection visualization
-- Blocked entity management
-- Trend analysis with severity indicators
+### Fraud Detection & Analytics
+- Fraud dashboard widgets sourced from live APIs with configurable severity thresholds
+- Analytics views offering custom ranges, localized charts, and CSV exports
 
-### Payment & Payouts
-- Payment method configuration (Stripe, PayPal, Wire)
-- Payout history with status tracking
-- Upcoming payout schedule
-- Revenue reconciliation
-- Tax documentation (1099 generation)
-
-### Analytics
-- Advanced time-series charts
-- Custom date range selection
-- Export capabilities (CSV, PDF)
-- Cohort analysis
-- Retention metrics
+### Billing, Payouts & Admin Workflows
+- Billing settings gated by feature flags with inline validation, toast persistence, and a beta Migration Assistant panel that appears when `NEXT_PUBLIC_ENABLE_BILLING_MIGRATION=true`
+- Invoice downloads with TTL-bound cache + TanStack Query data access
+- Admin health, billing ops, and audit surfaces protected by `useAdminGate`
 
 ## Project Structure
 
@@ -127,6 +111,7 @@ Create `.env.local`:
 NEXT_PUBLIC_API_URL=http://localhost:8080
 NEXT_PUBLIC_FRAUD_API_URL=http://localhost:8083
 NEXT_PUBLIC_ANALYTICS_API_URL=http://localhost:8084
+NEXT_PUBLIC_TRANSPARENCY_API_URL=http://localhost:8086
 
 # Authentication
 NEXTAUTH_URL=http://localhost:3000
@@ -137,7 +122,23 @@ GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=
 GITHUB_CLIENT_ID=
 GITHUB_CLIENT_SECRET=
+
+# Feature Flags / Defaults
+NEXT_PUBLIC_USE_MOCK_API=false
+NEXT_PUBLIC_REQUIRE_CONSENT=false
+NEXT_PUBLIC_DEFAULT_LOCALE=en-US
+NEXT_PUBLIC_DEFAULT_CURRENCY=USD
+NEXT_PUBLIC_ENABLE_TRANSPARENCY_REFRESH=true
+NEXT_PUBLIC_ENABLE_BILLING_MIGRATION=false
+NEXT_PUBLIC_REQUIRE_ADMIN_GUARD=true
 ```
+
+Feature toggles mirror `.env.local.example`:
+
+- `NEXT_PUBLIC_USE_MOCK_API` swaps network calls for fixtures.
+- `NEXT_PUBLIC_ENABLE_TRANSPARENCY_REFRESH` controls whether manual refresh/retry buttons render on the Transparency Auctions + Summary pages (the queries still auto-refresh when disabled).
+- `NEXT_PUBLIC_ENABLE_BILLING_MIGRATION` reveals the beta Migration Assistant card inside billing settings so teams can submit migration context to ops.
+- `NEXT_PUBLIC_REQUIRE_ADMIN_GUARD` enforces `useAdminGate` redirects; set it to `false` to bypass redirects while keeping the rest of the hook stateful for local debugging.
 
 ### Development
 
@@ -231,34 +232,6 @@ Extended Tailwind palette:
 - `warning-*` (yellow shades)
 - `danger-*` (red shades)
 
-## Components (To Be Built)
-
-### UI Components
-- `Button` - Reusable button component
-- `Card` - Card container
-- `Table` - Data table with sorting/filtering
-- `Modal` - Modal dialog
-- `Badge` - Status badge
-- `Spinner` - Loading indicator
-- `Alert` - Alert/notification
-
-### Charts
-- `LineChart` - Time series revenue
-- `BarChart` - Comparison charts
-- `PieChart` - Distribution charts
-- `AreaChart` - Trend analysis
-
-### Forms
-- `PlacementForm` - Create/edit placement
-- `AdapterForm` - Configure adapter
-- `PaymentMethodForm` - Update payment info
-
-### Dashboard Widgets
-- `RevenueCard` - Revenue summary
-- `MetricsCard` - Key metrics (impressions, clicks, eCPM)
-- `FraudAlerts` - Recent fraud alerts
-- `TopPlacements` - Best performing placements
-
 ## Data Flow
 
 1. **Query**: Components use TanStack Query hooks
@@ -314,6 +287,23 @@ docker build -t ad-platform-console .
 # Run container
 docker run -p 3000:3000 ad-platform-console
 ```
+
+### Fly.io
+
+Fly is configured via `console/fly.toml` and deploys the production-ready Next.js server close to regional bidders.
+
+```bash
+# Authenticate once
+fly auth login
+
+# Set secrets for backend URLs and NextAuth session keys
+fly secrets set NEXTAUTH_SECRET=... NEXT_PUBLIC_API_URL=...
+
+# Deploy using the provided config (build uses Dockerfile)
+fly deploy --config fly.toml --remote-only
+```
+
+Scaling, certificates, and log drains can then be managed through `fly scale`, `fly certs`, and `fly logs`.
 
 ### Manual Deployment
 

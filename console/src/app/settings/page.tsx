@@ -1,5 +1,5 @@
-'use client'
-
+import { getServerSession } from 'next-auth'
+import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import {
   ShieldAlert,
@@ -9,6 +9,8 @@ import {
   BellRing,
   ArrowRight,
 } from 'lucide-react'
+import { authOptions } from '@/lib/auth/options'
+import { hasRole, type Role } from '@/lib/rbac'
 
 const sections = [
   {
@@ -43,7 +45,26 @@ const sections = [
   },
 ]
 
-export default function SettingsPage() {
+const SETTINGS_ROUTE = '/settings'
+const ALLOWED_ROLES: Role[] = ['admin', 'publisher']
+
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+
+export default async function SettingsPage() {
+  const session = await getServerSession(authOptions)
+
+  if (!session?.user) {
+    redirect(`/login?next=${encodeURIComponent(SETTINGS_ROUTE)}`)
+  }
+
+  const role = (session.user as { role?: Role | null })?.role ?? null
+  const publisherId = (session.user as { publisherId?: string | null })?.publisherId ?? null
+
+  if (!hasRole(role, ALLOWED_ROLES) || !publisherId) {
+    redirect('/403')
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white/90 backdrop-blur border-b">

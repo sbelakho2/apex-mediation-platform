@@ -3,6 +3,8 @@
 import { useSearchParams, useRouter, usePathname } from 'next/navigation'
 import { useCallback, useMemo } from 'react'
 
+const canUseDom = () => typeof window !== 'undefined'
+
 /**
  * Hook for managing query string parameters with React state-like interface
  * Automatically syncs with URL and handles browser back/forward
@@ -18,15 +20,19 @@ export function useQueryState<T extends string = string>(
   key: string,
   defaultValue: T
 ): [T, (value: T) => void] {
-  const searchParams = useSearchParams()
   const router = useRouter()
   const pathname = usePathname()
+  const searchParams = useSearchParams()
+  const hasDom = canUseDom()
 
-  const value = (searchParams.get(key) as T) || defaultValue
+  const searchParamsKey = hasDom ? searchParams?.toString() ?? '' : ''
+  const value = hasDom ? ((searchParams?.get(key) as T) ?? defaultValue) : defaultValue
 
   const setValue = useCallback(
     (newValue: T) => {
-      const params = new URLSearchParams(searchParams.toString())
+      if (!hasDom) return
+
+      const params = new URLSearchParams(searchParamsKey)
 
       if (newValue === defaultValue || newValue === '') {
         params.delete(key)
@@ -40,7 +46,7 @@ export function useQueryState<T extends string = string>(
       // Use replace to avoid polluting browser history with every keystroke
       router.replace(url, { scroll: false })
     },
-    [key, defaultValue, searchParams, pathname, router]
+    [defaultValue, hasDom, key, pathname, router, searchParamsKey]
   )
 
   return [value, setValue]
@@ -51,7 +57,7 @@ export function useQueryState<T extends string = string>(
  * Useful for forms with multiple filters
  * 
  * @example
- * const [filters, setFilters] = useUrlQueryParams({
+ * const [filters, setFilters] = useQueryParamsState({
  *   status: 'all',
  *   page: '1',
  *   sort: '-created_at'
@@ -59,36 +65,44 @@ export function useQueryState<T extends string = string>(
  * 
  * setFilters({ status: 'paid', page: '1' }) // Updates multiple params
  */
-export function useQueryParams<T extends Record<string, string>>(
+export function useQueryParamsState<T extends Record<string, string>>(
   defaults: T
 ): [T, (updates: Partial<T>) => void, () => void] {
-  const searchParams = useSearchParams()
   const router = useRouter()
   const pathname = usePathname()
-
-  const trackedEntries = useMemo(() => {
-    return (Object.keys(defaults) as Array<keyof T>).map((key) => {
-      const urlValue = searchParams.get(String(key))
-      const value = (urlValue ?? defaults[key]) as string
-      return [key, value] as const
-    })
-  }, [defaults, searchParams])
+  const searchParams = useSearchParams()
+  const hasDom = canUseDom()
+  const searchParamsKey = hasDom ? searchParams?.toString() ?? '' : ''
 
   const values = useMemo(() => {
     const next: T = { ...defaults }
-    trackedEntries.forEach(([key, value]) => {
-      next[key] = value as T[typeof key]
+
+    if (!hasDom) {
+      return next
+    }
+
+    const params = new URLSearchParams(searchParamsKey)
+
+    params.forEach((value, key) => {
+      if (key in next) {
+        next[key as keyof T] = value as T[keyof T]
+      }
     })
+
     return next
-  }, [defaults, trackedEntries])
+  }, [defaults, hasDom, searchParamsKey])
 
   const setValues = useCallback(
     (updates: Partial<T>) => {
-      const params = new URLSearchParams(searchParams.toString())
+      if (!hasDom) return
+
+      const params = new URLSearchParams(searchParamsKey)
 
       // Update only the changed params
       Object.entries(updates).forEach(([key, value]) => {
-        if (value === defaults[key as keyof T] || value === '' || value === null || value === undefined) {
+        const defaultValue = defaults[key as keyof T]
+
+        if (value === defaultValue || value === '' || value === null || value === undefined) {
           params.delete(key)
         } else {
           params.set(key, String(value))
@@ -100,12 +114,13 @@ export function useQueryParams<T extends Record<string, string>>(
 
       router.replace(url, { scroll: false })
     },
-    [defaults, searchParams, pathname, router]
+    [defaults, hasDom, pathname, router, searchParamsKey]
   )
 
   const resetValues = useCallback(() => {
+    if (!hasDom) return
     router.replace(pathname, { scroll: false })
-  }, [pathname, router])
+  }, [hasDom, pathname, router])
 
   return [values, setValues, resetValues]
 }
@@ -115,11 +130,21 @@ export function useQueryParams<T extends Record<string, string>>(
  */
 export function useAllQueryParams(): Record<string, string> {
   const searchParams = useSearchParams()
-  const params: Record<string, string> = {}
+  const hasDom = canUseDom()
+  const searchParamsKey = hasDom ? searchParams?.toString() ?? '' : ''
 
-  searchParams.forEach((value, key) => {
-    params[key] = value
-  })
+  return useMemo(() => {
+    if (!hasDom) {
+      return {}
+    }
 
-  return params
+    const params: Record<string, string> = {}
+    const parsed = new URLSearchParams(searchParamsKey)
+
+    parsed.forEach((value, key) => {
+      params[key] = value
+    })
+
+    return params
+  }, [hasDom, searchParamsKey])
 }

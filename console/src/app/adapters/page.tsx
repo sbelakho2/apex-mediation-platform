@@ -1,8 +1,8 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { useQuery } from '@tanstack/react-query'
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
 import { adapterApi, placementApi } from '@/lib/api'
 import { formatNumber } from '@/lib/utils'
 import {
@@ -21,22 +21,65 @@ export default function AdaptersPage() {
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<'all' | Adapter['status']>('all')
   const [networkFilter, setNetworkFilter] = useState('all')
+  const queryClient = useQueryClient()
 
-  const { data: adapters, isLoading } = useQuery({
-    queryKey: ['adapters', statusFilter, networkFilter],
+  const {
+    data: adapters,
+    isLoading,
+    isError: isAdaptersError,
+    error: adaptersError,
+    refetch: refetchAdapters,
+  } = useQuery<Adapter[], Error>({
+    queryKey: ['adapters'],
     queryFn: async () => {
       const { data } = await adapterApi.list()
       return data
     },
+    staleTime: 60_000,
+    retry: 1,
   })
 
-  const { data: placements } = useQuery({
+  const {
+    data: placements,
+    isError: isPlacementsError,
+    error: placementsError,
+    refetch: refetchPlacements,
+  } = useQuery<Placement[], Error>({
     queryKey: ['placements', 'lookup'],
     queryFn: async () => {
       const { data } = await placementApi.list({ page: 1, pageSize: 200 })
       return data.data
     },
+    placeholderData: keepPreviousData,
+    staleTime: 5 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
+    retry: 1,
   })
+
+  const handlePrefetch = useCallback(
+    (adapter: Adapter) => {
+      queryClient.prefetchQuery({
+        queryKey: ['adapter', adapter.id],
+        queryFn: async () => {
+          const { data } = await adapterApi.get(adapter.id)
+          return data
+        },
+        staleTime: 60_000,
+      })
+
+      if (adapter.placementId) {
+        queryClient.prefetchQuery({
+          queryKey: ['placement', adapter.placementId],
+          queryFn: async () => {
+            const { data } = await placementApi.get(adapter.placementId)
+            return data
+          },
+          staleTime: 5 * 60 * 1000,
+        })
+      }
+    },
+    [queryClient]
+  )
 
   const filteredAdapters = useMemo(() => {
     if (!adapters) return []
@@ -59,6 +102,11 @@ export default function AdaptersPage() {
     if (!adapters) return []
     return Array.from(new Set(adapters.map((adapter) => adapter.network))).sort()
   }, [adapters])
+
+  const adaptersErrorMessage = adaptersError?.message || 'Please check your connection and try again.'
+  const placementLookupError = isPlacementsError
+    ? placementsError?.message || 'Placement names are temporarily unavailable.'
+    : null
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -126,23 +174,52 @@ export default function AdaptersPage() {
           </div>
         </div>
 
-        {isLoading ? (
-          <AdaptersSkeleton />
-        ) : filteredAdapters.length > 0 ? (
+        {placementLookupError && (
+          <InlineNotice
+            message={`Placement lookup failed: ${placementLookupError}`}
+            actionLabel="Retry lookup"
+            onAction={() => refetchPlacements()}
+          />
+        )}
+
+        {isLoading && <AdaptersSkeleton />}
+
+        {!isLoading && isAdaptersError && (
+          <ErrorState
+            title="We couldn’t load your adapters"
+            description={adaptersErrorMessage}
+            onRetry={() => refetchAdapters()}
+          />
+        )}
+
+        {!isLoading && !isAdaptersError && filteredAdapters.length > 0 && (
           <div className="grid grid-cols-1 gap-4">
             {filteredAdapters.map((adapter) => (
-              <AdapterCard key={adapter.id} adapter={adapter} placements={placements} />
+              <AdapterCard
+                key={adapter.id}
+                adapter={adapter}
+                placements={placements}
+                onPrefetch={handlePrefetch}
+              />
             ))}
           </div>
-        ) : (
-          <EmptyState />
         )}
+
+        {!isLoading && !isAdaptersError && filteredAdapters.length === 0 && <EmptyState />}
       </main>
     </div>
   )
 }
 
-function AdapterCard({ adapter, placements }: { adapter: Adapter; placements?: Placement[] }) {
+function AdapterCard({
+  adapter,
+  placements,
+  onPrefetch,
+}: {
+  adapter: Adapter
+  placements?: Placement[]
+  onPrefetch?: (adapter: Adapter) => void
+}) {
   const statusChip = {
     active: 'bg-success-100 text-success-700',
     inactive: 'bg-gray-100 text-gray-700',
@@ -179,7 +256,12 @@ function AdapterCard({ adapter, placements }: { adapter: Adapter; placements?: P
           <Metric label="eCPM" value={`$${adapter.ecpm?.toFixed(2) || '0.00'}`} icon={Zap} />
           <Metric label="Fill Rate" value={`${((adapter.fillRate || 0) * 100).toFixed(1)}%`} icon={Loader2} />
           <Metric label="Requests" value={formatNumber(adapter.requestCount)} />
-          <Link href={`/adapters/${adapter.id}`} className="btn btn-outline self-center">
+          <Link
+            href={`/adapters/${adapter.id}`}
+            className="btn btn-outline self-center"
+            onMouseEnter={() => onPrefetch?.(adapter)}
+            onFocus={() => onPrefetch?.(adapter)}
+          >
             Manage
           </Link>
         </div>
@@ -214,6 +296,51 @@ function EmptyState() {
         <Plus className="h-4 w-4" aria-hidden="true" />
         Add Adapter
       </Link>
+    </div>
+  )
+}
+
+function InlineNotice({
+  message,
+  actionLabel,
+  onAction,
+}: {
+  message: string
+  actionLabel: string
+  onAction: () => void
+}) {
+  return (
+    <div className="border border-amber-200 rounded-lg bg-amber-50 px-4 py-3 flex flex-col gap-2 text-amber-900">
+      <p className="text-sm font-medium">{message}</p>
+      <button
+        type="button"
+        className="self-start text-sm font-semibold text-amber-900 underline"
+        onClick={onAction}
+      >
+        {actionLabel}
+      </button>
+    </div>
+  )
+}
+
+function ErrorState({
+  title,
+  description,
+  onRetry,
+}: {
+  title: string
+  description: string
+  onRetry: () => void
+}) {
+  return (
+    <div className="card border border-red-200 bg-red-50 text-red-900">
+      <div className="space-y-2">
+        <h3 className="text-lg font-semibold">{title}</h3>
+        <p className="text-sm">{description}</p>
+        <button type="button" className="btn btn-danger" onClick={onRetry}>
+          Try again
+        </button>
+      </div>
     </div>
   )
 }

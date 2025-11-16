@@ -13,6 +13,13 @@ import Pagination from '@/components/ui/Pagination'
 import Filters, { type InvoiceStatusFilter } from '@/components/ui/Filters'
 import { formatCurrency, formatDate } from '@/lib/utils'
 
+type InvoiceStatusParam = NonNullable<InvoicesQueryParams['status']>
+const ALLOWED_STATUS_VALUES: InvoiceStatusParam[] = ['draft', 'open', 'paid', 'void', 'uncollectible']
+
+const isInvoiceStatusParam = (value: InvoiceStatusFilter): value is InvoiceStatusParam => {
+  return typeof value === 'string' && value !== 'all' && (ALLOWED_STATUS_VALUES as readonly string[]).includes(value)
+}
+
 export default function InvoicesListPage() {
   const [data, setData] = useState<InvoicesListResponse | null>(null)
   const [loading, setLoading] = useState(true)
@@ -25,7 +32,7 @@ export default function InvoicesListPage() {
       setLoading(true)
       setError(null)
       const params: InvoicesQueryParams = { page, limit: 20 }
-      if (statusFilter !== 'all') {
+      if (isInvoiceStatusParam(statusFilter)) {
         params.status = statusFilter
       }
       const result = await listInvoices(params, { signal })

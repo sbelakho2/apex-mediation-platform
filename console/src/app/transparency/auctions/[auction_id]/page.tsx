@@ -1,12 +1,14 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, Download, RefreshCcw } from 'lucide-react'
 import { transparencyApi, type TransparencyAuction, type VerifyResult } from '../../../../lib/transparency'
 import { CopyButton, VerifyBadge, Skeleton } from '../../../../components/ui'
 
 const AUCTION_DETAIL_OVERVIEW_SKELETON_KEYS = ['auction-overview-1', 'auction-overview-2', 'auction-overview-3', 'auction-overview-4']
+const CANONICAL_PARSE_LIMIT = 200_000 // ~200 KB
+const CANONICAL_PREVIEW_LIMIT = 50_000
 
 export default function TransparencyAuctionDetailPage({ params }: { params: { auction_id: string } }) {
   const { auction_id } = params
@@ -14,22 +16,91 @@ export default function TransparencyAuctionDetailPage({ params }: { params: { au
   const [verify, setVerify] = useState<VerifyResult | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [retryCount, setRetryCount] = useState(0)
 
   useEffect(() => {
     let cancelled = false
-    setLoading(true)
-    setError(null)
-    Promise.all([transparencyApi.get(auction_id), transparencyApi.verify(auction_id)])
-      .then(([a, v]) => {
-        if (!cancelled) {
-          setAuction(a)
-          setVerify(v)
+    const controller = new AbortController()
+
+    const load = async () => {
+      setLoading(true)
+      setError(null)
+      setVerify(null)
+      try {
+        const auctionData = await transparencyApi.get(auction_id, { signal: controller.signal })
+        if (cancelled) return
+        setAuction(auctionData)
+
+        if (auctionData.integrity?.signature) {
+          try {
+            const verifyData = await transparencyApi.verify(auction_id, { signal: controller.signal })
+            if (!cancelled) {
+              setVerify(verifyData)
+            }
+          } catch (verifyError: any) {
+            if (!cancelled) {
+              setVerify({
+                status: 'unknown_key',
+                reason: verifyError?.message || 'Verification details unavailable.',
+              })
+            }
+          }
         }
-      })
-      .catch((e: any) => !cancelled && setError(e?.message || 'Failed to load'))
-      .finally(() => !cancelled && setLoading(false))
-    return () => { cancelled = true }
-  }, [auction_id])
+      } catch (e: any) {
+        if (!cancelled) {
+          setError(e?.message || 'Unable to load auction details.')
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false)
+        }
+      }
+    }
+
+    void load()
+
+    return () => {
+      cancelled = true
+      controller.abort()
+    }
+  }, [auction_id, retryCount])
+
+  const canonicalPayload = useMemo(() => {
+    if (!verify?.canonical) return null
+    const shouldFormat = verify.canonical.length <= CANONICAL_PARSE_LIMIT
+    let formatted = verify.canonical
+    if (shouldFormat) {
+      try {
+        formatted = JSON.stringify(JSON.parse(verify.canonical), null, 2)
+      } catch {
+        formatted = verify.canonical
+      }
+    }
+
+    const truncated = formatted.length > CANONICAL_PREVIEW_LIMIT
+    const preview = truncated
+      ? `${formatted.slice(0, CANONICAL_PREVIEW_LIMIT)}\n… (truncated for performance)`
+      : formatted
+
+    return { preview, truncated }
+  }, [verify?.canonical])
+
+  const canonicalValue = verify?.canonical ?? ''
+
+  const handleRetry = () => setRetryCount((count) => count + 1)
+
+  const handleDownloadCanonical = () => {
+    if (!canonicalValue) return
+    const blob = new Blob([canonicalValue], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `auction-${auction_id}-canonical.json`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -60,9 +131,19 @@ export default function TransparencyAuctionDetailPage({ params }: { params: { au
         {loading && <AuctionDetailSkeleton />}
         
         {!loading && error && (
-          <div className="border border-red-200 rounded-lg bg-red-50 px-4 py-3">
-            <p className="text-sm text-red-800 font-medium">Failed to load auction</p>
-            <p className="text-xs text-red-600 mt-1">{error}</p>
+          <div className="border border-red-200 rounded-lg bg-red-50 px-4 py-3 flex flex-col gap-2">
+            <div>
+              <p className="text-sm text-red-800 font-medium">Failed to load auction</p>
+              <p className="text-xs text-red-600 mt-1">{error}</p>
+            </div>
+            <button
+              type="button"
+              onClick={handleRetry}
+              className="inline-flex items-center gap-2 self-start text-sm font-medium text-red-900 border border-red-200 px-3 py-1.5 rounded hover:bg-red-100 transition-colors"
+            >
+              <RefreshCcw className="h-4 w-4" aria-hidden="true" />
+              Retry
+            </button>
           </div>
         )}
 
@@ -140,20 +221,37 @@ export default function TransparencyAuctionDetailPage({ params }: { params: { au
                         autoLoad={true}
                       />
                     </div>
-                    {verify?.canonical && (
+                    {canonicalPayload && (
                       <details className="mt-4">
                         <summary className="cursor-pointer text-sm font-medium text-gray-700 hover:text-gray-900">
                           View Canonical Payload
                         </summary>
+                        {canonicalValue && (
                         <div className="mt-3">
                           <div className="flex items-center justify-between mb-2">
                             <span className="text-xs text-gray-500">Canonical JSON used for signature</span>
-                            <CopyButton text={verify.canonical} variant="inline" size="sm" label="Copy Payload" />
+                            <div className="flex items-center gap-2">
+                              <CopyButton text={canonicalValue} variant="inline" size="sm" label="Copy Payload" />
+                              <button
+                                type="button"
+                                onClick={handleDownloadCanonical}
+                                className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-600 hover:text-gray-900"
+                              >
+                                <Download className="h-3.5 w-3.5" aria-hidden="true" />
+                                Download JSON
+                              </button>
+                            </div>
                           </div>
                           <pre className="text-xs bg-gray-900 text-gray-100 p-4 rounded-lg overflow-auto max-h-96">
-                            {JSON.stringify(JSON.parse(verify.canonical), null, 2)}
+                            {canonicalPayload.preview}
                           </pre>
+                          {canonicalPayload.truncated && (
+                            <p className="text-[11px] text-gray-500 mt-2">
+                              Preview truncated to protect browser performance. Download or copy the payload for the full JSON body.
+                            </p>
+                          )}
                         </div>
+                        )}
                       </details>
                     )}
                     {verify?.reason && (

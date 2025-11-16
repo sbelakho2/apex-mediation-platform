@@ -18,6 +18,7 @@ const mockPush = jest.fn()
 const clipboardWriteTextMock = jest.fn()
 const createObjectURLMock = jest.fn(() => 'blob:mock')
 const revokeObjectURLMock = jest.fn()
+const originalAnchorClick = HTMLAnchorElement.prototype.click
 
 jest.mock('next/navigation', () => ({
   useParams: () => ({ experimentId: 'exp-123' }),
@@ -54,6 +55,17 @@ beforeAll(() => {
   Object.defineProperty(window.URL, 'revokeObjectURL', {
     value: revokeObjectURLMock,
     configurable: true,
+  })
+  Object.defineProperty(HTMLAnchorElement.prototype, 'click', {
+    configurable: true,
+    value: jest.fn(),
+  })
+})
+
+afterAll(() => {
+  Object.defineProperty(HTMLAnchorElement.prototype, 'click', {
+    configurable: true,
+    value: originalAnchorClick,
   })
 })
 

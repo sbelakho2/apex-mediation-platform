@@ -26,26 +26,28 @@ jest.mock('@/lib/useFeatures', () => ({
   useFeatures: () => mockUseFeatures(),
 }))
 
-// Mock global fetch for feature flags in component runtime
-beforeAll(() => {
-  if (!global.fetch) {
-    global.fetch = jest.fn(() =>
-      Promise.resolve({
-        ok: true,
-        json: () =>
-          Promise.resolve({
-            data: { transparency: true, billing: true, migrationStudio: true },
-          }),
-      })
-    ) as unknown as typeof fetch
-  }
+const renderNavigation = () =>
+  render(
+    <Navigation>
+      <main>children</main>
+    </Navigation>
+  )
+
+const buildFeaturesState = (features: Record<string, boolean> = {}) => ({
+  features,
+  loading: false,
+  error: null,
+  refresh: jest.fn(),
 })
 
 describe('Navigation feature flags', () => {
   beforeEach(() => {
     mockUsePathname.mockReturnValue('/dashboard')
-    mockUseSession.mockReturnValue({ user: { email: 'demo@example.com', role: 'publisher' } })
-    mockUseFeatures.mockReturnValue({ features: { migrationStudio: false }, loading: false, error: null })
+    mockUseSession.mockReturnValue({
+      user: { email: 'demo@example.com', role: 'publisher' },
+      isLoading: false,
+    })
+    mockUseFeatures.mockReturnValue(buildFeaturesState())
   })
 
   afterEach(() => {
@@ -53,23 +55,48 @@ describe('Navigation feature flags', () => {
   })
 
   it('shows Migration Studio link when feature is enabled', () => {
-    mockUseFeatures.mockReturnValue({ features: { migrationStudio: true }, loading: false, error: null })
-    render(
-      <Navigation>
-        <main>children</main>
-      </Navigation>
-    )
+    mockUseFeatures.mockReturnValue(buildFeaturesState({ migrationStudio: true }))
+    renderNavigation()
 
     expect(screen.getByRole('link', { name: /Migration Studio/i })).toBeInTheDocument()
   })
 
   it('hides Migration Studio link when feature is disabled', () => {
-    render(
-      <Navigation>
-        <main>children</main>
-      </Navigation>
-    )
+    renderNavigation()
 
     expect(screen.queryByRole('link', { name: /Migration Studio/i })).not.toBeInTheDocument()
+  })
+
+  it('shows transparency and billing links when features enabled', () => {
+    mockUseFeatures.mockReturnValue(buildFeaturesState({ transparency: true, billing: true }))
+    renderNavigation()
+
+    expect(screen.getByRole('link', { name: /Transparency/i })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /Billing/i })).toBeInTheDocument()
+  })
+
+  it('hides transparency and billing links when features disabled', () => {
+    mockUseFeatures.mockReturnValue(buildFeaturesState({ transparency: false, billing: false }))
+    renderNavigation()
+
+    expect(screen.queryByRole('link', { name: /Transparency/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /Billing/i })).not.toBeInTheDocument()
+  })
+
+  it('renders admin link only for admin role', () => {
+    mockUseSession.mockReturnValue({
+      user: { email: 'publisher@example.com', role: 'publisher' },
+      isLoading: false,
+    })
+    renderNavigation()
+    expect(screen.queryByRole('link', { name: /Admin/i })).not.toBeInTheDocument()
+
+    mockUseSession.mockReturnValue({
+      user: { email: 'admin@example.com', role: 'admin' },
+      isLoading: false,
+    })
+    renderNavigation()
+
+    expect(screen.getByRole('link', { name: /Admin/i })).toBeInTheDocument()
   })
 })

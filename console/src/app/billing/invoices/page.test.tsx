@@ -175,8 +175,8 @@ describe('InvoicesPage Component States', () => {
       render(<InvoicesPage />, { wrapper: createWrapper() })
 
       await waitFor(() => {
-        const paidBadge = screen.getByText('Paid', { selector: 'span' })
-        expect(paidBadge).toHaveClass('bg-green-100')
+        const paidBadge = screen.getByLabelText('Paid')
+        expect(paidBadge).toHaveTextContent('Paid')
       })
     })
   })

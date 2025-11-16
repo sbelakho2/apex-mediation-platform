@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useSearchParams, useRouter, usePathname } from 'next/navigation'
 
 /**
@@ -53,27 +53,41 @@ export function useDebouncedValue<T>(value: T, delay: number = 300): T {
  * // Clear specific param
  * updateParams({ search: null })
  */
+type UpdateParamsOptions = {
+  history?: 'push' | 'replace'
+  scroll?: boolean
+}
+
 export function useUrlQueryParams() {
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
 
-  const updateParams = useCallback((updates: Record<string, string | number | null | undefined>) => {
-    const params = new URLSearchParams(searchParams?.toString() || '')
-    
+  const updateParams = useCallback((updates: Record<string, string | number | null | undefined>, options: UpdateParamsOptions = {}) => {
+    const nextParams = new URLSearchParams(searchParams?.toString() || '')
+
     Object.entries(updates).forEach(([key, value]) => {
       if (value === null || value === undefined || value === '') {
-        params.delete(key)
+        nextParams.delete(key)
       } else {
-        params.set(key, String(value))
+        nextParams.set(key, String(value))
       }
     })
 
-    const queryString = params.toString()
-    const url = queryString ? `${pathname}?${queryString}` : pathname
-    
-    router.push(url, { scroll: false })
-  }, [router, pathname, searchParams])
+    const currentQuery = searchParams?.toString() || ''
+    const nextQuery = nextParams.toString()
+    if (nextQuery === currentQuery) return
+
+    const url = nextQuery ? `${pathname}?${nextQuery}` : pathname
+    const historyMode = options.history ?? 'replace'
+    const scroll = options.scroll ?? false
+
+    if (historyMode === 'push') {
+      router.push(url, { scroll })
+    } else {
+      router.replace(url, { scroll })
+    }
+  }, [pathname, router, searchParams])
 
   return {
     params: searchParams,
@@ -100,8 +114,13 @@ export function useUrlQueryParams() {
 export function useLoadingState(minimumDuration: number = 300) {
   const [isLoading, setIsLoading] = useState(false)
   const [startTime, setStartTime] = useState<number | null>(null)
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const startLoading = useCallback(() => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current)
+      timerRef.current = null
+    }
     setIsLoading(true)
     setStartTime(Date.now())
   }, [])
@@ -114,12 +133,25 @@ export function useLoadingState(minimumDuration: number = 300) {
 
     const elapsed = Date.now() - startTime
     const remaining = Math.max(0, minimumDuration - elapsed)
+    if (timerRef.current) {
+      clearTimeout(timerRef.current)
+    }
 
-    setTimeout(() => {
+    timerRef.current = setTimeout(() => {
       setIsLoading(false)
       setStartTime(null)
+      timerRef.current = null
     }, remaining)
   }, [startTime, minimumDuration])
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current)
+        timerRef.current = null
+      }
+    }
+  }, [])
 
   return {
     isLoading,

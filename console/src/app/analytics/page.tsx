@@ -1,19 +1,10 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useId } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { revenueApi, analyticsApi } from '@/lib/api'
-import {
-  BarChart3,
-  TrendingUp,
-  Download,
-  Calendar,
-  DollarSign,
-  Eye,
-  MousePointer,
-  Zap,
-} from 'lucide-react'
-import { formatCurrency, formatNumber, formatPercentage } from '@/lib/utils'
+import { revenueApi } from '@/lib/api'
+import { BarChart3, TrendingUp, Download, DollarSign, Eye, MousePointer, Zap } from 'lucide-react'
+import { formatCurrency, formatNumber, formatPercentage, getLocale } from '@/lib/utils'
 import {
   LineChart,
   Line,
@@ -39,8 +30,42 @@ export default function AnalyticsPage() {
     endDate: today,
   })
   const [granularity, setGranularity] = useState<'hour' | 'day' | 'week' | 'month'>('day')
+  const locale = useMemo(() => getLocale(), [])
+  const chartDateFormatter = useMemo(
+    () =>
+      new Intl.DateTimeFormat(locale, {
+        month: 'short',
+        day: 'numeric',
+      }),
+    [locale]
+  )
+  const csvDateFormatter = useMemo(
+    () =>
+      new Intl.DateTimeFormat(locale, {
+        dateStyle: 'medium',
+      }),
+    [locale]
+  )
+  const csvNumberFormatter = useMemo(() => new Intl.NumberFormat(locale), [locale])
+  const csvPercentFormatter = useMemo(
+    () =>
+      new Intl.NumberFormat(locale, {
+        style: 'percent',
+        maximumFractionDigits: 2,
+      }),
+    [locale]
+  )
+  const revenueTrendDescriptionId = useId()
+  const efficiencyDescriptionId = useId()
+  const volumeDescriptionId = useId()
 
-  const { data: timeSeries, isLoading: loadingTimeSeries } = useQuery({
+  const {
+    data: timeSeries,
+    isLoading: loadingTimeSeries,
+    isError: timeSeriesError,
+    error: timeSeriesErrorObject,
+    refetch: refetchTimeSeries,
+  } = useQuery({
     queryKey: ['revenue-timeseries', dateRange.startDate, dateRange.endDate, granularity],
     queryFn: async ({ signal }) => {
       const { data } = await revenueApi.getTimeSeries({
@@ -57,7 +82,13 @@ export default function AnalyticsPage() {
     refetchOnReconnect: false,
   })
 
-  const { data: summary, isLoading: loadingSummary } = useQuery({
+  const {
+    data: summary,
+    isLoading: loadingSummary,
+    isError: summaryError,
+    error: summaryErrorObject,
+    refetch: refetchSummary,
+  } = useQuery({
     queryKey: ['revenue-summary', dateRange.startDate, dateRange.endDate],
     queryFn: async ({ signal }) => {
       const { data } = await revenueApi.getSummary({
@@ -80,38 +111,47 @@ export default function AnalyticsPage() {
 
   const chartData = useMemo(() => {
     if (!timeSeries) return []
-    return timeSeries.map((item) => ({
-      date: new Date(item.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-      revenue: item.revenue,
-      impressions: item.impressions / 1000, // Scale down for chart
-      clicks: item.clicks,
-      ecpm: item.ecpm,
-      fillRate: item.fillRate * 100,
-    }))
-  }, [timeSeries])
+    return timeSeries.map((item) => {
+      const parsedDate = new Date(item.date)
+      return {
+        date: chartDateFormatter.format(parsedDate),
+        revenue: item.revenue,
+        impressions: item.impressions / 1000, // Scale down for chart display
+        clicks: item.clicks,
+        ecpm: item.ecpm,
+        fillRate: item.fillRate * 100,
+      }
+    })
+  }, [chartDateFormatter, timeSeries])
+
+  const escapeCsvValue = (value: string | number) => {
+    const stringValue = String(value ?? '')
+    return /[",\n]/.test(stringValue) ? `"${stringValue.replace(/"/g, '""')}"` : stringValue
+  }
 
   const handleExportReport = () => {
-    if (!timeSeries || !summary) return
-    
-    const csvData = [
-      ['Date', 'Revenue', 'Impressions', 'Clicks', 'eCPM', 'Fill Rate (%)'],
+    if (!timeSeries?.length || !summary) return
+
+    const rows = [
+      ['Date', 'Revenue', 'Impressions', 'Clicks', 'eCPM', 'Fill Rate'],
       ...timeSeries.map((item) => [
-        new Date(item.date).toLocaleDateString(),
-        item.revenue.toFixed(2),
-        item.impressions.toString(),
-        item.clicks.toString(),
-        item.ecpm.toFixed(2),
-        (item.fillRate * 100).toFixed(2),
+        csvDateFormatter.format(new Date(item.date)),
+        formatCurrency(item.revenue),
+        csvNumberFormatter.format(item.impressions),
+        csvNumberFormatter.format(item.clicks),
+        formatCurrency(item.ecpm),
+        csvPercentFormatter.format(item.fillRate),
       ]),
       [],
       ['Summary'],
-      ['Total Revenue', summary.totalRevenue.toFixed(2)],
-      ['Total Impressions', summary.totalImpressions.toString()],
-      ['Total Clicks', summary.totalClicks.toString()],
-      ['Average eCPM', summary.averageEcpm.toFixed(2)],
+      ['Total Revenue', formatCurrency(summary.totalRevenue)],
+      ['Total Impressions', csvNumberFormatter.format(summary.totalImpressions)],
+      ['Total Clicks', csvNumberFormatter.format(summary.totalClicks)],
+      ['Average eCPM', formatCurrency(summary.averageEcpm)],
+      ['Average Fill Rate', csvPercentFormatter.format(summary.averageFillRate)],
     ]
-    
-    const csvContent = csvData.map(row => row.join(',')).join('\n')
+
+    const csvContent = rows.map((row) => row.map(escapeCsvValue).join(',')).join('\n')
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
     const link = document.createElement('a')
     const url = URL.createObjectURL(blob)
@@ -214,6 +254,20 @@ export default function AnalyticsPage() {
               </div>
             ))}
           </div>
+        ) : summaryError ? (
+          <div className="card border-danger-200 bg-danger-50 text-danger-700" role="alert">
+            <p className="font-semibold">We couldn’t load the analytics summary.</p>
+            <p className="text-sm mt-1">
+              {summaryErrorObject instanceof Error ? summaryErrorObject.message : 'Please try again later.'}
+            </p>
+            <button
+              type="button"
+              onClick={() => refetchSummary()}
+              className="mt-3 inline-flex items-center text-sm font-semibold text-danger-700 underline"
+            >
+              Retry summary fetch
+            </button>
+          </div>
         ) : summary ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             <div className="card">
@@ -300,12 +354,16 @@ export default function AnalyticsPage() {
               )}
             </div>
           </div>
-        ) : null}
+        ) : (
+          <div className="card text-sm text-gray-600">No summary data available for the selected period.</div>
+        )}
 
         {/* Revenue over time */}
         <div className="card">
           <div className="flex items-center justify-between mb-6">
-            <h2 className="text-lg font-semibold text-gray-900">Revenue Trend</h2>
+            <h2 className="text-lg font-semibold text-gray-900" id="revenue-trend-heading">
+              Revenue Trend
+            </h2>
             <div className="flex gap-2">
               {(['day', 'week', 'month'] as const).map((g) => (
                 <button
@@ -320,52 +378,30 @@ export default function AnalyticsPage() {
               ))}
             </div>
           </div>
-          {loadingTimeSeries ? (
+          {timeSeriesError ? (
+            <div className="h-80 flex flex-col items-center justify-center text-center text-danger-700">
+              <p className="font-semibold">We couldn’t load the revenue trend.</p>
+              <p className="text-sm mt-1">
+                {timeSeriesErrorObject instanceof Error ? timeSeriesErrorObject.message : 'Please try again later.'}
+              </p>
+              <button
+                type="button"
+                onClick={() => refetchTimeSeries()}
+                className="mt-3 inline-flex items-center text-sm font-semibold text-danger-700 underline"
+              >
+                Retry trend fetch
+              </button>
+            </div>
+          ) : loadingTimeSeries ? (
             <div className="h-80 flex items-center justify-center">
               <div className="animate-pulse text-gray-400">Loading chart...</div>
             </div>
           ) : chartData.length > 0 ? (
-            <ResponsiveContainer width="100%" height={320}>
-              <LineChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                <XAxis dataKey="date" stroke="#6b7280" style={{ fontSize: '12px' }} />
-                <YAxis stroke="#6b7280" style={{ fontSize: '12px' }} />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: 'white',
-                    border: '1px solid #e5e7eb',
-                    borderRadius: '8px',
-                    padding: '12px',
-                  }}
-                />
-                <Legend wrapperStyle={{ fontSize: '14px' }} />
-                <Line
-                  type="monotone"
-                  dataKey="revenue"
-                  stroke="#2563eb"
-                  strokeWidth={2}
-                  name="Revenue ($)"
-                  dot={{ fill: '#2563eb', r: 3 }}
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          ) : (
-            <div className="h-80 flex items-center justify-center text-gray-500">
-              No data available for selected period
-            </div>
-          )}
-        </div>
-
-        {/* Performance metrics */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="card">
-            <h2 className="text-lg font-semibold text-gray-900 mb-6">eCPM & Fill Rate</h2>
-            {loadingTimeSeries ? (
-              <div className="h-64 flex items-center justify-center">
-                <div className="animate-pulse text-gray-400">Loading chart...</div>
-              </div>
-            ) : chartData.length > 0 ? (
-              <ResponsiveContainer width="100%" height={256}>
+            <div role="figure" aria-labelledby="revenue-trend-heading" aria-describedby={revenueTrendDescriptionId}>
+              <p id={revenueTrendDescriptionId} className="sr-only">
+                {`Line chart showing revenue from ${chartData[0].date} to ${chartData[chartData.length - 1].date}.`}
+              </p>
+              <ResponsiveContainer width="100%" height={320}>
                 <LineChart data={chartData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                   <XAxis dataKey="date" stroke="#6b7280" style={{ fontSize: '12px' }} />
@@ -381,22 +417,84 @@ export default function AnalyticsPage() {
                   <Legend wrapperStyle={{ fontSize: '14px' }} />
                   <Line
                     type="monotone"
-                    dataKey="ecpm"
-                    stroke="#10b981"
+                    dataKey="revenue"
+                    stroke="#2563eb"
                     strokeWidth={2}
-                    name="eCPM ($)"
-                    dot={{ fill: '#10b981', r: 3 }}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="fillRate"
-                    stroke="#f59e0b"
-                    strokeWidth={2}
-                    name="Fill Rate (%)"
-                    dot={{ fill: '#f59e0b', r: 3 }}
+                    name="Revenue"
+                    dot={{ fill: '#2563eb', r: 3 }}
                   />
                 </LineChart>
               </ResponsiveContainer>
+            </div>
+          ) : (
+            <div className="h-80 flex items-center justify-center text-gray-500">
+              No data available for selected period
+            </div>
+          )}
+        </div>
+
+        {/* Performance metrics */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="card">
+            <h2 className="text-lg font-semibold text-gray-900 mb-6" id="efficiency-heading">
+              eCPM & Fill Rate
+            </h2>
+            {timeSeriesError ? (
+              <div className="h-64 flex flex-col items-center justify-center text-center text-danger-700">
+                <p className="font-semibold">Unable to load efficiency metrics.</p>
+                <p className="text-sm mt-1">
+                  {timeSeriesErrorObject instanceof Error ? timeSeriesErrorObject.message : 'Please try again.'}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => refetchTimeSeries()}
+                  className="mt-3 inline-flex items-center text-sm font-semibold text-danger-700 underline"
+                >
+                  Retry
+                </button>
+              </div>
+            ) : loadingTimeSeries ? (
+              <div className="h-64 flex items-center justify-center">
+                <div className="animate-pulse text-gray-400">Loading chart...</div>
+              </div>
+            ) : chartData.length > 0 ? (
+              <div role="figure" aria-labelledby="efficiency-heading" aria-describedby={efficiencyDescriptionId}>
+                <p id={efficiencyDescriptionId} className="sr-only">
+                  {`Line chart comparing eCPM and fill rate for ${chartData.length} data points.`}
+                </p>
+                <ResponsiveContainer width="100%" height={256}>
+                  <LineChart data={chartData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                    <XAxis dataKey="date" stroke="#6b7280" style={{ fontSize: '12px' }} />
+                    <YAxis stroke="#6b7280" style={{ fontSize: '12px' }} />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: 'white',
+                        border: '1px solid #e5e7eb',
+                        borderRadius: '8px',
+                        padding: '12px',
+                      }}
+                    />
+                    <Legend wrapperStyle={{ fontSize: '14px' }} />
+                    <Line
+                      type="monotone"
+                      dataKey="ecpm"
+                      stroke="#10b981"
+                      strokeWidth={2}
+                      name="eCPM"
+                      dot={{ fill: '#10b981', r: 3 }}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="fillRate"
+                      stroke="#f59e0b"
+                      strokeWidth={2}
+                      name="Fill Rate (%)"
+                      dot={{ fill: '#f59e0b', r: 3 }}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
             ) : (
               <div className="h-64 flex items-center justify-center text-gray-500">
                 No data available
@@ -405,30 +503,51 @@ export default function AnalyticsPage() {
           </div>
 
           <div className="card">
-            <h2 className="text-lg font-semibold text-gray-900 mb-6">Impressions & Clicks</h2>
-            {loadingTimeSeries ? (
+            <h2 className="text-lg font-semibold text-gray-900 mb-6" id="volume-heading">
+              Impressions & Clicks
+            </h2>
+            {timeSeriesError ? (
+              <div className="h-64 flex flex-col items-center justify-center text-center text-danger-700">
+                <p className="font-semibold">Unable to load volume metrics.</p>
+                <p className="text-sm mt-1">
+                  {timeSeriesErrorObject instanceof Error ? timeSeriesErrorObject.message : 'Please try again.'}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => refetchTimeSeries()}
+                  className="mt-3 inline-flex items-center text-sm font-semibold text-danger-700 underline"
+                >
+                  Retry
+                </button>
+              </div>
+            ) : loadingTimeSeries ? (
               <div className="h-64 flex items-center justify-center">
                 <div className="animate-pulse text-gray-400">Loading chart...</div>
               </div>
             ) : chartData.length > 0 ? (
-              <ResponsiveContainer width="100%" height={256}>
-                <BarChart data={chartData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                  <XAxis dataKey="date" stroke="#6b7280" style={{ fontSize: '12px' }} />
-                  <YAxis stroke="#6b7280" style={{ fontSize: '12px' }} />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: 'white',
-                      border: '1px solid #e5e7eb',
-                      borderRadius: '8px',
-                      padding: '12px',
-                    }}
-                  />
-                  <Legend wrapperStyle={{ fontSize: '14px' }} />
-                  <Bar dataKey="impressions" fill="#3b82f6" name="Impressions (K)" />
-                  <Bar dataKey="clicks" fill="#8b5cf6" name="Clicks" />
-                </BarChart>
-              </ResponsiveContainer>
+              <div role="figure" aria-labelledby="volume-heading" aria-describedby={volumeDescriptionId}>
+                <p id={volumeDescriptionId} className="sr-only">
+                  {`Bar chart comparing impressions (thousands) and clicks for ${chartData.length} dates.`}
+                </p>
+                <ResponsiveContainer width="100%" height={256}>
+                  <BarChart data={chartData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                    <XAxis dataKey="date" stroke="#6b7280" style={{ fontSize: '12px' }} />
+                    <YAxis stroke="#6b7280" style={{ fontSize: '12px' }} />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: 'white',
+                        border: '1px solid #e5e7eb',
+                        borderRadius: '8px',
+                        padding: '12px',
+                      }}
+                    />
+                    <Legend wrapperStyle={{ fontSize: '14px' }} />
+                    <Bar dataKey="impressions" fill="#3b82f6" name="Impressions (K)" />
+                    <Bar dataKey="clicks" fill="#8b5cf6" name="Clicks" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
             ) : (
               <div className="h-64 flex items-center justify-center text-gray-500">
                 No data available

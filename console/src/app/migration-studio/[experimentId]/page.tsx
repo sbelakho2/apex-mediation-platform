@@ -45,18 +45,33 @@ const statusBadgeStyles: Record<MigrationExperiment['status'], string> = {
   archived: 'bg-slate-100 text-slate-400',
 }
 
-type GuardrailFormState = {
-  latency_budget_ms: string
-  revenue_floor_percent: string
-  max_error_rate_percent: string
-  min_impressions: string
-}
+const copyTextWithFallback = async (text: string) => {
+  if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text)
+    return
+  }
 
-const emptyGuardrailState: GuardrailFormState = {
-  latency_budget_ms: '',
-  revenue_floor_percent: '',
-  max_error_rate_percent: '',
-  min_impressions: '',
+  if (typeof document === 'undefined') {
+    throw new Error('ClipboardUnavailable')
+  }
+
+  const textArea = document.createElement('textarea')
+  textArea.value = text
+  textArea.setAttribute('readonly', '')
+  textArea.style.position = 'fixed'
+  textArea.style.left = '-9999px'
+  textArea.style.opacity = '0'
+  document.body.appendChild(textArea)
+  textArea.select()
+
+  try {
+    const successful = document.execCommand('copy')
+    if (!successful) {
+      throw new Error('ClipboardFallbackFailed')
+    }
+  } finally {
+    document.body.removeChild(textArea)
+  }
 }
 
 const guardrailKeys: (keyof MigrationGuardrails)[] = [
@@ -65,6 +80,49 @@ const guardrailKeys: (keyof MigrationGuardrails)[] = [
   'max_error_rate_percent',
   'min_impressions',
 ]
+
+type GuardrailKey = (typeof guardrailKeys)[number]
+
+type GuardrailFieldState = {
+  input: string
+  value: number | null
+}
+
+type GuardrailFormState = Record<GuardrailKey, GuardrailFieldState>
+
+const createGuardrailFieldState = (initialValue?: number | null): GuardrailFieldState => {
+  if (typeof initialValue === 'number' && Number.isFinite(initialValue)) {
+    return {
+      input: `${initialValue}`,
+      value: initialValue,
+    }
+  }
+
+  return { input: '', value: null }
+}
+
+const createGuardrailFormState = (guardrails?: Partial<MigrationGuardrails>): GuardrailFormState => ({
+  latency_budget_ms: createGuardrailFieldState(guardrails?.latency_budget_ms ?? null),
+  revenue_floor_percent: createGuardrailFieldState(guardrails?.revenue_floor_percent ?? null),
+  max_error_rate_percent: createGuardrailFieldState(guardrails?.max_error_rate_percent ?? null),
+  min_impressions: createGuardrailFieldState(guardrails?.min_impressions ?? null),
+})
+
+const guardrailFieldFromInput = (input: string): GuardrailFieldState => {
+  if (input.trim() === '') {
+    return { input: '', value: null }
+  }
+
+  const numericValue = Number(input)
+  if (!Number.isFinite(numericValue)) {
+    return { input, value: null }
+  }
+
+  return {
+    input,
+    value: numericValue,
+  }
+}
 
 const CONTROL_SERIES_COLOR = '#2563eb'
 const TEST_SERIES_COLOR = '#10b981'
@@ -76,12 +134,21 @@ export default function MigrationExperimentPage() {
   const experimentId = params?.experimentId ?? ''
 
   const [mirrorPercent, setMirrorPercent] = useState<number>(5)
-  const [guardrailState, setGuardrailState] = useState<GuardrailFormState>(emptyGuardrailState)
+  const [guardrailState, setGuardrailState] = useState<GuardrailFormState>(() =>
+    createGuardrailFormState()
+  )
   const [guardrailResult, setGuardrailResult] = useState<{
     shouldPause: boolean
     violations: string[]
   } | null>(null)
   const [showSavedBanner, setShowSavedBanner] = useState<boolean>(false)
+
+  const handleGuardrailFieldChange = (field: GuardrailKey, input: string) => {
+    setGuardrailState((current) => ({
+      ...current,
+      [field]: guardrailFieldFromInput(input),
+    }))
+  }
 
   const experimentQuery = useQuery({
     queryKey: ['migration-experiment', experimentId],
@@ -162,12 +229,7 @@ export default function MigrationExperimentPage() {
 
     setMirrorPercent(Math.min(20, Math.max(0, experiment.mirror_percent)))
     const guardrails = experiment.guardrails ?? {}
-    setGuardrailState({
-      latency_budget_ms: guardrails.latency_budget_ms?.toString() ?? '',
-      revenue_floor_percent: guardrails.revenue_floor_percent?.toString() ?? '',
-      max_error_rate_percent: guardrails.max_error_rate_percent?.toString() ?? '',
-      min_impressions: guardrails.min_impressions?.toString() ?? '',
-    })
+    setGuardrailState(createGuardrailFormState(guardrails))
   }, [experiment])
 
   const isDraft = experiment?.status === 'draft'
@@ -180,18 +242,15 @@ export default function MigrationExperimentPage() {
   )
 
   const parsedGuardrails: Partial<MigrationGuardrails> = useMemo(() => {
-    const toNumber = (value: string) => {
-      const trimmed = value.trim().replace(/,/g, '')
-      if (!trimmed) return undefined
-      const numeric = Number(trimmed)
-      return Number.isFinite(numeric) ? numeric : undefined
-    }
+    const asValue = (field: GuardrailFieldState) => (field.value === null ? undefined : field.value)
+    const asPreciseValue = (field: GuardrailFieldState) =>
+      field.value === null ? undefined : Number(field.value.toFixed(2))
 
     return {
-      latency_budget_ms: toNumber(guardrailState.latency_budget_ms),
-      revenue_floor_percent: toNumber(guardrailState.revenue_floor_percent),
-      max_error_rate_percent: toNumber(guardrailState.max_error_rate_percent),
-      min_impressions: toNumber(guardrailState.min_impressions),
+      latency_budget_ms: asValue(guardrailState.latency_budget_ms),
+      revenue_floor_percent: asPreciseValue(guardrailState.revenue_floor_percent),
+      max_error_rate_percent: asPreciseValue(guardrailState.max_error_rate_percent),
+      min_impressions: asValue(guardrailState.min_impressions),
     }
   }, [guardrailState])
 
@@ -218,25 +277,22 @@ export default function MigrationExperimentPage() {
   }, [experiment?.status, guardrailResult])
 
   const handleCopyLink = async (link: MigrationExperimentShareLink) => {
-    if (typeof navigator === 'undefined' || !navigator.clipboard?.writeText) {
-      setShareFeedback({
-        tone: 'error',
-        message: t('migrationStudio.detail.reportAccessCopyUnsupported'),
-      })
-      return
-    }
-
     try {
-      await navigator.clipboard.writeText(link.url)
+      await copyTextWithFallback(link.url)
       if (copyTimeoutRef.current) {
         window.clearTimeout(copyTimeoutRef.current)
       }
       setCopiedLinkId(link.id)
       copyTimeoutRef.current = window.setTimeout(() => setCopiedLinkId(null), 2000)
     } catch (error) {
+      const fallbackMessage =
+        error instanceof Error &&
+        (error.message === 'ClipboardUnavailable' || error.message === 'ClipboardFallbackFailed')
+          ? t('migrationStudio.detail.reportAccessCopyUnsupported')
+          : handleApiError(error)
       setShareFeedback({
         tone: 'error',
-        message: handleApiError(error),
+        message: fallbackMessage,
       })
     }
   }
@@ -875,6 +931,11 @@ export default function MigrationExperimentPage() {
                     ? t('migrationStudio.detail.reportAccessGenerating')
                     : t('migrationStudio.detail.reportAccessGenerate')}
                 </button>
+                {createShareLinkMutation.isPending ? (
+                  <span className="text-xs text-gray-500" role="status" aria-live="polite">
+                    {t('migrationStudio.detail.reportAccessGenerating')}
+                  </span>
+                ) : null}
               </div>
               <p className="mt-2 text-xs text-gray-500" id="share-link-hint">
                 {t('migrationStudio.detail.reportAccessShareHint')}
@@ -904,6 +965,11 @@ export default function MigrationExperimentPage() {
                     ? t('migrationStudio.detail.reportAccessDownloading')
                     : t('migrationStudio.detail.reportAccessDownloadCta')}
                 </button>
+                {downloadReportMutation.isPending ? (
+                  <p className="mt-2 text-xs text-gray-500" role="status" aria-live="polite">
+                    {t('migrationStudio.detail.reportAccessDownloading')}
+                  </p>
+                ) : null}
               </div>
             </div>
           </div>
@@ -1010,10 +1076,8 @@ export default function MigrationExperimentPage() {
                 id="latency-budget"
                 label={t('migrationStudio.detail.latencyLabel')}
                 suffix={t('migrationStudio.detail.latencySuffix')}
-                value={guardrailState.latency_budget_ms}
-                onChange={(value) =>
-                  setGuardrailState((current) => ({ ...current, latency_budget_ms: value }))
-                }
+                value={guardrailState.latency_budget_ms.input}
+                onChange={(value) => handleGuardrailFieldChange('latency_budget_ms', value)}
                 inputMode="numeric"
                 min={0}
               />
@@ -1021,10 +1085,8 @@ export default function MigrationExperimentPage() {
                 id="revenue-floor"
                 label={t('migrationStudio.detail.revenueLabel')}
                 suffix={t('migrationStudio.detail.revenueSuffix')}
-                value={guardrailState.revenue_floor_percent}
-                onChange={(value) =>
-                  setGuardrailState((current) => ({ ...current, revenue_floor_percent: value }))
-                }
+                value={guardrailState.revenue_floor_percent.input}
+                onChange={(value) => handleGuardrailFieldChange('revenue_floor_percent', value)}
                 inputMode="decimal"
                 min={0}
                 step="0.1"
@@ -1033,10 +1095,8 @@ export default function MigrationExperimentPage() {
                 id="error-rate"
                 label={t('migrationStudio.detail.errorRateLabel')}
                 suffix={t('migrationStudio.detail.errorRateSuffix')}
-                value={guardrailState.max_error_rate_percent}
-                onChange={(value) =>
-                  setGuardrailState((current) => ({ ...current, max_error_rate_percent: value }))
-                }
+                value={guardrailState.max_error_rate_percent.input}
+                onChange={(value) => handleGuardrailFieldChange('max_error_rate_percent', value)}
                 inputMode="decimal"
                 min={0}
                 step="0.1"
@@ -1045,10 +1105,8 @@ export default function MigrationExperimentPage() {
                 id="min-impressions"
                 label={t('migrationStudio.detail.minImpressionsLabel')}
                 suffix={t('migrationStudio.detail.minImpressionsSuffix')}
-                value={guardrailState.min_impressions}
-                onChange={(value) =>
-                  setGuardrailState((current) => ({ ...current, min_impressions: value }))
-                }
+                value={guardrailState.min_impressions.input}
+                onChange={(value) => handleGuardrailFieldChange('min_impressions', value)}
                 inputMode="numeric"
                 min={0}
               />
@@ -1498,7 +1556,7 @@ function formatMetricValue(value: number | null, unit: MigrationMetricUnit): str
 
   switch (unit) {
     case 'currency_cents':
-      return formatCurrency(value)
+      return formatCurrency(value, 'USD', { fromMinorUnits: true })
     case 'percent':
       return formatPercentage(value, 1)
     case 'milliseconds':
@@ -1532,7 +1590,7 @@ function formatTimeseriesAxisTick(value: number | null, unit: MigrationMetricUni
 
   switch (unit) {
     case 'currency_cents':
-      return formatCurrency(Math.round(value * 100))
+      return formatCurrency(value)
     case 'percent':
       return formatPercentage(value, 0)
     case 'milliseconds':
