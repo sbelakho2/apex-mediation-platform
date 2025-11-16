@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { getInvoice, downloadInvoicePDF, Invoice } from '@/lib/billing'
 import Link from 'next/link'
@@ -14,12 +14,20 @@ import {
   XCircle,
 } from 'lucide-react'
 import { useSession } from '@/lib/useSession'
+import { useFeatures } from '@/lib/useFeatures'
+import { BILLING_FEATURE_FALLBACK, canAccessBilling as canUserAccessBilling } from '../../access'
 
 export default function InvoiceDetailPage() {
   const params = useParams()
-  const invoiceId = params?.id as string
+  const rawInvoiceId = params?.id
+  const invoiceId = useMemo(() => {
+    if (typeof rawInvoiceId === 'string') return rawInvoiceId
+    if (Array.isArray(rawInvoiceId)) return rawInvoiceId[0]
+    return ''
+  }, [rawInvoiceId])
   const router = useRouter()
   const { user, isLoading: sessionLoading } = useSession()
+  const { features, loading: featureLoading } = useFeatures({ fallback: BILLING_FEATURE_FALLBACK })
 
   const [invoice, setInvoice] = useState<Invoice | null>(null)
   const [loading, setLoading] = useState(true)
@@ -27,8 +35,8 @@ export default function InvoiceDetailPage() {
   const [downloading, setDownloading] = useState(false)
   const [downloadError, setDownloadError] = useState<string | null>(null)
 
-  const userRole = user?.role ?? 'readonly'
-  const canViewInvoices = !!user && (userRole === 'admin' || userRole === 'publisher')
+  const hasBillingFeature = features?.billing ?? BILLING_FEATURE_FALLBACK.billing ?? false
+  const canViewInvoices = useMemo(() => canUserAccessBilling(user), [user])
 
   const loadInvoice = useCallback(
     async (signal?: AbortSignal) => {
@@ -57,14 +65,21 @@ export default function InvoiceDetailPage() {
   }, [sessionLoading, user, router])
 
   useEffect(() => {
-    if (sessionLoading || !user) return
-    if (!canViewInvoices) {
+    if (sessionLoading || featureLoading) return
+    if (!hasBillingFeature || !canViewInvoices) {
       router.replace('/403')
     }
-  }, [sessionLoading, user, canViewInvoices, router])
+  }, [sessionLoading, featureLoading, user, hasBillingFeature, canViewInvoices, router])
 
   useEffect(() => {
-    if (!invoiceId || sessionLoading || !canViewInvoices) {
+    if (sessionLoading || featureLoading) return
+    if (!invoiceId) {
+      router.replace('/billing/invoices')
+    }
+  }, [invoiceId, sessionLoading, featureLoading, router])
+
+  useEffect(() => {
+    if (!invoiceId || sessionLoading || featureLoading || !hasBillingFeature || !canViewInvoices) {
       return
     }
 
@@ -73,11 +88,14 @@ export default function InvoiceDetailPage() {
     return () => {
       controller.abort()
     }
-  }, [invoiceId, sessionLoading, canViewInvoices, loadInvoice])
+  }, [invoiceId, sessionLoading, featureLoading, hasBillingFeature, canViewInvoices, loadInvoice])
 
   const handleDownloadPDF = async () => {
     try {
-      if (!invoiceId) return
+      if (!invoiceId) {
+        setDownloadError('Missing invoice identifier')
+        return
+      }
       setDownloading(true)
       setDownloadError(null)
       const blobUrl = await downloadInvoicePDF(invoiceId)
@@ -135,13 +153,28 @@ export default function InvoiceDetailPage() {
       day: 'numeric',
     })
 
-  if (sessionLoading) {
+  if (sessionLoading || featureLoading) {
     return (
       <div className="p-8">
         <div className="max-w-4xl mx-auto">
           <div className="animate-pulse space-y-6" role="status" aria-live="polite">
             <div className="h-8 w-48 bg-gray-200 rounded" />
             <div className="h-64 bg-gray-200 rounded-lg" />
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (!hasBillingFeature) {
+    return (
+      <div className="p-8">
+        <div className="max-w-4xl mx-auto">
+          <div className="bg-white border border-gray-200 rounded-lg p-6" role="alert">
+            <h2 className="text-lg font-semibold text-gray-900">Billing Disabled</h2>
+            <p className="text-sm text-gray-700 mt-2">
+              Billing tools are unavailable for this environment. Contact support if you believe this is an error.
+            </p>
           </div>
         </div>
       </div>
@@ -158,6 +191,28 @@ export default function InvoiceDetailPage() {
               You do not have permission to view invoices. Please contact your administrator if you believe
               this is an error.
             </p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (!invoiceId) {
+    return (
+      <div className="p-8">
+        <div className="max-w-4xl mx-auto">
+          <div className="bg-white border border-yellow-200 rounded-lg p-6" role="alert">
+            <h2 className="text-lg font-semibold text-gray-900">Invoice ID Required</h2>
+            <p className="text-sm text-gray-700 mt-2">
+              We couldn’t determine which invoice to display. Please return to the invoices list and choose an invoice again.
+            </p>
+            <Link
+              href="/billing/invoices"
+              className="inline-flex items-center gap-2 text-sm text-primary-600 hover:text-primary-700 mt-4"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Back to Invoices
+            </Link>
           </div>
         </div>
       </div>
@@ -243,20 +298,23 @@ export default function InvoiceDetailPage() {
                 </div>
               </div>
             </div>
-            <button
-              type="button"
-              onClick={handleDownloadPDF}
-              disabled={downloading}
-              className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition font-medium text-sm flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <Download className="h-4 w-4" />
-              {downloading ? 'Downloading...' : 'Download PDF'}
-            </button>
-            {downloadError && (
-              <p className="text-sm text-red-600 mt-2" role="alert" aria-live="assertive">
-                {downloadError}
-              </p>
-            )}
+            <div className="flex flex-col items-end gap-2" aria-live="assertive">
+              <button
+                type="button"
+                onClick={handleDownloadPDF}
+                disabled={downloading}
+                className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition font-medium text-sm flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Download className="h-4 w-4" />
+                {downloading ? 'Downloading...' : 'Download PDF'}
+              </button>
+              {downloadError && (
+                <div className="inline-flex items-center gap-2 text-xs text-red-700 bg-red-50 border border-red-200 rounded px-3 py-1" role="alert">
+                  <AlertCircle className="h-3 w-3" />
+                  {downloadError}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Invoice Details Grid */}

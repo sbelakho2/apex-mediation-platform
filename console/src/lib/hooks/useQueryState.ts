@@ -1,7 +1,7 @@
 'use client'
 
 import { useSearchParams, useRouter, usePathname } from 'next/navigation'
-import { useCallback } from 'react'
+import { useCallback, useMemo } from 'react'
 
 /**
  * Hook for managing query string parameters with React state-like interface
@@ -51,7 +51,7 @@ export function useQueryState<T extends string = string>(
  * Useful for forms with multiple filters
  * 
  * @example
- * const [filters, setFilters] = useQueryParams({
+ * const [filters, setFilters] = useUrlQueryParams({
  *   status: 'all',
  *   page: '1',
  *   sort: '-created_at'
@@ -66,11 +66,21 @@ export function useQueryParams<T extends Record<string, string>>(
   const router = useRouter()
   const pathname = usePathname()
 
-  // Get current values from URL or defaults
-  const values = Object.keys(defaults).reduce((acc, key) => {
-    acc[key] = (searchParams.get(key) || defaults[key]) as T[typeof key]
-    return acc
-  }, {} as T)
+  const trackedEntries = useMemo(() => {
+    return (Object.keys(defaults) as Array<keyof T>).map((key) => {
+      const urlValue = searchParams.get(String(key))
+      const value = (urlValue ?? defaults[key]) as string
+      return [key, value] as const
+    })
+  }, [defaults, searchParams])
+
+  const values = useMemo(() => {
+    const next: T = { ...defaults }
+    trackedEntries.forEach(([key, value]) => {
+      next[key] = value as T[typeof key]
+    })
+    return next
+  }, [defaults, trackedEntries])
 
   const setValues = useCallback(
     (updates: Partial<T>) => {

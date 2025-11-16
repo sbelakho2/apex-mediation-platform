@@ -41,26 +41,36 @@ export default function AnalyticsPage() {
   const [granularity, setGranularity] = useState<'hour' | 'day' | 'week' | 'month'>('day')
 
   const { data: timeSeries, isLoading: loadingTimeSeries } = useQuery({
-    queryKey: ['revenue-timeseries', dateRange, granularity],
-    queryFn: async () => {
+    queryKey: ['revenue-timeseries', dateRange.startDate, dateRange.endDate, granularity],
+    queryFn: async ({ signal }) => {
       const { data } = await revenueApi.getTimeSeries({
         startDate: dateRange.startDate,
         endDate: dateRange.endDate,
         granularity,
+        signal,
       })
       return data
     },
+    staleTime: 60_000,
+    gcTime: 300_000,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
   })
 
   const { data: summary, isLoading: loadingSummary } = useQuery({
-    queryKey: ['revenue-summary', dateRange],
-    queryFn: async () => {
+    queryKey: ['revenue-summary', dateRange.startDate, dateRange.endDate],
+    queryFn: async ({ signal }) => {
       const { data } = await revenueApi.getSummary({
         startDate: dateRange.startDate,
         endDate: dateRange.endDate,
+        signal,
       })
       return data
     },
+    staleTime: 60_000,
+    gcTime: 300_000,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
   })
 
   const handlePresetChange = (preset: string) => {

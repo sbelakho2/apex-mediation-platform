@@ -129,6 +129,24 @@ _Last updated: 2025-11-14 22:16 UTC_
 
 **Cross-fix alignment:** Outputs feed FIX-02 services and FIX-05 SDKs; coordinate manifest/schema changes so scoring services and SDK calculators stay compatible.
 
+#### FIX-06 — Completion log and Phase checklist (6–10)
+
+- [x] 6) CI workflows — PR fast lane + Nightly
+  - Files: `.github/workflows/ml-pr.yml`, `.github/workflows/ml-nightly.yml`
+  - Notes: Both lanes now install with constraints (`-c ML/constraints.txt`). PR lane runs tests + SoT guard + schema smoke; Nightly validates manifests, runs streaming FE and row‑limited train, and uploads artifacts.
+- [x] 7) Manifest SoT enforcement
+  - Files: `ML/scripts/check_manifests.py` (wired in PR workflow), `ML/scripts/manifest_tools.py` (scan/validate/refresh/compute‑checksum)
+  - Notes: Prevents stray `*manifest*.json` outside approved paths; unit tests cover checksums and strict modes.
+- [x] 8) Dependency matrices & environment parity
+  - Files: `Dockerfile.ml`, `Dockerfile.ml-gpu` (now install with `-c ML/constraints.txt`), `ML/constraints.txt` (pins aligned with `requirements*.txt`)
+  - Notes: CI updated to consume constraints; GPU guidance left via comments in `requirements-gpu.txt` for selecting the proper CUDA wheel when needed.
+- [x] 9) Documentation & CHANGELOG
+  - Files: `ML/README.md` (quick‑start), `CHANGELOG.md` (new FIX‑06 entry)
+  - Notes: README documents local install, tests, manifest validation, streaming FE + tiny train, and CI lanes.
+- [x] 10) Validation & sign‑off
+  - Files: `docs/Internal/Development/FIX-06_SIGNOFF.md`
+  - Notes: Checklist for making the ML PR workflow a required check, weekly nightly artifact review, and local verification commands. Final sign‑off to be recorded in that doc and in GitHub branch protection settings (admin action).
+
 ### FIX-07 — Quality & Testing Automation (14 TODOs)
 
 **Goal:** Elevate the shared quality toolchain: finish outstanding Playwright/Lighthouse coverage, keep k6 load tests runnable, and enforce linting for custom scripts.

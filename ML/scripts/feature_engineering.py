@@ -6,6 +6,19 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Deque, Dict, Iterable, List, Optional, Tuple
 
+# Optional local import of streaming loaders (FIX-06)
+try:
+    # Allow running directly from repo without installing as a package
+    import sys as _sys
+    from pathlib import Path as _P
+    _THIS = _P(__file__).resolve()
+    _LIB_DIR = _THIS.parent / "lib"
+    if str(_LIB_DIR) not in _sys.path:
+        _sys.path.insert(0, str(_LIB_DIR))
+    from lib.loader import iter_parquet, iter_csv, iter_jsonl  # type: ignore
+except Exception:  # pragma: no cover - loader is optional for non-streaming runs
+    iter_parquet = iter_csv = iter_jsonl = None  # type: ignore
+
 import numpy as np
 import pandas as pd
 
@@ -99,6 +112,7 @@ def engineer_features(
     *,
     time_column: str = DEFAULT_TIME_COLUMN,
     label_column: str = DEFAULT_LABEL_COLUMN,
+    include_history: bool = True,
 ) -> Tuple[pd.DataFrame, Dict[str, object]]:
     output = pd.DataFrame(index=df.index)
 
@@ -113,7 +127,7 @@ def engineer_features(
 
     label_series = _safe_column(df, label_column, default=0.0)
 
-    # Rolling aggregates for IP, ASN, device, placement
+    # Rolling aggregates and history-dependent features (guarded for streaming mode)
     entity_columns = {
         "ip": "ip",
         "asn": "asn",
@@ -126,42 +140,44 @@ def engineer_features(
         if column_name not in df.columns:
             continue
         keys = df[column_name].fillna("unknown").astype(str)
-        for window_name, window_delta in ROLLING_WINDOWS.items():
-            rolling_total = _compute_rolling_counts(timestamps, keys, window_delta)
-            output[f"{entity_name}_rolling_events_{window_name}"] = rolling_total
 
-            if label_series.sum() > 0:
-                weighted = _compute_rolling_counts(
-                    timestamps,
-                    keys,
-                    window_delta,
-                    weights=label_series,
-                )
-                rate = np.divide(
-                    weighted,
-                    rolling_total,
-                    out=np.zeros_like(weighted),
-                    where=rolling_total > 0,
-                )
-                output[f"{entity_name}_rolling_positive_rate_{window_name}"] = rate
+        if include_history:
+            for window_name, window_delta in ROLLING_WINDOWS.items():
+                rolling_total = _compute_rolling_counts(timestamps, keys, window_delta)
+                output[f"{entity_name}_rolling_events_{window_name}"] = rolling_total
 
-        # Entropy / burstiness features
-        if "placement_id" in df.columns:
-            entropy_lookup = (
-                pd.DataFrame({"key": keys, "placement": df["placement_id"]})
-                .groupby("key", dropna=False)["placement"]
-                .agg(lambda vals: _entropy(vals))
+                if label_series.sum() > 0:
+                    weighted = _compute_rolling_counts(
+                        timestamps,
+                        keys,
+                        window_delta,
+                        weights=label_series,
+                    )
+                    rate = np.divide(
+                        weighted,
+                        rolling_total,
+                        out=np.zeros_like(weighted),
+                        where=rolling_total > 0,
+                    )
+                    output[f"{entity_name}_rolling_positive_rate_{window_name}"] = rate
+
+            # Entropy / burstiness features
+            if "placement_id" in df.columns:
+                entropy_lookup = (
+                    pd.DataFrame({"key": keys, "placement": df["placement_id"]})
+                    .groupby("key", dropna=False)["placement"]
+                    .agg(lambda vals: _entropy(vals))
+                )
+                output[f"{entity_name}_entropy"] = keys.map(entropy_lookup).fillna(0.0).astype(np.float32)
+            else:
+                output[f"{entity_name}_entropy"] = 0.0
+
+            burst_lookup = (
+                pd.DataFrame({"key": keys, "timestamp": timestamps})
+                .groupby("key", dropna=False)["timestamp"]
+                .agg(lambda vals: _burstiness(list(vals)))
             )
-            output[f"{entity_name}_entropy"] = keys.map(entropy_lookup).fillna(0.0).astype(np.float32)
-        else:
-            output[f"{entity_name}_entropy"] = 0.0
-
-        burst_lookup = (
-            pd.DataFrame({"key": keys, "timestamp": timestamps})
-            .groupby("key", dropna=False)["timestamp"]
-            .agg(lambda vals: _burstiness(list(vals)))
-        )
-        output[f"{entity_name}_burstiness"] = keys.map(burst_lookup).fillna(0.0).astype(np.float32)
+            output[f"{entity_name}_burstiness"] = keys.map(burst_lookup).fillna(0.0).astype(np.float32)
 
     # Event type ratios (click / impression / install)
     if "event_type" in df.columns:
@@ -241,7 +257,7 @@ def engineer_features(
 
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Feature engineering for fraud model training")
-    parser.add_argument("--input", required=True, help="Input parquet file or directory")
+    parser.add_argument("--input", required=True, help="Input file or directory (parquet by default)")
     parser.add_argument("--out-dir", required=True, help="Output directory for engineered features")
     parser.add_argument("--time-column", default=DEFAULT_TIME_COLUMN)
     parser.add_argument("--label-column", default=DEFAULT_LABEL_COLUMN)
@@ -256,6 +272,40 @@ def build_arg_parser() -> argparse.ArgumentParser:
         default=42,
         help="Random seed used when sampling rows",
     )
+    # Streaming mode (FIX-06)
+    parser.add_argument(
+        "--stream",
+        action="store_true",
+        help="Enable streaming mode to process large inputs in chunks (history-dependent features disabled)",
+    )
+    parser.add_argument(
+        "--input-format",
+        choices=["parquet", "csv", "jsonl"],
+        default="parquet",
+        help="Input format for streaming mode",
+    )
+    parser.add_argument(
+        "--output",
+        default=None,
+        help="Optional explicit output parquet file path (defaults to <out-dir>/features.parquet)",
+    )
+    # Validation (FIX-06)
+    parser.add_argument(
+        "--validate-in",
+        action="store_true",
+        help="Validate a sample of the input dataset against the fraud schema before processing",
+    )
+    parser.add_argument(
+        "--validate-out",
+        action="store_true",
+        help="Validate a sample of the engineered features (output) against the fraud schema",
+    )
+    parser.add_argument(
+        "--validate-limit",
+        type=int,
+        default=10000,
+        help="Number of rows to sample for validation (default: 10000)",
+    )
     return parser
 
 
@@ -265,23 +315,141 @@ def run(argv: Optional[List[str]] = None) -> str:
 
     os.makedirs(args.out_dir, exist_ok=True)
 
-    frame = _load_input_frames(args.input)
-    frame = frame.sort_values(by=args.time_column)
+    features_path = args.output or os.path.join(args.out_dir, "features.parquet")
 
-    if args.sample_size and args.sample_size > 0 and len(frame) > args.sample_size:
-        rng = np.random.default_rng(args.seed)
-        sample_indices = rng.choice(len(frame), size=args.sample_size, replace=False)
-        frame = frame.iloc[np.sort(sample_indices)]
+    # Optional input validation (preflight) — fraud schema by default
+    if args.validate_in:
+        try:
+            # Lazy import to avoid hard dependency when flag not used
+            import sys as _sys
+            from pathlib import Path as _P
+            _THIS = _P(__file__).resolve()
+            _LIB_DIR = _THIS.parent / "lib"
+            if str(_LIB_DIR) not in _sys.path:
+                _sys.path.insert(0, str(_LIB_DIR))
+            from lib.loader import iter_parquet as _iter_parquet, iter_csv as _iter_csv, iter_jsonl as _iter_jsonl  # type: ignore
+            from lib.schema import iter_validate_rows as _iter_validate_rows, diagnostics as _diagnostics  # type: ignore
+            import pandas as _pd  # type: ignore
+        except Exception as e:  # pragma: no cover
+            raise SystemExit(f"Validation libraries unavailable: {e}")
+
+        # Read a sample
+        limit = max(1, int(args.validate_limit))
+        total = 0
+        frames: List['_pd.DataFrame'] = []
+        it = _iter_parquet(args.input) if args.input_format == 'parquet' else (_iter_csv(args.input) if args.input_format == 'csv' else _iter_jsonl(args.input))
+        for ch in it:
+            need = limit - total
+            if need <= 0:
+                break
+            if ch.shape[0] > need:
+                ch = ch.iloc[:need]
+            frames.append(ch)
+            total += ch.shape[0]
+            if total >= limit:
+                break
+        sample = _pd.concat(frames, ignore_index=True) if frames else _pd.DataFrame()
+        errs = sum(1 for _idx, err in _iter_validate_rows(sample, schema='fraud', limit=len(sample)) if err is not None)
+        diag = _diagnostics(sample) if not sample.empty else {}
+        # Write adjacent report next to out-dir
+        report_path = os.path.join(args.out_dir, 'input.validation.json')
+        with open(report_path, 'w', encoding='utf-8') as fh:
+            json.dump({
+                'schema': 'fraud',
+                'format': args.input_format,
+                'path': args.input,
+                'sampled_rows': int(len(sample)),
+                'error_count': int(errs),
+                'diagnostics': diag,
+            }, fh, indent=2)
+        if errs > 0:
+            print(f"[WARN] Input validation reported {errs} errors in sample; see {report_path}")
+
+    if args.stream:
+        if iter_parquet is None:
+            raise SystemExit("Streaming loaders are unavailable; ensure ML/scripts/lib/loader.py is present")
+
+        # Prepare Parquet writer
+        try:
+            import pyarrow as pa  # type: ignore
+            import pyarrow.parquet as pq  # type: ignore
+        except Exception as e:
+            raise SystemExit(f"pyarrow is required for streaming output: {e}")
+
+        writer: Optional[pq.ParquetWriter] = None  # type: ignore
+        total_rows = 0
+        first_schema = None
+
+        def _write_chunk(df_chunk: pd.DataFrame) -> None:
+            nonlocal writer, first_schema, total_rows
+            table = pa.Table.from_pandas(df_chunk, preserve_index=False)
+            if writer is None:
+                first_schema = table.schema
+                writer = pq.ParquetWriter(features_path, first_schema)
+            writer.write_table(table)
+            total_rows += df_chunk.shape[0]
+
+        # Iterate input by format
+        if args.input_format == "parquet":
+            iterator = iter_parquet(args.input)
+        elif args.input_format == "csv":
+            iterator = iter_csv(args.input)
+        else:
+            iterator = iter_jsonl(args.input)
+
+        for chunk in iterator:
+            # Ensure time sort per chunk for deterministic feature engineering
+            if args.time_column in chunk.columns:
+                chunk = chunk.sort_values(by=args.time_column)
+            # Optional subsample on chunk (best-effort) for CI
+            if args.sample_size and args.sample_size > 0:
+                remaining = max(0, args.sample_size - total_rows)
+                if remaining <= 0:
+                    break
+                if chunk.shape[0] > remaining:
+                    chunk = chunk.iloc[:remaining]
+            feats, _meta = engineer_features(
+                chunk,
+                time_column=args.time_column,
+                label_column=args.label_column,
+                include_history=False,  # history features disabled in streaming mode
+            )
+            _write_chunk(feats)
+
+        if writer is not None:
+            writer.close()
+        else:
+            # No data encountered
+            pd.DataFrame().to_parquet(features_path, index=False)
+
+        features = None  # not held in memory
+        metadata = {
+            "generated_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+            "input_path": args.input,
+            "feature_columns": None,
+            "label_column": args.label_column,
+            "rows": int(total_rows),
+            "streaming": True,
+            "history_features_included": False,
+        }
+    else:
+        frame = _load_input_frames(args.input)
         frame = frame.sort_values(by=args.time_column)
 
-    features, metadata = engineer_features(
-        frame,
-        time_column=args.time_column,
-        label_column=args.label_column,
-    )
+        if args.sample_size and args.sample_size > 0 and len(frame) > args.sample_size:
+            rng = np.random.default_rng(args.seed)
+            sample_indices = rng.choice(len(frame), size=args.sample_size, replace=False)
+            frame = frame.iloc[np.sort(sample_indices)]
+            frame = frame.sort_values(by=args.time_column)
 
-    features_path = os.path.join(args.out_dir, "features.parquet")
-    features.to_parquet(features_path, index=False)
+        features, metadata = engineer_features(
+            frame,
+            time_column=args.time_column,
+            label_column=args.label_column,
+            include_history=True,
+        )
+        # Write once
+        pd.DataFrame(features).to_parquet(features_path, index=False)
 
     metadata.update(
         {
@@ -293,6 +461,50 @@ def run(argv: Optional[List[str]] = None) -> str:
     manifest_path = os.path.join(args.out_dir, "feature_manifest.json")
     with open(manifest_path, "w", encoding="utf-8") as handle:
         json.dump(metadata, handle, indent=2)
+
+    # Optional output validation
+    if args.validate_out:
+        try:
+            import sys as _sys
+            from pathlib import Path as _P
+            _THIS = _P(__file__).resolve()
+            _LIB_DIR = _THIS.parent / "lib"
+            if str(_LIB_DIR) not in _sys.path:
+                _sys.path.insert(0, str(_LIB_DIR))
+            from lib.loader import iter_parquet as _iter_parquet  # type: ignore
+            from lib.schema import iter_validate_rows as _iter_validate_rows, diagnostics as _diagnostics  # type: ignore
+            import pandas as _pd  # type: ignore
+        except Exception as e:  # pragma: no cover
+            raise SystemExit(f"Validation libraries unavailable: {e}")
+
+        limit = max(1, int(args.validate_limit))
+        total = 0
+        frames: List['_pd.DataFrame'] = []
+        for ch in _iter_parquet(features_path):
+            need = limit - total
+            if need <= 0:
+                break
+            if ch.shape[0] > need:
+                ch = ch.iloc[:need]
+            frames.append(ch)
+            total += ch.shape[0]
+            if total >= limit:
+                break
+        sample = _pd.concat(frames, ignore_index=True) if frames else _pd.DataFrame()
+        errs = sum(1 for _idx, err in _iter_validate_rows(sample, schema='fraud', limit=len(sample)) if err is not None)
+        diag = _diagnostics(sample) if not sample.empty else {}
+        report_path = os.path.join(args.out_dir, 'features.validation.json')
+        with open(report_path, 'w', encoding='utf-8') as fh:
+            json.dump({
+                'schema': 'fraud',
+                'format': 'parquet',
+                'path': features_path,
+                'sampled_rows': int(len(sample)),
+                'error_count': int(errs),
+                'diagnostics': diag,
+            }, fh, indent=2)
+        if errs > 0:
+            print(f"[WARN] Output validation reported {errs} errors in sample; see {report_path}")
 
     print(f"Wrote engineered features to {features_path}")
     return features_path

@@ -45,3 +45,16 @@ export const PAYOUT_METHOD_LABELS: Record<PayoutMethod, string> = {
   paypal: 'PayPal',
   wire: 'Wire Transfer',
 }
+
+export const PAYOUTS_PAGE_SIZE = 20
+
+export const PAYOUT_CSV_HEADERS = [
+  { key: 'id', label: 'Payout ID' },
+  { key: 'scheduledDate', label: 'Scheduled Date' },
+  { key: 'completedDate', label: 'Completed Date' },
+  { key: 'amount', label: 'Amount' },
+  { key: 'status', label: 'Status' },
+  { key: 'method', label: 'Method' },
+] as const
+
+export type PayoutCsvHeaderKey = (typeof PAYOUT_CSV_HEADERS)[number]['key']

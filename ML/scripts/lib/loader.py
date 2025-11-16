@@ -102,30 +102,35 @@ def iter_tsv(path: Path | str, options: Optional[CsvOptions] = None) -> Iterator
 def iter_jsonl(path: Path | str, chunk_rows: Optional[int] = None) -> Iterator["pandas.DataFrame"]:  # type: ignore[name-defined]
     """
     Stream JSON Lines by accumulating rows into DataFrame batches of size chunk_rows.
-    This avoids pandas.read_json(lines=True) full-load behavior when chunksize is not supported.
+    Uses json.loads for line parsing and pandas.DataFrame.from_records for efficient batching.
+    Malformed lines are skipped.
     """
     import pandas as pd
+    import json
     p = Path(path)
     size = _estimate_rows_for_budget(p, _default_chunk_rows())
-    batch = []
     target = int(chunk_rows or size)
+    rows: List[Dict[str, Any]] = []  # type: ignore[name-defined]
     with p.open("r", encoding="utf-8", errors="ignore") as fh:
         for line in fh:
             s = line.strip()
             if not s:
                 continue
             try:
-                # Using pandas.json_normalize on dicts would be possible; keep simple: parse as json via pandas
-                rec = pd.read_json(f"[{s}]", lines=False, orient="records")  # DataFrame with 1 row
-                batch.append(rec)
+                obj = json.loads(s)
+                if isinstance(obj, dict):
+                    rows.append(obj)
+                else:
+                    # Ignore non-dict values
+                    continue
             except Exception:
-                # Skip malformed lines; alternatively raise in strict mode (future knob)
+                # Skip malformed lines; optionally log in future
                 continue
-            if len(batch) >= target:
-                yield pd.concat(batch, ignore_index=True)
-                batch = []
-        if batch:
-            yield pd.concat(batch, ignore_index=True)
+            if len(rows) >= target:
+                yield pd.DataFrame.from_records(rows)
+                rows = []
+        if rows:
+            yield pd.DataFrame.from_records(rows)
 
 
 def iter_parquet(path: Path | str, columns: Optional[List[str]] = None, filters: Optional[List[Tuple[str, str, Any]]] = None, batch_size: Optional[int] = None) -> Iterator["pandas.DataFrame"]:  # type: ignore[name-defined]

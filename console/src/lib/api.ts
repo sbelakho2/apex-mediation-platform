@@ -13,6 +13,7 @@ import type {
   PayoutSettings,
   TeamMember,
   TeamInvitation,
+  TeamRoleDefinition,
   NotificationSettings,
   ComplianceSettings,
   ApiResponse,
@@ -57,6 +58,10 @@ export const placementApi = {
   update: (id: string, data: Partial<Placement>) =>
     apiClient.put<Placement>(`/placements/${id}`, data),
   delete: (id: string) => apiClient.delete(`/placements/${id}`),
+  getFormatCatalog: () => {
+    if (USE_MOCK_API) return mockApiCall<Record<string, string[]>>('placement-formats')
+    return apiClient.get<Record<string, string[]>>('/placements/formats')
+  },
 }
 
 // Adapter API
@@ -75,18 +80,33 @@ export const adapterApi = {
 }
 
 // Revenue API
+type RevenueTimeSeriesRequest = {
+  startDate: string
+  endDate: string
+  granularity?: 'hour' | 'day' | 'week' | 'month'
+  signal?: AbortSignal
+}
+
+type RevenueSummaryRequest = {
+  startDate: string
+  endDate: string
+  signal?: AbortSignal
+}
+
 export const revenueApi = {
-  getTimeSeries: async (params: {
-    startDate: string
-    endDate: string
-    granularity?: 'hour' | 'day' | 'week' | 'month'
-  }) => {
+  getTimeSeries: async ({ signal, ...params }: RevenueTimeSeriesRequest) => {
     if (USE_MOCK_API) return mockApiCall<RevenueData[]>('revenue-timeseries')
-    return apiClient.get<RevenueData[]>('/revenue/timeseries', { params })
+    return apiClient.get<RevenueData[]>('/revenue/timeseries', {
+      params,
+      signal,
+    })
   },
-  getSummary: async (params: { startDate: string; endDate: string }) => {
+  getSummary: async ({ signal, ...params }: RevenueSummaryRequest) => {
     if (USE_MOCK_API) return mockApiCall<AnalyticsSummary>('revenue-summary')
-    return apiClient.get<AnalyticsSummary>('/revenue/summary', { params })
+    return apiClient.get<AnalyticsSummary>('/revenue/summary', {
+      params,
+      signal,
+    })
   },
 }
 
@@ -106,13 +126,27 @@ export const analyticsApi = {
 
 // Fraud API
 export const fraudApi = {
-  getAlerts: async (publisherId: string, params?: { limit?: number }) => {
+  getAlerts: async (
+    publisherId: string,
+    params?: { limit?: number; signal?: AbortSignal }
+  ) => {
     if (USE_MOCK_API) return mockApiCall<{ alerts: FraudAlert[] }>('fraud-alerts')
-    return fraudApiClient.get<{ alerts: FraudAlert[] }>(`/fraud/alerts/${publisherId}`, { params })
+    const { signal, ...query } = params ?? {}
+    return fraudApiClient.get<{ alerts: FraudAlert[] }>(`/fraud/alerts/${publisherId}`, {
+      params: query,
+      signal,
+    })
   },
-  getStats: async (publisherId: string, params?: { window?: '1h' | '24h' | '7d' | '30d' }) => {
+  getStats: async (
+    publisherId: string,
+    params?: { window?: '1h' | '24h' | '7d' | '30d'; signal?: AbortSignal }
+  ) => {
     if (USE_MOCK_API) return mockApiCall<FraudStats>('fraud-stats')
-    return fraudApiClient.get<FraudStats>(`/fraud/stats/${publisherId}`, { params })
+    const { signal, ...query } = params ?? {}
+    return fraudApiClient.get<FraudStats>(`/fraud/stats/${publisherId}`, {
+      params: query,
+      signal,
+    })
   },
   getDashboard: (publisherId: string) =>
     fraudApiClient.get(`/fraud/dashboard/${publisherId}`),
@@ -530,4 +564,5 @@ export const teamApi = {
     apiClient.put<TeamMember>(`/team/members/${id}`, data),
   removeMember: (id: string) => apiClient.delete(`/team/members/${id}`),
   resendInvite: (id: string) => apiClient.post(`/team/members/${id}/resend`),
+  listRoles: () => apiClient.get<TeamRoleDefinition[]>('/team/roles'),
 }

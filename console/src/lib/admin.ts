@@ -1,6 +1,7 @@
 "use client"
 
 import { apiClient, handleApiError } from './api-client'
+import type { ApiResponse } from '@/types'
 
 export interface AuditEntry {
   id: string
@@ -16,6 +17,87 @@ export interface AuditListResponse {
   pagination: { page: number; limit: number; total: number; total_pages: number }
 }
 
+export interface SalesAutomationSummary {
+  trialToPaidRate: number
+  baselineTrialRate?: number
+  avgDealSizeUSD: number
+  targetDealSizeUSD?: number
+  timeToConvertDays: number
+  targetTimeToConvertDays?: number
+  activeTrials: number
+  trialWeekChange?: number
+}
+
+export interface SalesPrincipleStat {
+  key: string
+  label: string
+  description: string
+  conversionRate: number
+  touches: number
+  revenueUSD: number
+  icon?: string
+  color?: string
+}
+
+export interface SalesFunnelStage {
+  key: string
+  name: string
+  count: number
+  conversionPercentage: number
+  avgDays: number
+  engagementScore: number
+}
+
+export interface SalesJourneyTouchpoint {
+  day: number
+  title: string
+  principle: string
+  sent: number
+  openRate: number
+  clickRate: number
+  impact: 'Low' | 'Medium' | 'High' | 'Very High' | 'Critical'
+}
+
+export interface SalesConversionRecord {
+  company: string
+  mrrUSD: number
+  daysInTrial: number
+  principle: string
+  milestonesCompleted: number
+  conversionProbability: number
+}
+
+export interface SalesExperimentRecord {
+  id: string
+  testName: string
+  hypothesis: string
+  controlRate: number
+  testRate: number
+  confidence: number
+  winner: 'control' | 'test' | 'inconclusive'
+  recommendation: string
+}
+
+export interface SalesQuickAction {
+  id: string
+  title: string
+  description: string
+  icon?: string
+  href?: string
+}
+
+export interface SalesAutomationOverview {
+  summary: SalesAutomationSummary
+  principles: SalesPrincipleStat[]
+  funnel: SalesFunnelStage[]
+  journey: SalesJourneyTouchpoint[]
+  conversions: SalesConversionRecord[]
+  experiments: SalesExperimentRecord[]
+  quickActions: SalesQuickAction[]
+  insights: string[]
+  updatedAt: string
+}
+
 export async function listBillingAudit(params?: {
   page?: number
   limit?: number
@@ -27,6 +109,17 @@ export async function listBillingAudit(params?: {
   try {
     const res = await apiClient.get('/admin/billing/audit', { params })
     return res.data as AuditListResponse
+  } catch (err) {
+    throw new Error(handleApiError(err))
+  }
+}
+
+export async function getSalesAutomationOverview(params?: { signal?: AbortSignal }) {
+  try {
+    const res = await apiClient.get<ApiResponse<SalesAutomationOverview>>('/admin/sales-automation', {
+      signal: params?.signal,
+    })
+    return res.data
   } catch (err) {
     throw new Error(handleApiError(err))
   }

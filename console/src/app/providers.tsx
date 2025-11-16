@@ -31,6 +31,23 @@ export function Providers({ children }: { children: React.ReactNode }) {
 }
 
 function BootstrapCsrf() {
-  useEffect(() => { void getCsrfToken() }, [])
+  useEffect(() => {
+    let cancelled = false
+    const prime = async () => {
+      try {
+        await getCsrfToken()
+      } catch (error) {
+        if (!cancelled) {
+          console.warn('[csrf] Unable to prime CSRF token', error)
+        }
+      }
+    }
+    if (typeof window !== 'undefined') {
+      void prime()
+    }
+    return () => {
+      cancelled = true
+    }
+  }, [])
   return null
 }

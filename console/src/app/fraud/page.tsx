@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { fraudApi } from '@/lib/api'
-import { useSession } from 'next-auth/react'
+import { useSession } from '@/lib/useSession'
 import { ShieldAlert, AlertTriangle, Shield, Activity, Ban, Flag } from 'lucide-react'
 import { formatNumber, formatPercentage } from '@/lib/utils'
 import type { FraudAlert, FraudStats } from '@/types'
@@ -24,8 +24,8 @@ const alertTypeLabels = {
 }
 
 export default function FraudPage() {
-  const { data: session, status: sessionStatus } = useSession()
-  const publisherId = session?.user?.publisherId
+  const { user, isLoading: sessionLoading } = useSession()
+  const publisherId = user?.publisherId
   const [timeWindow, setTimeWindow] = useState<'1h' | '24h' | '7d' | '30d'>('24h')
   const [severityFilter, setSeverityFilter] = useState<'all' | FraudAlert['severity']>('all')
   const [page, setPage] = useState(1)
@@ -35,24 +35,39 @@ export default function FraudPage() {
     setPage(1)
   }, [severityFilter])
 
-  const { data: stats, isLoading: loadingStats } = useQuery({
+  const {
+    data: stats,
+    isLoading: loadingStats,
+    error: statsError,
+  } = useQuery({
     queryKey: ['fraud-stats', publisherId, timeWindow],
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       if (!publisherId) throw new Error('Missing publisher context')
-      const { data } = await fraudApi.getStats(publisherId, { window: timeWindow })
+      const { data } = await fraudApi.getStats(publisherId, { window: timeWindow, signal })
       return data
     },
     enabled: Boolean(publisherId),
+    staleTime: 60_000,
+    gcTime: 300_000,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
   })
 
-  const { data: alertsData, isLoading: loadingAlerts } = useQuery({
+  const {
+    data: alertsData,
+    isLoading: loadingAlerts,
+    error: alertsError,
+    refetch: refetchAlerts,
+  } = useQuery({
     queryKey: ['fraud-alerts', publisherId],
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       if (!publisherId) throw new Error('Missing publisher context')
-      const { data } = await fraudApi.getAlerts(publisherId, { limit: 50 })
+      const { data } = await fraudApi.getAlerts(publisherId, { limit: 50, signal })
       return data
     },
     enabled: Boolean(publisherId),
+    staleTime: 30_000,
+    gcTime: 300_000,
   })
 
   const alerts = useMemo(() => alertsData?.alerts ?? [], [alertsData?.alerts])
@@ -77,7 +92,7 @@ export default function FraudPage() {
     }))
   }, [stats?.topFraudTypes])
 
-  if (sessionStatus === 'loading') {
+  if (sessionLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-sm text-gray-600">Loading session...</div>
@@ -184,6 +199,10 @@ export default function FraudPage() {
               <p className="text-2xl font-bold text-gray-900">{formatNumber(stats.flaggedRequests)}</p>
             </div>
           </div>
+        ) : statsError ? (
+          <div className="card border-danger-200 bg-danger-50 text-danger-700">
+            <p className="text-sm">Unable to load fraud stats: {statsError instanceof Error ? statsError.message : 'Unknown error'}</p>
+          </div>
         ) : null}
 
         {/* Detection breakdown */}
@@ -269,6 +288,14 @@ export default function FraudPage() {
                   <div className="h-3 bg-gray-200 rounded w-1/2" />
                 </div>
               ))}
+            </div>
+          ) : alertsError ? (
+            <div className="flex flex-col gap-2 text-danger-700">
+              <p className="text-sm font-medium">Failed to load alerts.</p>
+              <p className="text-xs">{alertsError instanceof Error ? alertsError.message : 'Unknown error'}</p>
+              <button type="button" className="btn btn-outline btn-sm w-fit" onClick={() => refetchAlerts()}>
+                Retry
+              </button>
             </div>
           ) : filteredAlerts.length === 0 ? (
             <div className="text-center py-12">

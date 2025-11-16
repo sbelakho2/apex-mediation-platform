@@ -58,10 +58,10 @@ export const transparencyApi = {
     surface?: string
     geo?: string
     publisher_id?: string
-  }) {
+  }, options: { signal?: AbortSignal } = {}) {
     const res = await apiClient.get<{ page: number; limit: number; count: number; data: TransparencyAuction[] }>(
       '/transparency/auctions',
-      { params }
+      { params, signal: options.signal }
     )
     return res.data
   },

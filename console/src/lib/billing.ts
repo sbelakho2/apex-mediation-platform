@@ -101,13 +101,17 @@ export async function getCurrentUsage(): Promise<UsageData> {
 /**
  * List invoices with optional filters
  */
-export async function listInvoices(params: InvoicesQueryParams = {}): Promise<InvoicesListResponse> {
+export async function listInvoices(
+  params: InvoicesQueryParams = {},
+  options: { signal?: AbortSignal } = {}
+): Promise<InvoicesListResponse> {
   try {
     const response: AxiosResponse<InvoicesListResponse> = await apiClient.get('/billing/invoices', {
       params: {
         limit: 20,
         ...params,
       },
+      signal: options.signal,
     })
     return response.data
   } catch (error) {
@@ -120,9 +124,13 @@ export async function listInvoices(params: InvoicesQueryParams = {}): Promise<In
  */
 export async function getInvoice(invoiceId: string, options: { signal?: AbortSignal } = {}): Promise<Invoice> {
   try {
-    const response: AxiosResponse<Invoice> = await apiClient.get(`/billing/invoices/${invoiceId}`, {
-      signal: options.signal,
-    })
+    let response: AxiosResponse<Invoice>
+    if (options.signal) {
+      response = await apiClient.get(`/billing/invoices/${invoiceId}`, { signal: options.signal })
+    } else {
+      // Pass only the URL when no config is needed to keep compatibility with tests/mocks
+      response = await apiClient.get(`/billing/invoices/${invoiceId}`)
+    }
     return response.data
   } catch (error) {
     throw new Error(handleApiError(error))

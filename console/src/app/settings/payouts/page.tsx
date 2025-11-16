@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
@@ -9,20 +9,43 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 import { settingsApi } from '@/lib/api'
 import { ArrowLeft, Banknote, Save, AlertCircle, CheckCircle } from 'lucide-react'
 
-const payoutSchema = z.object({
-  method: z.enum(['stripe', 'paypal', 'wire']),
-  accountName: z.string().min(1, 'Account name is required'),
-  accountNumberMasked: z.string().min(4, 'Account reference is required'),
-  currency: z.string().min(1, 'Currency is required'),
-  minimumPayout: z.coerce.number().min(0),
-  autoPayout: z.boolean(),
-  backupMethod: z.enum(['stripe', 'paypal', 'wire']).optional().or(z.literal('')),
-})
+const payoutSchema = z
+  .object({
+    method: z.enum(['stripe', 'paypal', 'wire'], { required_error: 'Select a payout method' }),
+    accountName: z
+      .string()
+      .trim()
+      .min(1, 'Account name is required')
+      .max(100, 'Account name is too long'),
+    accountNumberMasked: z
+      .string()
+      .trim()
+      .min(4, 'Account reference is required')
+      .regex(/^[A-Za-z0-9*\-\s]+$/, 'Use only letters, numbers, spaces, dashes, or *'),
+    currency: z
+      .string()
+      .trim()
+      .regex(/^[A-Z]{3}$/i, 'Currency must be a 3-letter ISO code (e.g., USD, EUR)')
+      .transform((s) => s.toUpperCase()),
+    minimumPayout: z.coerce.number().min(0, 'Minimum payout must be >= 0'),
+    autoPayout: z.boolean(),
+    backupMethod: z.union([z.enum(['stripe', 'paypal', 'wire']), z.literal('')]).optional(),
+  })
+  .refine(
+    (v) => {
+      const backupValue = typeof v.backupMethod === 'string' ? v.backupMethod : ''
+      const backup = backupValue.length > 0 ? backupValue : undefined
+      if (!backup) return true
+      return backup !== v.method
+    },
+    { path: ['backupMethod'], message: 'Backup method must differ from primary method' }
+  )
 
 type PayoutFormValues = z.infer<typeof payoutSchema>
 
 export default function PayoutSettingsPage() {
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+  const [showConfirm, setShowConfirm] = useState(false)
 
   const { data, isLoading } = useQuery({
   queryKey: ['settings', 'payout'],
@@ -34,6 +57,7 @@ export default function PayoutSettingsPage() {
 
   const form = useForm<PayoutFormValues>({
     resolver: zodResolver(payoutSchema),
+    mode: 'onChange',
     defaultValues: {
       method: 'wire',
       accountName: '',
@@ -72,9 +96,15 @@ export default function PayoutSettingsPage() {
       })
     },
     onMutate: () => setMessage(null),
-    onSuccess: () => setMessage({ type: 'success', text: 'Payout settings updated successfully.' }),
+    onSuccess: () => {
+      setShowConfirm(false)
+      setMessage({ type: 'success', text: 'Payout settings updated successfully.' })
+    },
     onError: () => setMessage({ type: 'error', text: 'Failed to update payout settings. Please try again.' }),
   })
+
+  // Derived flag: can confirm only when valid and not pending
+  const canConfirm = useMemo(() => form.formState.isValid && !updateMutation.isPending, [form.formState.isValid, updateMutation.isPending])
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -103,7 +133,13 @@ export default function PayoutSettingsPage() {
       </header>
 
       <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <form onSubmit={form.handleSubmit((values) => updateMutation.mutate(values))} className="space-y-6">
+        <form
+          onSubmit={form.handleSubmit(() => {
+            // Open confirmation modal instead of immediate submit
+            setShowConfirm(true)
+          })}
+          className="space-y-6"
+        >
           {message && (
             <div
               className={`card flex items-start gap-3 ${
@@ -251,6 +287,37 @@ export default function PayoutSettingsPage() {
             </button>
           </div>
         </form>
+
+        {/* Confirmation Modal */}
+        {showConfirm && (
+          <div role="dialog" aria-modal="true" aria-labelledby="confirm-title" className="fixed inset-0 z-50 flex items-center justify-center">
+            <button
+              type="button"
+              aria-label="Dismiss confirmation dialog"
+              className="absolute inset-0 bg-black/30"
+              onClick={() => setShowConfirm(false)}
+            />
+            <div className="relative bg-white rounded-lg shadow-xl max-w-lg w-full mx-4 p-6">
+              <h3 id="confirm-title" className="text-lg font-semibold text-gray-900">Confirm sensitive account changes</h3>
+              <p className="text-sm text-gray-600 mt-2">
+                You are about to update payout banking details. This may affect future disbursements. Please confirm you wish to save these changes.
+              </p>
+              <div className="flex items-center justify-end gap-3 mt-6">
+                <button type="button" className="btn btn-outline" onClick={() => setShowConfirm(false)}>
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  disabled={!canConfirm}
+                  onClick={form.handleSubmit((values) => updateMutation.mutate(values))}
+                >
+                  {updateMutation.isPending ? 'Saving…' : 'Confirm & Save'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </main>
     </div>
   )

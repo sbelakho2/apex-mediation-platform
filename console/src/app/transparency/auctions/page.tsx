@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { transparencyApi, type TransparencyAuction } from '../../../lib/transparency'
-import { useDebouncedValue, useQueryParams } from '../../../lib/hooks'
+import { useDebouncedValue, useUrlQueryParams } from '../../../lib/hooks'
 import { VerifyBadge, Skeleton, CopyButton } from '../../../components/ui'
 
 const AUCTIONS_TABLE_SKELETON_KEYS = ['auctions-row-1', 'auctions-row-2', 'auctions-row-3', 'auctions-row-4', 'auctions-row-5']
@@ -17,7 +17,7 @@ function formatCurrency(value: number, cur: string) {
 }
 
 export default function TransparencyAuctionsPage() {
-  const { params: urlParams, updateParams } = useQueryParams()
+  const { params: urlParams, updateParams } = useUrlQueryParams()
   
   // Initialize state from URL or defaults
   const [data, setData] = useState<TransparencyAuction[]>([])
@@ -62,18 +62,21 @@ export default function TransparencyAuctionsPage() {
   }, [page, debouncedFrom, debouncedTo, debouncedPlacementId, debouncedSurface, debouncedGeo, updateParams])
 
   useEffect(() => {
-    let cancelled = false
+    const controller = new AbortController()
     setLoading(true)
     setError(null)
     transparencyApi
-      .list(params)
+      .list(params, { signal: controller.signal })
       .then((resp) => {
-        if (!cancelled) setData(resp.data)
+        setData(resp.data)
       })
-      .catch((e: any) => !cancelled && setError(e?.message || 'Failed to load auctions'))
-      .finally(() => !cancelled && setLoading(false))
+      .catch((e: any) => {
+        if (e?.name === 'CanceledError' || e?.name === 'AbortError') return
+        setError(e?.message || 'Failed to load auctions')
+      })
+      .finally(() => setLoading(false))
     return () => {
-      cancelled = true
+      controller.abort()
     }
   }, [params])
 

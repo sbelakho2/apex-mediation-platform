@@ -20,7 +20,7 @@ const sections = [
   {
     title: 'Payouts & Banking',
     description: 'Manage payment methods, currencies, and payout triggers.',
-    href: '/settings/payout',
+    href: '/settings/payouts',
     icon: CreditCard,
   },
   {

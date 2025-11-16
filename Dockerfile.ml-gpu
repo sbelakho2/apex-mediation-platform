@@ -6,9 +6,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /workspace
 
+# Install dependencies with constraints to ensure parity across envs (FIX-06)
 COPY ML/requirements-gpu.txt /tmp/requirements-gpu.txt
+COPY ML/constraints.txt /tmp/constraints.txt
 RUN pip install --no-cache-dir --upgrade pip \
-    && pip install --no-cache-dir -r /tmp/requirements-gpu.txt
+    && pip install --no-cache-dir -c /tmp/constraints.txt -r /tmp/requirements-gpu.txt
 
 COPY ML /workspace/ML
 COPY scripts /workspace/scripts

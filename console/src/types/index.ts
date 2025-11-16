@@ -141,8 +141,16 @@ export interface TeamMember {
 
 export interface TeamInvitation {
   email: string
-  role: 'admin' | 'developer' | 'finance'
+  role: TeamMember['role'] | string
   permissions?: string[]
+}
+
+export interface TeamRoleDefinition {
+  id: string
+  label: string
+  description: string
+  permissions?: string[]
+  invitable?: boolean
 }
 
 // Notification types
@@ -187,6 +195,12 @@ export interface ComplianceSettings {
     provider?: 'custom' | 'onetrust' | 'cookiebot'
     autoBlock: boolean
     consentString?: string
+    encryptedConsent?: {
+      algorithm: 'AES-GCM'
+      keyId: string
+      iv: string
+      cipherText: string
+    }
   }
   dataRetention: {
     rawEventsDays: number

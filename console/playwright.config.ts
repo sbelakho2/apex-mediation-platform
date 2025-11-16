@@ -11,4 +11,11 @@ export default defineConfig({
   projects: [
     { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
   ],
+  // Auto-start the Console app during tests to avoid connection errors
+  webServer: {
+    command: 'npm run dev --workspace console',
+    url: process.env.CONSOLE_BASE_URL || 'http://localhost:3000',
+    reuseExistingServer: true,
+    timeout: 120_000,
+  },
 });

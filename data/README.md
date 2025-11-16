@@ -32,8 +32,24 @@ Script integration (preflight flags)
     --manifest-dir data/enrichment
   (Validates manifests in the given directory; if omitted, looks for *manifest.json adjacent to inputs.)
 
+Validation CLI (dataset schemas)
+- Validate a dataset sample against canonical schemas and emit diagnostics JSON:
+  - CSV:
+    - python ML/scripts/validate_dataset.py --schema fraud --format csv --path data/sample.csv --limit 10000 --report artifacts/sample.csv.validation.json
+  - Parquet:
+    - python ML/scripts/validate_dataset.py --schema fraud --format parquet --path data/features.parquet --limit 20000 --report artifacts/features.validation.json
+  - JSONL:
+    - python ML/scripts/validate_dataset.py --schema fraud --format jsonl --path data/events.jsonl --limit 50000 --report artifacts/events.validation.json
+
+Feature engineering & training with validation
+- Feature engineering (streaming) with input/output validation:
+  - python ML/scripts/feature_engineering.py --input data/events.parquet --out-dir .out --stream --input-format parquet --validate-in --validate-out --validate-limit 10000
+- Training (bounded-memory) with preflight features validation:
+  - python ML/scripts/train_supervised_logreg.py --features .out/features.parquet --row-limit 100000 --input-format parquet --out-dir .model --validate-features --validate-limit 10000
+
 Best practices
 - Keep manifest files next to their data under data/enrichment/ and data/weak-supervision/.
 - Prefer names like *_manifest.json or *.manifest.json for easy discovery.
 - Refresh manifests whenever the underlying file changes.
 - Avoid duplicates: models/* should be the single source of truth for model-bound manifests (CI check planned in FIX-06).
+  - Use ML/scripts/check_manifests.py or the ML PR workflow to enforce the allowed locations (models/**, data/enrichment/**, data/weak-supervision/**).

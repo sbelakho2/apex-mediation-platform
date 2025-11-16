@@ -329,7 +329,9 @@
         "missingPlacement": "Select a placement before importing.",
         "fileRequired": "Please choose a CSV export to continue.",
         "generic": "Something went wrong. Try again or contact support.",
-        "unresolvedMappings": "Resolve {count} pending mappings before finalizing."
+        "unresolvedMappings": "Resolve {count} pending mappings before finalizing.",
+        "clipboardUnavailable": "Clipboard access is unavailable. Copy the payload manually.",
+        "assignmentBatchFailed": "Couldn't update {count} mappings: {failed}."
       },
       "csv": {
         "uploadPrompt": "Drag and drop your CSV export here or choose a file",
@@ -353,6 +355,8 @@
       "review": {
         "metaTitle": "Review detected mappings",
         "metaSubtitle": "Placement {placement} · Imported {timestamp}",
+        "summaryUnavailable": "Summary metrics aren't available for this import.",
+        "summaryPending": "Summary metrics will populate once processing finishes.",
         "columns": {
           "incumbent": "Incumbent instance",
           "details": "Details",
@@ -405,7 +409,10 @@
       "copy": "Copy",
       "copied": "Copied",
       "tooltip": "Copy to clipboard",
-      "error": "Unable to copy. Please copy manually."
+      "error": "Unable to copy. Please copy manually.",
+      "unsupported": "Clipboard access is unavailable in this browser or connection.",
+      "fallbackInstructions": "Select the text manually and press Ctrl/Cmd + C.",
+      "insecure": "Clipboard actions require a secure (HTTPS or localhost) connection"
     }
   }
 }

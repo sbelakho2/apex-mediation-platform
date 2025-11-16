@@ -29,12 +29,11 @@ jest.mock('@/lib/billing', () => ({
 jest.mock('@tanstack/react-query', () => ({
   useQuery: jest.fn(() => ({
     data: {
-      id: '1',
-      invoice_number: 'INV-001',
-      amount: 9900,
-      currency: 'usd',
-      status: 'paid',
-      line_items: [],
+      userId: 'user-1',
+      publisherId: 'pub-1',
+      email: 'billing@example.com',
+      role: 'admin',
+      permissions: ['billing:view'],
     },
     isLoading: false,
     error: null,
@@ -43,10 +42,27 @@ jest.mock('@tanstack/react-query', () => ({
     mutate: jest.fn(),
     isPending: false,
   })),
+  useQueryClient: jest.fn(() => ({
+    invalidateQueries: jest.fn(),
+    setQueryData: jest.fn(),
+  })),
+}))
+
+jest.mock('@/lib/useFeatures', () => ({
+  useFeatures: () => ({
+    features: { billing: true },
+    loading: false,
+    error: null,
+    refresh: jest.fn(),
+  }),
 }))
 
 jest.mock('next/navigation', () => ({
   useParams: () => ({ id: '1' }),
+  useRouter: () => ({
+    replace: jest.fn(),
+    push: jest.fn(),
+  }),
 }))
 
 describe('InvoiceDetailPage Accessibility', () => {

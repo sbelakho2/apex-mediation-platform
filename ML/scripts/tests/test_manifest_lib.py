@@ -91,3 +91,48 @@ def test_refresh_manifest_populates_sha_and_version(tmp_path: Path) -> None:
     assert m.sha256 is not None and len(m.sha256) == 64
     assert m.version == "v0-test"
     assert m.updated_at is not None
+
+
+def test_validate_manifest_raises_on_missing_file(tmp_path: Path) -> None:
+    # Manifest points to a non-existent file
+    mfile = tmp_path / "missing_manifest.json"
+    mfile.write_text(
+        json.dumps(
+            {
+                "source": "unit-test",
+                "path": "does_not_exist.csv",
+                "format": "csv",
+                "sha256": "0" * 64,
+            },
+            indent=2,
+        )
+    )
+    with pytest.raises(ManifestError):
+        validate_manifest(mfile)
+
+
+def test_validate_manifest_requires_sha_in_strict_mode(tmp_path: Path) -> None:
+    # Create a real data file but omit sha256; strict mode should fail
+    data_file = tmp_path / "data.csv"
+    write_file(data_file, b"a\n1\n")
+    mfile = tmp_path / "strict_missing_sha_manifest.json"
+    write_manifest(
+        mfile,
+        {
+            "source": "unit-test",
+            "path": data_file.name,
+            "format": "csv",
+        },
+    )
+    with pytest.raises(ManifestError):
+        validate_manifest(mfile, strict_checksum=True)
+    # Allow missing checksum when strict is disabled
+    _ = validate_manifest(mfile, strict_checksum=False)
+
+
+def test_load_manifest_raises_on_corrupt_json(tmp_path: Path) -> None:
+    # Write an invalid JSON file
+    corrupt = tmp_path / "corrupt_manifest.json"
+    corrupt.write_text("{" )  # incomplete JSON
+    with pytest.raises(ManifestError):
+        validate_manifest(corrupt)

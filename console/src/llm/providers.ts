@@ -1,6 +1,10 @@
+'use server'
+
 // LLM provider abstraction with cost-aware routing and rate-limit-aware HTTP providers.
 
-export type ProviderName = 'chatgpt' | 'junie'
+import { ProviderName, type PricingPerThousandTokens } from './types'
+
+export type { ProviderName } from './types'
 
 export interface LLMRequest {
   model?: string
@@ -22,10 +26,7 @@ export interface LLMResponse {
 export interface LLMProvider {
   name: ProviderName
   complete(req: LLMRequest): Promise<LLMResponse>
-  pricingPer1k: {
-    inputUSD: number
-    outputUSD: number
-  }
+  pricingPer1k: PricingPerThousandTokens
 }
 
 export class ProviderError extends Error {
@@ -45,13 +46,18 @@ export class RateLimitError extends ProviderError {
 type HttpProviderConfig = {
   name: ProviderName
   endpoint: string
-  target: ProviderName
+  target?: ProviderName
   defaultModel: string
   defaultMaxTokens: number
   defaultTemperature: number
-  pricingPer1k: LLMProvider['pricingPer1k']
+  pricingPer1k: PricingPerThousandTokens
   maxConcurrency?: number
   requestsPerMinute?: number
+  timeoutMs?: number
+  credentials?: RequestCredentials
+  headers?: () => Record<string, string | undefined>
+  buildRequestPayload?: (req: LLMRequest, config: HttpProviderConfig) => Record<string, unknown>
+  mapResponse?: (payload: any, req: LLMRequest, config: HttpProviderConfig) => Partial<LLMResponse>
 }
 
 class AsyncSemaphore {
@@ -129,25 +135,27 @@ class HttpLLMProvider implements LLMProvider {
   }
 
   async complete(req: LLMRequest): Promise<LLMResponse> {
-  const signal = req.signal
-  const startedAt = now()
-    await this.rateLimiter.acquire(signal)
-    await this.semaphore.acquire(signal)
+    const startedAt = now()
+    await this.rateLimiter.acquire(req.signal)
+    await this.semaphore.acquire(req.signal)
+    const { signal, cleanup } = createRequestSignal(req.signal, this.config.timeoutMs)
     try {
+      const payload = this.config.buildRequestPayload
+        ? this.config.buildRequestPayload(req, this.config)
+        : {
+            provider: this.config.target,
+            model: req.model || this.config.defaultModel,
+            prompt: req.prompt,
+            maxTokens: req.maxTokens ?? this.config.defaultMaxTokens,
+            temperature: req.temperature ?? this.config.defaultTemperature,
+          }
+
       const response = await fetch(this.config.endpoint, {
         method: 'POST',
-        credentials: 'include',
+        credentials: this.config.credentials ?? 'include',
         signal,
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          provider: this.config.target,
-          model: req.model || this.config.defaultModel,
-          prompt: req.prompt,
-          maxTokens: req.maxTokens ?? this.config.defaultMaxTokens,
-          temperature: req.temperature ?? this.config.defaultTemperature,
-        }),
+        headers: buildHeaders(this.config.headers),
+        body: JSON.stringify(payload),
       })
 
       if (response.status === 429) {
@@ -158,24 +166,93 @@ class HttpLLMProvider implements LLMProvider {
         throw new ProviderError(`Provider ${this.name} failed: ${response.status}`, response.status)
       }
 
-      const payload = await response.json().catch(() => ({}))
-      const tokensIn = payload?.usage?.prompt_tokens ?? payload?.tokens?.input ?? estimateTokens(req.prompt)
+      const body = await response.json().catch(() => ({}))
+      const mapped = this.config.mapResponse ? this.config.mapResponse(body, req, this.config) : {}
+      const tokensIn =
+        mapped.tokensIn ?? body?.usage?.prompt_tokens ?? body?.tokens?.input ?? estimateTokens(req.prompt)
       const tokensOut =
-        payload?.usage?.completion_tokens ?? payload?.tokens?.output ?? req.maxTokens ?? this.config.defaultMaxTokens
+        mapped.tokensOut ??
+        body?.usage?.completion_tokens ??
+        body?.tokens?.output ??
+        req.maxTokens ??
+        this.config.defaultMaxTokens
       const estimatedCostUSD =
-        payload?.costUSD ?? estimateCost(tokensIn, tokensOut, this.pricingPer1k.inputUSD, this.pricingPer1k.outputUSD)
+        mapped.estimatedCostUSD ??
+        body?.costUSD ??
+        estimateCost(tokensIn, tokensOut, this.pricingPer1k.inputUSD, this.pricingPer1k.outputUSD)
+
       return {
-        text: payload?.text ?? payload?.choices?.[0]?.message?.content ?? '',
+        text: mapped.text ?? body?.text ?? body?.choices?.[0]?.message?.content ?? '',
         tokensIn,
         tokensOut,
         estimatedCostUSD,
         provider: this.name,
         latencyMs: Math.round(now() - startedAt),
       }
+    } catch (error) {
+      if (error instanceof RateLimitError || error instanceof ProviderError || isAbortError(error)) {
+        throw error
+      }
+      if (error instanceof Error) {
+        throw new ProviderError(error.message)
+      }
+      throw new ProviderError('LLM provider failed')
     } finally {
+      cleanup()
       this.semaphore.release()
     }
   }
+}
+
+function buildHeaders(factory?: () => Record<string, string | undefined>) {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  }
+  const extra = factory?.() ?? {}
+  for (const [key, value] of Object.entries(extra)) {
+    if (typeof value === 'string' && value.length > 0) {
+      headers[key] = value
+    }
+  }
+  return headers
+}
+
+function createRequestSignal(parent?: AbortSignal, timeoutMs?: number) {
+  if (!parent && !timeoutMs) {
+    return { signal: undefined, cleanup: () => {} }
+  }
+
+  if (!timeoutMs) {
+    return { signal: parent, cleanup: () => {} }
+  }
+
+  const controller = new AbortController()
+  const onAbort = () => controller.abort()
+  if (parent) {
+    if (parent.aborted) {
+      controller.abort()
+    } else {
+      parent.addEventListener('abort', onAbort, { once: true })
+    }
+  }
+
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
+
+  return {
+    signal: controller.signal,
+    cleanup: () => {
+      clearTimeout(timer)
+      parent?.removeEventListener('abort', onAbort)
+    },
+  }
+}
+
+function isAbortError(error: unknown) {
+  if (!error) return false
+  if (typeof DOMException !== 'undefined' && error instanceof DOMException) {
+    return error.name === 'AbortError'
+  }
+  return (error as any)?.name === 'AbortError' || (error as any)?.code === 'ERR_CANCELED'
 }
 
 export interface RoutingContext {
@@ -186,26 +263,32 @@ export interface RoutingContext {
 }
 
 export class CostAwareRouter {
-  constructor(private providers: Record<ProviderName, LLMProvider>) {}
+  constructor(private providers: Partial<Record<ProviderName, LLMProvider>>) {}
 
   pickProvider(ctx: RoutingContext): LLMProvider {
-    const chatgpt = this.providers.chatgpt
-    const junie = this.providers.junie
+  const chatgpt = this.providers.chatgpt
+  const junie = this.providers.junie
     const preferJunie = ctx.task === 'plan' || ctx.task === 'analyze' || ctx.task === 'doc'
     const budgetTight = ctx.remainingMonthlyUSD < 50 || ctx.remainingDailyUSD < 2
 
-    if (!chatgpt) return junie
-    if (!junie) return chatgpt
+    if (!chatgpt && !junie) {
+      throw new ProviderError('No LLM providers configured')
+    }
+    if (!chatgpt && junie) return junie
+    if (!junie && chatgpt) return chatgpt
 
-    if (preferJunie || budgetTight) return junie
-    if (ctx.qualityBias === 'high' && ctx.task !== 'doc') return chatgpt
-    return junie
+    const ensuredChatgpt = chatgpt!
+    const ensuredJunie = junie!
+
+    if (preferJunie || budgetTight) return ensuredJunie
+    if (ctx.qualityBias === 'high' && ctx.task !== 'doc') return ensuredChatgpt
+    return ensuredJunie
   }
 
   fallbackProvider(current: ProviderName): LLMProvider | null {
     const alternatives = Object.entries(this.providers)
-      .filter(([name]) => name !== current)
-      .map(([, provider]) => provider)
+      .filter(([name, provider]) => name !== current && Boolean(provider))
+      .map(([, provider]) => provider as LLMProvider)
     return alternatives[0] || null
   }
 }
@@ -228,36 +311,129 @@ export class LLMClient {
   }
 }
 
-const proxyUrl = (process.env.NEXT_PUBLIC_LLM_PROXY_URL || '/api/v1/llm/proxy').trim()
-
-const chatgptProvider = new HttpLLMProvider({
-  name: 'chatgpt',
-  target: 'chatgpt',
-  endpoint: proxyUrl,
-  defaultModel: process.env.NEXT_PUBLIC_LLM_CHATGPT_MODEL || 'gpt-4o-mini',
-  defaultMaxTokens: 512,
-  defaultTemperature: 0.2,
-  pricingPer1k: { inputUSD: 0.005, outputUSD: 0.015 },
-  maxConcurrency: 2,
-  requestsPerMinute: Number(process.env.NEXT_PUBLIC_LLM_CHATGPT_RPM || 40),
-})
-
-const junieProvider = new HttpLLMProvider({
-  name: 'junie',
-  target: 'junie',
-  endpoint: proxyUrl,
-  defaultModel: process.env.NEXT_PUBLIC_LLM_JUNIE_MODEL || 'junie-pro',
-  defaultMaxTokens: 384,
-  defaultTemperature: 0.3,
-  pricingPer1k: { inputUSD: 0.003, outputUSD: 0.009 },
-  maxConcurrency: 4,
-  requestsPerMinute: Number(process.env.NEXT_PUBLIC_LLM_JUNIE_RPM || 60),
-})
-
-export const llmProviders: Record<ProviderName, LLMProvider> = {
-  chatgpt: chatgptProvider,
-  junie: junieProvider,
+function readNumber(value: string | undefined, fallback: number) {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : fallback
 }
+
+function getProxyEndpoint() {
+  return (process.env.LLM_PROXY_URL || process.env.NEXT_PUBLIC_LLM_PROXY_URL || '/api/v1/llm/proxy').trim()
+}
+
+function createProxyProvider(name: ProviderName): LLMProvider {
+  const isChatGPT = name === 'chatgpt'
+  return new HttpLLMProvider({
+    name,
+    target: name,
+    endpoint: getProxyEndpoint(),
+    defaultModel: isChatGPT
+      ? process.env.NEXT_PUBLIC_LLM_CHATGPT_MODEL || 'gpt-4o-mini'
+      : process.env.NEXT_PUBLIC_LLM_JUNIE_MODEL || 'junie-pro',
+    defaultMaxTokens: isChatGPT ? 512 : 384,
+    defaultTemperature: isChatGPT ? 0.2 : 0.3,
+    pricingPer1k: isChatGPT
+      ? { inputUSD: 0.005, outputUSD: 0.015 }
+      : { inputUSD: 0.003, outputUSD: 0.009 },
+    maxConcurrency: isChatGPT ? 2 : 4,
+    requestsPerMinute: readNumber(
+      isChatGPT ? process.env.NEXT_PUBLIC_LLM_CHATGPT_RPM : process.env.NEXT_PUBLIC_LLM_JUNIE_RPM,
+      isChatGPT ? 40 : 60,
+    ),
+    credentials: 'include',
+  })
+}
+
+function createChatgptProvider(): LLMProvider {
+  const apiKey = process.env.OPENAI_API_KEY
+  if (!apiKey) {
+    return createProxyProvider('chatgpt')
+  }
+
+  return new HttpLLMProvider({
+    name: 'chatgpt',
+    endpoint: (process.env.OPENAI_API_BASE || 'https://api.openai.com/v1/chat/completions').trim(),
+    defaultModel: process.env.NEXT_PUBLIC_LLM_CHATGPT_MODEL || 'gpt-4o-mini',
+    defaultMaxTokens: 512,
+    defaultTemperature: 0.2,
+    pricingPer1k: { inputUSD: 0.005, outputUSD: 0.015 },
+    maxConcurrency: 2,
+    requestsPerMinute: readNumber(
+      process.env.NEXT_PUBLIC_LLM_CHATGPT_RPM || process.env.LLM_CHATGPT_RPM,
+      40,
+    ),
+    timeoutMs: 30_000,
+    credentials: 'omit',
+    headers: () => ({ Authorization: `Bearer ${apiKey}` }),
+    buildRequestPayload: (req, config) => ({
+      model: req.model || config.defaultModel,
+      messages: [{ role: 'user', content: req.prompt }],
+      max_tokens: req.maxTokens ?? config.defaultMaxTokens,
+      temperature: req.temperature ?? config.defaultTemperature,
+    }),
+    mapResponse: (payload, req, config) => ({
+      text: payload?.choices?.[0]?.message?.content ?? payload?.choices?.[0]?.text ?? payload?.text,
+      tokensIn: payload?.usage?.prompt_tokens ?? estimateTokens(req.prompt),
+      tokensOut: payload?.usage?.completion_tokens ?? config.defaultMaxTokens,
+      estimatedCostUSD:
+        payload?.usage?.prompt_tokens != null && payload?.usage?.completion_tokens != null
+          ? estimateCost(
+              payload.usage.prompt_tokens,
+              payload.usage.completion_tokens,
+              config.pricingPer1k.inputUSD,
+              config.pricingPer1k.outputUSD,
+            )
+          : undefined,
+    }),
+  })
+}
+
+function createJunieProvider(): LLMProvider {
+  const apiKey = process.env.JUNIE_API_KEY
+  const endpoint = process.env.JUNIE_API_URL
+  if (!apiKey || !endpoint) {
+    return createProxyProvider('junie')
+  }
+
+  return new HttpLLMProvider({
+    name: 'junie',
+    endpoint: endpoint.trim(),
+    defaultModel: process.env.NEXT_PUBLIC_LLM_JUNIE_MODEL || 'junie-pro',
+    defaultMaxTokens: 384,
+    defaultTemperature: 0.3,
+    pricingPer1k: { inputUSD: 0.003, outputUSD: 0.009 },
+    maxConcurrency: 4,
+    requestsPerMinute: readNumber(
+      process.env.NEXT_PUBLIC_LLM_JUNIE_RPM || process.env.LLM_JUNIE_RPM,
+      60,
+    ),
+    timeoutMs: 25_000,
+    credentials: 'omit',
+    headers: () => ({ Authorization: `Bearer ${apiKey}` }),
+    buildRequestPayload: (req, config) => ({
+      prompt: req.prompt,
+      model: req.model || config.defaultModel,
+      max_tokens: req.maxTokens ?? config.defaultMaxTokens,
+      temperature: req.temperature ?? config.defaultTemperature,
+    }),
+    mapResponse: (payload, req, config) => ({
+      text: payload?.output ?? payload?.text ?? payload?.choices?.[0]?.message?.content ?? '',
+      tokensIn: payload?.usage?.input_tokens ?? estimateTokens(req.prompt),
+      tokensOut: payload?.usage?.output_tokens ?? config.defaultMaxTokens,
+      estimatedCostUSD: payload?.usage?.total_cost_usd ?? payload?.costUSD,
+    }),
+  })
+}
+
+export function createLLMProviders(): Partial<Record<ProviderName, LLMProvider>> {
+  const providers: Partial<Record<ProviderName, LLMProvider>> = {}
+  const chatgpt = createChatgptProvider()
+  if (chatgpt) providers.chatgpt = chatgpt
+  const junie = createJunieProvider()
+  if (junie) providers.junie = junie
+  return providers
+}
+
+export const llmProviders: Partial<Record<ProviderName, LLMProvider>> = createLLMProviders()
 
 export const defaultRouter = new CostAwareRouter(llmProviders)
 export const llmClient = new LLMClient(defaultRouter)

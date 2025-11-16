@@ -1,3 +1,55 @@
+Changelog — FIX-06 Data & ML Pipeline Hardening (2025-11-16)
+
+Summary
+- Completes FIX‑06 by hardening the Data & ML toolchain: CI lanes for PRs and nightly runs, manifest single‑source‑of‑truth (SoT) enforcement, dependency parity via constraints across Dockerfiles and CI, and a developer quick‑start for ML workflows.
+
+What changed (highlights)
+- CI lanes
+  - Added/verified PR fast lane and Nightly ML pipelines.
+  - Both lanes now install with `ML/constraints.txt` to ensure deterministic dependency resolution.
+  - PR lane runs unit tests, the Manifest SoT guard, and a schema‑validation smoke; Nightly validates manifests, runs streaming feature engineering and a row‑limited training step, and uploads artifacts.
+- Manifest integrity / SoT
+  - `ML/scripts/check_manifests.py` wired into PR CI to prevent stray or duplicated manifests outside approved roots.
+  - `ML/scripts/manifest_tools.py` provides `scan`, `validate`, `refresh`, `compute-checksum` CLIs; tests cover corrupt/missing/strict modes.
+- Dependency matrices & environment parity
+  - Introduced constraints consumption across Dockerfiles and updated CI to use the same constraints:
+    - `Dockerfile.ml` and `Dockerfile.ml-gpu` now install with `-c ML/constraints.txt`.
+    - `.github/workflows/ml-pr.yml` and `ml-nightly.yml` install with constraints.
+  - Aligned `ML/constraints.txt` pins with `requirements*.txt`.
+- Documentation
+  - New `ML/README.md` quick‑start explains local install, tests, manifest validation, streaming FE, and tiny training runs.
+  - Sign‑off checklist added at `docs/Internal/Development/FIX-06_SIGNOFF.md`.
+
+Affected files
+- .github/workflows/ml-pr.yml (install with constraints)
+- .github/workflows/ml-nightly.yml (install with constraints)
+- Dockerfile.ml (constraints enabled)
+- Dockerfile.ml-gpu (constraints enabled)
+- ML/constraints.txt (aligned pins)
+- ML/README.md (new)
+- docs/Internal/Development/FIX-06_SIGNOFF.md (new)
+
+How to verify (local)
+```bash
+# CPU lane
+python -m venv .venv && source .venv/bin/activate
+pip install --upgrade pip
+pip install -c ML/constraints.txt -r ML/requirements.txt
+pytest ML/scripts/tests -q
+
+# Streaming FE + tiny training
+python ML/scripts/feature_engineering.py --input <parquet|dir> --out-dir /tmp/fe \
+  --stream --input-format parquet --validate-in --validate-out --validate-limit 500
+python ML/scripts/train_supervised_logreg.py --features /tmp/fe/features.parquet \
+  --row-limit 500 --input-format parquet --out-dir /tmp/model --validate-features --validate-limit 500
+```
+
+Operational notes
+- Make the “ML PR Fast Lane” workflow a required check in repository Branch protection settings for the default branch.
+- Establish a weekly review of “ML Nightly Pipeline” artifacts (see the sign‑off doc) and file issues for any regressions.
+
+---
+
 Changelog — FIX-01 Backend & Core Platform Hardening (2025-11-15)
 
 Summary

@@ -42,7 +42,7 @@ export function useDebouncedValue<T>(value: T, delay: number = 300): T {
  * @returns Object with current params and update function
  * 
  * @example
- * const { params, updateParams } = useQueryParams()
+ * const { params, updateParams } = useUrlQueryParams()
  * 
  * // Read from URL
  * const page = params.get('page') || '1'
@@ -53,7 +53,7 @@ export function useDebouncedValue<T>(value: T, delay: number = 300): T {
  * // Clear specific param
  * updateParams({ search: null })
  */
-export function useQueryParams() {
+export function useUrlQueryParams() {
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()

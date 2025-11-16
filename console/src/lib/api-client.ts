@@ -1,4 +1,4 @@
-import axios, { AxiosInstance, AxiosError } from 'axios'
+import axios, { AxiosInstance, AxiosError, AxiosHeaders, InternalAxiosRequestConfig } from 'axios'
 import { getCsrfToken, readXsrfCookie } from './csrf'
 
 const USE_MOCK_API = process.env.NEXT_PUBLIC_USE_MOCK_API === 'true'
@@ -34,29 +34,69 @@ export const analyticsApiClient: AxiosInstance = axios.create({
   withCredentials: true,
 })
 
-// Request interceptor - include CSRF token for mutating requests
-const requestInterceptor = async (config: any) => {
+const MUTATING_METHODS = new Set(['post', 'put', 'patch', 'delete'])
+
+let inflightCsrfRequest: Promise<string | null> | null = null
+
+async function ensureBrowserCsrfToken(): Promise<string | null> {
+  if (typeof window === 'undefined') return null
+  const existing = readXsrfCookie()
+  if (existing) return existing
+
+  if (!inflightCsrfRequest) {
+    inflightCsrfRequest = getCsrfToken().catch(() => null).finally(() => {
+      inflightCsrfRequest = null
+    })
+  }
+
+  return inflightCsrfRequest
+}
+
+const requestInterceptor = async (config: InternalAxiosRequestConfig) => {
   const method = (config.method || 'get').toLowerCase()
-  if (['post', 'put', 'patch', 'delete'].includes(method)) {
-    // Ensure we have a token cookie; request one if absent
-    const existing = typeof window !== 'undefined' ? readXsrfCookie() : null
-    if (!existing && typeof window !== 'undefined') {
-      try { await getCsrfToken() } catch {}
-    }
-    const token = typeof window !== 'undefined' ? readXsrfCookie() : null
+  if (MUTATING_METHODS.has(method)) {
+    const token = await ensureBrowserCsrfToken()
     if (token) {
-      config.headers['X-CSRF-Token'] = token
+      const headers = AxiosHeaders.from(config.headers || {})
+      headers.set('X-CSRF-Token', token)
+      config.headers = headers
     }
   }
   return config
 }
 
+export const AUTH_UNAUTHORIZED_EVENT = 'apex:auth:unauthorized'
+
+type UnauthorizedHandler = (error: AxiosError) => void
+
+let unauthorizedHandler: UnauthorizedHandler | null = null
+
+export function setUnauthorizedHandler(handler: UnauthorizedHandler | null) {
+  unauthorizedHandler = handler
+}
+
+function emitUnauthorized(error: AxiosError) {
+  if (unauthorizedHandler) {
+    unauthorizedHandler(error)
+    return
+  }
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(
+      new CustomEvent(AUTH_UNAUTHORIZED_EVENT, {
+        detail: {
+          status: error.response?.status || null,
+          url: error.config?.url,
+        },
+      })
+    )
+  }
+}
+
 // Response interceptor - handle errors
 const responseErrorInterceptor = async (error: AxiosError) => {
   if (error.response?.status === 401) {
-    if (typeof window !== 'undefined') {
-      window.location.href = '/login'
-    }
+    emitUnauthorized(error)
   }
   return Promise.reject(error)
 }

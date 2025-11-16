@@ -8,11 +8,13 @@ import { Shield } from 'lucide-react'
 const MAX_ATTEMPTS_BEFORE_COOLDOWN = 5
 const COOLDOWN_MS = 30_000
 const DEMO_LOGIN_ENABLED = process.env.NEXT_PUBLIC_DEMO_LOGIN === 'true'
+const IS_PRODUCTION_BUILD = process.env.NODE_ENV === 'production'
+const CAN_SHOW_DEMO_MODE = DEMO_LOGIN_ENABLED && !IS_PRODUCTION_BUILD
 
 export default function LoginPage() {
   const router = useRouter()
-  const [email, setEmail] = useState(() => (DEMO_LOGIN_ENABLED ? 'demo@apexmediation.com' : ''))
-  const [password, setPassword] = useState(() => (DEMO_LOGIN_ENABLED ? 'demo' : ''))
+  const [email, setEmail] = useState(() => (CAN_SHOW_DEMO_MODE ? 'demo@apexmediation.com' : ''))
+  const [password, setPassword] = useState(() => (CAN_SHOW_DEMO_MODE ? 'demo' : ''))
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
   const [csrfToken, setCsrfToken] = useState<string | null>(null)
@@ -141,12 +143,22 @@ export default function LoginPage() {
             )}
 
             {/* Demo Notice */}
-            {DEMO_LOGIN_ENABLED && (
+            {CAN_SHOW_DEMO_MODE && (
               <div className="p-4 bg-blue-50 border border-blue-200 text-blue-700 rounded-lg text-sm">
                 <p className="font-medium mb-1">Demo Mode</p>
                 <p>
                   Use <strong>demo@apexmediation.com</strong> with any password to login in sandbox
                   environments.
+                </p>
+              </div>
+            )}
+
+            {!CAN_SHOW_DEMO_MODE && DEMO_LOGIN_ENABLED && IS_PRODUCTION_BUILD && (
+              <div className="p-4 bg-warning-50 border border-warning-200 text-warning-800 rounded-lg text-sm">
+                <p className="font-medium mb-1">Demo login disabled</p>
+                <p>
+                  Demo credentials are blocked in production builds even if the flag is set. Contact an
+                  administrator if you need sandbox access.
                 </p>
               </div>
             )}

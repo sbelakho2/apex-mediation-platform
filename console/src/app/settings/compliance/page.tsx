@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import Link from 'next/link'
-import { Controller, useForm, useWatch } from 'react-hook-form'
+import { useForm, useWatch } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation, useQuery } from '@tanstack/react-query'
@@ -15,7 +15,6 @@ import {
   CheckCircle,
   Eye,
   EyeOff,
-  Trash2,
   X,
 } from 'lucide-react'
 import type { ComplianceSettings } from '@/types'
@@ -28,7 +27,22 @@ import {
   type IsoCountryCode,
 } from '@/constants/geo'
 
-type EncryptedConsentPayload = { cipher: ArrayBuffer; iv: Uint8Array } | { fallback: string }
+type EncryptedConsentPayload =
+  | {
+      mode: 'encrypted'
+      algorithm: 'AES-GCM'
+      cipherText: string
+      iv: string
+      keyId: string
+    }
+  | {
+      mode: 'fallback'
+      value: string
+    }
+
+const CONSENT_ENCRYPTION_KEY = process.env.NEXT_PUBLIC_CONSENT_ENCRYPTION_KEY ?? ''
+const CONSENT_ENCRYPTION_KEY_ID = process.env.NEXT_PUBLIC_CONSENT_ENCRYPTION_KEY_ID ?? 'default-consent-key'
+const CONSENT_ENCRYPTION_ALGO = 'AES-GCM'
 
 const toggleFieldNames = ['gdprEnabled', 'ccpaEnabled', 'coppaMode', 'autoBlock', 'euTrafficOnly'] as const
 
@@ -47,6 +61,70 @@ const formatCategoryLabel = (slug: string) =>
     .join(' ') || slug.toUpperCase()
 
 const hasWebCryptoSupport = () => typeof window !== 'undefined' && !!window.crypto?.subtle
+
+const arrayBufferToBase64 = (buffer: ArrayBuffer | Uint8Array) => {
+  if (typeof window === 'undefined') {
+    throw new Error('Base64 encoding is only supported in the browser environment.')
+  }
+
+  const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer)
+  let binary = ''
+  bytes.forEach((byte) => {
+    binary += String.fromCharCode(byte)
+  })
+  return window.btoa(binary)
+}
+
+const base64ToUint8Array = (value: string) => {
+  if (typeof window === 'undefined') {
+    throw new Error('Base64 decoding is only supported in the browser environment.')
+  }
+  const binary = window.atob(value)
+  const bytes = new Uint8Array(binary.length)
+  for (let i = 0; i < binary.length; i += 1) {
+    bytes[i] = binary.charCodeAt(i)
+  }
+  return bytes
+}
+
+const encryptConsentValue = async (value: string): Promise<EncryptedConsentPayload> => {
+  if (!value) {
+    return { mode: 'fallback', value: '' }
+  }
+
+  if (!hasWebCryptoSupport() || !CONSENT_ENCRYPTION_KEY) {
+    return { mode: 'fallback', value }
+  }
+
+  try {
+    const keyBytes = base64ToUint8Array(CONSENT_ENCRYPTION_KEY)
+    const cryptoKey = await window.crypto.subtle.importKey(
+      'raw',
+      keyBytes,
+      { name: CONSENT_ENCRYPTION_ALGO },
+      false,
+      ['encrypt']
+    )
+    const iv = window.crypto.getRandomValues(new Uint8Array(12))
+    const encoder = new TextEncoder()
+    const cipherBuffer = await window.crypto.subtle.encrypt(
+      { name: CONSENT_ENCRYPTION_ALGO, iv },
+      cryptoKey,
+      encoder.encode(value)
+    )
+
+    return {
+      mode: 'encrypted',
+      algorithm: 'AES-GCM',
+      cipherText: arrayBufferToBase64(cipherBuffer),
+      iv: arrayBufferToBase64(iv),
+      keyId: CONSENT_ENCRYPTION_KEY_ID,
+    }
+  } catch (error) {
+    console.warn('Failed to encrypt consent string. Falling back to plaintext payload.', error)
+    return { mode: 'fallback', value }
+  }
+}
 
 const isoCountryCodeSchema = z
   .string()
@@ -136,6 +214,152 @@ export default function ComplianceSettingsPage() {
     },
   })
 
+  const watchedBlockedCountries = useWatch({ control: form.control, name: 'blockedCountries' }) as
+    | string[]
+    | undefined
+  const watchedSensitiveCategories = useWatch({ control: form.control, name: 'sensitiveCategories' }) as
+    | string[]
+    | undefined
+  const blockedCountryValues = useMemo(() => watchedBlockedCountries ?? [], [watchedBlockedCountries])
+  const sensitiveCategoryValues = useMemo(() => watchedSensitiveCategories ?? [], [watchedSensitiveCategories])
+  const toggleValues = useWatch({ control: form.control, name: toggleFieldNames as unknown as any }) as
+    | boolean[]
+    | undefined
+
+  const [countryInput, setCountryInput] = useState('')
+  const [categoryInput, setCategoryInput] = useState('')
+  const [countryError, setCountryError] = useState<string | null>(null)
+  const [categoryError, setCategoryError] = useState<string | null>(null)
+
+  const debouncedCountryQuery = useDebouncedValue(countryInput, 150)
+  const debouncedCategoryQuery = useDebouncedValue(categoryInput, 150)
+  const toggleKey = useMemo(() => JSON.stringify(toggleValues ?? []), [toggleValues])
+  const debouncedToggleKey = useDebouncedValue(toggleKey, 600)
+  const toggleBaselineRef = useRef<string | null>(null)
+
+  const filteredCountrySuggestions = useMemo(() => {
+    const query = debouncedCountryQuery.trim()
+    const available = ISO_COUNTRY_CODES.filter((code) => !blockedCountryValues.includes(code))
+    if (!query) {
+      return available.slice(0, 8)
+    }
+    const lowered = query.toLowerCase()
+    return available
+      .filter(
+        (code) =>
+          code.toLowerCase().includes(lowered) ||
+          ISO_COUNTRY_LABELS[code as IsoCountryCode].toLowerCase().includes(lowered)
+      )
+      .slice(0, 8)
+  }, [blockedCountryValues, debouncedCountryQuery])
+
+  const filteredCategorySuggestions = useMemo(() => {
+    const query = debouncedCategoryQuery.trim().toLowerCase()
+    const available = COMMON_SENSITIVE_CATEGORY_SUGGESTIONS.filter(
+      (category) => !sensitiveCategoryValues.includes(category)
+    )
+    if (!query) {
+      return available.slice(0, 8)
+    }
+    return available.filter((category) => category.toLowerCase().includes(query)).slice(0, 8)
+  }, [debouncedCategoryQuery, sensitiveCategoryValues])
+
+  const addBlockedCountry = useCallback(
+    (input: string) => {
+      const normalized = input.trim().toUpperCase()
+      if (!normalized) {
+        return false
+      }
+      const parsed = isoCountryCodeSchema.safeParse(normalized)
+      if (!parsed.success) {
+        setCountryError(parsed.error.issues[0]?.message ?? 'Invalid ISO country code.')
+        return false
+      }
+      if (blockedCountryValues.includes(parsed.data)) {
+        setCountryError('Country already blocked.')
+        return false
+      }
+      const next = [...blockedCountryValues, parsed.data]
+      form.setValue('blockedCountries', next, { shouldDirty: true, shouldValidate: true })
+      setCountryInput('')
+      setCountryError(null)
+      form.clearErrors('blockedCountries')
+      return true
+    },
+    [blockedCountryValues, form]
+  )
+
+  const removeBlockedCountry = useCallback(
+    (code: string) => {
+      const next = blockedCountryValues.filter((entry) => entry !== code)
+      form.setValue('blockedCountries', next, { shouldDirty: true, shouldValidate: true })
+    },
+    [blockedCountryValues, form]
+  )
+
+  const addSensitiveCategory = useCallback(
+    (input: string) => {
+      const normalized = input.trim()
+      if (!normalized) {
+        return false
+      }
+      const parsed = categorySlugSchema.safeParse(normalized)
+      if (!parsed.success) {
+        setCategoryError(parsed.error.issues[0]?.message ?? 'Invalid category slug.')
+        return false
+      }
+      if (sensitiveCategoryValues.includes(parsed.data)) {
+        setCategoryError('Category already blocked.')
+        return false
+      }
+      const next = [...sensitiveCategoryValues, parsed.data]
+      form.setValue('sensitiveCategories', next, { shouldDirty: true, shouldValidate: true })
+      setCategoryInput('')
+      setCategoryError(null)
+      form.clearErrors('sensitiveCategories')
+      return true
+    },
+    [form, sensitiveCategoryValues]
+  )
+
+  const removeSensitiveCategory = useCallback(
+    (value: string) => {
+      const next = sensitiveCategoryValues.filter((entry) => entry !== value)
+      form.setValue('sensitiveCategories', next, { shouldDirty: true, shouldValidate: true })
+    },
+    [form, sensitiveCategoryValues]
+  )
+
+  const handleCountryInputKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLInputElement>) => {
+      if (['Enter', ',', 'Tab'].includes(event.key)) {
+        if (event.key !== 'Tab') {
+          event.preventDefault()
+        }
+        addBlockedCountry(event.currentTarget.value)
+      } else if (event.key === 'Backspace' && !event.currentTarget.value && blockedCountryValues.length) {
+        const last = blockedCountryValues[blockedCountryValues.length - 1]
+        removeBlockedCountry(last)
+      }
+    },
+    [addBlockedCountry, blockedCountryValues, removeBlockedCountry]
+  )
+
+  const handleCategoryInputKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLInputElement>) => {
+      if (['Enter', ',', 'Tab'].includes(event.key)) {
+        if (event.key !== 'Tab') {
+          event.preventDefault()
+        }
+        addSensitiveCategory(event.currentTarget.value)
+      } else if (event.key === 'Backspace' && !event.currentTarget.value && sensitiveCategoryValues.length) {
+        const last = sensitiveCategoryValues[sensitiveCategoryValues.length - 1]
+        removeSensitiveCategory(last)
+      }
+    },
+    [addSensitiveCategory, removeSensitiveCategory, sensitiveCategoryValues]
+  )
+
   useEffect(() => {
     if (data) {
       form.reset({
@@ -153,25 +377,36 @@ export default function ComplianceSettingsPage() {
         blockedCountries: data.regionalSettings.blockedCountries,
         sensitiveCategories: data.regionalSettings.sensitiveCategories,
       })
+      toggleBaselineRef.current = JSON.stringify([
+        data.gdprEnabled,
+        data.ccpaEnabled,
+        data.coppaMode,
+        data.consentManagement.autoBlock,
+        data.regionalSettings.euTrafficOnly,
+      ])
     }
   }, [data, form])
 
   const updateMutation = useMutation({
     mutationFn: async (values: ComplianceFormValues) => {
-      // Accept either arrays or comma-separated strings for the two list fields.
-      const blockedCountries = Array.isArray(values.blockedCountries)
-        ? values.blockedCountries.map((c) => String(c).trim().toUpperCase()).filter(Boolean)
+      const blockedCountries = (Array.isArray(values.blockedCountries)
+        ? values.blockedCountries
         : String(values.blockedCountries || '')
             .split(',')
-            .map((c) => c.trim().toUpperCase())
-            .filter(Boolean)
+            .map((entry) => entry.trim()))
+        .map((code) => code.toUpperCase())
+        .filter(Boolean)
 
-      const sensitiveCategories = Array.isArray(values.sensitiveCategories)
-        ? values.sensitiveCategories.map((c) => String(c).trim()).filter(Boolean)
+      const sensitiveCategories = (Array.isArray(values.sensitiveCategories)
+        ? values.sensitiveCategories
         : String(values.sensitiveCategories || '')
             .split(',')
-            .map((c) => slugifyCategory(c))
-            .filter(Boolean)
+            .map((entry) => entry.trim()))
+        .map((category) => slugifyCategory(category))
+        .filter(Boolean)
+
+      const trimmedConsent = values.consentString?.trim() ?? ''
+      const consentPayload = trimmedConsent ? await encryptConsentValue(trimmedConsent) : null
 
       await settingsApi.updateComplianceSettings({
         gdprEnabled: values.gdprEnabled,
@@ -180,7 +415,17 @@ export default function ComplianceSettingsPage() {
         consentManagement: {
           provider: values.consentProvider || undefined,
           autoBlock: values.autoBlock,
-          consentString: values.consentString || undefined,
+          consentString:
+            consentPayload && consentPayload.mode === 'fallback' ? consentPayload.value : undefined,
+          encryptedConsent:
+            consentPayload && consentPayload.mode === 'encrypted'
+              ? {
+                  algorithm: consentPayload.algorithm,
+                  cipherText: consentPayload.cipherText,
+                  iv: consentPayload.iv,
+                  keyId: consentPayload.keyId,
+                }
+              : undefined,
         },
         dataRetention: {
           rawEventsDays: values.rawEventsDays,
@@ -195,34 +440,30 @@ export default function ComplianceSettingsPage() {
       })
     },
     onMutate: () => setMessage(null),
-    onSuccess: () => setMessage({ type: 'success', text: 'Compliance settings updated successfully.' }),
+    onSuccess: () => {
+      setMessage({ type: 'success', text: 'Compliance settings updated successfully.' })
+      form.resetField('consentString', { defaultValue: '' })
+    },
     onError: () => setMessage({ type: 'error', text: 'Failed to update compliance settings. Please try again.' }),
   })
 
-  // Debounced autosave for quick toggle changes so repeated toggles don't spam mutations
-  const toggleValues = useWatch({ control: form.control, name: toggleFieldNames as any })
-  const autosaveTimer = useRef<number | null>(null)
-  const toggleKey = useMemo(() => JSON.stringify(toggleValues), [toggleValues])
-
   useEffect(() => {
-    // Only trigger autosave for toggle changes; avoid when mutation already pending
+    if (!data) return
     if (updateMutation.isPending) return
-    // clear any pending timer
-    if (autosaveTimer.current) {
-      window.clearTimeout(autosaveTimer.current)
-      autosaveTimer.current = null
+    if (!debouncedToggleKey) return
+
+    if (!toggleBaselineRef.current) {
+      toggleBaselineRef.current = debouncedToggleKey
+      return
     }
-    autosaveTimer.current = window.setTimeout(() => {
-      updateMutation.mutate(form.getValues() as any)
-    }, 700)
-    return () => {
-      if (autosaveTimer.current) {
-        window.clearTimeout(autosaveTimer.current)
-        autosaveTimer.current = null
-      }
+
+    if (toggleBaselineRef.current === debouncedToggleKey) {
+      return
     }
-    // stringify toggleValues to avoid referential instability in dependency
-  }, [toggleKey, form, updateMutation])
+
+    toggleBaselineRef.current = debouncedToggleKey
+    updateMutation.mutate(form.getValues())
+  }, [data, debouncedToggleKey, form, updateMutation])
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -413,72 +654,166 @@ export default function ComplianceSettingsPage() {
               <label htmlFor="blockedCountries" className="label">
                 Blocked Countries
               </label>
-              <Controller
-                control={form.control}
-                name="blockedCountries"
-                render={({ field }) => {
-                  const display = Array.isArray(field.value) ? field.value.join(', ') : ''
-                  return (
-                    <>
-                      <input
-                        id="blockedCountries"
-                        type="text"
-                        className="input"
-                        placeholder="RU, CN, KP"
-                        value={display}
-                        onChange={(e) => {
-                          const parsed = String(e.target.value)
-                            .split(',')
-                            .map((c) => (c || '').trim().toUpperCase())
-                            .filter(Boolean)
-                          field.onChange(parsed)
-                        }}
-                      />
-                      {form.formState.errors.blockedCountries && (
-                        <p className="text-sm text-danger-600 mt-1">{(form.formState.errors.blockedCountries as any).message}</p>
-                      )}
-                    </>
-                  )
-                }}
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                ISO country codes separated by commas. Traffic from these regions will be rejected.
+              <div className="space-y-3">
+                <div className="relative">
+                  <input
+                    id="blockedCountries"
+                    type="text"
+                    className="input pr-24"
+                    placeholder="Search ISO code or country name"
+                    value={countryInput}
+                    onChange={(e) => {
+                      setCountryInput(e.target.value.toUpperCase())
+                      setCountryError(null)
+                    }}
+                    onKeyDown={handleCountryInputKeyDown}
+                    aria-describedby="blockedCountriesHelp"
+                    autoComplete="off"
+                  />
+                  <button
+                    type="button"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-sm font-semibold text-primary-600 disabled:opacity-40"
+                    onClick={() => addBlockedCountry(countryInput)}
+                    disabled={!countryInput.trim()}
+                  >
+                    Add
+                  </button>
+                </div>
+                {countryError && (
+                  <p className="text-sm text-danger-600" role="alert">
+                    {countryError}
+                  </p>
+                )}
+                {!countryError && form.formState.errors.blockedCountries && (
+                  <p className="text-sm text-danger-600" role="alert">
+                    {(form.formState.errors.blockedCountries as any).message}
+                  </p>
+                )}
+                {blockedCountryValues.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {blockedCountryValues.map((code) => (
+                      <span
+                        key={code}
+                        className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-gray-100 px-3 py-1 text-xs font-medium text-gray-700"
+                      >
+                        <span>
+                          {code}{' '}
+                          <span className="text-gray-500">
+                            {ISO_COUNTRY_LABELS[code as IsoCountryCode] ?? 'Unknown'}
+                          </span>
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => removeBlockedCountry(code)}
+                          className="text-gray-500 hover:text-gray-900"
+                        >
+                          <X className="h-3 w-3" aria-hidden={true} />
+                          <span className="sr-only">Remove {code}</span>
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {(debouncedCountryQuery || blockedCountryValues.length === 0) &&
+                  filteredCountrySuggestions.length > 0 && (
+                    <div className="max-h-48 overflow-y-auto rounded-lg border bg-white shadow-sm divide-y">
+                      {filteredCountrySuggestions.map((code) => (
+                        <button
+                          key={code}
+                          type="button"
+                          className="flex w-full items-center justify-between px-3 py-2 text-sm hover:bg-gray-50"
+                          onClick={() => addBlockedCountry(code)}
+                        >
+                          <span className="font-medium text-gray-900">{code}</span>
+                          <span className="text-xs text-gray-500">
+                            {ISO_COUNTRY_LABELS[code as IsoCountryCode]}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+              </div>
+              <p id="blockedCountriesHelp" className="text-xs text-gray-500 mt-1">
+                Add ISO 3166-1 alpha-2 codes (e.g., US, DE). Traffic from these countries will be rejected.
               </p>
             </div>
             <div>
               <label htmlFor="sensitiveCategories" className="label">
                 Blocked Ad Categories
               </label>
-              <Controller
-                control={form.control}
-                name="sensitiveCategories"
-                render={({ field }) => {
-                  const display = Array.isArray(field.value) ? field.value.join(', ') : ''
-                  return (
-                    <>
-                      <input
-                        id="sensitiveCategories"
-                        type="text"
-                        className="input"
-                        placeholder="gambling, alcohol, dating"
-                        value={display}
-                        onChange={(e) => {
-                          const parsed = String(e.target.value)
-                            .split(',')
-                            .map((c) => slugifyCategory(String(c || '').trim()))
-                            .filter(Boolean)
-                          field.onChange(parsed)
-                        }}
-                      />
-                      {form.formState.errors.sensitiveCategories && (
-                        <p className="text-sm text-danger-600 mt-1">{(form.formState.errors.sensitiveCategories as any).message}</p>
-                      )}
-                    </>
-                  )
-                }}
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                IAB categories or custom keywords. Ads matching these will be automatically filtered.
+              <div className="space-y-3">
+                <div className="relative">
+                  <input
+                    id="sensitiveCategories"
+                    type="text"
+                    className="input pr-24"
+                    placeholder="gambling, alcohol, dating"
+                    value={categoryInput}
+                    onChange={(e) => {
+                      setCategoryInput(e.target.value)
+                      setCategoryError(null)
+                    }}
+                    onKeyDown={handleCategoryInputKeyDown}
+                    aria-describedby="sensitiveCategoriesHelp"
+                    autoComplete="off"
+                  />
+                  <button
+                    type="button"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-sm font-semibold text-primary-600 disabled:opacity-40"
+                    onClick={() => addSensitiveCategory(categoryInput)}
+                    disabled={!categoryInput.trim()}
+                  >
+                    Add
+                  </button>
+                </div>
+                {categoryError && (
+                  <p className="text-sm text-danger-600" role="alert">
+                    {categoryError}
+                  </p>
+                )}
+                {!categoryError && form.formState.errors.sensitiveCategories && (
+                  <p className="text-sm text-danger-600" role="alert">
+                    {(form.formState.errors.sensitiveCategories as any).message}
+                  </p>
+                )}
+                {sensitiveCategoryValues.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {sensitiveCategoryValues.map((category) => (
+                      <span
+                        key={category}
+                        className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-gray-100 px-3 py-1 text-xs font-medium text-gray-700"
+                      >
+                        <span>{formatCategoryLabel(category)}</span>
+                        <button
+                          type="button"
+                          onClick={() => removeSensitiveCategory(category)}
+                          className="text-gray-500 hover:text-gray-900"
+                        >
+                          <X className="h-3 w-3" aria-hidden={true} />
+                          <span className="sr-only">Remove {category}</span>
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {(debouncedCategoryQuery || sensitiveCategoryValues.length === 0) &&
+                  filteredCategorySuggestions.length > 0 && (
+                    <div className="max-h-40 overflow-y-auto rounded-lg border bg-white shadow-sm divide-y">
+                      {filteredCategorySuggestions.map((category) => (
+                        <button
+                          key={category}
+                          type="button"
+                          className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50"
+                          onClick={() => addSensitiveCategory(category)}
+                        >
+                          {formatCategoryLabel(category)}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+              </div>
+              <p id="sensitiveCategoriesHelp" className="text-xs text-gray-500 mt-1">
+                Use IAB categories or custom slugs (letters, numbers, and dashes). Ads in these categories are filtered automatically.
               </p>
             </div>
           </section>

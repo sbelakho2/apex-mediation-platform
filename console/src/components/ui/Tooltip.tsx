@@ -24,16 +24,23 @@ interface TooltipProps {
  */
 export function Tooltip({ content, children, position = 'top', delay = 200 }: TooltipProps) {
   const [isVisible, setIsVisible] = useState(false)
-  const [showTimeout, setShowTimeout] = useState<NodeJS.Timeout | null>(null)
+  // Store timers in refs so they are not tied to re-renders and can be cleared reliably
+  const showTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const tooltipRef = useRef<HTMLDivElement>(null)
 
   const handleMouseEnter = () => {
-    const timeout = setTimeout(() => setIsVisible(true), delay)
-    setShowTimeout(timeout)
+    if (showTimeoutRef.current) {
+      clearTimeout(showTimeoutRef.current)
+      showTimeoutRef.current = null
+    }
+    showTimeoutRef.current = setTimeout(() => setIsVisible(true), delay)
   }
 
   const handleMouseLeave = () => {
-    if (showTimeout) clearTimeout(showTimeout)
+    if (showTimeoutRef.current) {
+      clearTimeout(showTimeoutRef.current)
+      showTimeoutRef.current = null
+    }
     setIsVisible(false)
   }
 
@@ -58,6 +65,16 @@ export function Tooltip({ content, children, position = 'top', delay = 200 }: To
     left: 'left-full top-1/2 -translate-y-1/2 border-l-gray-900',
     right: 'right-full top-1/2 -translate-y-1/2 border-r-gray-900',
   }
+
+  // Clear timers on unmount and when delay changes
+  useEffect(() => {
+    return () => {
+      if (showTimeoutRef.current) {
+        clearTimeout(showTimeoutRef.current)
+        showTimeoutRef.current = null
+      }
+    }
+  }, [delay])
 
   return (
     <div

@@ -1,11 +1,11 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { useMutation } from '@tanstack/react-query'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import { placementApi } from '@/lib/api'
 import { ArrowLeft, Save, AlertCircle } from 'lucide-react'
 import Link from 'next/link'
@@ -18,6 +18,20 @@ const placementSchema = z.object({
 })
 
 type PlacementFormData = z.infer<typeof placementSchema>
+type PlacementType = PlacementFormData['type']
+
+const FALLBACK_FORMATS: Record<PlacementType, string[]> = {
+  banner: ['320x50', '300x250', '728x90', '320x100'],
+  interstitial: ['fullscreen', 'portrait', 'landscape'],
+  rewarded: ['fullscreen-video', 'rewarded-interstitial'],
+}
+
+const createSlug = (value: string) =>
+  value
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
 
 export default function NewPlacementPage() {
   const router = useRouter()
@@ -49,12 +63,45 @@ export default function NewPlacementPage() {
   })
 
   const selectedType = watch('type')
+  const watchedName = watch('name') || ''
 
-  const formatOptions: Record<string, string[]> = {
-    banner: ['320x50', '300x250', '728x90', '320x100'],
-    interstitial: ['fullscreen', 'portrait', 'landscape'],
-    rewarded: ['fullscreen-video', 'rewarded-interstitial'],
-  }
+  const {
+    data: formatCatalog,
+    isLoading: loadingFormats,
+    isError: formatError,
+  } = useQuery<{ [key: string]: string[] }>({
+    queryKey: ['placement-format-catalog'],
+    queryFn: async () => {
+      try {
+        const { data } = await placementApi.getFormatCatalog()
+        return data
+      } catch (err) {
+        if (process.env.NODE_ENV !== 'production') {
+          console.warn('Falling back to default placement formats', err)
+        }
+        return FALLBACK_FORMATS
+      }
+    },
+    staleTime: 1000 * 60 * 60,
+  })
+
+  const { data: placementNames } = useQuery({
+    queryKey: ['placements', 'names'],
+    queryFn: async () => {
+      const { data } = await placementApi.list({ pageSize: 200 })
+      return data.data
+    },
+    staleTime: 5 * 60 * 1000,
+  })
+
+  const existingNameSet = useMemo(() => {
+    return new Set((placementNames ?? []).map((placement) => placement.name.trim().toLowerCase()))
+  }, [placementNames])
+
+  const normalizedName = watchedName.trim().toLowerCase()
+  const isDuplicateName = normalizedName.length > 0 && existingNameSet.has(normalizedName)
+  const slugPreview = useMemo(() => createSlug(watchedName), [watchedName])
+  const formatOptions = formatCatalog?.[selectedType] ?? FALLBACK_FORMATS[selectedType]
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -109,6 +156,17 @@ export default function NewPlacementPage() {
                   {errors.name && (
                     <p className="text-sm text-danger-600 mt-1">{errors.name.message}</p>
                   )}
+                  {watchedName && (
+                    <p className="text-xs text-gray-500 mt-1">
+                      Slug preview:{' '}
+                      <span className="font-mono text-gray-900">{slugPreview || 'n/a'}</span>
+                    </p>
+                  )}
+                  {isDuplicateName && (
+                    <p className="text-sm text-danger-600 mt-1" role="alert">
+                      A placement with this name already exists. Choose a different label to avoid conflicts.
+                    </p>
+                  )}
                   <p className="text-xs text-gray-500 mt-1">
                     A descriptive name to identify this placement in reports.
                   </p>
@@ -161,9 +219,14 @@ export default function NewPlacementPage() {
                   <label htmlFor="format" className="label">
                     Ad Format <span className="text-danger-600">*</span>
                   </label>
-                  <select id="format" {...register('format')} className="input">
-                    <option value="">-- Select format --</option>
-                    {formatOptions[selectedType]?.map((fmt) => (
+                  <select
+                    id="format"
+                    {...register('format')}
+                    className="input"
+                    disabled={loadingFormats}
+                  >
+                    <option value="">{loadingFormats ? 'Loading formats…' : '-- Select format --'}</option>
+                    {formatOptions?.map((fmt) => (
                       <option key={fmt} value={fmt}>
                         {fmt}
                       </option>
@@ -175,6 +238,9 @@ export default function NewPlacementPage() {
                   <p className="text-xs text-gray-500 mt-1">
                     Specific size or layout for this ad type.
                   </p>
+                  {formatError && (
+                    <p className="text-xs text-warning-600 mt-1">Unable to fetch the latest formats—showing defaults.</p>
+                  )}
                 </div>
               </div>
             </section>
@@ -186,7 +252,7 @@ export default function NewPlacementPage() {
             </Link>
             <button
               type="submit"
-              disabled={isSubmitting || createMutation.isPending}
+              disabled={isSubmitting || createMutation.isPending || isDuplicateName}
               className="btn btn-primary flex items-center gap-2"
             >
               <Save className="h-4 w-4" aria-hidden="true" />

@@ -6,6 +6,18 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
+# Optional local import of streaming loaders (FIX-06)
+try:
+    import sys as _sys
+    from pathlib import Path as _P
+    _THIS = _P(__file__).resolve()
+    _LIB_DIR = _THIS.parent / "lib"
+    if str(_LIB_DIR) not in _sys.path:
+        _sys.path.insert(0, str(_LIB_DIR))
+    from lib.loader import iter_parquet, iter_csv, iter_jsonl  # type: ignore
+except Exception:  # pragma: no cover - loader is optional for non-row-limit runs
+    iter_parquet = iter_csv = iter_jsonl = None  # type: ignore
+
 import joblib
 import numpy as np
 import pandas as pd
@@ -42,6 +54,50 @@ def _load_datasets(
         raise SystemExit("No ground-truth or weak labels available for supervised training")
 
     return frame, label
+
+
+def _load_datasets_row_limited(
+    features_path: str,
+    label_column: str,
+    row_limit: int,
+    input_format: str = "parquet",
+) -> Tuple[pd.DataFrame, pd.Series]:
+    """Load at most row_limit rows from features using streaming iterators.
+    Only features parquet/csv/jsonl are supported; label column is extracted
+    and removed from features frame.
+    """
+    if iter_parquet is None:
+        # Fallback: read full and slice (not memory safe but preserves behavior)
+        full = pd.read_parquet(features_path)
+        df = full.iloc[:row_limit].copy()
+    else:
+        if input_format == "parquet":
+            iterator = iter_parquet(features_path)
+        elif input_format == "csv":
+            iterator = iter_csv(features_path)
+        else:
+            iterator = iter_jsonl(features_path)
+
+        chunks: List[pd.DataFrame] = []
+        total = 0
+        for ch in iterator:
+            need = max(0, row_limit - total)
+            if need <= 0:
+                break
+            if ch.shape[0] > need:
+                ch = ch.iloc[:need]
+            chunks.append(ch)
+            total += ch.shape[0]
+            if total >= row_limit:
+                break
+        df = pd.concat(chunks, ignore_index=True) if chunks else pd.DataFrame()
+
+    if label_column in df.columns:
+        labels = df[label_column].astype(int)
+        df = df.drop(columns=[label_column])
+    else:
+        raise SystemExit(f"Label column '{label_column}' not found in features for row-limited load")
+    return df, labels
 
 
 def _build_time_folds(
@@ -152,6 +208,31 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Calibration method to evaluate",
     )
     parser.add_argument("--penalty", type=float, default=1.0, help="Inverse regularization strength (C)")
+    # Bounded-memory option (FIX-06)
+    parser.add_argument(
+        "--row-limit",
+        type=int,
+        default=None,
+        help="Cap the number of feature rows loaded for training (streaming/iterator-based).",
+    )
+    parser.add_argument(
+        "--input-format",
+        choices=["parquet", "csv", "jsonl"],
+        default="parquet",
+        help="Features input format when using --row-limit",
+    )
+    # Validation (FIX-06)
+    parser.add_argument(
+        "--validate-features",
+        action="store_true",
+        help="Validate a sample of the features dataset against the fraud schema before training",
+    )
+    parser.add_argument(
+        "--validate-limit",
+        type=int,
+        default=10000,
+        help="Number of rows to sample for validation (default: 10000)",
+    )
     return parser
 
 
@@ -167,7 +248,69 @@ def run(argv: Optional[List[str]] = None) -> str:
     np.random.seed(args.seed)
     os.environ["PYTHONHASHSEED"] = str(args.seed)
 
-    features_df, labels = _load_datasets(args.features, args.weak_labels, args.label_column)
+    # Optional preflight validation of features
+    if args.validate_features:
+        try:
+            import sys as _sys
+            from pathlib import Path as _P
+            _THIS = _P(__file__).resolve()
+            _LIB_DIR = _THIS.parent / "lib"
+            if str(_LIB_DIR) not in _sys.path:
+                _sys.path.insert(0, str(_LIB_DIR))
+            from lib.loader import iter_parquet as _iter_parquet, iter_csv as _iter_csv, iter_jsonl as _iter_jsonl  # type: ignore
+            from lib.schema import iter_validate_rows as _iter_validate_rows, diagnostics as _diagnostics  # type: ignore
+            import pandas as _pd  # type: ignore
+        except Exception as e:  # pragma: no cover
+            raise SystemExit(f"Validation libraries unavailable: {e}")
+
+        limit = max(1, int(args.validate_limit))
+        total = 0
+        frames: List['_pd.DataFrame'] = []
+        it = (
+            _iter_parquet(args.features)
+            if args.input_format == "parquet"
+            else (_iter_csv(args.features) if args.input_format == "csv" else _iter_jsonl(args.features))
+        )
+        for ch in it:
+            need = limit - total
+            if need <= 0:
+                break
+            if ch.shape[0] > need:
+                ch = ch.iloc[:need]
+            frames.append(ch)
+            total += ch.shape[0]
+            if total >= limit:
+                break
+        feat_sample = _pd.concat(frames, ignore_index=True) if frames else _pd.DataFrame()
+        errs = sum(
+            1 for _idx, err in _iter_validate_rows(feat_sample, schema="fraud", limit=len(feat_sample)) if err is not None
+        )
+        diag = _diagnostics(feat_sample) if not feat_sample.empty else {}
+        out_dir = args.out_dir or "."
+        Path(out_dir).mkdir(parents=True, exist_ok=True)
+        report_path = Path(out_dir) / "features.pretrain.validation.json"
+        report_path.write_text(
+            json.dumps(
+                {
+                    "schema": "fraud",
+                    "format": args.input_format,
+                    "path": args.features,
+                    "sampled_rows": int(len(feat_sample)),
+                    "error_count": int(errs),
+                    "diagnostics": diag,
+                },
+                indent=2,
+            )
+        )
+        if errs > 0:
+            print(f"[WARN] Features validation reported {errs} errors in sample; see {report_path}")
+
+    if args.row_limit and args.row_limit > 0:
+        features_df, labels = _load_datasets_row_limited(
+            args.features, args.label_column, args.row_limit, args.input_format
+        )
+    else:
+        features_df, labels = _load_datasets(args.features, args.weak_labels, args.label_column)
 
     timestamps = (
         pd.to_datetime(features_df[args.time_column], errors="coerce")

@@ -1,7 +1,7 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useQuery } from '@tanstack/react-query'
 import { payoutApi } from '@/lib/api'
 import {
@@ -11,13 +11,26 @@ import {
   Calendar,
   CreditCard,
 } from 'lucide-react'
-import { formatCurrency, formatDate } from '@/lib/utils'
+import { formatCurrency, formatDate, getLocale } from '@/lib/utils'
 import type { PaginatedResponse, PayoutHistory } from '@/types'
 import { useSession } from '@/lib/useSession'
 import type { Role } from '@/lib/rbac'
-import { PAYOUT_METHOD_LABELS, PAYOUT_STATUS_META } from '@/constants/payouts'
+import {
+  PAYOUT_CSV_HEADERS,
+  PAYOUT_METHOD_LABELS,
+  PAYOUT_STATUS_META,
+  PAYOUTS_PAGE_SIZE,
+} from '@/constants/payouts'
 
 const PAYOUT_ALLOWED_ROLES: Role[] = ['admin', 'publisher']
+
+const parsePositivePage = (value: string | null, fallback = 1) => {
+  const parsed = Number(value)
+  if (Number.isFinite(parsed) && parsed >= 1) {
+    return Math.floor(parsed)
+  }
+  return fallback
+}
 
 const escapeCsvValue = (value: string | number | null | undefined) => {
   if (value === null || typeof value === 'undefined') return ''
@@ -30,35 +43,80 @@ const escapeCsvValue = (value: string | number | null | undefined) => {
 
 export default function PayoutsPage() {
   const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+  const searchParamsString = useMemo(() => searchParams.toString(), [searchParams])
   const { user, isLoading: sessionLoading } = useSession()
-  const [page, setPage] = useState(1)
+  const [page, setPage] = useState(() => parsePositivePage(searchParams.get('page')))
   const [exportError, setExportError] = useState<string | null>(null)
-  const pageSize = 20
-  const locale = typeof navigator !== 'undefined' ? navigator.language : 'en-US'
+  const pageSize = PAYOUTS_PAGE_SIZE
+  const resolvedLocale = useMemo(() => user?.locale ?? getLocale(), [user?.locale])
   const publisherId = user?.publisherId
 
-  const dateFormatter = useMemo(
+  useEffect(() => {
+    const paramPage = parsePositivePage(searchParams.get('page'))
+    setPage((prev) => (prev === paramPage ? prev : paramPage))
+  }, [searchParams])
+
+  const csvDateFormatter = useMemo(
     () =>
-      new Intl.DateTimeFormat(locale, {
+      new Intl.DateTimeFormat(resolvedLocale, {
         year: 'numeric',
         month: 'short',
         day: 'numeric',
       }),
-    [locale]
+    [resolvedLocale]
   )
 
-  const formatCsvDate = useCallback((value: string) => dateFormatter.format(new Date(value)), [
-    dateFormatter,
-  ])
+  const currencyFormatterCache = useRef(new Map<string, Intl.NumberFormat>())
+
+  useEffect(() => {
+    currencyFormatterCache.current.clear()
+  }, [resolvedLocale])
+
+  const formatCsvDate = useCallback(
+    (value?: string | null) => {
+      if (!value) return '—'
+      const parsed = new Date(value)
+      if (Number.isNaN(parsed.getTime())) {
+        return '—'
+      }
+      return csvDateFormatter.format(parsed)
+    },
+    [csvDateFormatter]
+  )
 
   const formatCsvCurrency = useCallback(
-    (amount: number, currency: string) =>
-      new Intl.NumberFormat(locale, { style: 'currency', currency }).format(amount),
-    [locale]
+    (amount: number, currency: string) => {
+      const code = currency || 'USD'
+      let formatter = currencyFormatterCache.current.get(code)
+      if (!formatter) {
+        formatter = new Intl.NumberFormat(resolvedLocale, { style: 'currency', currency: code })
+        currencyFormatterCache.current.set(code, formatter)
+      }
+      return formatter.format(amount)
+    },
+    [resolvedLocale]
   )
 
   const userRole = (user?.role ?? 'publisher') as Role
   const canView = !!user && PAYOUT_ALLOWED_ROLES.includes(userRole)
+  const canFetchPayouts = canView && Boolean(publisherId)
+
+  const syncPageState = useCallback(
+    (nextPage: number) => {
+      setPage(nextPage)
+      const params = new URLSearchParams(searchParamsString)
+      if (nextPage > 1) {
+        params.set('page', String(nextPage))
+      } else {
+        params.delete('page')
+      }
+      const nextSearch = params.toString()
+      router.replace(nextSearch ? `${pathname}?${nextSearch}` : pathname, { scroll: false })
+    },
+    [pathname, router, searchParamsString]
+  )
 
   useEffect(() => {
     if (!sessionLoading && !user) {
@@ -77,7 +135,7 @@ export default function PayoutsPage() {
     isLoading: loadingHistory,
   } = useQuery<PaginatedResponse<PayoutHistory>>({
     queryKey: ['payout-history', page, publisherId],
-    enabled: canView,
+    enabled: canFetchPayouts,
     queryFn: async ({ signal }) => {
       const { data } = await payoutApi.getHistory({ page, pageSize, publisherId, signal })
       return data
@@ -89,7 +147,7 @@ export default function PayoutsPage() {
     isLoading: loadingUpcoming,
   } = useQuery<PayoutHistory | null>({
     queryKey: ['payout-upcoming', publisherId],
-    enabled: canView,
+    enabled: canFetchPayouts,
     queryFn: async ({ signal }) => {
       const { data } = await payoutApi.getUpcoming({ publisherId, signal })
       return data
@@ -108,6 +166,32 @@ export default function PayoutsPage() {
   const canGoNext = totalPages ? page < totalPages : hasMore
   const canGoPrev = page > 1
 
+  useEffect(() => {
+    if (totalPages && page > totalPages) {
+      syncPageState(totalPages)
+    }
+  }, [page, totalPages, syncPageState])
+
+  const goToPage = useCallback(
+    (targetPage: number) => {
+      const normalized = Math.max(1, totalPages ? Math.min(totalPages, targetPage) : targetPage)
+      syncPageState(normalized)
+    },
+    [syncPageState, totalPages]
+  )
+
+  const handleNextPage = useCallback(() => {
+    if (canGoNext) {
+      goToPage(page + 1)
+    }
+  }, [canGoNext, goToPage, page])
+
+  const handlePrevPage = useCallback(() => {
+    if (canGoPrev) {
+      goToPage(page - 1)
+    }
+  }, [canGoPrev, goToPage, page])
+
   const handleExportCSV = useCallback(() => {
     if ((!history || history.length === 0) && !upcoming) {
       setExportError('No payout data available to export yet.')
@@ -115,9 +199,7 @@ export default function PayoutsPage() {
     }
 
     try {
-      const rows: string[][] = [
-        ['ID', 'Scheduled Date', 'Completed Date', 'Amount', 'Status', 'Method'],
-      ]
+      const rows: string[][] = [PAYOUT_CSV_HEADERS.map((header) => header.label)]
 
       history.forEach((payout) => {
         const statusMeta = PAYOUT_STATUS_META[payout.status]
@@ -125,7 +207,7 @@ export default function PayoutsPage() {
         rows.push([
           payout.id,
           formatCsvDate(payout.scheduledDate),
-          payout.completedDate ? formatCsvDate(payout.completedDate) : '—',
+          formatCsvDate(payout.completedDate),
           formatCsvCurrency(payout.amount, payout.currency),
           statusMeta.label,
           methodLabel,
@@ -140,7 +222,7 @@ export default function PayoutsPage() {
         rows.push([
           upcoming.id,
           formatCsvDate(upcoming.scheduledDate),
-          'Pending',
+          '—',
           formatCsvCurrency(upcoming.amount, upcoming.currency),
           upcomingStatus.label,
           methodLabel,
@@ -153,16 +235,18 @@ export default function PayoutsPage() {
 
       const link = document.createElement('a')
       link.href = url
-      link.download = `payouts-export-${new Date().toISOString().split('T')[0]}.csv`
+      const filenameDate = new Date().toISOString().split('T')[0]
+      link.download = `payouts-${publisherId ?? 'export'}-${filenameDate}.csv`
       document.body.appendChild(link)
       link.click()
       document.body.removeChild(link)
       URL.revokeObjectURL(url)
       setExportError(null)
     } catch (error) {
+      console.error('Unable to export payouts', error)
       setExportError('Unable to export payouts right now. Please try again.')
     }
-  }, [formatCsvCurrency, formatCsvDate, history, upcoming])
+  }, [formatCsvCurrency, formatCsvDate, history, publisherId, upcoming])
 
   if (sessionLoading) {
     return (
@@ -185,6 +269,21 @@ export default function PayoutsPage() {
             <h2 className="text-lg font-semibold text-gray-900">Access restricted</h2>
             <p className="text-sm text-gray-600 mt-2">
               You do not have permission to view payouts. Contact an administrator if you believe this is a mistake.
+            </p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (!publisherId) {
+    return (
+      <div className="p-8">
+        <div className="max-w-4xl mx-auto">
+          <div className="bg-white border border-gray-200 rounded-lg p-6" role="alert">
+            <h2 className="text-lg font-semibold text-gray-900">Missing publisher context</h2>
+            <p className="text-sm text-gray-600 mt-2">
+              We couldn&apos;t determine which publisher account to load payouts for. Please refresh or contact support if the problem persists.
             </p>
           </div>
         </div>
@@ -379,7 +478,7 @@ export default function PayoutsPage() {
               {(canGoPrev || canGoNext) && (
                 <div className="flex items-center justify-between mt-6 pt-6 border-t">
                   <button
-                    onClick={() => setPage(Math.max(1, page - 1))}
+                    onClick={handlePrevPage}
                     disabled={!canGoPrev}
                     className="btn btn-outline disabled:opacity-50 disabled:cursor-not-allowed"
                   >
@@ -390,7 +489,7 @@ export default function PayoutsPage() {
                     {totalPages ? ` of ${totalPages}` : ''}
                   </span>
                   <button
-                    onClick={() => setPage((prev) => (totalPages ? Math.min(totalPages, prev + 1) : prev + 1))}
+                    onClick={handleNextPage}
                     disabled={!canGoNext}
                     className="btn btn-outline disabled:opacity-50 disabled:cursor-not-allowed"
                   >

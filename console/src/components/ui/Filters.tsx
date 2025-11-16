@@ -1,10 +1,10 @@
 import React from 'react'
 
-type Status = 'all' | 'draft' | 'open' | 'paid' | 'void' | 'uncollectible'
+export type InvoiceStatusFilter = 'all' | 'draft' | 'open' | 'paid' | 'void' | 'uncollectible'
 
 type Props = {
-  status: Status
-  onStatusChange: (s: Status) => void
+  status: InvoiceStatusFilter
+  onStatusChange: (s: InvoiceStatusFilter) => void
   className?: string
 }
 
@@ -17,7 +17,7 @@ export default function Filters({ status, onStatusChange, className }: Props) {
       <select
         id="status"
         value={status}
-        onChange={(e) => onStatusChange(e.target.value as Status)}
+  onChange={(e) => onStatusChange(e.target.value as InvoiceStatusFilter)}
         className="text-sm border rounded px-2 py-1"
         aria-label="Filter by invoice status"
       >

@@ -1,7 +1,8 @@
 'use client'
 
+import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { fraudApi } from '@/lib/api'
+import { fraudApi, settingsApi } from '@/lib/api'
 import { formatNumber, formatPercentage } from '@/lib/utils'
 import { AlertTriangle, Shield, ShieldCheck, TrendingUp } from 'lucide-react'
 import Link from 'next/link'
@@ -19,6 +20,11 @@ const FRAUD_CRITICAL_THRESHOLD = Number(
 )
 const FRAUD_FEATURE_FALLBACK = process.env.NEXT_PUBLIC_FRAUD_DETECTION_ENABLED !== 'false'
 
+const clamp = (value: number, min = 0, max = 1) => {
+  if (Number.isNaN(value)) return min
+  return Math.min(Math.max(value, min), max)
+}
+
 export function FraudWidget({ publisherId }: FraudWidgetProps) {
   const { features } = useFeatures()
   const { data: fraudStats, isLoading } = useQuery({
@@ -27,12 +33,45 @@ export function FraudWidget({ publisherId }: FraudWidgetProps) {
     enabled: !!publisherId,
   })
 
-  const warningThreshold = Number.isFinite(FRAUD_WARNING_THRESHOLD)
-    ? FRAUD_WARNING_THRESHOLD
-    : DEFAULT_WARNING_THRESHOLD
-  const criticalThreshold = Number.isFinite(FRAUD_CRITICAL_THRESHOLD)
-    ? FRAUD_CRITICAL_THRESHOLD
-    : DEFAULT_CRITICAL_THRESHOLD
+  const {
+    data: fraudSettings,
+    isLoading: isFraudSettingsLoading,
+    isError: isFraudSettingsError,
+  } = useQuery({
+    queryKey: ['settings', 'fraud'],
+    queryFn: () => settingsApi.getFraudSettings().then(res => res.data),
+  })
+
+  const { warningThreshold, criticalThreshold, thresholdsSource } = useMemo(() => {
+    const fallbackWarning = Number.isFinite(FRAUD_WARNING_THRESHOLD)
+      ? FRAUD_WARNING_THRESHOLD
+      : DEFAULT_WARNING_THRESHOLD
+    const fallbackCritical = Number.isFinite(FRAUD_CRITICAL_THRESHOLD)
+      ? FRAUD_CRITICAL_THRESHOLD
+      : DEFAULT_CRITICAL_THRESHOLD
+
+    if (!fraudSettings) {
+      return {
+        warningThreshold: fallbackWarning,
+        criticalThreshold: fallbackCritical,
+        thresholdsSource: 'fallback' as const,
+      }
+    }
+
+    const apiWarning = clamp(fraudSettings.warningThreshold)
+    const apiCritical = clamp(
+      fraudSettings.blockThreshold < fraudSettings.warningThreshold
+        ? fraudSettings.warningThreshold
+        : fraudSettings.blockThreshold
+    )
+
+    return {
+      warningThreshold: apiWarning,
+      criticalThreshold: apiCritical,
+      thresholdsSource: 'api' as const,
+    }
+  }, [fraudSettings])
+
   const fraudDashboardEnabled = features?.fraudDetection ?? FRAUD_FEATURE_FALLBACK
 
   if (isLoading) {
@@ -83,6 +122,12 @@ export function FraudWidget({ publisherId }: FraudWidgetProps) {
         </div>
       </div>
 
+      {isFraudSettingsError && (
+        <div className="mb-4 rounded-lg border border-warning-200 bg-warning-50 px-3 py-2 text-xs text-warning-800">
+          Couldn&rsquo;t load fraud thresholds from your settings. Showing default guardrails instead.
+        </div>
+      )}
+
       <div className="space-y-5">
         <section className="rounded-lg border border-gray-100 bg-gray-50 p-4">
           <div className="flex items-center justify-between text-sm text-gray-500">
@@ -119,6 +164,11 @@ export function FraudWidget({ publisherId }: FraudWidgetProps) {
           <p className="mt-2 text-xs text-gray-500">
             Thresholds: normal &lt; {formatPercentage(warningThreshold, 0)}, moderate between {formatPercentage(warningThreshold, 0)}-
             {formatPercentage(criticalThreshold, 0)}, critical &gt; {formatPercentage(criticalThreshold, 0)} over the selected window.
+            {thresholdsSource === 'fallback' && !isFraudSettingsLoading && !isFraudSettingsError && (
+              <span className="block text-[11px] text-gray-400">
+                Using defaults until custom thresholds are configured.
+              </span>
+            )}
           </p>
         </section>
 

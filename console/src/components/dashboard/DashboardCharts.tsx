@@ -3,6 +3,7 @@
 import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { revenueApi } from '@/lib/api'
+import { getLocale } from '@/lib/utils'
 import { RevenueAreaChart, EcpmLineChart } from '@/components/charts/RevenueCharts'
 
 interface DashboardChartsProps {
@@ -10,6 +11,7 @@ interface DashboardChartsProps {
     startDate: string
     endDate: string
   }
+  currency?: string
 }
 
 type RevenueTimeseriesPoint = {
@@ -21,26 +23,26 @@ type RevenueTimeseriesPoint = {
   fillRate: number
 }
 
-export function DashboardCharts({ dateRange }: DashboardChartsProps) {
-  const rangeKey = `${dateRange.startDate}:${dateRange.endDate}`
+export function DashboardCharts({ dateRange, currency = 'USD' }: DashboardChartsProps) {
+  const locale = useMemo(() => getLocale(), [])
+  const timeZone = 'UTC'
 
   const { axisFormatter, tooltipFormatter } = useMemo(() => {
-    const locale = typeof navigator !== 'undefined' ? navigator.language : 'en-US'
     const axis = new Intl.DateTimeFormat(locale, {
       month: 'short',
       day: 'numeric',
-      timeZone: 'UTC',
+      timeZone,
     })
     const tooltip = new Intl.DateTimeFormat(locale, {
       dateStyle: 'medium',
-      timeZone: 'UTC',
+      timeZone,
     })
 
     return {
       axisFormatter: (value: string) => axis.format(new Date(value)),
       tooltipFormatter: (value: string) => tooltip.format(new Date(value)),
     }
-  }, [])
+  }, [locale, timeZone])
 
   const {
     data: revenueData = [],
@@ -49,18 +51,24 @@ export function DashboardCharts({ dateRange }: DashboardChartsProps) {
     error,
     refetch,
   } = useQuery<RevenueTimeseriesPoint[]>({
-    queryKey: ['revenue-timeseries', rangeKey],
-    queryFn: () =>
+    queryKey: ['revenue-timeseries', dateRange.startDate, dateRange.endDate],
+    queryFn: ({ signal }) =>
       revenueApi
         .getTimeSeries({
           startDate: dateRange.startDate,
           endDate: dateRange.endDate,
           granularity: 'day',
+          signal,
         })
         .then((res) => res.data),
     placeholderData: (previousData) => previousData,
+    staleTime: 60_000,
+    gcTime: 300_000,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
   })
   const errorMessage = error instanceof Error ? error.message : 'Unable to load revenue metrics.'
+  const hasData = revenueData.length > 0
 
   if (isLoading) {
     return (
@@ -73,12 +81,36 @@ export function DashboardCharts({ dateRange }: DashboardChartsProps) {
 
   if (isError) {
     return (
-      <div className="card border-danger-200 bg-danger-50 text-danger-800">
-        <h3 className="text-lg font-semibold mb-2">Unable to load revenue charts</h3>
-        <p className="text-sm mb-4">{errorMessage}</p>
-        <button type="button" className="btn btn-outline btn-sm" onClick={() => refetch()}>
-          Try again
-        </button>
+      <div className="card border-danger-200 bg-danger-50 text-danger-800" role="alert" aria-live="polite">
+        <div className="flex flex-col gap-3">
+          <div>
+            <h3 className="text-lg font-semibold">Unable to load revenue charts</h3>
+            <p className="text-sm">{errorMessage}</p>
+          </div>
+          <div>
+            <button type="button" className="btn btn-outline btn-sm" onClick={() => refetch()}>
+              Retry fetching data
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (!hasData) {
+    return (
+      <div className="card bg-white border border-dashed border-gray-200" role="status" aria-live="polite">
+        <div className="flex flex-col gap-3 text-center py-10">
+          <h3 className="text-lg font-semibold text-gray-900">No revenue data yet</h3>
+          <p className="text-sm text-gray-600">
+            Try adjusting the selected date range or refresh the dashboard once new revenue has been recorded.
+          </p>
+          <div className="flex justify-center">
+            <button type="button" className="btn btn-outline btn-sm" onClick={() => refetch()}>
+              Refresh data
+            </button>
+          </div>
+        </div>
       </div>
     )
   }
@@ -91,6 +123,9 @@ export function DashboardCharts({ dateRange }: DashboardChartsProps) {
         <RevenueAreaChart
           data={revenueData}
           height={280}
+          locale={locale}
+          currency={currency}
+          timeZone={timeZone}
           formatDateLabel={axisFormatter}
           formatTooltipLabel={tooltipFormatter}
         />
@@ -102,6 +137,9 @@ export function DashboardCharts({ dateRange }: DashboardChartsProps) {
         <EcpmLineChart
           data={revenueData}
           height={280}
+          locale={locale}
+          currency={currency}
+          timeZone={timeZone}
           formatDateLabel={axisFormatter}
           formatTooltipLabel={tooltipFormatter}
         />

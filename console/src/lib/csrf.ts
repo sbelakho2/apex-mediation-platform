@@ -2,6 +2,23 @@
 
 export const XSRF_COOKIE_NAME = process.env.NEXT_PUBLIC_CSRF_COOKIE_NAME || 'XSRF-TOKEN'
 
+export class CsrfFetchError extends Error {
+  status?: number
+
+  constructor(message: string, status?: number, options?: ErrorOptions) {
+    super(message, options)
+    this.name = 'CsrfFetchError'
+    this.status = status
+  }
+}
+
+type GetCsrfTokenOptions = {
+  baseUrl?: string
+  signal?: AbortSignal
+}
+
+const AUTH_CSRF_PATH = '/auth/csrf'
+
 export function readXsrfCookie(): string | null {
   if (typeof document === 'undefined') return null
   const name = XSRF_COOKIE_NAME + '='
@@ -13,14 +30,50 @@ export function readXsrfCookie(): string | null {
   return null
 }
 
-export async function getCsrfToken(baseUrl?: string): Promise<string | null> {
-  try {
-    const url = (baseUrl || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1') + '/auth/csrf'
-    const res = await fetch(url, { credentials: 'include' })
-    if (!res.ok) return null
-    const data = await res.json()
-    return data?.token || readXsrfCookie()
-  } catch {
-    return null
+function resolveCsrfUrl(baseUrl?: string): string {
+  const normalizedBase = baseUrl?.replace(/\/$/, '')
+  if (normalizedBase) return `${normalizedBase}${AUTH_CSRF_PATH}`
+
+  const envBase = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, '')
+  if (envBase) {
+    return `${envBase}${AUTH_CSRF_PATH}`
   }
+
+  if (typeof window !== 'undefined') {
+    return `/api${AUTH_CSRF_PATH}`
+  }
+
+  throw new CsrfFetchError('Unable to resolve CSRF endpoint URL. Set NEXT_PUBLIC_API_URL for server-side calls.')
+}
+
+export async function getCsrfToken(options?: GetCsrfTokenOptions): Promise<string> {
+  const url = resolveCsrfUrl(options?.baseUrl)
+  let response: Response
+  try {
+    response = await fetch(url, {
+      credentials: 'include',
+      headers: { Accept: 'application/json' },
+      signal: options?.signal,
+    })
+  } catch (error) {
+    throw new CsrfFetchError('Unable to reach CSRF endpoint', undefined, { cause: error })
+  }
+
+  if (!response.ok) {
+    throw new CsrfFetchError(`CSRF endpoint responded with ${response.status}`, response.status)
+  }
+
+  let data: any = null
+  try {
+    data = await response.json()
+  } catch (error) {
+    throw new CsrfFetchError('Failed to parse CSRF response payload', response.status, { cause: error })
+  }
+
+  const token = data?.token || readXsrfCookie()
+  if (!token) {
+    throw new CsrfFetchError('CSRF token missing in response payload', response.status)
+  }
+
+  return token
 }

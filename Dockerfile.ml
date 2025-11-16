@@ -6,9 +6,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /workspace
 
+# Install dependencies with constraints to ensure parity across envs (FIX-06)
 COPY ML/requirements.txt /tmp/requirements.txt
+COPY ML/constraints.txt /tmp/constraints.txt
 RUN pip install --no-cache-dir --upgrade pip \
-    && pip install --no-cache-dir -r /tmp/requirements.txt
+    && pip install --no-cache-dir -c /tmp/constraints.txt -r /tmp/requirements.txt
 
 COPY ML /workspace/ML
 COPY scripts /workspace/scripts

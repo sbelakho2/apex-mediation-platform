@@ -6,16 +6,20 @@ import { usePathname, useRouter } from 'next/navigation'
 import { CreditCard, FileText, TrendingUp, Settings } from 'lucide-react'
 import { useSession } from '@/lib/useSession'
 import { useFeatures } from '@/lib/useFeatures'
-import type { Role } from '@/lib/rbac'
+import {
+  BILLING_ALLOWED_PERMISSIONS,
+  BILLING_ALLOWED_ROLES,
+  BILLING_FEATURE_FALLBACK,
+  canAccessBilling as canUserAccessBilling,
+} from './access'
 
 type BillingNavItem = {
   name: string
   href: string
   icon: typeof TrendingUp
-  featureFlag?: keyof ReturnType<typeof useFeatures>['features']
+  featureFlag?: keyof NonNullable<ReturnType<typeof useFeatures>['features']>
+  permission?: string
 }
-
-const BILLING_ALLOWED_ROLES: Role[] = ['admin', 'publisher']
 
 const BILLING_NAV: BillingNavItem[] = [
   { name: 'Usage', href: '/billing/usage', icon: TrendingUp },
@@ -23,9 +27,6 @@ const BILLING_NAV: BillingNavItem[] = [
   { name: 'Settings', href: '/billing/settings', icon: Settings },
 ]
 
-const BILLING_FEATURE_FALLBACK = {
-  billing: process.env.NEXT_PUBLIC_BILLING_ENABLED === 'true',
-}
 
 export default function BillingLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
@@ -34,8 +35,7 @@ export default function BillingLayout({ children }: { children: React.ReactNode 
   const { features, loading: featureLoading } = useFeatures({ fallback: BILLING_FEATURE_FALLBACK })
 
   const hasBillingFeature = features?.billing ?? BILLING_FEATURE_FALLBACK.billing ?? false
-  const userRole = (user?.role ?? 'publisher') as Role
-  const canAccessBilling = !!user && BILLING_ALLOWED_ROLES.includes(userRole)
+  const canAccessBilling = canUserAccessBilling(user)
 
   useEffect(() => {
     if (!sessionLoading && !user) {
@@ -52,8 +52,16 @@ export default function BillingLayout({ children }: { children: React.ReactNode 
 
   const navItems = useMemo(() => {
     if (!hasBillingFeature || !canAccessBilling) return []
-    return BILLING_NAV
-  }, [hasBillingFeature, canAccessBilling])
+    return BILLING_NAV.filter((item) => {
+      if (item.featureFlag && features && features[item.featureFlag] === false) {
+        return false
+      }
+      if (item.permission && !(user?.permissions ?? []).includes(item.permission)) {
+        return false
+      }
+      return true
+    })
+  }, [canAccessBilling, features, hasBillingFeature, user?.permissions])
 
   if (sessionLoading || featureLoading) {
     return (
@@ -82,7 +90,7 @@ export default function BillingLayout({ children }: { children: React.ReactNode 
   return (
     <div>
       {/* Billing Sub-Navigation */}
-      <div className="border-b border-gray-200 bg-white">
+      <div className="border-b border-gray-200 bg-white" role="navigation" aria-label="Billing sections">
         <div className="px-8 py-4">
           <div className="max-w-6xl mx-auto">
             <div className="flex items-center gap-6">
@@ -103,6 +111,7 @@ export default function BillingLayout({ children }: { children: React.ReactNode 
                     <Link
                       key={item.name}
                       href={item.href}
+                      aria-current={isActive ? 'page' : undefined}
                       className={`
                         flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition
                         ${
@@ -117,6 +126,11 @@ export default function BillingLayout({ children }: { children: React.ReactNode 
                     </Link>
                   )
                 })}
+                {navItems.length === 0 && (
+                  <p className="text-xs text-gray-500" role="status">
+                    No billing tools are enabled for your account yet.
+                  </p>
+                )}
               </nav>
             </div>
           </div>

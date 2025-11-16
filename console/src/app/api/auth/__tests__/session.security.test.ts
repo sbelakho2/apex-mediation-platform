@@ -19,7 +19,7 @@ const setNodeEnv = (value: string) => {
 }
 
 const loadAuthOptions = async () => {
-  const mod = await import('../[...nextauth]/route')
+  const mod = await import('@/lib/auth/options')
   return mod.authOptions
 }
 

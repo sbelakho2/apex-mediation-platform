@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, useId } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { X, UploadCloud, Radio, ShieldAlert, CheckCircle2 } from 'lucide-react'
 import { migrationApi } from '@/lib/api'
@@ -47,7 +47,79 @@ const sourceOptions: Array<{ value: MigrationImportSource; title: string; descri
   },
 ]
 
-export function ImportWizard({ placementId, onClose, onCompleted }: ImportWizardProps) {
+const ASSIGNMENT_BATCH_SIZE = 10
+
+type AssignmentUpdatePayload = {
+  mappingId: string
+  ourAdapterId: string
+  label: string
+}
+
+async function applyAssignmentUpdates(updates: AssignmentUpdatePayload[]) {
+  const results: MigrationMappingUpdateResponse[] = []
+  for (let index = 0; index < updates.length; index += ASSIGNMENT_BATCH_SIZE) {
+    const chunk = updates.slice(index, index + ASSIGNMENT_BATCH_SIZE)
+    const settled = await Promise.allSettled(
+      chunk.map((payload) =>
+        migrationApi.updateMapping({
+          mappingId: payload.mappingId,
+          ourAdapterId: payload.ourAdapterId,
+        })
+      )
+    )
+
+    const failed = settled
+      .map((result, idx) => ({ result, payload: chunk[idx] }))
+      .filter((item): item is { result: PromiseRejectedResult; payload: AssignmentUpdatePayload } => item.result.status === 'rejected')
+
+    if (failed.length > 0) {
+      const failedLabels = failed.map(({ payload }) => payload.label).join(', ')
+      throw new Error(
+        t('migrationStudio.import.errors.assignmentBatchFailed', {
+          count: failed.length,
+          failed: failedLabels,
+        })
+      )
+    }
+
+    settled.forEach((item) => {
+      if (item.status === 'fulfilled') {
+        results.push(item.value)
+      }
+    })
+  }
+
+  return results
+}
+
+async function copyJsonToClipboard(payload: Record<string, unknown>) {
+  const text = JSON.stringify(payload, null, 2)
+
+  if (navigator?.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text)
+    return
+  }
+
+  const textarea = document.createElement('textarea')
+  textarea.value = text
+  textarea.setAttribute('aria-hidden', 'true')
+  textarea.style.position = 'fixed'
+  textarea.style.top = '0'
+  textarea.style.left = '0'
+  textarea.style.opacity = '0'
+  document.body.appendChild(textarea)
+  textarea.focus()
+  textarea.select()
+
+  const succeeded = document.execCommand('copy')
+  document.body.removeChild(textarea)
+
+  if (!succeeded) {
+    throw new Error(t('migrationStudio.import.errors.clipboardUnavailable'))
+  }
+}
+
+function useImportWizardController({ placementId, onClose, onCompleted }: ImportWizardProps) {
   const [step, setStep] = useState<WizardStep>('source')
   const [source, setSource] = useState<MigrationImportSource>('csv')
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
@@ -56,7 +128,7 @@ export function ImportWizard({ placementId, onClose, onCompleted }: ImportWizard
   const [assignments, setAssignments] = useState<PendingAssignments>({})
   const [stepError, setStepError] = useState<string | null>(null)
 
-  const dismiss = useCallback(() => {
+  const resetWizard = useCallback(() => {
     setStep('source')
     setSource('csv')
     setSelectedFile(null)
@@ -64,19 +136,16 @@ export function ImportWizard({ placementId, onClose, onCompleted }: ImportWizard
     setImportResult(null)
     setAssignments({})
     setStepError(null)
-    onClose()
-  }, [onClose])
+  }, [])
 
-  useEffect(() => {
-    const handler = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        event.preventDefault()
-        dismiss()
-      }
-    }
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
-  }, [dismiss])
+  const dismiss = useCallback(() => {
+    resetWizard()
+    onClose()
+  }, [onClose, resetWizard])
+
+  const reportError = useCallback((message: string) => {
+    setStepError(message)
+  }, [])
 
   useEffect(() => {
     if (!importResult) return
@@ -129,30 +198,29 @@ export function ImportWizard({ placementId, onClose, onCompleted }: ImportWizard
         }
       }
 
-      const updates: Array<Promise<MigrationMappingUpdateResponse>> = []
+      const updates: AssignmentUpdatePayload[] = []
       importResult.mappings.forEach((mapping) => {
         const desiredAdapter = assignments[mapping.id]
         const normalized = desiredAdapter?.trim() ?? ''
         if (normalized && normalized !== mapping.our_adapter_id) {
-          updates.push(
-            migrationApi.updateMapping({
-              mappingId: mapping.id,
-              ourAdapterId: normalized,
-            })
-          )
+          updates.push({
+            mappingId: mapping.id,
+            ourAdapterId: normalized,
+            label: mapping.incumbent_instance_name ?? mapping.incumbent_instance_id ?? mapping.id,
+          })
         }
       })
 
       if (updates.length > 0) {
-        const results = await Promise.all(updates)
+        const responses = await applyAssignmentUpdates(updates)
         setImportResult((current) => {
           if (!current) return current
-          const updatesById = new Map(results.map((result) => [result.mapping.id, result]))
+          const updatesById = new Map(responses.map((response) => [response.mapping.id, response]))
           const updatedMappings = current.mappings.map((mapping) => {
             const update = updatesById.get(mapping.id)
             return update ? update.mapping : mapping
           })
-          const latestSummary = results[results.length - 1]?.summary ?? current.summary
+          const latestSummary = responses[responses.length - 1]?.summary ?? current.summary
           return {
             ...current,
             mappings: updatedMappings,
@@ -191,41 +259,129 @@ export function ImportWizard({ placementId, onClose, onCompleted }: ImportWizard
     },
   })
 
-  const summaryCards = useMemo(() => {
-    if (!importResult?.summary) return null
-    return [
-      {
-        label: t('migrationStudio.import.summary.total'),
-        value: importResult.summary.total_mappings,
-      },
-      {
-        label: t('migrationStudio.import.summary.confirmed'),
-        value: importResult.summary.status_breakdown.confirmed ?? 0,
-      },
-      {
-        label: t('migrationStudio.import.summary.pending'),
-        value: importResult.summary.status_breakdown.pending ?? 0,
-      },
-      {
-        label: t('migrationStudio.import.summary.conflicts'),
-        value: importResult.summary.status_breakdown.conflict ?? 0,
-      },
-      {
-        label: t('migrationStudio.import.summary.networks'),
-        value: importResult.summary.unique_networks ?? 0,
-      },
-    ]
+  const summaryState = useMemo(() => {
+    if (!importResult?.summary) {
+      return {
+        hasSummary: false,
+        cards: [] as Array<{ label: string; value: number }>,
+      }
+    }
+
+    return {
+      hasSummary: true,
+      cards: [
+        {
+          label: t('migrationStudio.import.summary.total'),
+          value: importResult.summary.total_mappings,
+        },
+        {
+          label: t('migrationStudio.import.summary.confirmed'),
+          value: importResult.summary.status_breakdown.confirmed ?? 0,
+        },
+        {
+          label: t('migrationStudio.import.summary.pending'),
+          value: importResult.summary.status_breakdown.pending ?? 0,
+        },
+        {
+          label: t('migrationStudio.import.summary.conflicts'),
+          value: importResult.summary.status_breakdown.conflict ?? 0,
+        },
+        {
+          label: t('migrationStudio.import.summary.networks'),
+          value: importResult.summary.unique_networks ?? 0,
+        },
+      ],
+    }
   }, [importResult?.summary])
+
+  return {
+    step,
+    source,
+    setSource,
+    selectedFile,
+    setSelectedFile,
+    apiCredentials,
+    setApiCredentials,
+    importResult,
+    assignments,
+    setAssignments,
+    stepError,
+  summaryCards: summaryState.hasSummary ? summaryState.cards : null,
+    hasSummaryMetrics: summaryState.hasSummary,
+    startImport: () => importMutation.mutate(),
+    isImporting: importMutation.isPending,
+    saveAssignments: () => saveAssignmentsMutation.mutate(),
+    finalizeImport: () => finalizeMutation.mutate(),
+    isSaving: saveAssignmentsMutation.isPending,
+    isFinalizing: finalizeMutation.isPending,
+    dismiss,
+    reportError,
+  }
+}
+
+export function ImportWizard(props: ImportWizardProps) {
+  const {
+    step,
+    source,
+    setSource,
+    selectedFile,
+    setSelectedFile,
+    apiCredentials,
+    setApiCredentials,
+    importResult,
+    assignments,
+    setAssignments,
+    stepError,
+    summaryCards,
+    hasSummaryMetrics,
+    startImport,
+    isImporting,
+    saveAssignments,
+    finalizeImport,
+    isSaving,
+    isFinalizing,
+    dismiss,
+    reportError,
+  } = useImportWizardController(props)
+
+  const dialogRef = useRef<HTMLDivElement | null>(null)
+  const previousFocusRef = useRef<HTMLElement | null>(null)
+
+  const handleDismiss = useCallback(() => {
+    dismiss()
+    previousFocusRef.current?.focus()
+  }, [dismiss])
+
+  useEffect(() => {
+    previousFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    dialogRef.current?.focus()
+    return () => {
+      previousFocusRef.current?.focus()
+    }
+  }, [])
+
+  useEffect(() => {
+    const handler = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        handleDismiss()
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [handleDismiss])
 
   const stepIndex = step === 'source' ? 0 : step === 'review' ? 1 : 2
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/40" role="presentation" onClick={dismiss} />
+      <div className="absolute inset-0 bg-black/40" role="presentation" onClick={handleDismiss} />
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="migration-import-title"
+        tabIndex={-1}
         className="relative z-50 w-full max-w-4xl bg-white rounded-2xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col"
       >
         <header className="flex items-center justify-between border-b px-6 py-4 bg-gray-50">
@@ -239,7 +395,7 @@ export function ImportWizard({ placementId, onClose, onCompleted }: ImportWizard
           </div>
           <button
             type="button"
-            onClick={dismiss}
+            onClick={handleDismiss}
             className="rounded-lg p-2 text-gray-500 hover:text-gray-900 hover:bg-gray-100"
             aria-label={t('migrationStudio.import.actions.close')}
           >
@@ -283,8 +439,8 @@ export function ImportWizard({ placementId, onClose, onCompleted }: ImportWizard
               onFileSelected={setSelectedFile}
               apiCredentials={apiCredentials}
               onCredentialsChange={setApiCredentials}
-              onSubmit={() => importMutation.mutate()}
-              isSubmitting={importMutation.isPending}
+              onSubmit={startImport}
+              isSubmitting={isImporting}
             />
           )}
 
@@ -293,16 +449,18 @@ export function ImportWizard({ placementId, onClose, onCompleted }: ImportWizard
               importResult={importResult}
               assignments={assignments}
               onAssignmentsChange={setAssignments}
-              onSave={() => saveAssignmentsMutation.mutate()}
-              onFinalize={() => finalizeMutation.mutate()}
-              isSaving={saveAssignmentsMutation.isPending}
-              isFinalizing={finalizeMutation.isPending}
+              onSave={saveAssignments}
+              onFinalize={finalizeImport}
+              isSaving={isSaving}
+              isFinalizing={isFinalizing}
               summaryCards={summaryCards}
+              summaryAvailable={hasSummaryMetrics}
+              onCopyError={reportError}
             />
           )}
 
           {step === 'success' && importResult && (
-            <SuccessStep importResult={importResult} onClose={dismiss} />
+            <SuccessStep importResult={importResult} onClose={handleDismiss} />
           )}
         </div>
       </div>
@@ -331,6 +489,9 @@ function SourceStep({
   onSubmit,
   isSubmitting,
 }: SourceStepProps) {
+  const apiKeyFieldId = useId()
+  const accountFieldId = useId()
+
   return (
     <form
       onSubmit={(event) => {
@@ -396,11 +557,12 @@ function SourceStep({
       ) : (
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
-            <label className="block text-sm font-medium text-gray-700">
+            <label className="block text-sm font-medium text-gray-700" htmlFor={apiKeyFieldId}>
               {t('migrationStudio.import.api.apiKeyLabel')}
             </label>
             <input
               type="text"
+              id={apiKeyFieldId}
               value={apiCredentials.apiKey}
               onChange={(event) => onCredentialsChange({ ...apiCredentials, apiKey: event.target.value })}
               className="input mt-1 w-full"
@@ -409,11 +571,12 @@ function SourceStep({
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700">
+            <label className="block text-sm font-medium text-gray-700" htmlFor={accountFieldId}>
               {t('migrationStudio.import.api.accountLabel')}
             </label>
             <input
               type="text"
+              id={accountFieldId}
               value={apiCredentials.accountId}
               onChange={(event) => onCredentialsChange({ ...apiCredentials, accountId: event.target.value })}
               className="input mt-1 w-full"
@@ -459,6 +622,8 @@ type ReviewStepProps = {
   isSaving: boolean
   isFinalizing: boolean
   summaryCards: Array<{ label: string; value: number }> | null
+  summaryAvailable: boolean
+  onCopyError: (message: string) => void
 }
 
 function ReviewStep({
@@ -470,6 +635,8 @@ function ReviewStep({
   isSaving,
   isFinalizing,
   summaryCards,
+  summaryAvailable,
+  onCopyError,
 }: ReviewStepProps) {
   const signedComparison = importResult.signed_comparison
   const numberFormatter = useMemo(() => new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }), [])
@@ -511,13 +678,14 @@ function ReviewStep({
     }
 
     try {
-      await navigator.clipboard.writeText(JSON.stringify(payload, null, 2))
+      await copyJsonToClipboard(payload)
       setCopiedSignature(true)
       setTimeout(() => setCopiedSignature(false), 3000)
     } catch (error) {
       console.error('Unable to copy signature payload', error)
+      onCopyError(t('migrationStudio.import.errors.clipboardUnavailable'))
     }
-  }, [signedComparison])
+  }, [onCopyError, signedComparison])
 
   return (
     <div className="space-y-6">
@@ -531,7 +699,7 @@ function ReviewStep({
             timestamp: formatDate(importResult.created_at),
           })}
         </p>
-        {summaryCards && (
+        {summaryCards && summaryCards.length > 0 ? (
           <dl className="mt-4 grid gap-4 sm:grid-cols-5">
             {summaryCards.map((item) => (
               <div key={item.label} className="rounded-lg bg-white p-3 text-center shadow-sm">
@@ -540,6 +708,12 @@ function ReviewStep({
               </div>
             ))}
           </dl>
+        ) : (
+          <p className="mt-4 text-xs text-gray-500">
+            {summaryAvailable
+              ? t('migrationStudio.import.review.summaryUnavailable')
+              : t('migrationStudio.import.review.summaryPending')}
+          </p>
         )}
       </div>
 

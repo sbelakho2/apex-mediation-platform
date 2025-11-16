@@ -22,11 +22,10 @@ for (const page of BILLING_PAGES) {
       test('should match screenshot', async ({ page: playwright }) => {
         // TODO: Add authentication before navigating
         await playwright.goto(page.path)
-        
-        // Wait for page to be fully loaded
-        await playwright.waitForLoadState('networkidle')
-        
-        // Wait for any loading spinners to disappear
+        // Prefer a deterministic readiness sequence over networkidle
+        await playwright.waitForLoadState('domcontentloaded')
+        await playwright.locator('main').first().waitFor({ state: 'visible', timeout: 5000 }).catch(() => {})
+        // Wait for any loading spinners to disappear (best-effort)
         await playwright.waitForSelector('[role="status"]', { state: 'hidden', timeout: 5000 }).catch(() => {})
         
         // Take screenshot
@@ -38,6 +37,8 @@ for (const page of BILLING_PAGES) {
 
       test('should have no layout shifts', async ({ page: playwright }) => {
         await playwright.goto(page.path)
+        await playwright.waitForLoadState('domcontentloaded')
+        await playwright.locator('main').first().waitFor({ state: 'visible', timeout: 5000 }).catch(() => {})
         
         // Measure CLS (Cumulative Layout Shift)
         const cls = await playwright.evaluate(() => {
@@ -94,11 +95,12 @@ for (const page of BILLING_PAGES) {
 test.describe('Invoice Detail - Visual Regression', () => {
   for (const [breakpointName, viewport] of Object.entries(BREAKPOINTS)) {
     test(`${breakpointName} - should match screenshot`, async ({ page }) => {
-      test.use({ viewport })
+      await page.setViewportSize(viewport as any)
       
       // TODO: Add authentication and use real invoice ID
       await page.goto('/billing/invoices/test-invoice-id')
-      await page.waitForLoadState('networkidle')
+      await page.waitForLoadState('domcontentloaded')
+      await page.locator('main').first().waitFor({ state: 'visible', timeout: 5000 }).catch(() => {})
       
       await expect(page).toHaveScreenshot(`invoice-detail-${breakpointName}.png`, {
         fullPage: true,
@@ -122,8 +124,8 @@ test.describe('Billing Pages - Responsive Behavior', () => {
   test('Invoices table - should be scrollable on mobile', async ({ page }) => {
     await page.setViewportSize(BREAKPOINTS.mobile)
     await page.goto('/billing/invoices')
-    
-    await page.waitForLoadState('networkidle')
+    await page.waitForLoadState('domcontentloaded')
+    await page.locator('main').first().waitFor({ state: 'visible', timeout: 5000 }).catch(() => {})
     
     // Check table has horizontal scroll or is stacked
     const table = page.locator('table').first()
@@ -139,8 +141,8 @@ test.describe('Billing Pages - Responsive Behavior', () => {
   test('Settings page - should stack sections on mobile', async ({ page }) => {
     await page.setViewportSize(BREAKPOINTS.mobile)
     await page.goto('/billing/settings')
-    
-    await page.waitForLoadState('networkidle')
+    await page.waitForLoadState('domcontentloaded')
+    await page.locator('main').first().waitFor({ state: 'visible', timeout: 5000 }).catch(() => {})
     
     // All sections should be visible (stacked vertically)
     const sections = page.locator('section')
@@ -160,7 +162,8 @@ test.describe('Billing Pages - Dark Mode', () => {
   for (const page of BILLING_PAGES) {
     test(`${page.name} - should render correctly in dark mode`, async ({ page: playwright }) => {
       await playwright.goto(page.path)
-      await playwright.waitForLoadState('networkidle')
+      await playwright.waitForLoadState('domcontentloaded')
+      await playwright.locator('main').first().waitFor({ state: 'visible', timeout: 5000 }).catch(() => {})
       
       await expect(playwright).toHaveScreenshot(`${page.name.toLowerCase().replace(/\s+/g, '-')}-dark.png`, {
         fullPage: true,

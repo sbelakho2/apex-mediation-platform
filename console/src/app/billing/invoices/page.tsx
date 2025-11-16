@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { listInvoices, InvoicesListResponse } from '@/lib/billing'
+import { listInvoices, type InvoicesListResponse, type InvoicesQueryParams } from '@/lib/billing'
 import Link from 'next/link'
 import {
   FileText,
@@ -10,42 +10,46 @@ import {
 } from 'lucide-react'
 import StatusBadge from '@/components/ui/StatusBadge'
 import Pagination from '@/components/ui/Pagination'
-import Filters from '@/components/ui/Filters'
+import Filters, { type InvoiceStatusFilter } from '@/components/ui/Filters'
+import { formatCurrency, formatDate } from '@/lib/utils'
 
 export default function InvoicesListPage() {
   const [data, setData] = useState<InvoicesListResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [page, setPage] = useState(1)
-  const [statusFilter, setStatusFilter] = useState<string>('all')
+  const [statusFilter, setStatusFilter] = useState<InvoiceStatusFilter>('all')
 
-  const loadInvoices = useCallback(async () => {
+  const loadInvoices = useCallback(async (signal?: AbortSignal) => {
     try {
       setLoading(true)
       setError(null)
-      const params: any = { page, limit: 20 }
+      const params: InvoicesQueryParams = { page, limit: 20 }
       if (statusFilter !== 'all') {
         params.status = statusFilter
       }
-      const result = await listInvoices(params)
+      const result = await listInvoices(params, { signal })
+      if (signal?.aborted) return
       setData(result)
     } catch (err) {
+      if (signal?.aborted) return
       setError(err instanceof Error ? err.message : 'Failed to load invoices')
     } finally {
-      setLoading(false)
+      if (!signal?.aborted) {
+        setLoading(false)
+      }
     }
   }, [page, statusFilter])
 
   useEffect(() => {
-    loadInvoices()
+    const controller = new AbortController()
+    loadInvoices(controller.signal)
+    return () => {
+      controller.abort()
+    }
   }, [loadInvoices])
 
   // Status visuals provided by StatusBadge component
-
-  const formatCurrency = (amount: number) =>
-    new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount)
-
-  const formatDate = (dateString: string) => new Date(dateString).toLocaleDateString()
 
   if (loading && !data) {
     return (
@@ -74,7 +78,7 @@ export default function InvoicesListPage() {
               <h3 className="font-semibold text-red-900">Error Loading Invoices</h3>
               <p className="text-sm text-red-700 mt-1">{error}</p>
               <button
-                onClick={loadInvoices}
+                onClick={() => loadInvoices()}
                 className="mt-3 text-sm font-medium text-red-700 hover:text-red-800"
               >
                 Try Again
@@ -100,7 +104,7 @@ export default function InvoicesListPage() {
         {/* Filters */}
         <div className="bg-white rounded-lg border border-gray-200 p-4">
           <Filters
-            status={statusFilter as any}
+            status={statusFilter}
             onStatusChange={(s) => {
               setStatusFilter(s)
               setPage(1)
@@ -144,15 +148,10 @@ export default function InvoicesListPage() {
                         </div>
                         <div className="flex items-center gap-4 text-sm text-gray-600">
                           <span>
-                            Period: {formatDate(invoice.period_start)} -{' '}
-                            {formatDate(invoice.period_end)}
+                            Period: {formatDate(invoice.period_start)} - {formatDate(invoice.period_end)}
                           </span>
-                          {invoice.due_date && (
-                            <span>Due: {formatDate(invoice.due_date)}</span>
-                          )}
-                          {invoice.paid_at && (
-                            <span>Paid: {formatDate(invoice.paid_at)}</span>
-                          )}
+                          {invoice.due_date && <span>Due: {formatDate(invoice.due_date)}</span>}
+                          {invoice.paid_at && <span>Paid: {formatDate(invoice.paid_at)}</span>}
                         </div>
                       </div>
                     </div>

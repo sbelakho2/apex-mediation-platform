@@ -35,32 +35,41 @@ const baseNavigation = [
 
 export default function Navigation({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
-  const { user } = useCookieSession()
+  const { user, isLoading: sessionLoading } = useCookieSession()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [signingOut, setSigningOut] = useState(false)
 
   // Prefer runtime feature flags from API, with build-time env as SSR fallback
-  const { features } = useFeatures({
-    fallback: {
+  const featureFallbacks = useMemo(
+    () => ({
       transparency: process.env.NEXT_PUBLIC_TRANSPARENCY_ENABLED === 'true',
       billing: process.env.NEXT_PUBLIC_BILLING_ENABLED === 'true',
       migrationStudio: process.env.NEXT_PUBLIC_MIGRATION_STUDIO_ENABLED === 'true',
-    },
-  })
-  const showTransparency = !!features?.transparency
-  const showBilling = !!features?.billing
-  const showMigrationStudio = !!features?.migrationStudio
+    }),
+    []
+  )
+
+  const { features, loading: featuresLoading } = useFeatures({ fallback: featureFallbacks })
+  const resolvedFeatures = features ?? featureFallbacks
+  const showTransparency = Boolean(resolvedFeatures.transparency)
+  const showBilling = Boolean(resolvedFeatures.billing)
+  const showMigrationStudio = Boolean(resolvedFeatures.migrationStudio)
 
   const navigation = useMemo(() => {
-    const items = [...baseNavigation]
-    if (showMigrationStudio) {
-  items.splice(2, 0, { name: t('migrationStudio.nav'), href: '/migration-studio', icon: GitCompare })
-    }
-    if (showTransparency) {
-      items.splice(4, 0, { name: 'Transparency', href: '/transparency/auctions', icon: ShieldCheck })
-    }
-    if (showBilling) {
-      items.splice(5, 0, { name: 'Billing', href: '/billing/usage', icon: CreditCard })
-    }
+    const items = [
+      baseNavigation[0],
+      baseNavigation[1],
+      ...(showMigrationStudio
+        ? [{ name: t('migrationStudio.nav'), href: '/migration-studio', icon: GitCompare }]
+        : []),
+      baseNavigation[2],
+      baseNavigation[3],
+      ...(showTransparency ? [{ name: 'Transparency', href: '/transparency/auctions', icon: ShieldCheck }] : []),
+      baseNavigation[4],
+      baseNavigation[5],
+      ...(showBilling ? [{ name: 'Billing', href: '/billing/usage', icon: CreditCard }] : []),
+      baseNavigation[6],
+    ]
     // Admin section (operators only)
     if (user?.role === 'admin') {
       items.push({ name: 'Admin', href: '/admin/health', icon: Settings })
@@ -70,6 +79,19 @@ export default function Navigation({ children }: { children: React.ReactNode }) 
 
   // Don't show navigation on login page
   if (!pathname || pathname === '/login' || pathname === '/') return <>{children}</>
+
+  if (sessionLoading || featuresLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <p className="text-sm text-gray-600">Loading workspace navigation…</p>
+      </div>
+    )
+  }
+
+  // If session missing (logging out / unauthorized), defer to page-level redirects without flashing nav
+  if (!user) {
+    return <>{children}</>
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -169,16 +191,20 @@ export default function Navigation({ children }: { children: React.ReactNode }) 
               </div>
               <button
                 onClick={async () => {
+                  if (signingOut) return
+                  setSigningOut(true)
                   try {
                     await signOut({ callbackUrl: '/login' })
                   } finally {
-                    // no-op
+                    setSigningOut(false)
                   }
                 }}
-                className="w-full mt-2 flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 hover:text-gray-900 transition"
+                disabled={signingOut}
+                className="w-full mt-2 flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 hover:text-gray-900 transition disabled:opacity-60 disabled:cursor-not-allowed"
+                aria-busy={signingOut}
               >
                 <LogOut className="h-5 w-5" aria-hidden={true} />
-                Sign Out
+                {signingOut ? 'Signing Out…' : 'Sign Out'}
               </button>
           </div>
         </div>

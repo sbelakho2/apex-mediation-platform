@@ -1,7 +1,34 @@
 'use client'
 
 import { LineChart, Line, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
-import { formatCurrency, formatNumber } from '@/lib/utils'
+
+const FALLBACK_LOCALE = 'en-US'
+const FALLBACK_CURRENCY = 'USD'
+const FALLBACK_TIMEZONE = 'UTC'
+
+const sanitizeNumber = (value: number, fallback = 0) => (Number.isFinite(value) ? value : fallback)
+
+const parseDateValue = (value: string | number | Date) => {
+  const date = value instanceof Date ? value : new Date(value)
+  return Number.isNaN(date.getTime()) ? null : date
+}
+
+const formatDateValue = (value: string | number | Date, formatter: Intl.DateTimeFormat) => {
+  const parsed = parseDateValue(value)
+  return parsed ? formatter.format(parsed) : ''
+}
+
+const createCurrencyFormatter = (locale: string, currency: string, options?: Intl.NumberFormatOptions) =>
+  new Intl.NumberFormat(locale, {
+    style: 'currency',
+    currency,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+    ...options,
+  })
+
+const createNumberFormatter = (locale: string, options?: Intl.NumberFormatOptions) =>
+  new Intl.NumberFormat(locale, options)
 
 interface RevenueData {
   date: string
@@ -15,6 +42,9 @@ interface RevenueData {
 interface ChartProps {
   data: RevenueData[]
   height?: number
+  locale?: string
+  currency?: string
+  timeZone?: string
 }
 
 interface DateFormattedChartProps extends ChartProps {
@@ -23,7 +53,24 @@ interface DateFormattedChartProps extends ChartProps {
 }
 
 // Revenue Line Chart
-export function RevenueLineChart({ data, height = 300 }: ChartProps) {
+export function RevenueLineChart({
+  data,
+  height = 300,
+  locale = FALLBACK_LOCALE,
+  currency = FALLBACK_CURRENCY,
+  timeZone = FALLBACK_TIMEZONE,
+}: ChartProps) {
+  const axisDateFormatter = new Intl.DateTimeFormat(locale, {
+    month: 'short',
+    day: 'numeric',
+    timeZone,
+  })
+  const tooltipDateFormatter = new Intl.DateTimeFormat(locale, {
+    dateStyle: 'medium',
+    timeZone,
+  })
+  const currencyFormatter = createCurrencyFormatter(locale, currency)
+
   return (
     <ResponsiveContainer width="100%" height={height}>
       <LineChart data={data}>
@@ -32,17 +79,17 @@ export function RevenueLineChart({ data, height = 300 }: ChartProps) {
           dataKey="date" 
           stroke="#6b7280"
           fontSize={12}
-          tickFormatter={(value) => new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+          tickFormatter={(value) => formatDateValue(value, axisDateFormatter)}
         />
         <YAxis 
           stroke="#6b7280"
           fontSize={12}
-          tickFormatter={(value) => formatCurrency(value, 'USD').replace('$', '')}
+          tickFormatter={(value) => currencyFormatter.format(sanitizeNumber(value))}
         />
         <Tooltip 
           contentStyle={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '8px' }}
-          labelFormatter={(label) => new Date(label).toLocaleDateString()}
-          formatter={(value: number) => [formatCurrency(value), 'Revenue']}
+          labelFormatter={(label) => formatDateValue(label, tooltipDateFormatter)}
+          formatter={(value: number) => [currencyFormatter.format(sanitizeNumber(value)), 'Revenue']}
         />
         <Legend />
         <Line 
@@ -60,14 +107,34 @@ export function RevenueLineChart({ data, height = 300 }: ChartProps) {
 }
 
 // Revenue Area Chart
-export function RevenueAreaChart({ data, height = 300, formatDateLabel, formatTooltipLabel }: DateFormattedChartProps) {
-  const axisFormatter = (value: string | number) =>
-    formatDateLabel
-      ? formatDateLabel(String(value))
-      : new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+export function RevenueAreaChart({
+  data,
+  height = 300,
+  formatDateLabel,
+  formatTooltipLabel,
+  currency = FALLBACK_CURRENCY,
+  locale = FALLBACK_LOCALE,
+  timeZone = FALLBACK_TIMEZONE,
+}: DateFormattedChartProps) {
+  const axisDateFormatter = new Intl.DateTimeFormat(locale, {
+    month: 'short',
+    day: 'numeric',
+    timeZone,
+  })
+  const tooltipDateFormatter = new Intl.DateTimeFormat(locale, {
+    dateStyle: 'medium',
+    timeZone,
+  })
 
-  const tooltipLabelFormatter = (label: string) =>
-    formatTooltipLabel ? formatTooltipLabel(label) : new Date(label).toLocaleDateString()
+  const resolvedAxisFormatter = formatDateLabel
+    ? (value: string | number) => formatDateLabel(String(value))
+    : (value: string | number) => formatDateValue(value, axisDateFormatter)
+
+  const resolvedTooltipFormatter = formatTooltipLabel
+    ? (label: string) => formatTooltipLabel(label)
+    : (label: string) => formatDateValue(label, tooltipDateFormatter)
+
+  const currencyFormatter = createCurrencyFormatter(locale, currency)
 
   return (
     <ResponsiveContainer width="100%" height={height}>
@@ -83,17 +150,17 @@ export function RevenueAreaChart({ data, height = 300, formatDateLabel, formatTo
           dataKey="date" 
           stroke="#6b7280"
           fontSize={12}
-          tickFormatter={(value) => axisFormatter(value)}
+          tickFormatter={(value) => resolvedAxisFormatter(value)}
         />
         <YAxis 
           stroke="#6b7280"
           fontSize={12}
-          tickFormatter={(value) => formatCurrency(value, 'USD').replace('$', '')}
+          tickFormatter={(value) => currencyFormatter.format(sanitizeNumber(value))}
         />
         <Tooltip 
           contentStyle={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '8px' }}
-          labelFormatter={(label) => tooltipLabelFormatter(String(label))}
-          formatter={(value: number) => [formatCurrency(value), 'Revenue']}
+          labelFormatter={(label) => resolvedTooltipFormatter(String(label))}
+          formatter={(value: number) => [currencyFormatter.format(sanitizeNumber(value)), 'Revenue']}
         />
         <Area 
           type="monotone" 
@@ -110,7 +177,23 @@ export function RevenueAreaChart({ data, height = 300, formatDateLabel, formatTo
 }
 
 // Impressions Bar Chart
-export function ImpressionsBarChart({ data, height = 300 }: ChartProps) {
+export function ImpressionsBarChart({
+  data,
+  height = 300,
+  locale = FALLBACK_LOCALE,
+  timeZone = FALLBACK_TIMEZONE,
+}: ChartProps) {
+  const axisDateFormatter = new Intl.DateTimeFormat(locale, {
+    month: 'short',
+    day: 'numeric',
+    timeZone,
+  })
+  const tooltipDateFormatter = new Intl.DateTimeFormat(locale, {
+    dateStyle: 'medium',
+    timeZone,
+  })
+  const numberFormatter = createNumberFormatter(locale, { maximumFractionDigits: 0 })
+
   return (
     <ResponsiveContainer width="100%" height={height}>
       <BarChart data={data}>
@@ -119,17 +202,17 @@ export function ImpressionsBarChart({ data, height = 300 }: ChartProps) {
           dataKey="date" 
           stroke="#6b7280"
           fontSize={12}
-          tickFormatter={(value) => new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+          tickFormatter={(value) => formatDateValue(value, axisDateFormatter)}
         />
         <YAxis 
           stroke="#6b7280"
           fontSize={12}
-          tickFormatter={(value) => formatNumber(value)}
+          tickFormatter={(value) => numberFormatter.format(sanitizeNumber(value))}
         />
         <Tooltip 
           contentStyle={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '8px' }}
-          labelFormatter={(label) => new Date(label).toLocaleDateString()}
-          formatter={(value: number) => [formatNumber(value), 'Impressions']}
+          labelFormatter={(label) => formatDateValue(label, tooltipDateFormatter)}
+          formatter={(value: number) => [numberFormatter.format(sanitizeNumber(value)), 'Impressions']}
         />
         <Legend />
         <Bar 
@@ -144,14 +227,34 @@ export function ImpressionsBarChart({ data, height = 300 }: ChartProps) {
 }
 
 // eCPM Line Chart
-export function EcpmLineChart({ data, height = 300, formatDateLabel, formatTooltipLabel }: DateFormattedChartProps) {
-  const axisFormatter = (value: string | number) =>
-    formatDateLabel
-      ? formatDateLabel(String(value))
-      : new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+export function EcpmLineChart({
+  data,
+  height = 300,
+  formatDateLabel,
+  formatTooltipLabel,
+  locale = FALLBACK_LOCALE,
+  currency = FALLBACK_CURRENCY,
+  timeZone = FALLBACK_TIMEZONE,
+}: DateFormattedChartProps) {
+  const axisDateFormatter = new Intl.DateTimeFormat(locale, {
+    month: 'short',
+    day: 'numeric',
+    timeZone,
+  })
+  const tooltipDateFormatter = new Intl.DateTimeFormat(locale, {
+    dateStyle: 'medium',
+    timeZone,
+  })
 
-  const tooltipLabelFormatter = (label: string) =>
-    formatTooltipLabel ? formatTooltipLabel(label) : new Date(label).toLocaleDateString()
+  const resolvedAxisFormatter = formatDateLabel
+    ? (value: string | number) => formatDateLabel(String(value))
+    : (value: string | number) => formatDateValue(value, axisDateFormatter)
+
+  const resolvedTooltipFormatter = formatTooltipLabel
+    ? (label: string) => formatTooltipLabel(label)
+    : (label: string) => formatDateValue(label, tooltipDateFormatter)
+
+  const currencyFormatter = createCurrencyFormatter(locale, currency, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
   return (
     <ResponsiveContainer width="100%" height={height}>
@@ -161,17 +264,17 @@ export function EcpmLineChart({ data, height = 300, formatDateLabel, formatToolt
           dataKey="date" 
           stroke="#6b7280"
           fontSize={12}
-          tickFormatter={(value) => axisFormatter(value)}
+          tickFormatter={(value) => resolvedAxisFormatter(value)}
         />
         <YAxis 
           stroke="#6b7280"
           fontSize={12}
-          tickFormatter={(value) => `$${value.toFixed(2)}`}
+          tickFormatter={(value) => currencyFormatter.format(sanitizeNumber(value))}
         />
         <Tooltip 
           contentStyle={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '8px' }}
-          labelFormatter={(label) => tooltipLabelFormatter(String(label))}
-          formatter={(value: number) => [`$${value.toFixed(2)}`, 'eCPM']}
+          labelFormatter={(label) => resolvedTooltipFormatter(String(label))}
+          formatter={(value: number) => [currencyFormatter.format(sanitizeNumber(value)), 'eCPM']}
         />
         <Legend />
         <Line 
@@ -189,7 +292,30 @@ export function EcpmLineChart({ data, height = 300, formatDateLabel, formatToolt
 }
 
 // Fill Rate Line Chart
-export function FillRateLineChart({ data, height = 300 }: ChartProps) {
+export function FillRateLineChart({
+  data,
+  height = 300,
+  locale = FALLBACK_LOCALE,
+  timeZone = FALLBACK_TIMEZONE,
+}: ChartProps) {
+  const axisDateFormatter = new Intl.DateTimeFormat(locale, {
+    month: 'short',
+    day: 'numeric',
+    timeZone,
+  })
+  const tooltipDateFormatter = new Intl.DateTimeFormat(locale, {
+    dateStyle: 'medium',
+    timeZone,
+  })
+  const percentFormatter = createNumberFormatter(locale, {
+    style: 'percent',
+    maximumFractionDigits: 0,
+  })
+  const percentTooltipFormatter = createNumberFormatter(locale, {
+    style: 'percent',
+    maximumFractionDigits: 2,
+  })
+
   return (
     <ResponsiveContainer width="100%" height={height}>
       <LineChart data={data}>
@@ -198,18 +324,18 @@ export function FillRateLineChart({ data, height = 300 }: ChartProps) {
           dataKey="date" 
           stroke="#6b7280"
           fontSize={12}
-          tickFormatter={(value) => new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+          tickFormatter={(value) => formatDateValue(value, axisDateFormatter)}
         />
         <YAxis 
           stroke="#6b7280"
           fontSize={12}
-          tickFormatter={(value) => `${(value * 100).toFixed(0)}%`}
+          tickFormatter={(value) => percentFormatter.format(sanitizeNumber(value))}
           domain={[0, 1]}
         />
         <Tooltip 
           contentStyle={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '8px' }}
-          labelFormatter={(label) => new Date(label).toLocaleDateString()}
-          formatter={(value: number) => [`${(value * 100).toFixed(2)}%`, 'Fill Rate']}
+          labelFormatter={(label) => formatDateValue(label, tooltipDateFormatter)}
+          formatter={(value: number) => [percentTooltipFormatter.format(sanitizeNumber(value)), 'Fill Rate']}
         />
         <Legend />
         <Line 
@@ -227,7 +353,25 @@ export function FillRateLineChart({ data, height = 300 }: ChartProps) {
 }
 
 // Combined Metrics Chart (Revenue + Impressions)
-export function CombinedMetricsChart({ data, height = 300 }: ChartProps) {
+export function CombinedMetricsChart({
+  data,
+  height = 300,
+  locale = FALLBACK_LOCALE,
+  currency = FALLBACK_CURRENCY,
+  timeZone = FALLBACK_TIMEZONE,
+}: ChartProps) {
+  const axisDateFormatter = new Intl.DateTimeFormat(locale, {
+    month: 'short',
+    day: 'numeric',
+    timeZone,
+  })
+  const tooltipDateFormatter = new Intl.DateTimeFormat(locale, {
+    dateStyle: 'medium',
+    timeZone,
+  })
+  const currencyFormatter = createCurrencyFormatter(locale, currency)
+  const numberFormatter = createNumberFormatter(locale)
+
   return (
     <ResponsiveContainer width="100%" height={height}>
       <LineChart data={data}>
@@ -236,24 +380,24 @@ export function CombinedMetricsChart({ data, height = 300 }: ChartProps) {
           dataKey="date" 
           stroke="#6b7280"
           fontSize={12}
-          tickFormatter={(value) => new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+          tickFormatter={(value) => formatDateValue(value, axisDateFormatter)}
         />
         <YAxis 
           yAxisId="left"
           stroke="#6b7280"
           fontSize={12}
-          tickFormatter={(value) => formatCurrency(value, 'USD').replace('$', '')}
+          tickFormatter={(value) => currencyFormatter.format(sanitizeNumber(value))}
         />
         <YAxis 
           yAxisId="right"
           orientation="right"
           stroke="#6b7280"
           fontSize={12}
-          tickFormatter={(value) => formatNumber(value)}
+          tickFormatter={(value) => numberFormatter.format(sanitizeNumber(value))}
         />
         <Tooltip 
           contentStyle={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '8px' }}
-          labelFormatter={(label) => new Date(label).toLocaleDateString()}
+          labelFormatter={(label) => formatDateValue(label, tooltipDateFormatter)}
         />
         <Legend />
         <Line 

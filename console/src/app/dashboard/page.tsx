@@ -26,7 +26,6 @@ import type { LucideIcon } from 'lucide-react'
 
 export default function DashboardPage() {
   const { data: session } = useSession()
-  const locale = useMemo(() => (typeof navigator !== 'undefined' ? navigator.language : 'en-US'), [])
   const defaultStart = useMemo(
     () => new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
     []
@@ -47,14 +46,19 @@ export default function DashboardPage() {
     refetch: refetchRevenueSummary,
   } = useQuery({
     queryKey: ['revenue-summary', dateRange.startDate, dateRange.endDate],
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       const { data } = await revenueApi.getSummary({
         startDate: dateRange.startDate,
         endDate: dateRange.endDate,
+        signal,
       })
 
       return data
     },
+    staleTime: 60_000,
+    gcTime: 300_000,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
   })
 
   const revenueCurrency = (revenueSummary as { currency?: string } | null)?.currency ?? 'USD'
@@ -84,25 +88,13 @@ export default function DashboardPage() {
     }
 
     try {
-      const currencyFormatter = new Intl.NumberFormat(locale, {
-        style: 'currency',
-        currency: revenueCurrency,
-        maximumFractionDigits: 2,
-      })
-      const integerFormatter = new Intl.NumberFormat(locale, { maximumFractionDigits: 0 })
-      const percentFormatter = new Intl.NumberFormat(locale, {
-        style: 'percent',
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-      })
-
       const csvData = [
         ['Metric', 'Value'],
-        ['Total Revenue', currencyFormatter.format(revenueSummary.totalRevenue ?? 0)],
-        ['Total Impressions', integerFormatter.format(revenueSummary.totalImpressions ?? 0)],
-        ['Total Clicks', integerFormatter.format(revenueSummary.totalClicks ?? 0)],
-        ['Average eCPM', currencyFormatter.format(revenueSummary.averageEcpm ?? 0)],
-        ['Average Fill Rate', percentFormatter.format(revenueSummary?.averageFillRate ?? 0)],
+        ['Total Revenue', formatCurrency(revenueSummary.totalRevenue ?? 0, revenueCurrency)],
+        ['Total Impressions', formatNumber(revenueSummary.totalImpressions ?? 0, { maximumFractionDigits: 0 })],
+        ['Total Clicks', formatNumber(revenueSummary.totalClicks ?? 0, { maximumFractionDigits: 0 })],
+        ['Average eCPM', formatCurrency(revenueSummary.averageEcpm ?? 0, revenueCurrency)],
+        ['Average Fill Rate', formatPercentage(revenueSummary?.averageFillRate ?? 0)],
         [
           'Date Range',
           `${dateRange.startDate} to ${dateRange.endDate}`,
@@ -125,7 +117,7 @@ export default function DashboardPage() {
       console.error('Failed to export dashboard CSV', error)
       setExportError('Unable to export dashboard data right now. Please try again in a moment.')
     }
-  }, [dateRange.endDate, dateRange.startDate, locale, revenueCurrency, revenueSummary])
+  }, [dateRange.endDate, dateRange.startDate, revenueCurrency, revenueSummary])
 
   const presets = useMemo(() => {
     const now = new Date()
@@ -154,6 +146,9 @@ export default function DashboardPage() {
     revenueSummaryError instanceof Error
       ? revenueSummaryError.message
       : 'Unable to load revenue summary.'
+
+  const publisherId = session?.user?.publisherId
+  const canRenderOperationalWidgets = Boolean(publisherId)
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -221,31 +216,50 @@ export default function DashboardPage() {
                   </div>
                 </div>
               </div>
+            ) : !revenueSummary ? (
+              <div className="card border border-dashed border-gray-200 bg-white text-gray-700 col-span-full">
+                <div className="flex flex-col gap-2">
+                  <h3 className="text-lg font-semibold">No data returned</h3>
+                  <p className="text-sm">
+                    The revenue service didn&rsquo;t return any metrics for this window. Confirm collectors are running and
+                    try a different date range.
+                  </p>
+                  <div>
+                    <button
+                      type="button"
+                      className="btn btn-outline btn-sm"
+                      onClick={() => refetchRevenueSummary()}
+                    >
+                      Refresh data
+                    </button>
+                  </div>
+                </div>
+              </div>
             ) : (
               <>
                 <MetricCard
                   title="Total Revenue"
-                  value={formatCurrency(revenueSummary?.totalRevenue || 0, revenueCurrency)}
-                  change={revenueSummary?.revenueChangePercent ?? undefined}
+                  value={formatCurrency(revenueSummary.totalRevenue ?? 0, revenueCurrency)}
+                  change={revenueSummary.revenueChangePercent ?? undefined}
                   icon={<DollarSign className="w-5 h-5" />}
                 />
                 <MetricCard
                   title="Impressions"
-                  value={formatNumber(revenueSummary?.totalImpressions || 0)}
-                  change={revenueSummary?.impressionsChangePercent ?? undefined}
+                  value={formatNumber(revenueSummary.totalImpressions ?? 0)}
+                  change={revenueSummary.impressionsChangePercent ?? undefined}
                   icon={<Eye className="w-5 h-5" />}
                 />
                 <MetricCard
                   title="eCPM"
-                  value={formatCurrency(revenueSummary?.averageEcpm || 0, revenueCurrency)}
+                  value={formatCurrency(revenueSummary.averageEcpm ?? 0, revenueCurrency)}
                   change={ecpmChange}
                   icon={<TrendingUp className="w-5 h-5" />}
                   trend={ecpmTrend}
                 />
                 <MetricCard
                   title="Fill Rate"
-                  value={formatPercentage(revenueSummary?.averageFillRate || 0)}
-                  change={revenueSummary?.fillRateChangePercent ?? undefined}
+                  value={formatPercentage(revenueSummary.averageFillRate ?? 0)}
+                  change={revenueSummary.fillRateChangePercent ?? undefined}
                   icon={<MousePointer className="w-5 h-5" />}
                 />
               </>
@@ -255,14 +269,26 @@ export default function DashboardPage() {
 
         <section className="space-y-6">
           <h2 className="text-xl font-semibold text-gray-900">Revenue Intelligence</h2>
-          <DashboardCharts dateRange={dateRange} />
+          <DashboardCharts dateRange={dateRange} currency={revenueCurrency} />
         </section>
 
         <section>
           <h2 className="sr-only">Operational insights</h2>
           <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-            <FraudWidget publisherId={session?.user?.publisherId || ''} />
-            <PayoutWidget />
+            {canRenderOperationalWidgets ? (
+              <>
+                <FraudWidget publisherId={publisherId!} />
+                <PayoutWidget />
+              </>
+            ) : (
+              <div className="card col-span-full">
+                <h3 className="text-lg font-semibold text-gray-900">Connect a publisher account</h3>
+                <p className="text-sm text-gray-600 mt-2">
+                  Fraud and payout insights unlock once your session includes an active publisher context. Contact support if
+                  you expect to see one here.
+                </p>
+              </div>
+            )}
             <QuickActionsPanel />
           </div>
         </section>

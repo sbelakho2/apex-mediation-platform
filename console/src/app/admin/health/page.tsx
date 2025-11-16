@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { apiClient } from '@/lib/api-client'
 import { useAdminGate } from '@/lib/useAdminGate'
 
@@ -25,9 +26,14 @@ const safeNumber = (value: string | undefined, fallback: number): number => {
   return Number.isFinite(parsed) ? parsed : fallback
 }
 
+const sanitizeNumberInput = (value: unknown, fallback: number): number => {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : fallback
+}
+
 const POLL_INTERVAL_MS = safeNumber(process.env.NEXT_PUBLIC_ADMIN_HEALTH_POLL_INTERVAL_MS, 30_000)
 
-const RED_THRESHOLDS: Record<'latency' | 'error' | 'timeouts', ThresholdConfig> = Object.freeze({
+const DEFAULT_RED_THRESHOLDS: Record<'latency' | 'error' | 'timeouts', ThresholdConfig> = Object.freeze({
   latency: {
     warn: safeNumber(process.env.NEXT_PUBLIC_ADMIN_HEALTH_LATENCY_WARN, 0.5),
     crit: safeNumber(process.env.NEXT_PUBLIC_ADMIN_HEALTH_LATENCY_CRIT, 1.0),
@@ -42,6 +48,26 @@ const RED_THRESHOLDS: Record<'latency' | 'error' | 'timeouts', ThresholdConfig> 
   },
 })
 
+const THRESHOLD_STORAGE_KEY = 'admin-health-thresholds'
+const THRESHOLD_CONTROL_CONFIG: ReadonlyArray<{
+  key: keyof typeof DEFAULT_RED_THRESHOLDS
+  label: string
+  step: number
+  multiplier?: number
+}> = [
+  { key: 'latency', label: 'Latency (s)', step: 0.01 },
+  { key: 'error', label: 'Error Rate (%)', step: 0.001, multiplier: 100 },
+  { key: 'timeouts', label: 'Adapter Timeouts (RPS)', step: 0.1 },
+]
+
+const cloneThresholds = (
+  source: Record<'latency' | 'error' | 'timeouts', ThresholdConfig> = DEFAULT_RED_THRESHOLDS
+) => ({
+  latency: { ...source.latency },
+  error: { ...source.error },
+  timeouts: { ...source.timeouts },
+})
+
 const isAbortError = (error: unknown) => {
   if (!error) return false
   if ((error as any)?.code === 'ERR_CANCELED') return true
@@ -51,6 +77,7 @@ const isAbortError = (error: unknown) => {
 
 export default function AdminHealthPage() {
   const { isAdmin, isLoading: gateLoading } = useAdminGate()
+  const router = useRouter()
   const [info, setInfo] = useState<MetaInfo | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -58,6 +85,73 @@ export default function AdminHealthPage() {
   const [red, setRed] = useState<RedSummary | null>(null)
   const [redError, setRedError] = useState<string | null>(null)
   const [redLoading, setRedLoading] = useState<boolean>(true)
+  const [thresholds, setThresholds] = useState(() => cloneThresholds())
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const raw = window.localStorage.getItem(THRESHOLD_STORAGE_KEY)
+    if (!raw) return
+    try {
+      const parsed = JSON.parse(raw)
+      if (parsed && typeof parsed === 'object') {
+        setThresholds((prev) => ({
+          latency: {
+            warn: sanitizeNumberInput(parsed.latency?.warn, prev.latency.warn),
+            crit: sanitizeNumberInput(parsed.latency?.crit, prev.latency.crit),
+          },
+          error: {
+            warn: sanitizeNumberInput(parsed.error?.warn, prev.error.warn),
+            crit: sanitizeNumberInput(parsed.error?.crit, prev.error.crit),
+          },
+          timeouts: {
+            warn: sanitizeNumberInput(parsed.timeouts?.warn, prev.timeouts.warn),
+            crit: sanitizeNumberInput(parsed.timeouts?.crit, prev.timeouts.crit),
+          },
+        }))
+      }
+    } catch (err) {
+      console.warn('Failed to parse admin health thresholds', err)
+    }
+  }, [])
+
+  const persistThresholds = useCallback((next: typeof thresholds) => {
+    const cloned = cloneThresholds(next)
+    setThresholds(cloned)
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(THRESHOLD_STORAGE_KEY, JSON.stringify(cloned))
+    }
+  }, [])
+
+  const handleThresholdChange = useCallback(
+    (metric: keyof typeof thresholds, level: keyof ThresholdConfig, value: string) => {
+      const numeric = Number(value)
+      if (!Number.isFinite(numeric) || numeric < 0) return
+      const next = {
+        ...thresholds,
+        [metric]: {
+          ...thresholds[metric],
+          [level]: numeric,
+        },
+      }
+      if (next[metric].crit < next[metric].warn) {
+        next[metric].crit = next[metric].warn
+      }
+      persistThresholds(next)
+    },
+    [persistThresholds, thresholds]
+  )
+
+  const resetThresholds = useCallback(() => {
+    persistThresholds(cloneThresholds())
+  }, [persistThresholds])
+
+  useEffect(() => {
+    if (gateLoading) return
+    if (!isAdmin) {
+      const timeout = setTimeout(() => router.replace('/403'), 1200)
+      return () => clearTimeout(timeout)
+    }
+  }, [gateLoading, isAdmin, router])
 
   useEffect(() => {
     if (!isAdmin) return
@@ -87,6 +181,7 @@ export default function AdminHealthPage() {
     if (!isAdmin) return
     let active = true
     let controller: AbortController | null = null
+    let timeoutId: ReturnType<typeof setTimeout> | null = null
 
     const loadRed = async (options: { initial?: boolean } = {}) => {
       controller?.abort()
@@ -105,21 +200,37 @@ export default function AdminHealthPage() {
         if (options.initial && active) {
           setRedLoading(false)
         }
+        if (active && !document.hidden) {
+          timeoutId = setTimeout(() => loadRed(), POLL_INTERVAL_MS)
+        }
       }
     }
 
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        controller?.abort()
+        if (timeoutId) {
+          clearTimeout(timeoutId)
+          timeoutId = null
+        }
+      } else {
+        loadRed()
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
     loadRed({ initial: true })
-    const id = setInterval(() => loadRed(), POLL_INTERVAL_MS)
     return () => {
       active = false
       controller?.abort()
-      clearInterval(id)
+      if (timeoutId) clearTimeout(timeoutId)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
     }
   }, [isAdmin])
 
   function redStatusColor(kind: 'latency' | 'error' | 'timeouts', v: number | null) {
     if (v == null || isNaN(v)) return 'bg-gray-100 text-gray-800 border-gray-200'
-    const { warn, crit } = RED_THRESHOLDS[kind]
+    const { warn, crit } = thresholds[kind]
     if (v >= crit) return 'bg-red-100 text-red-800 border-red-200'
     if (v >= warn) return 'bg-yellow-100 text-yellow-800 border-yellow-200'
     return 'bg-green-100 text-green-800 border-green-200'
@@ -140,6 +251,7 @@ export default function AdminHealthPage() {
       </div>
     )
   }
+
 
   return (
     <div className="space-y-6">
@@ -221,6 +333,69 @@ export default function AdminHealthPage() {
             </div>
           </div>
         )}
+      </section>
+
+      <section className="bg-white border rounded-lg p-6">
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          <div>
+            <h2 className="text-xl font-semibold text-gray-900">Alert Thresholds</h2>
+            <p className="text-sm text-gray-600">
+              Adjust warning and critical thresholds without redeploying. Values persist per browser.
+            </p>
+          </div>
+          <button type="button" className="btn btn-outline btn-sm" onClick={resetThresholds}>
+            Reset defaults
+          </button>
+        </div>
+        <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+          {THRESHOLD_CONTROL_CONFIG.map(({ key, label, step, multiplier }) => (
+            <div key={key} className="p-4 rounded-lg border space-y-3">
+              <div className="text-sm font-medium text-gray-700">{label}</div>
+              <div className="flex flex-col gap-2">
+                <label className="text-xs text-gray-500" htmlFor={`${key}-warn`}>
+                  Warning
+                </label>
+                <input
+                  id={`${key}-warn`}
+                  type="number"
+                  min={0}
+                  step={step}
+                  className="input"
+                  value={
+                    multiplier ? thresholds[key].warn * (multiplier ?? 1) : thresholds[key].warn
+                  }
+                  onChange={(event) =>
+                    handleThresholdChange(
+                      key,
+                      'warn',
+                      multiplier ? (Number(event.target.value) / (multiplier ?? 1)).toString() : event.target.value
+                    )
+                  }
+                />
+                <label className="text-xs text-gray-500" htmlFor={`${key}-crit`}>
+                  Critical
+                </label>
+                <input
+                  id={`${key}-crit`}
+                  type="number"
+                  min={0}
+                  step={step}
+                  className="input"
+                  value={
+                    multiplier ? thresholds[key].crit * (multiplier ?? 1) : thresholds[key].crit
+                  }
+                  onChange={(event) =>
+                    handleThresholdChange(
+                      key,
+                      'crit',
+                      multiplier ? (Number(event.target.value) / (multiplier ?? 1)).toString() : event.target.value
+                    )
+                  }
+                />
+              </div>
+            </div>
+          ))}
+        </div>
       </section>
 
       <section className="bg-white border rounded-lg p-6">

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Copy, Check } from 'lucide-react'
 import { Tooltip } from './Tooltip'
 import { t } from '@/i18n'
@@ -25,15 +25,55 @@ interface CopyButtonProps {
  * <CopyButton text="auc-123" label="Copy Auction ID" />
  * <CopyButton text={signature} variant="icon" size="sm" />
  */
+const translate = (key: string, fallback: string) => {
+  const value = t(key)
+  return value === key ? fallback : value
+}
+
 export function CopyButton({ text, label, variant = 'default', size = 'md' }: CopyButtonProps) {
   const [copyState, setCopyState] = useState<'idle' | 'success' | 'error'>('idle')
-  const timerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null)
+  const [errorDetails, setErrorDetails] = useState<string | null>(null)
+  const [clipboardSupport, setClipboardSupport] = useState<'unknown' | 'supported' | 'unsupported'>('unknown')
+  const [unsupportedReason, setUnsupportedReason] = useState<'insecure' | 'unavailable' | null>(null)
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     return () => {
       if (timerRef.current) {
         clearTimeout(timerRef.current)
+        timerRef.current = null
       }
+    }
+  }, [])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const isSecureContext = typeof window.isSecureContext === 'boolean'
+      ? window.isSecureContext
+      : window.location?.protocol === 'https:'
+
+    if (!isSecureContext) {
+      setClipboardSupport('unsupported')
+      setUnsupportedReason('insecure')
+      return
+    }
+
+    const hasAsyncClipboard = Boolean(navigator?.clipboard?.writeText)
+    let canExecCommand = false
+    try {
+      canExecCommand = typeof document !== 'undefined' && typeof document.queryCommandSupported === 'function'
+        ? document.queryCommandSupported('copy')
+        : false
+    } catch {
+      canExecCommand = false
+    }
+
+    if (hasAsyncClipboard || canExecCommand) {
+      setClipboardSupport('supported')
+      setUnsupportedReason(null)
+    } else {
+      setClipboardSupport('unsupported')
+      setUnsupportedReason('unavailable')
     }
   }, [])
 
@@ -41,6 +81,10 @@ export function CopyButton({ text, label, variant = 'default', size = 'md' }: Co
     if (navigator?.clipboard?.writeText) {
       await navigator.clipboard.writeText(value)
       return
+    }
+
+    if (typeof document === 'undefined') {
+      throw new Error('Clipboard API unavailable')
     }
 
     const textarea = document.createElement('textarea')
@@ -57,36 +101,86 @@ export function CopyButton({ text, label, variant = 'default', size = 'md' }: Co
     }
   }
 
-  const scheduleReset = (delay: number) => {
+  const scheduleReset = useCallback((delay: number) => {
     if (timerRef.current) {
       clearTimeout(timerRef.current)
     }
-    timerRef.current = window.setTimeout(() => setCopyState('idle'), delay)
-  }
+    timerRef.current = setTimeout(() => setCopyState('idle'), delay)
+  }, [])
 
   const handleCopy = async () => {
+    if (clipboardSupport === 'unsupported') {
+      setCopyState('error')
+      const fallbackMessage =
+        unsupportedReason === 'insecure'
+          ? translate('ui.copyButton.insecure', 'Clipboard actions require a secure (HTTPS or localhost) connection')
+          : translate('ui.copyButton.unsupported', 'Clipboard access unavailable in this browser')
+      setErrorDetails(fallbackMessage)
+      scheduleReset(4000)
+      return
+    }
     try {
       await copyToClipboard(text)
       setCopyState('success')
+      setErrorDetails(null)
       scheduleReset(2000)
     } catch (err) {
-      console.error('Failed to copy:', err)
       setCopyState('error')
+      setErrorDetails(err instanceof Error ? err.message : translate('ui.copyButton.unsupported', 'Clipboard access unavailable in this browser'))
       scheduleReset(4000)
     }
   }
 
-  const copyLabel = label || t('ui.copyButton.copy')
-  const successLabel = t('ui.copyButton.copied')
-  const errorLabel = t('ui.copyButton.error')
-  const defaultTooltip = label || t('ui.copyButton.tooltip')
-  const tooltipText = copyState === 'success' ? successLabel : copyState === 'error' ? errorLabel : defaultTooltip
+  const copyLabel = useMemo(() => label || translate('ui.copyButton.copy', 'Copy'), [label])
+  const successLabel = useMemo(() => translate('ui.copyButton.copied', 'Copied'), [])
+  const errorLabel = useMemo(() => translate('ui.copyButton.error', 'Unable to copy'), [])
+  const unsupportedLabel = useMemo(() => translate('ui.copyButton.unsupported', 'Clipboard access unavailable in this browser'), [])
+  const defaultTooltip = useMemo(() => label || translate('ui.copyButton.tooltip', 'Copy to clipboard'), [label])
+  const fallbackInstructions = useMemo(
+    () => translate('ui.copyButton.fallbackInstructions', 'Select the text manually and press Ctrl/Cmd + C.'),
+    [],
+  )
+  const insecureContextLabel = useMemo(
+    () => translate('ui.copyButton.insecure', 'Clipboard actions require a secure (HTTPS or localhost) connection'),
+    [],
+  )
+  const fallbackMessage = useMemo(() => {
+    if (clipboardSupport !== 'unsupported') return null
+    if (unsupportedReason === 'insecure') {
+      return `${insecureContextLabel}. ${fallbackInstructions}`
+    }
+    return `${unsupportedLabel} ${fallbackInstructions}`
+  }, [clipboardSupport, fallbackInstructions, insecureContextLabel, unsupportedLabel, unsupportedReason])
+  const tooltipText =
+    clipboardSupport === 'unsupported'
+      ? fallbackMessage || unsupportedLabel
+      : copyState === 'success'
+        ? successLabel
+        : copyState === 'error'
+          ? errorDetails
+            ? `${errorLabel}: ${errorDetails}`
+            : errorLabel
+          : defaultTooltip
   const statusAnnouncer =
     copyState === 'idle' ? null : (
       <span className="sr-only" role="status" aria-live="polite">
         {copyState === 'success' ? successLabel : errorLabel}
       </span>
     )
+
+  const isCopyDisabled = clipboardSupport === 'unsupported'
+  const renderFallbackHelper = (currentVariant: CopyButtonProps['variant']) => {
+    if (!fallbackMessage) return null
+    const className =
+      currentVariant === 'inline'
+        ? 'ml-2 inline-flex text-[11px] text-gray-500'
+        : 'mt-1 block text-xs text-gray-500'
+    return (
+      <span className={className} data-testid="copy-fallback-hint" role="note">
+        {fallbackMessage}
+      </span>
+    )
+  }
 
   const sizeClasses = {
     sm: 'h-3.5 w-3.5',
@@ -104,8 +198,12 @@ export function CopyButton({ text, label, variant = 'default', size = 'md' }: Co
       <button
         onClick={handleCopy}
         type="button"
-        className={`inline-flex items-center justify-center ${size === 'sm' ? 'p-1' : 'p-1.5'} rounded hover:bg-gray-100 transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 text-gray-600 hover:text-gray-900 ${copyState === 'error' ? 'text-danger-600' : ''}`}
+        className={`inline-flex items-center justify-center ${size === 'sm' ? 'p-1' : 'p-1.5'} rounded hover:bg-gray-100 transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 text-gray-600 hover:text-gray-900 ${copyState === 'error' ? 'text-danger-600' : ''} ${
+          isCopyDisabled ? 'opacity-60 cursor-not-allowed hover:bg-transparent' : ''
+        }`}
         aria-label={label || 'Copy to clipboard'}
+        disabled={isCopyDisabled}
+        aria-disabled={isCopyDisabled}
       >
         {copyState === 'success' ? (
           <Check className={`${sizeClasses[size]} text-green-600`} aria-hidden="true" />
@@ -119,6 +217,7 @@ export function CopyButton({ text, label, variant = 'default', size = 'md' }: Co
       <>
         <Tooltip content={tooltipText}>{button}</Tooltip>
         {statusAnnouncer}
+        {renderFallbackHelper('icon')}
       </>
     )
   }
@@ -131,7 +230,9 @@ export function CopyButton({ text, label, variant = 'default', size = 'md' }: Co
         type="button"
         className={`inline-flex items-center gap-1.5 text-xs transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 ${
           copyState === 'error' ? 'text-danger-600' : 'text-gray-600 hover:text-gray-900'
-        }`}
+        } ${isCopyDisabled ? 'opacity-60 cursor-not-allowed' : ''}`}
+        disabled={isCopyDisabled}
+        aria-disabled={isCopyDisabled}
         aria-label={label || 'Copy to clipboard'}
       >
         {copyState === 'success' ? (
@@ -142,7 +243,7 @@ export function CopyButton({ text, label, variant = 'default', size = 'md' }: Co
         ) : copyState === 'error' ? (
           <>
             <Copy className="h-3 w-3" aria-hidden="true" />
-            <span className="font-medium">{errorLabel}</span>
+            <span className="font-medium">{errorDetails || errorLabel}</span>
           </>
         ) : (
           <>
@@ -155,8 +256,9 @@ export function CopyButton({ text, label, variant = 'default', size = 'md' }: Co
 
     return (
       <>
-        {button}
+        <Tooltip content={tooltipText}>{button}</Tooltip>
         {statusAnnouncer}
+        {renderFallbackHelper('inline')}
       </>
     )
   }
@@ -172,8 +274,10 @@ export function CopyButton({ text, label, variant = 'default', size = 'md' }: Co
           : copyState === 'error'
             ? 'text-danger-600 border-danger-200'
             : 'text-gray-700 border-gray-300'
-      }`}
+      } ${isCopyDisabled ? 'opacity-60 cursor-not-allowed hover:bg-white' : ''}`}
       aria-label={label || 'Copy to clipboard'}
+      disabled={isCopyDisabled}
+      aria-disabled={isCopyDisabled}
     >
       {copyState === 'success' ? (
         <>
@@ -183,7 +287,7 @@ export function CopyButton({ text, label, variant = 'default', size = 'md' }: Co
       ) : copyState === 'error' ? (
         <>
           <Copy className={sizeClasses[size]} aria-hidden="true" />
-          {errorLabel}
+          {errorDetails || errorLabel}
         </>
       ) : (
         <>
@@ -196,8 +300,9 @@ export function CopyButton({ text, label, variant = 'default', size = 'md' }: Co
 
   return (
     <>
-      {button}
+      <Tooltip content={tooltipText}>{button}</Tooltip>
       {statusAnnouncer}
+      {renderFallbackHelper('default')}
     </>
   )
 }
