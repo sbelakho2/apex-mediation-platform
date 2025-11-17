@@ -1,48 +1,47 @@
-import http from 'http'
-
 /**
- * This test assumes the website is running locally on port 3000.
- * CI job `website-security-headers` starts the server before running tests.
+ * Self-contained security headers test (no running server required).
+ * We import next.config.js and assert the configured headers and values.
  */
-describe('Website Security Headers', () => {
-  const baseUrl = process.env.WEBSITE_BASE_URL || 'http://localhost:3000'
+// @ts-expect-error — CJS export from next.config.js
+const nextConfig = require('../../next.config.js')
 
-  const paths = ['/', '/about', '/contact']
+type Header = { key: string; value: string }
 
-  it('sets strict security headers on key routes', async () => {
-    for (const p of paths) {
-      const res = await request(`${baseUrl}${p}`)
-      expect([200, 304]).toContain(res.statusCode)
-      const headers = lowerCaseHeaders(res.headers)
-      expect(headers['strict-transport-security']).toContain('max-age=')
-      expect(headers['x-content-type-options']).toBe('nosniff')
-      expect(headers['x-frame-options']).toBe('DENY')
-      expect(headers['referrer-policy']).toBe('strict-origin-when-cross-origin')
-      expect(headers['permissions-policy']).toContain('camera=()')
-      expect(headers['content-security-policy']).toContain("default-src 'self'")
-    }
+function toMap(headers: Header[]): Record<string, string> {
+  const map: Record<string, string> = {}
+  for (const h of headers) {
+    map[h.key.toLowerCase()] = h.value
+  }
+  return map
+}
+
+describe('Website Security Headers (config)', () => {
+  it('defines strict security headers on all routes', async () => {
+    const rules = await nextConfig.headers()
+    const all = rules.find((r: any) => r.source === '/:path*')
+    expect(all).toBeTruthy()
+    const map = toMap(all.headers as Header[])
+
+    expect(map['x-dns-prefetch-control']).toBe('on')
+    expect(map['strict-transport-security']).toBe('max-age=63072000; includeSubDomains; preload')
+    expect(map['x-content-type-options']).toBe('nosniff')
+    expect(map['x-frame-options']).toBe('DENY')
+    expect(map['referrer-policy']).toBe('strict-origin-when-cross-origin')
+    expect(map['permissions-policy']).toContain('camera=()')
+
+    // Content-Security-Policy exact directives
+    const csp = map['content-security-policy']
+    expect(csp).toContain("default-src 'self'")
+    expect(csp).toContain("frame-ancestors 'none'")
+    expect(csp).toContain("object-src 'none'")
+    expect(csp).toContain("img-src 'self' data: https:")
+    expect(csp).toContain("style-src 'self'")
+    expect(csp).toContain("script-src 'self'")
+    expect(csp).toContain("connect-src 'self' https:")
+    expect(csp).toContain("font-src 'self' data:")
+
+    // In non-production test env we do not require 'upgrade-insecure-requests'
+    // but if present it should not fail the test.
+    // Optionally verify it appears only when NODE_ENV=production in separate env test.
   })
 })
-
-function request(url: string): Promise<http.IncomingMessage & { body?: string }> {
-  return new Promise((resolve, reject) => {
-    const req = http.get(url, (res) => {
-      const chunks: Buffer[] = []
-      res.on('data', (c) => chunks.push(Buffer.from(c)))
-      res.on('end', () => {
-        ;(res as any).body = Buffer.concat(chunks).toString('utf8')
-        resolve(res as any)
-      })
-    })
-    req.on('error', reject)
-  })
-}
-
-function lowerCaseHeaders(h: http.IncomingHttpHeaders): Record<string, string> {
-  const out: Record<string, string> = {}
-  for (const [k, v] of Object.entries(h)) {
-    if (Array.isArray(v)) out[k.toLowerCase()] = v.join(', ')
-    else if (typeof v === 'string') out[k.toLowerCase()] = v
-  }
-  return out
-}

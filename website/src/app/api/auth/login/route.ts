@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export async function POST(request: NextRequest) {
   try {
-    const { email, password } = await request.json();
+    const { email, password, rememberMe } = await request.json();
 
     // Validate input
     if (!email || !password) {
@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
     if (!response.success || !response.data) {
       return NextResponse.json(
         { success: false, error: response.error || 'Invalid credentials' },
-        { status: 401 }
+        { status: response.status === 429 ? 429 : 401 }
       );
     }
 
@@ -51,13 +51,17 @@ export async function POST(request: NextRequest) {
     });
 
     // Set httpOnly cookie
-    res.cookies.set('session', token, {
+    // If rememberMe is true, extend duration; otherwise session cookie (no maxAge)
+    const cookieOptions: Parameters<typeof res.cookies.set>[2] = {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
-      maxAge: 60 * 60 * 24 * 7, // 7 days
       path: '/',
-    });
+    };
+    if (rememberMe) {
+      cookieOptions.maxAge = 60 * 60 * 24 * 30; // 30 days
+    }
+    res.cookies.set('session', token, cookieOptions);
 
     return res;
   } catch (error) {

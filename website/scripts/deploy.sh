@@ -1,9 +1,13 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # Website Deployment Script
 # This script handles local deployment and monitoring for ApexMediation website
 
-set -e
+set -euo pipefail
+
+# Resolve paths
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+WEBSITE_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 # Colors for output
 RED='\033[0;31m'
@@ -57,15 +61,25 @@ check_prerequisites() {
 
 # Install dependencies
 install_dependencies() {
-    log_info "Installing dependencies..."
-    cd "$(dirname "$0")"
-    npm install
+    log_info "Installing dependencies (website workspace)..."
+    cd "$WEBSITE_ROOT"
+    if command -v npm &> /dev/null; then
+      if [ -f package-lock.json ]; then
+        npm ci
+      else
+        npm install
+      fi
+    else
+      log_error "npm is not available"
+      exit 1
+    fi
     log_success "Dependencies installed"
 }
 
 # Build website
 build_website() {
     log_info "Building website..."
+    cd "$WEBSITE_ROOT"
     npm run build
     log_success "Website built successfully"
 }
@@ -73,7 +87,11 @@ build_website() {
 # Run tests
 run_tests() {
     log_info "Running tests..."
-    npm test
+    cd "$WEBSITE_ROOT"
+    npm test || {
+      log_warning "Tests failed. Review output above."
+      exit 1
+    }
     log_success "Tests passed"
 }
 
@@ -95,6 +113,7 @@ deploy_to_vercel() {
 # Start development server
 start_dev_server() {
     log_info "Starting development server..."
+    cd "$WEBSITE_ROOT"
     npm run dev
 }
 

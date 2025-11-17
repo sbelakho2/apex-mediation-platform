@@ -1,8 +1,8 @@
-'use client';
+"use client";
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 export default function SignUpPage() {
   const router = useRouter();
@@ -16,6 +16,32 @@ export default function SignUpPage() {
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [consent, setConsent] = useState(false);
+  const [csrf, setCsrf] = useState<string | null>(null);
+
+  // Derived validations
+  const emailValid = useMemo(() => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(formData.email), [formData.email]);
+  const passwordValid = useMemo(() => {
+    const p = formData.password;
+    if (p.length < 10) return false;
+    let classes = 0;
+    if (/[a-z]/.test(p)) classes++;
+    if (/[A-Z]/.test(p)) classes++;
+    if (/[0-9]/.test(p)) classes++;
+    if (/[^A-Za-z0-9]/.test(p)) classes++;
+    return classes >= 3;
+  }, [formData.password]);
+  const passwordsMatch = formData.password === formData.confirmPassword;
+  const canSubmit = emailValid && passwordValid && passwordsMatch && consent && !loading;
+
+  useEffect(() => {
+    try {
+      const m = document.cookie.match(/(?:^|; )csrf_token=([^;]+)/);
+      if (m && m[1]) setCsrf(decodeURIComponent(m[1]));
+    } catch {
+      // ignore
+    }
+  }, []);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({
@@ -24,39 +50,42 @@ export default function SignUpPage() {
     });
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError('');
-
-    // Validation
-    if (formData.password !== formData.confirmPassword) {
-      setError('Passwords do not match');
-      return;
-    }
-
-    if (formData.password.length < 8) {
-      setError('Password must be at least 8 characters');
-      return;
-    }
+    if (!emailValid) { setError('Please enter a valid email address.'); return; }
+    if (!passwordValid) { setError('Password must be at least 10 characters and include 3 of: upper, lower, number, symbol.'); return; }
+    if (!passwordsMatch) { setError('Passwords do not match'); return; }
+    if (!consent) { setError('Please accept the Terms and Privacy Policy.'); return; }
 
     setLoading(true);
 
     try {
       const response = await fetch('/api/auth/signup', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(csrf ? { 'X-CSRF-Token': csrf } : {}),
+        },
         body: JSON.stringify({
           name: formData.name,
           email: formData.email,
           password: formData.password,
           companyName: formData.companyName,
+          consent: true,
+          // Honeypot — real users won't fill this hidden field
+          hp: (e.currentTarget.elements.namedItem('hp') as HTMLInputElement | null)?.value || ''
         }),
       });
 
-      const data = await response.json();
+      const data = await response.json().catch(() => ({}));
 
       if (!data.success) {
-        setError(data.error || 'Registration failed');
+        if (response.status === 429) {
+          setError('Too many attempts. Please wait a moment and try again.');
+        } else {
+          setError(data.error || 'Registration failed');
+        }
         setLoading(false);
         return;
       }
@@ -84,7 +113,7 @@ export default function SignUpPage() {
           </p>
         </div>
 
-        <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
+        <form className="mt-8 space-y-6" onSubmit={handleSubmit} aria-label="Create account form">
           {error && (
             <div className="rounded-md bg-red-50 p-4">
               <div className="flex">
@@ -158,11 +187,14 @@ export default function SignUpPage() {
                 autoComplete="new-password"
                 required
                 className="input w-full mt-1"
-                placeholder="At least 8 characters"
+                placeholder="At least 10 chars; 3 of upper/lower/number/symbol"
                 value={formData.password}
                 onChange={handleChange}
                 disabled={loading}
               />
+              <p className="mt-1 text-xs text-gray-500" role="note">
+                {passwordValid ? 'Strong enough' : 'Use at least 10 characters and include a mix of cases, numbers, or symbols.'}
+              </p>
             </div>
 
             <div>
@@ -184,26 +216,38 @@ export default function SignUpPage() {
             </div>
           </div>
 
+          {/* Consent checkbox */}
+          <div className="flex items-start gap-2">
+            <input
+              id="consent"
+              name="consent"
+              type="checkbox"
+              className="mt-1 h-4 w-4 text-sunshine-yellow focus:ring-sunshine-yellow border-gray-300 rounded"
+              checked={consent}
+              onChange={(e) => setConsent(e.target.checked)}
+              aria-describedby="consent-hint"
+            />
+            <label htmlFor="consent" className="text-sm text-gray-900">
+              I agree to the <a href="/terms" className="text-primary-blue font-bold underline">Terms of Service</a> and{' '}
+              <a href="/privacy" className="text-primary-blue font-bold underline">Privacy Policy</a>.
+            </label>
+          </div>
+          <p id="consent-hint" className="sr-only">Required to create an account.</p>
+
+          {/* Honeypot */}
+          <input type="text" name="hp" aria-hidden="true" tabIndex={-1} className="hidden" />
+
           <div>
             <button
               type="submit"
-              disabled={loading}
+              disabled={!canSubmit}
               className="btn-primary-yellow w-full py-3 font-bold uppercase disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading ? 'Creating account...' : 'Create account →'}
             </button>
           </div>
 
-          <p className="text-xs text-center text-gray-500">
-            By creating an account, you agree to our{' '}
-            <a href="/terms" className="text-primary-blue font-bold underline">
-              Terms of Service
-            </a>{' '}
-            and{' '}
-            <a href="/privacy" className="text-primary-blue font-bold underline">
-              Privacy Policy
-            </a>
-          </p>
+          <p className="text-xs text-center text-gray-500">No credit card required.</p>
         </form>
       </div>
     </div>

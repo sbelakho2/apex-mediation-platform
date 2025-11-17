@@ -1,4 +1,3 @@
-"use client";
 import Image from 'next/image';
 import type { Metadata } from 'next';
 import React from 'react';
@@ -67,7 +66,8 @@ export default function AboutPage() {
           We optimize for user experience and revenue simultaneously. SDKs are size-gated and run under
           StrictMode to prevent main-thread I/O. We enforce binary compatibility and publish API docs so you can
           upgrade with confidence. On the web, we target <abbr title="Largest Contentful Paint">LCP</abbr>
-          &nbsp;&lt; 2.5s (p75) and <abbr title="Cumulative Layout Shift">CLS</abbr>&nbsp;&lt; 0.1. Budgets are baked into CI to prevent regression.
+          &nbsp;&lt; 2.5s (p75) and <abbr title="Cumulative Layout Shift">CLS</abbr>&nbsp;&lt; 0.1. Budgets are baked into CI to prevent regression. Where
+          certain telemetry is still rolling out, we label it as roadmap until live dashboards back it with data.
         </p>
       </section>
 

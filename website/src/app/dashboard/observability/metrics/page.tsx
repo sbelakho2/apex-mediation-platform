@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { auctionApi } from '@/lib/auctionApi';
 
 interface AdapterMetricsSnapshot {
@@ -19,42 +19,111 @@ export default function AdapterMetricsPage() {
   const [data, setData] = useState<AdapterMetricsSnapshot[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [lastUpdated, setLastUpdated] = useState<number | null>(null);
 
-  const load = async () => {
-    setLoading(true);
-    const res = await auctionApi.getAdapterMetrics();
+  // Polling/backoff controls
+  const pollingRef = useRef<boolean>(true);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const backoffRef = useRef<number>(5000); // start at 5s
+
+  const loadOnce = async (signal?: AbortSignal) => {
+    const res = await auctionApi.getAdapterMetrics({ signal });
     if (!res.success) {
       setError(res.error || 'Failed to load metrics');
       setData(null);
-    } else {
-      setError(null);
-      setData(res.data as AdapterMetricsSnapshot[]);
+      return false;
     }
-    setLoading(false);
+    setError(null);
+    setData(res.data as AdapterMetricsSnapshot[]);
+    setLastUpdated(Date.now());
+    return true;
+  };
+
+  const scheduleNext = (success: boolean) => {
+    backoffRef.current = success ? 5000 : Math.min(60000, Math.max(5000, backoffRef.current * 2));
+    if (!pollingRef.current) return;
+    timeoutRef.current = setTimeout(async () => {
+      if (!pollingRef.current) return;
+      const controller = typeof AbortController !== 'undefined' ? new AbortController() : undefined;
+      const ok = await loadOnce(controller?.signal).catch(() => false);
+      scheduleNext(!!ok);
+    }, backoffRef.current);
   };
 
   useEffect(() => {
-    load();
-    const id = setInterval(load, 5000);
-    return () => clearInterval(id);
+    let alive = true;
+    pollingRef.current = true;
+    setLoading(true);
+    const controller = typeof AbortController !== 'undefined' ? new AbortController() : undefined;
+    loadOnce(controller?.signal)
+      .then((ok) => {
+        if (!alive) return;
+        setLoading(false);
+        scheduleNext(!!ok);
+      })
+      .catch(() => {
+        if (!alive) return;
+        setLoading(false);
+        scheduleNext(false);
+      });
+
+    const onVis = () => {
+      const hidden = typeof document !== 'undefined' && document.hidden;
+      pollingRef.current = !hidden;
+      if (!hidden) {
+        if (timeoutRef.current) clearTimeout(timeoutRef.current);
+        const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : undefined;
+        loadOnce(ctrl?.signal).then((ok) => scheduleNext(!!ok)).catch(() => scheduleNext(false));
+      } else if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
+    };
+    document.addEventListener('visibilitychange', onVis);
+
+    return () => {
+      alive = false;
+      pollingRef.current = false;
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      document.removeEventListener('visibilitychange', onVis);
+      controller?.abort();
+    };
   }, []);
 
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-h2-sm font-bold uppercase text-primary-blue tracking-tight">Adapter Metrics</h1>
-        <button onClick={load} className="px-3 py-2 text-sm font-bold uppercase rounded bg-sunshine-yellow text-primary-blue">Refresh</button>
+        <button
+          onClick={() => {
+            if (timeoutRef.current) {
+              clearTimeout(timeoutRef.current);
+              timeoutRef.current = null;
+            }
+            const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : undefined;
+            setLoading(true);
+            loadOnce(ctrl?.signal)
+              .then((ok) => { setLoading(false); scheduleNext(!!ok); })
+              .catch(() => { setLoading(false); scheduleNext(false); });
+          }}
+          className="px-3 py-2 text-sm font-bold uppercase rounded bg-sunshine-yellow text-primary-blue"
+        >
+          Refresh
+        </button>
       </div>
 
       {error && (
-        <div className="rounded border border-red-200 bg-red-50 p-3 text-red-800">{error}</div>
+        <div className="rounded border border-red-200 bg-red-50 p-3 text-red-800" role="alert" aria-live="polite">{error}</div>
       )}
 
-      {loading && <div>Loading…</div>}
+      {loading && <div aria-busy="true">Loading…</div>}
 
       {!loading && data && (
         <div className="overflow-x-auto rounded border">
-          <table className="min-w-full divide-y divide-gray-200">
+          <table className="min-w-full divide-y divide-gray-200" aria-describedby="metrics-caption">
+            <caption id="metrics-caption" className="sr-only">
+              Adapter-level request, success, error, and latency metrics{lastUpdated ? `, updated ${new Date(lastUpdated).toLocaleTimeString()}` : ''}.
+            </caption>
             <thead className="bg-gray-50">
               <tr>
                 <Th>Adapter</Th>

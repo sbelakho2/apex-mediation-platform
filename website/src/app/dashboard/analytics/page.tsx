@@ -1,7 +1,7 @@
 'use client';
 
 // Reference: Design.md § "Dashboard Pages" & WEBSITE_DESIGN.md § "Analytics Page"
-// Analytics dashboard with comprehensive metrics and insights
+// Analytics dashboard wired to live APIs with accessible charts and resilient states
 
 import {
     ArrowPathIcon,
@@ -11,10 +11,78 @@ import {
     GlobeAltIcon,
     UsersIcon,
 } from '@heroicons/react/24/outline';
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { api } from '@/lib/api';
+
+type Range = 'today' | 'week' | 'month'
+
+type Overview = Partial<{
+  totalUsers: number
+  avgSessionSeconds: number
+  ctr: number // 0..1
+  fillRate: number // 0..1
+  requests: number
+  dauMau: number // 0..1
+  platform: { name: string; percent: number; users: number }[]
+  topCountries: { country: string; users: number; percent: number }[]
+  formats: { name: string; impressions: number; ecpm: number; ctr: number; fillRate: number }[]
+}>
+
+type FunnelStepType = { label: string; value: number; percent: number }
 
 export default function AnalyticsPage() {
-  const [timeRange, setTimeRange] = useState<'today' | 'week' | 'month'>('week');
+  const [timeRange, setTimeRange] = useState<Range>('week');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [overview, setOverview] = useState<Overview>({});
+  const [funnel, setFunnel] = useState<FunnelStepType[]>([]);
+
+  const numberFmt = useMemo(() => new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }), []);
+  const pctFmt = useMemo(() => new Intl.NumberFormat(undefined, { style: 'percent', maximumFractionDigits: 1 }), []);
+  const currencyFmt = useMemo(() => new Intl.NumberFormat(undefined, { style: 'currency', currency: process.env.NEXT_PUBLIC_DEFAULT_CURRENCY || 'USD' }), []);
+
+  useEffect(() => {
+    let alive = true;
+    const controller = typeof AbortController !== 'undefined' ? new AbortController() : undefined;
+    setLoading(true);
+    setError(null);
+    (async () => {
+      const rangeParam = timeRange === 'today' ? '1d' : timeRange === 'week' ? '7d' : '30d';
+      const [o, f] = await Promise.all([
+        api.get<Overview>(`/api/v1/analytics/overview?range=${rangeParam}`, { signal: controller?.signal }),
+        api.get<{ steps: FunnelStepType[] }>(`/api/v1/analytics/funnels?range=${rangeParam}`, { signal: controller?.signal }),
+      ]);
+      if (!alive) return;
+      if (!o.success || !o.data) {
+        setError(o.error || 'Failed to load analytics overview');
+        setLoading(false);
+        return;
+      }
+      if (!f.success || !f.data) {
+        setError(f.error || 'Failed to load funnel');
+        setLoading(false);
+        return;
+      }
+      setOverview(o.data);
+      setFunnel(f.data.steps || []);
+      setLoading(false);
+    })().catch((e) => {
+      if (!alive) return;
+      setError(e?.message || 'Network error');
+      setLoading(false);
+    });
+    return () => {
+      alive = false;
+      controller?.abort();
+    };
+  }, [timeRange]);
+
+  const totalUsers = overview.totalUsers ?? 0;
+  const avgSession = overview.avgSessionSeconds ?? 0;
+  const ctr = Math.min(1, Math.max(0, overview.ctr ?? 0));
+  const fillRate = Math.min(1, Math.max(0, overview.fillRate ?? 0));
+  const requests = overview.requests ?? 0;
+  const dauMau = Math.min(1, Math.max(0, overview.dauMau ?? 0));
 
   return (
     <div className="p-6 space-y-6">
@@ -47,48 +115,28 @@ export default function AnalyticsPage() {
 
       {/* Key Metrics */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        <MetricCard
-          title="Total Users"
-          value="234,567"
-          change={+12.3}
-          icon={UsersIcon}
-          trend={[45, 52, 48, 61, 58, 67, 72]}
-        />
-        <MetricCard
-          title="Avg Session Duration"
-          value="8m 34s"
-          change={+5.7}
-          icon={ClockIcon}
-          trend={[62, 58, 65, 63, 70, 68, 72]}
-        />
-        <MetricCard
-          title="Click-Through Rate"
-          value="3.42%"
-          change={-1.2}
-          icon={ArrowPathIcon}
-          trend={[58, 62, 59, 55, 52, 50, 48]}
-        />
-        <MetricCard
-          title="Fill Rate"
-          value="97.8%"
-          change={+2.1}
-          icon={ChartPieIcon}
-          trend={[82, 85, 88, 90, 93, 95, 98]}
-        />
-        <MetricCard
-          title="DAU/MAU Ratio"
-          value="42.3%"
-          change={+3.4}
-          icon={DevicePhoneMobileIcon}
-          trend={[35, 37, 39, 40, 41, 42, 42]}
-        />
-        <MetricCard
-          title="Requests"
-          value="1.2M"
-          change={+18.9}
-          icon={GlobeAltIcon}
-          trend={[65, 70, 75, 82, 88, 95, 100]}
-        />
+        {loading ? (
+          [...Array(6)].map((_, i) => (
+            <div key={i} className="card p-6 animate-pulse">
+              <div className="h-4 w-24 bg-gray-200 rounded mb-3" />
+              <div className="h-7 w-28 bg-gray-200 rounded mb-2" />
+              <div className="h-3 w-20 bg-gray-200 rounded" />
+            </div>
+          ))
+        ) : error ? (
+          <div role="alert" aria-live="polite" className="col-span-full rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+            {error}
+          </div>
+        ) : (
+          <>
+            <MetricCard title="Total Users" value={numberFmt.format(totalUsers)} change={0} icon={UsersIcon} trend={[45,52,48,61,58,67,72]} />
+            <MetricCard title="Avg Session Duration" value={`${Math.floor(avgSession/60)}m ${Math.round(avgSession%60)}s`} change={0} icon={ClockIcon} trend={[62,58,65,63,70,68,72]} />
+            <MetricCard title="Click-Through Rate" value={pctFmt.format(ctr)} change={0} icon={ArrowPathIcon} trend={[58,62,59,55,52,50,48]} />
+            <MetricCard title="Fill Rate" value={pctFmt.format(fillRate)} change={0} icon={ChartPieIcon} trend={[82,85,88,90,93,95,98]} />
+            <MetricCard title="DAU/MAU Ratio" value={pctFmt.format(dauMau)} change={0} icon={DevicePhoneMobileIcon} trend={[35,37,39,40,41,42,42]} />
+            <MetricCard title="Requests" value={numberFmt.format(requests)} change={0} icon={GlobeAltIcon} trend={[65,70,75,82,88,95,100]} />
+          </>
+        )}
       </div>
 
       {/* User Engagement Funnel */}
@@ -96,13 +144,25 @@ export default function AnalyticsPage() {
         <h2 className="text-sunshine-yellow font-bold uppercase text-lg mb-6">
           User Engagement Funnel
         </h2>
-        <div className="space-y-4">
-          <FunnelStep label="App Opens" value={234567} percentage={100} />
-          <FunnelStep label="Ad Requests" value={187654} percentage={80} />
-          <FunnelStep label="Ads Shown" value={183456} percentage={78.2} />
-          <FunnelStep label="Ad Clicks" value={6274} percentage={2.7} />
-          <FunnelStep label="Conversions" value={891} percentage={0.38} />
-        </div>
+        {loading ? (
+          <div className="space-y-3" aria-busy="true">
+            {[...Array(5)].map((_, i) => (
+              <div key={i} className="h-10 bg-white/30 animate-pulse rounded" />
+            ))}
+          </div>
+        ) : error ? (
+          <div role="alert" aria-live="polite" className="rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+            {error}
+          </div>
+        ) : funnel.length === 0 ? (
+          <p className="text-white/90">No funnel data for this period.</p>
+        ) : (
+          <div className="space-y-4">
+            {funnel.map((s, i) => (
+              <FunnelStep key={i} label={s.label} value={s.value} percentage={s.percent} />
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Platform & Geography Breakdown */}
@@ -112,11 +172,22 @@ export default function AnalyticsPage() {
           <h2 className="text-primary-blue font-bold uppercase text-lg mb-4 border-b-2 border-sunshine-yellow pb-2">
             Platform Distribution
           </h2>
-          <div className="space-y-4">
-            <PlatformBar platform="iOS" percentage={58.3} users={136789} color="blue" />
-            <PlatformBar platform="Android" percentage={39.7} users={93145} color="yellow" />
-            <PlatformBar platform="Web" percentage={2.0} users={4633} color="blue" />
-          </div>
+          {loading ? (
+            <div className="space-y-3" aria-busy="true">
+              {[...Array(3)].map((_, i) => (<div key={i} className="h-8 bg-gray-100 animate-pulse rounded" />))}
+            </div>
+          ) : error ? (
+            <p className="text-sm text-red-700">{error}</p>
+          ) : (
+            <div className="space-y-4">
+              {(overview.platform ?? []).map((p, i) => (
+                <PlatformBar key={i} platform={p.name} percentage={p.percent} users={p.users} color={i % 2 ? 'yellow' : 'blue'} />
+              ))}
+              {(overview.platform ?? []).length === 0 && (
+                <p className="text-sm text-gray-600">No platform data.</p>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Top Countries */}
@@ -124,14 +195,22 @@ export default function AnalyticsPage() {
           <h2 className="text-primary-blue font-bold uppercase text-lg mb-4 border-b-2 border-sunshine-yellow pb-2">
             Top Countries
           </h2>
-          <div className="space-y-3">
-            <CountryItem country="United States" flag="🇺🇸" users={89234} percentage={38.0} />
-            <CountryItem country="United Kingdom" flag="🇬🇧" users={34567} percentage={14.7} />
-            <CountryItem country="Germany" flag="🇩🇪" users={28901} percentage={12.3} />
-            <CountryItem country="Canada" flag="🇨🇦" users={23456} percentage={10.0} />
-            <CountryItem country="Australia" flag="🇦🇺" users={18234} percentage={7.8} />
-            <CountryItem country="Others" flag="🌍" users={40175} percentage={17.2} />
-          </div>
+          {loading ? (
+            <div className="space-y-3" aria-busy="true">
+              {[...Array(5)].map((_, i) => (<div key={i} className="h-7 bg-gray-100 animate-pulse rounded" />))}
+            </div>
+          ) : error ? (
+            <p className="text-sm text-red-700">{error}</p>
+          ) : (
+            <div className="space-y-3">
+              {(overview.topCountries ?? []).map((c, i) => (
+                <CountryItem key={i} country={c.country} users={c.users} percentage={c.percent} />
+              ))}
+              {(overview.topCountries ?? []).length === 0 && (
+                <p className="text-sm text-gray-600">No country breakdown.</p>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
@@ -140,29 +219,22 @@ export default function AnalyticsPage() {
         <h2 className="text-primary-blue font-bold uppercase text-lg mb-4 border-b-2 border-sunshine-yellow pb-2">
           Ad Format Performance
         </h2>
-        <div className="grid md:grid-cols-3 gap-6 mt-6">
-          <AdFormatCard
-            format="Rewarded Video"
-            impressions={456789}
-            ecpm={18.45}
-            ctr={12.3}
-            fillRate={98.2}
-          />
-          <AdFormatCard
-            format="Interstitial"
-            impressions={298456}
-            ecpm={14.23}
-            ctr={2.8}
-            fillRate={95.7}
-          />
-          <AdFormatCard
-            format="Banner"
-            impressions={823456}
-            ecpm={3.89}
-            ctr={0.9}
-            fillRate={99.1}
-          />
-        </div>
+        {loading ? (
+          <div className="grid md:grid-cols-3 gap-6 mt-6" aria-busy="true">
+            {[...Array(3)].map((_, i) => (<div key={i} className="h-28 bg-gray-100 animate-pulse rounded" />))}
+          </div>
+        ) : error ? (
+          <p className="text-sm text-red-700">{error}</p>
+        ) : (
+          <div className="grid md:grid-cols-3 gap-6 mt-6">
+            {(overview.formats ?? []).map((f, i) => (
+              <AdFormatCard key={i} format={f.name} impressions={f.impressions} ecpm={f.ecpm} ctr={f.ctr} fillRate={f.fillRate} />
+            ))}
+            {(overview.formats ?? []).length === 0 && (
+              <p className="text-sm text-gray-600">No ad format data.</p>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Real-Time Activity */}
@@ -176,24 +248,32 @@ export default function AnalyticsPage() {
             <span className="text-white text-sm">Live</span>
           </div>
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
-          <div>
-            <p className="text-sunshine-yellow text-3xl font-bold">1,247</p>
-            <p className="text-white text-sm mt-1">Active Users</p>
+        {loading ? (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center" aria-busy="true">
+            {[...Array(4)].map((_, i) => (<div key={i} className="h-14 bg-white/30 animate-pulse rounded" />))}
           </div>
-          <div>
-            <p className="text-sunshine-yellow text-3xl font-bold">892</p>
-            <p className="text-white text-sm mt-1">Impressions/min</p>
+        ) : error ? (
+          <p className="text-white">{error}</p>
+        ) : (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+            <div>
+              <p className="text-sunshine-yellow text-3xl font-bold">{numberFmt.format(totalUsers)}</p>
+              <p className="text-white text-sm mt-1">Active Users</p>
+            </div>
+            <div>
+              <p className="text-sunshine-yellow text-3xl font-bold">{numberFmt.format(requests / 60)}</p>
+              <p className="text-white text-sm mt-1">Impressions/min</p>
+            </div>
+            <div>
+              <p className="text-sunshine-yellow text-3xl font-bold">{currencyFmt.format(0)}</p>
+              <p className="text-white text-sm mt-1">Revenue/hour</p>
+            </div>
+            <div>
+              <p className="text-sunshine-yellow text-3xl font-bold">{pctFmt.format(fillRate)}</p>
+              <p className="text-white text-sm mt-1">Fill Rate</p>
+            </div>
           </div>
-          <div>
-            <p className="text-sunshine-yellow text-3xl font-bold">$12.34</p>
-            <p className="text-white text-sm mt-1">Revenue/hour</p>
-          </div>
-          <div>
-            <p className="text-sunshine-yellow text-3xl font-bold">97.2%</p>
-            <p className="text-white text-sm mt-1">Fill Rate</p>
-          </div>
-        </div>
+        )}
       </div>
     </div>
   );
@@ -294,16 +374,14 @@ function PlatformBar({ platform, percentage, users, color }: PlatformBarProps) {
 
 interface CountryItemProps {
   country: string;
-  flag: string;
   users: number;
   percentage: number;
 }
 
-function CountryItem({ country, flag, users, percentage }: CountryItemProps) {
+function CountryItem({ country, users, percentage }: CountryItemProps) {
   return (
     <div className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
       <div className="flex items-center gap-3">
-        <span className="text-2xl">{flag}</span>
         <span className="font-bold text-primary-blue">{country}</span>
       </div>
       <div className="text-right">

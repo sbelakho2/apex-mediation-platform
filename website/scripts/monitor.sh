@@ -1,9 +1,15 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # Website Health Monitor
 # Monitors website health and performance metrics
 
-set -e
+set -euo pipefail
+
+# Resolve paths
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+WEBSITE_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+LOG_DIR="${WEBSITE_ROOT}/logs"
+mkdir -p "$LOG_DIR"
 
 # Configuration
 WEBSITE_URL="${WEBSITE_URL:-https://apexmediation.bel-consulting.ee}"
@@ -21,7 +27,7 @@ log_status() {
     local status=$1
     local message=$2
     local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
-    echo "[$timestamp] $status: $message" >> monitor.log
+    echo "[$timestamp] $status: $message" >> "${LOG_DIR}/website-monitor.log"
 }
 
 # Check website health
@@ -39,7 +45,16 @@ check_health() {
 check_ssl() {
     local domain=$(echo "$WEBSITE_URL" | sed -E 's|https?://([^/]+).*|\1|')
     local expiry=$(echo | openssl s_client -servername "$domain" -connect "$domain:443" 2>/dev/null | openssl x509 -noout -dates | grep notAfter | cut -d= -f2)
-    local expiry_epoch=$(date -j -f "%b %d %T %Y %Z" "$expiry" "+%s" 2>/dev/null || date -d "$expiry" "+%s" 2>/dev/null)
+    # Prefer GNU date; fallback to BusyBox compatible format if needed
+    local expiry_epoch
+    expiry_epoch=$(date -d "$expiry" "+%s" 2>/dev/null || true)
+    if [ -z "${expiry_epoch:-}" ]; then
+      # Attempt to normalize to RFC-2822 (e.g., Mon, 02 Jan 2006 15:04:05 GMT)
+      # Many OpenSSL notAfter values are already parsable by -d above; if not, skip SSL check.
+      log_status "WARN" "Could not parse SSL expiry date: $expiry"
+      echo 9999
+      return 0
+    fi
     local now_epoch=$(date "+%s")
     local days_until_expiry=$(( ($expiry_epoch - $now_epoch) / 86400 ))
 

@@ -1,4 +1,3 @@
-"use client";
 import Image from 'next/image';
 import Link from 'next/link';
 import type { Metadata } from 'next';
@@ -15,7 +14,11 @@ export const metadata: Metadata = {
   },
 };
 
-const EMAIL = 'sbelakho@bel-consulting.com';
+// Prefer server-only env if present; fall back to a public contact alias.
+const EMAIL = process.env.SUPPORT_EMAIL
+  || process.env.CONTACT_EMAIL
+  || process.env.NEXT_PUBLIC_CONTACT_EMAIL
+  || 'contact@apexmediation.ee';
 
 export default function ContactPage() {
   return (

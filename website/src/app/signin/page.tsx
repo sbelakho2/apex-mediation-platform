@@ -1,8 +1,8 @@
-'use client';
+"use client";
 
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 export default function SignInPage() {
   const router = useRouter();
@@ -13,23 +13,49 @@ export default function SignInPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
+  const [csrf, setCsrf] = useState<string | null>(null);
+
+  // Basic email validation
+  const emailValid = useMemo(() => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email), [email]);
+
+  // Try to discover a CSRF token from cookies (graceful if absent)
+  useEffect(() => {
+    try {
+      const m = document.cookie.match(/(?:^|; )csrf_token=([^;]+)/);
+      if (m && m[1]) setCsrf(decodeURIComponent(m[1]));
+    } catch {
+      // ignore
+    }
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    if (!emailValid) {
+      setError('Please enter a valid email address.');
+      return;
+    }
     setLoading(true);
 
     try {
       const response = await fetch('/api/auth/login', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        headers: {
+          'Content-Type': 'application/json',
+          ...(csrf ? { 'X-CSRF-Token': csrf } : {}),
+        },
+        body: JSON.stringify({ email, password, rememberMe }),
       });
 
-      const data = await response.json();
+      const data = await response.json().catch(() => ({}));
 
       if (!data.success) {
-        setError(data.error || 'Login failed');
+        if (response.status === 429) {
+          setError('Too many attempts. Please wait a moment and try again.');
+        } else {
+          setError(data.error || 'Login failed');
+        }
         setLoading(false);
         return;
       }
@@ -112,6 +138,8 @@ export default function SignInPage() {
                 name="remember-me"
                 type="checkbox"
                 className="h-4 w-4 text-sunshine-yellow focus:ring-sunshine-yellow border-gray-300 rounded"
+                checked={rememberMe}
+                onChange={(e) => setRememberMe(e.target.checked)}
               />
               <label htmlFor="remember-me" className="ml-2 block text-sm text-gray-900">
                 Remember me
@@ -128,7 +156,7 @@ export default function SignInPage() {
           <div>
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || !emailValid || password.length === 0}
               className="btn-primary-yellow w-full py-3 font-bold uppercase disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading ? 'Signing in...' : 'Sign in →'}
@@ -136,6 +164,7 @@ export default function SignInPage() {
           </div>
         </form>
 
+        {process.env.NODE_ENV !== 'production' && (
         <div className="mt-6">
           <div className="relative">
             <div className="absolute inset-0 flex items-center">
@@ -150,6 +179,7 @@ export default function SignInPage() {
             <p>Password: demo1234</p>
           </div>
         </div>
+        )}
       </div>
     </div>
   );

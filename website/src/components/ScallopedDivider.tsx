@@ -2,7 +2,10 @@
 // Reusable scalloped edge divider component for visual separation between sections
 
 interface ScallopedDividerProps {
-  color?: 'yellow' | 'blue' | 'cream' | 'white';
+  /**
+   * Accepts one of the predefined tokens or any valid CSS color string (e.g., hex, rgb, var(--token)).
+   */
+  color?: 'yellow' | 'blue' | 'cream' | 'white' | string;
   position?: 'top' | 'bottom';
   className?: string;
 }
@@ -19,7 +22,7 @@ export default function ScallopedDivider({
     white: '#FFFFFF',
   };
 
-  const fillColor = colors[color];
+  const fillColor = (colors as Record<string, string>)[color as string] || (color as string);
   const rotation = position === 'top' ? 'rotate-180' : '';
 
   return (

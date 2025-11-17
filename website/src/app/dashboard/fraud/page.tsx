@@ -1,7 +1,7 @@
 'use client';
 
 // Reference: Design.md § "Dashboard Pages" & WEBSITE_DESIGN.md § "Fraud Detection Page"
-// ML-powered fraud detection dashboard with real-time monitoring
+// ML-powered fraud detection dashboard with live data wiring and accessible severity indicators
 
 import {
     CheckCircleIcon,
@@ -9,74 +9,85 @@ import {
     ShieldCheckIcon,
     XCircleIcon,
 } from '@heroicons/react/24/outline';
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { api } from '@/lib/api';
+
+type Severity = 'high' | 'medium' | 'low'
+type FraudType = 'click_fraud' | 'install_fraud' | 'bot_traffic' | 'vpn_abuse'
 
 interface FraudEvent {
   id: string;
-  timestamp: string;
-  type: 'click_fraud' | 'install_fraud' | 'bot_traffic' | 'vpn_abuse';
-  severity: 'high' | 'medium' | 'low';
-  ip: string;
-  country: string;
+  ts: string; // ISO
+  type: FraudType;
+  severity: Severity;
+  ip?: string;
+  countryCode?: string; // ISO-2
   blocked: boolean;
-  details: string;
+  details?: string;
+}
+
+interface FraudSummary {
+  blockedToday: number;
+  moneySavedCents: number;
+  fraudRate: number; // 0..1
+  cleanRequests: number;
+  breakdownByType: { type: FraudType; count: number }[];
+  topBlockedCountries: { countryCode: string; blocked: number }[];
 }
 
 export default function FraudPage() {
   const [timeRange, setTimeRange] = useState<'today' | 'week' | 'month'>('today');
 
-  const fraudEvents: FraudEvent[] = [
-    {
-      id: '1',
-      timestamp: '2 minutes ago',
-      type: 'click_fraud',
-      severity: 'high',
-      ip: '192.168.1.45',
-      country: '🇷🇺 Russia',
-      blocked: true,
-      details: 'Suspicious click pattern detected: 47 clicks in 3 seconds',
-    },
-    {
-      id: '2',
-      timestamp: '8 minutes ago',
-      type: 'bot_traffic',
-      severity: 'high',
-      ip: '203.45.67.89',
-      country: '🇨🇳 China',
-      blocked: true,
-      details: 'Bot signature matched: User-Agent spoofing detected',
-    },
-    {
-      id: '3',
-      timestamp: '15 minutes ago',
-      type: 'vpn_abuse',
-      severity: 'medium',
-      ip: '10.23.45.67',
-      country: '🇳🇱 Netherlands',
-      blocked: true,
-      details: 'VPN/proxy detected with suspicious engagement patterns',
-    },
-    {
-      id: '4',
-      timestamp: '23 minutes ago',
-      type: 'install_fraud',
-      severity: 'high',
-      ip: '45.67.89.12',
-      country: '🇻🇳 Vietnam',
-      blocked: true,
-      details: 'Install farm detected: 23 installs from same device ID',
-    },
-    {
-      id: '5',
-      timestamp: '35 minutes ago',
-      type: 'click_fraud',
-      severity: 'low',
-      ip: '123.45.67.89',
-      country: '🇮🇳 India',
-      blocked: false,
-      details: 'Suspicious but below threshold: Manual review recommended',
-    },
-  ];
+  // Data state
+  const [summary, setSummary] = useState<FraudSummary | null>(null);
+  const [events, setEvents] = useState<FraudEvent[]>([]);
+  const [page, setPage] = useState(1);
+  const [pageSize] = useState(20);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const numberFmt = useMemo(() => new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }), []);
+  const currencyFmt = useMemo(() => new Intl.NumberFormat(undefined, { style: 'currency', currency: process.env.NEXT_PUBLIC_DEFAULT_CURRENCY || 'USD' }), []);
+  const percentFmt = useMemo(() => new Intl.NumberFormat(undefined, { style: 'percent', maximumFractionDigits: 1 }), []);
+
+  useEffect(() => {
+    let alive = true;
+    const controller = typeof AbortController !== 'undefined' ? new AbortController() : undefined;
+    setLoading(true);
+    setError(null);
+    (async () => {
+      const rangeParam = timeRange === 'today' ? '1d' : timeRange === 'week' ? '7d' : '30d';
+      const [s, a] = await Promise.all([
+        api.get<FraudSummary>(`/api/v1/fraud/summary?range=${rangeParam}`, { signal: controller?.signal }),
+        api.get<{ items: FraudEvent[]; total: number }>(`/api/v1/fraud/alerts?range=${rangeParam}&page=${page}&pageSize=${pageSize}`, { signal: controller?.signal }),
+      ]);
+      if (!alive) return;
+      if (!s.success || !s.data) {
+        setError(s.error || 'Failed to load fraud summary');
+        setLoading(false);
+        return;
+      }
+      if (!a.success || !a.data) {
+        setError(a.error || 'Failed to load alerts');
+        setLoading(false);
+        return;
+      }
+      setSummary(s.data);
+      setEvents(a.data.items || []);
+      setLoading(false);
+    })().catch((e) => {
+      if (!alive) return;
+      setError(e?.message || 'Network error');
+      setLoading(false);
+    });
+    return () => {
+      alive = false;
+      controller?.abort();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [timeRange, page, pageSize]);
+
+  const fraudEvents = events;
 
   return (
     <div className="p-6 space-y-6">
@@ -87,7 +98,7 @@ export default function FraudPage() {
             Fraud Detection
           </h1>
           <p className="text-sm text-gray-600 mt-1">
-            ML-powered fraud protection • 99.7% accuracy • {'<'}5ms latency
+            ML-powered fraud protection with live alerts and actionable summaries
           </p>
         </div>
         <div className="flex gap-2">
@@ -107,63 +118,78 @@ export default function FraudPage() {
         </div>
       </div>
 
-      {/* ML Model Stats */}
+      {/* Summary cards */}
       <div className="card-blue p-6">
         <div className="flex items-center gap-3 mb-6">
           <ShieldCheckIcon className="w-8 h-8 text-sunshine-yellow" />
           <div>
             <h2 className="text-sunshine-yellow font-bold uppercase text-lg">
-              ML Model Performance
+              Fraud Summary
             </h2>
-            <p className="text-white text-sm">Trained on 500,000+ fraud samples</p>
+            <p className="text-white text-sm">Last {timeRange === 'today' ? '24 hours' : timeRange}</p>
           </div>
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-          <div>
-            <p className="text-sunshine-yellow text-4xl font-bold">99.7%</p>
-            <p className="text-white text-sm mt-1">Detection Accuracy</p>
+        {loading ? (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-6" aria-busy="true">
+            {[0,1,2,3].map((i) => (
+              <div key={i} className="animate-pulse">
+                <div className="h-8 w-24 bg-yellow-300/60 rounded mb-2" />
+                <div className="h-3 w-28 bg-white/40 rounded" />
+              </div>
+            ))}
           </div>
-          <div>
-            <p className="text-sunshine-yellow text-4xl font-bold">{'<'}5ms</p>
-            <p className="text-white text-sm mt-1">Inference Time</p>
+        ) : error ? (
+          <div role="alert" aria-live="polite" className="rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+            {error}
           </div>
-          <div>
-            <p className="text-sunshine-yellow text-4xl font-bold">0.08%</p>
-            <p className="text-white text-sm mt-1">False Positive Rate</p>
+        ) : summary ? (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+            <div>
+              <p className="text-sunshine-yellow text-4xl font-bold">{numberFmt.format(summary.blockedToday)}</p>
+              <p className="text-white text-sm mt-1">Blocked Today</p>
+            </div>
+            <div>
+              <p className="text-sunshine-yellow text-4xl font-bold">{currencyFmt.format(Math.max(0, summary.moneySavedCents / 100))}</p>
+              <p className="text-white text-sm mt-1">Money Saved</p>
+            </div>
+            <div>
+              <p className="text-sunshine-yellow text-4xl font-bold">{percentFmt.format(Math.min(1, Math.max(0, summary.fraudRate)))}</p>
+              <p className="text-white text-sm mt-1">Fraud Rate</p>
+            </div>
+            <div>
+              <p className="text-sunshine-yellow text-4xl font-bold">{numberFmt.format(summary.cleanRequests)}</p>
+              <p className="text-white text-sm mt-1">Clean Requests</p>
+            </div>
           </div>
-          <div>
-            <p className="text-sunshine-yellow text-4xl font-bold">17</p>
-            <p className="text-white text-sm mt-1">Features Analyzed</p>
-          </div>
-        </div>
+        ) : null}
       </div>
 
-      {/* Stats Cards */}
+      {/* Stats Cards (derived from summary when present) */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         <StatCard
           title="Blocked Today"
-          value="1,247"
+          value={summary ? numberFmt.format(summary.blockedToday) : '—'}
           subtitle="Fraud attempts"
           color="red"
           icon={XCircleIcon}
         />
         <StatCard
           title="Money Saved"
-          value="$2,438"
-          subtitle="This month"
+          value={summary ? currencyFmt.format(Math.max(0, summary.moneySavedCents / 100)) : '—'}
+          subtitle="This period"
           color="yellow"
           icon={ShieldCheckIcon}
         />
         <StatCard
           title="Fraud Rate"
-          value="3.2%"
+          value={summary ? percentFmt.format(Math.min(1, Math.max(0, summary.fraudRate))) : '—'}
           subtitle="Of total traffic"
           color="blue"
           icon={ExclamationTriangleIcon}
         />
         <StatCard
           title="Clean Requests"
-          value="38,421"
+          value={summary ? numberFmt.format(summary.cleanRequests) : '—'}
           subtitle="Passed verification"
           color="green"
           icon={CheckCircleIcon}
@@ -178,10 +204,23 @@ export default function FraudPage() {
             Fraud Type Breakdown
           </h2>
           <div className="space-y-4">
-            <FraudTypeBar type="Click Fraud" count={547} percentage={43.9} color="red" />
-            <FraudTypeBar type="Bot Traffic" count={389} percentage={31.2} color="yellow" />
-            <FraudTypeBar type="Install Fraud" count={203} percentage={16.3} color="blue" />
-            <FraudTypeBar type="VPN Abuse" count={108} percentage={8.6} color="gray" />
+            {loading && (
+              <div className="animate-pulse h-28 bg-gray-100 rounded" aria-hidden="true" />
+            )}
+            {!loading && summary && summary.breakdownByType.length === 0 && (
+              <p className="text-sm text-gray-600">No fraud detected in this period.</p>
+            )}
+            {!loading && summary && summary.breakdownByType.length > 0 && (
+              summary.breakdownByType.map((row) => (
+                <FraudTypeBar
+                  key={row.type}
+                  type={typeLabels[row.type]}
+                  count={row.count}
+                  percentage={calcPct(row.count, summary.breakdownByType)}
+                  color={typeColor(row.type)}
+                />
+              ))
+            )}
           </div>
         </div>
 
@@ -191,11 +230,20 @@ export default function FraudPage() {
             Top Blocked Countries
           </h2>
           <div className="space-y-3">
-            <CountryBlock country="Russia" flag="🇷🇺" blocked={324} percentage={26.0} />
-            <CountryBlock country="China" flag="🇨🇳" blocked={267} percentage={21.4} />
-            <CountryBlock country="Vietnam" flag="🇻🇳" blocked={189} percentage={15.2} />
-            <CountryBlock country="India" flag="🇮🇳" blocked={156} percentage={12.5} />
-            <CountryBlock country="Others" flag="🌍" blocked={311} percentage={24.9} />
+            {loading && <div className="animate-pulse h-24 bg-gray-100 rounded" aria-hidden="true" />}
+            {!loading && summary && summary.topBlockedCountries.length === 0 && (
+              <p className="text-sm text-gray-600">No blocked traffic by country for this period.</p>
+            )}
+            {!loading && summary && summary.topBlockedCountries.length > 0 && (
+              summary.topBlockedCountries.map((row) => (
+                <CountryBlock
+                  key={row.countryCode}
+                  country={row.countryCode}
+                  blocked={row.blocked}
+                  percentage={calcPct(row.blocked, summary.topBlockedCountries)}
+                />
+              ))
+            )}
           </div>
         </div>
       </div>
@@ -205,44 +253,33 @@ export default function FraudPage() {
         <h2 className="text-primary-blue font-bold uppercase text-lg mb-6 border-b-2 border-sunshine-yellow pb-2">
           Recent Fraud Events
         </h2>
-        <div className="space-y-4">
-          {fraudEvents.map((event) => (
-            <FraudEventCard key={event.id} event={event} />
-          ))}
-        </div>
+        {loading ? (
+          <div className="space-y-3" aria-busy="true">
+            {[...Array(5)].map((_, i) => (
+              <div key={i} className="h-16 bg-gray-100 animate-pulse rounded" />
+            ))}
+          </div>
+        ) : error ? (
+          <div role="alert" aria-live="polite" className="rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+            {error}
+          </div>
+        ) : fraudEvents.length === 0 ? (
+          <p className="text-sm text-gray-600">No alerts for this period.</p>
+        ) : (
+          <div className="space-y-4" aria-live="polite">
+            {fraudEvents.map((event) => (
+              <FraudEventCard key={event.id} event={event} />
+            ))}
+            <Pagination
+              page={page}
+              onPageChange={(p) => setPage(Math.max(1, p))}
+              hasNext={fraudEvents.length === pageSize}
+            />
+          </div>
+        )}
       </div>
 
-      {/* Model Features */}
-      <div className="card-blue p-6">
-        <h2 className="text-sunshine-yellow font-bold uppercase text-lg mb-4">
-          ML Model Features (17 Total)
-        </h2>
-        <div className="grid md:grid-cols-3 gap-4 text-white text-sm">
-          <div className="space-y-2">
-            <FeatureItem name="Historical Fraud Rate" weight={+2.574} />
-            <FeatureItem name="Click Frequency" weight={+1.808} />
-            <FeatureItem name="Time Since Install" weight={-1.342} />
-            <FeatureItem name="Device ID Frequency" weight={+1.256} />
-            <FeatureItem name="IP Reputation Score" weight={+2.123} />
-            <FeatureItem name="User Agent Validity" weight={+0.987} />
-          </div>
-          <div className="space-y-2">
-            <FeatureItem name="Session Duration" weight={-1.873} />
-            <FeatureItem name="Click-to-Install Time" weight={-0.945} />
-            <FeatureItem name="Geographic Consistency" weight={+1.456} />
-            <FeatureItem name="Engagement Pattern" weight={-1.234} />
-            <FeatureItem name="Network Type" weight={+0.678} />
-            <FeatureItem name="Referrer Validity" weight={+1.089} />
-          </div>
-          <div className="space-y-2">
-            <FeatureItem name="OS Version" weight={+0.567} />
-            <FeatureItem name="App Version" weight={-0.423} />
-            <FeatureItem name="Time of Day" weight={+0.789} />
-            <FeatureItem name="VPN Detection" weight={+1.945} />
-            <FeatureItem name="Proxy Detection" weight={+1.678} />
-          </div>
-        </div>
-      </div>
+      {/* Model Features placeholder removed until backed by live telemetry */}
     </div>
   );
 }
@@ -319,11 +356,10 @@ interface CountryBlockProps {
   percentage: number;
 }
 
-function CountryBlock({ country, flag, blocked, percentage }: CountryBlockProps) {
+function CountryBlock({ country, blocked, percentage }: CountryBlockProps) {
   return (
     <div className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
       <div className="flex items-center gap-3">
-        <span className="text-2xl">{flag}</span>
         <span className="font-bold text-primary-blue">{country}</span>
       </div>
       <div className="text-right">
@@ -340,9 +376,9 @@ interface FraudEventCardProps {
 
 function FraudEventCard({ event }: FraudEventCardProps) {
   const severityConfig = {
-    high: { color: 'border-red-500 bg-red-50', badge: 'bg-red-500' },
-    medium: { color: 'border-yellow-500 bg-yellow-50', badge: 'bg-yellow-500' },
-    low: { color: 'border-gray-400 bg-gray-50', badge: 'bg-gray-400' },
+    high: { color: 'border-red-500 bg-red-50', badge: 'bg-red-500', label: 'High severity' },
+    medium: { color: 'border-yellow-500 bg-yellow-50', badge: 'bg-yellow-500', label: 'Medium severity' },
+    low: { color: 'border-gray-400 bg-gray-50', badge: 'bg-gray-400', label: 'Low severity' },
   };
 
   const typeLabels = {
@@ -355,13 +391,13 @@ function FraudEventCard({ event }: FraudEventCardProps) {
   const config = severityConfig[event.severity];
 
   return (
-    <div className={`border-l-4 ${config.color} p-4 rounded`}>
+    <div className={`border-l-4 ${config.color} p-4 rounded`} aria-label={`${config.label} ${typeLabels[event.type]} alert`}>
       <div className="flex items-start justify-between mb-2">
         <div className="flex items-center gap-3">
           <div className={`${config.badge} text-white px-3 py-1 rounded text-xs font-bold uppercase`}>
             {typeLabels[event.type]}
           </div>
-          <span className="text-sm text-gray-600">{event.timestamp}</span>
+          <span className="text-sm text-gray-600">{formatTs(event.ts)}</span>
         </div>
         {event.blocked ? (
           <div className="flex items-center gap-1 text-green-600 text-sm font-bold">
@@ -375,27 +411,67 @@ function FraudEventCard({ event }: FraudEventCardProps) {
           </div>
         )}
       </div>
-      <p className="text-gray-700 text-sm mb-2">{event.details}</p>
+      {event.details && <p className="text-gray-700 text-sm mb-2">{event.details}</p>}
       <div className="flex items-center gap-4 text-xs text-gray-600">
-        <span>IP: {event.ip}</span>
-        <span>Country: {event.country}</span>
+        {event.ip && <span>IP: {event.ip}</span>}
+        {event.countryCode && <span>Country: {event.countryCode}</span>}
       </div>
     </div>
   );
 }
 
-interface FeatureItemProps {
-  name: string;
-  weight: number;
-}
-
-function FeatureItem({ name, weight }: FeatureItemProps) {
+function Pagination({ page, hasNext, onPageChange }: { page: number; hasNext: boolean; onPageChange: (p: number) => void }) {
   return (
-    <div className="flex items-center justify-between">
-      <span className="text-sm">{name}</span>
-      <span className={`text-sm font-bold ${weight > 0 ? 'text-sunshine-yellow' : 'text-white'}`}>
-        {weight > 0 ? '+' : ''}{weight.toFixed(3)}
-      </span>
+    <div className="flex items-center justify-end gap-2 pt-2">
+      <button
+        className="px-3 py-1 text-sm border rounded disabled:opacity-50"
+        onClick={() => onPageChange(page - 1)}
+        disabled={page <= 1}
+        aria-label="Previous page"
+      >
+        Prev
+      </button>
+      <span className="text-sm" aria-live="polite">Page {page}</span>
+      <button
+        className="px-3 py-1 text-sm border rounded disabled:opacity-50"
+        onClick={() => onPageChange(page + 1)}
+        disabled={!hasNext}
+        aria-label="Next page"
+      >
+        Next
+      </button>
     </div>
   );
+}
+
+// Helpers
+const typeLabels: Record<FraudType, string> = {
+  click_fraud: 'Click Fraud',
+  install_fraud: 'Install Fraud',
+  bot_traffic: 'Bot Traffic',
+  vpn_abuse: 'VPN Abuse',
+};
+
+function typeColor(t: FraudType): 'red' | 'yellow' | 'blue' | 'gray' {
+  switch (t) {
+    case 'click_fraud': return 'red'
+    case 'bot_traffic': return 'yellow'
+    case 'install_fraud': return 'blue'
+    case 'vpn_abuse':
+    default: return 'gray'
+  }
+}
+
+function calcPct<T extends { [k: string]: any }>(count: number, rows: T[]): number {
+  const total = rows.reduce((acc, r: any) => acc + (r.count ?? r.blocked ?? 0), 0) || 1;
+  return Math.round((count / total) * 1000) / 10; // one decimal
+}
+
+function formatTs(iso: string) {
+  try {
+    const d = new Date(iso);
+    return d.toLocaleString();
+  } catch {
+    return iso;
+  }
 }

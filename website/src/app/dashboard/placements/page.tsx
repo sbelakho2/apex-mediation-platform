@@ -1,15 +1,18 @@
-'use client';
+"use client";
 
 // Reference: Design.md § "Dashboard Pages" & WEBSITE_DESIGN.md § "Placements Page"
 // Ad placements management with performance heatmap and format configuration
 
 import {
-    CheckCircleIcon,
-    PlusCircleIcon,
-    XCircleIcon,
+  CheckCircleIcon,
+  PlusCircleIcon,
+  XCircleIcon,
 } from '@heroicons/react/24/outline';
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { api } from '@/lib/api';
 
+// Placement shape normalized for UI
 interface Placement {
   id: string;
   name: string;
@@ -17,113 +20,85 @@ interface Placement {
   app: string;
   status: 'active' | 'inactive';
   impressions: number;
-  revenue: number;
-  ecpm: number;
-  fillRate: number;
-  ctr: number;
+  revenue: number; // major units
+  ecpm: number; // major units
+  fillRate: number; // percent 0..100
+  ctr: number; // percent 0..100
 }
 
 export default function PlacementsPage() {
-  const [selectedFormat, setSelectedFormat] = useState<'all' | 'banner' | 'interstitial' | 'rewarded' | 'native'>('all');
+  const router = useRouter();
+  const search = useSearchParams();
+  const pathname = usePathname();
 
-  const [placements, setPlacements] = useState<Placement[]>([
-    {
-      id: '1',
-      name: 'Home Screen Banner',
-      format: 'banner',
-      app: 'Puzzle Quest Pro',
-      status: 'active',
-      impressions: 123456,
-      revenue: 1234.56,
-      ecpm: 10.00,
-      fillRate: 98.5,
-      ctr: 1.2,
-    },
-    {
-      id: '2',
-      name: 'Level Complete Interstitial',
-      format: 'interstitial',
-      app: 'Puzzle Quest Pro',
-      status: 'active',
-      impressions: 45678,
-      revenue: 678.90,
-      ecpm: 14.87,
-      fillRate: 96.3,
-      ctr: 3.4,
-    },
-    {
-      id: '3',
-      name: 'Extra Lives Rewarded Video',
-      format: 'rewarded',
-      app: 'Puzzle Quest Pro',
-      status: 'active',
-      impressions: 34567,
-      revenue: 789.01,
-      ecpm: 22.83,
-      fillRate: 94.2,
-      ctr: 15.6,
-    },
-    {
-      id: '4',
-      name: 'Race Results Interstitial',
-      format: 'interstitial',
-      app: 'Racing Thunder',
-      status: 'active',
-      impressions: 56789,
-      revenue: 812.34,
-      ecpm: 14.31,
-      fillRate: 97.1,
-      ctr: 2.8,
-    },
-    {
-      id: '5',
-      name: 'Boost Rewarded Video',
-      format: 'rewarded',
-      app: 'Racing Thunder',
-      status: 'active',
-      impressions: 23456,
-      revenue: 534.21,
-      ecpm: 22.77,
-      fillRate: 93.8,
-      ctr: 18.2,
-    },
-    {
-      id: '6',
-      name: 'Bottom Banner',
-      format: 'banner',
-      app: 'Word Master',
-      status: 'active',
-      impressions: 89012,
-      revenue: 890.12,
-      ecpm: 10.00,
-      fillRate: 99.2,
-      ctr: 0.9,
-    },
-    {
-      id: '7',
-      name: 'Hints Rewarded Video',
-      format: 'rewarded',
-      app: 'Word Master',
-      status: 'active',
-      impressions: 12345,
-      revenue: 267.89,
-      ecpm: 21.70,
-      fillRate: 92.5,
-      ctr: 16.4,
-    },
-    {
-      id: '8',
-      name: 'Article Native Ad',
-      format: 'native',
-      app: 'Casual Slots',
-      status: 'inactive',
-      impressions: 0,
-      revenue: 0,
-      ecpm: 0,
-      fillRate: 0,
-      ctr: 0,
-    },
-  ]);
+  // Read initial state from the URL (persist filters/pagination)
+  const initialFormat = (search.get('format') as any) || 'all';
+  const [selectedFormat, setSelectedFormat] = useState<'all' | 'banner' | 'interstitial' | 'rewarded' | 'native'>(initialFormat);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [placements, setPlacements] = useState<Placement[]>([]);
+  const [page, setPage] = useState(Number(search.get('page') || 1));
+  const [pageSize] = useState(20);
+  const [total, setTotal] = useState(0);
+
+  const currency = process.env.NEXT_PUBLIC_DEFAULT_CURRENCY || 'USD';
+  const curFmt = useMemo(() => new Intl.NumberFormat(undefined, { style: 'currency', currency }), [currency]);
+
+  // Keep URL in sync with UI state
+  useEffect(() => {
+    const params = new URLSearchParams(search?.toString());
+    params.set('page', String(page));
+    params.set('pageSize', String(pageSize));
+    params.set('format', selectedFormat);
+    // Avoid router spam: only push when something changed
+    const next = `${pathname}?${params.toString()}`;
+    const curr = `${pathname}?${search?.toString()}`;
+    if (next !== curr) router.replace(next);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, pageSize, selectedFormat]);
+
+  useEffect(() => {
+    let alive = true;
+    const controller = typeof AbortController !== 'undefined' ? new AbortController() : undefined;
+    setLoading(true);
+    setError(null);
+    (async () => {
+      const params = new URLSearchParams();
+      params.set('page', String(page));
+      params.set('pageSize', String(pageSize));
+      if (selectedFormat !== 'all') params.set('format', selectedFormat);
+      const res = await api.get<{ items: any[]; total: number }>(`/api/v1/placements?${params.toString()}` , { signal: controller?.signal });
+      if (!alive) return;
+      if (!res.success || !res.data) {
+        setError(res.error || 'Failed to load placements');
+        setLoading(false);
+        return;
+      }
+      const mapped: Placement[] = (res.data.items || []).map((p: any) => ({
+        id: String(p.id),
+        name: String(p.name || p.title || 'Untitled'),
+        format: (p.format || 'banner') as Placement['format'],
+        app: String(p.appName || p.app || '—'),
+        status: (p.status === 'active' ? 'active' : 'inactive') as Placement['status'],
+        impressions: Math.max(0, Number(p.impressions || 0)),
+        revenue: Math.max(0, Number(p.revenueCents || 0) / 100),
+        ecpm: Math.max(0, Number(p.ecpmCents || 0) / 100),
+        fillRate: Math.max(0, Math.min(100, Number(p.fillRate || 0) * (p.fillRate <= 1 ? 100 : 1))),
+        ctr: Math.max(0, Math.min(100, Number(p.ctr || 0) * (p.ctr <= 1 ? 100 : 1))),
+      }));
+      setPlacements(mapped);
+      setTotal(Math.max(0, Number(res.data.total || mapped.length)));
+      setLoading(false);
+    })().catch((e) => {
+      if (!alive) return;
+      setError(e?.message || 'Network error');
+      setLoading(false);
+    });
+    return () => {
+      alive = false;
+      controller?.abort();
+    };
+  }, [page, pageSize, selectedFormat]);
 
   const [modalState, setModalState] = useState<
     | { type: null }
@@ -141,31 +116,62 @@ export default function PlacementsPage() {
 
   const closeModal = () => setModalState({ type: null });
 
-  const handleActivatePlacement = (id: string) => {
-    setPlacements((prev) =>
-      prev.map((placement) =>
-        placement.id === id
-          ? {
-              ...placement,
-              status: 'active',
-              impressions: 12500,
-              revenue: 245.67,
-              ecpm: 19.65,
-              fillRate: 92.3,
-              ctr: 2.3,
-            }
-          : placement
-      )
-    );
+  // Helpers to discover CSRF token from cookie (best-effort)
+  function getCsrf(): string | undefined {
+    try {
+      const m = document.cookie.match(/(?:^|; )csrf_token=([^;]+)/);
+      return m && m[1] ? decodeURIComponent(m[1]) : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
+  // API actions — Create / Update / Archive with basic CSRF header
+  async function createPlacement(input: { name: string; app: string; format: Placement['format'] }) {
+    const res = await api.post('/api/v1/placements', input, {
+      headers: {
+        ...(getCsrf() ? { 'X-CSRF-Token': getCsrf()! } : {}),
+      },
+    });
+    if (!res.success) throw new Error(res.error || 'Failed to create placement');
+    // Refresh list
+    setPage(1);
+  }
+
+  async function updatePlacement(id: string, patch: Partial<Placement>) {
+    const res = await api.put(`/api/v1/placements/${id}`, patch, {
+      headers: {
+        ...(getCsrf() ? { 'X-CSRF-Token': getCsrf()! } : {}),
+      },
+    });
+    if (!res.success) throw new Error(res.error || 'Failed to update placement');
+  }
+
+  async function archivePlacement(id: string) {
+    const res = await api.delete(`/api/v1/placements/${id}`, {
+      headers: {
+        ...(getCsrf() ? { 'X-CSRF-Token': getCsrf()! } : {}),
+      },
+    });
+    if (!res.success) throw new Error(res.error || 'Failed to archive placement');
+    // Remove from local list optimistically
+    setPlacements((prev) => prev.filter((p) => p.id !== id));
+  }
+
+  const handleActivatePlacement = async (id: string) => {
+    try {
+      await updatePlacement(id, { status: 'active' } as any);
+      setPlacements((prev) => prev.map((p) => (p.id === id ? { ...p, status: 'active' } : p)));
+    } catch (e: any) {
+      setError(e?.message || 'Failed to activate placement');
+    }
   };
 
-  const filteredPlacements = selectedFormat === 'all'
-    ? placements
-    : placements.filter(p => p.format === selectedFormat);
+  const filteredPlacements = placements; // server-filtered above; keep for safety
 
-  const totalRevenue = placements.reduce((sum, p) => sum + p.revenue, 0);
-  const totalImpressions = placements.reduce((sum, p) => sum + p.impressions, 0);
-  const avgEcpm = totalRevenue / (totalImpressions / 1000);
+  const totalRevenue = placements.reduce((sum, p) => sum + Math.max(0, p.revenue), 0);
+  const totalImpressions = placements.reduce((sum, p) => sum + Math.max(0, p.impressions), 0);
+  const avgEcpm = totalImpressions > 0 ? totalRevenue / (totalImpressions / 1000) : 0;
   const activePlacements = placements.filter(p => p.status === 'active').length;
 
   return (
@@ -202,14 +208,14 @@ export default function PlacementsPage() {
           <p className="text-sunshine-yellow font-bold uppercase text-sm mb-2">
             Total Revenue
           </p>
-          <p className="text-white text-4xl font-bold">${totalRevenue.toLocaleString()}</p>
+          <p className="text-white text-4xl font-bold">{curFmt.format(totalRevenue)}</p>
           <p className="text-white text-sm mt-1">this week</p>
         </div>
         <div className="card-blue p-6">
           <p className="text-sunshine-yellow font-bold uppercase text-sm mb-2">
             Avg eCPM
           </p>
-          <p className="text-white text-4xl font-bold">${avgEcpm.toFixed(2)}</p>
+          <p className="text-white text-4xl font-bold">{curFmt.format(avgEcpm)}</p>
           <p className="text-white text-sm mt-1">across all placements</p>
         </div>
         <div className="card-blue p-6">
@@ -293,17 +299,50 @@ export default function PlacementsPage() {
       <div className="space-y-4">
         <h2 className="text-primary-blue font-bold uppercase text-lg">
           {selectedFormat === 'all' ? 'All Placements' : `${selectedFormat} Placements`}
-          <span className="text-gray-500 text-sm ml-2">({filteredPlacements.length})</span>
+          <span className="text-gray-500 text-sm ml-2">({total})</span>
         </h2>
-        {filteredPlacements.map((placement) => (
-          <PlacementCard
-            key={placement.id}
-            placement={placement}
-            onConfigure={() => openModal('configure', placement)}
-            onViewDetails={() => openModal('view-details', placement)}
-            onActivate={() => handleActivatePlacement(placement.id)}
-          />
-        ))}
+        {loading ? (
+          <div className="space-y-3" aria-hidden="true">
+            {[...Array(5)].map((_, i) => (
+              <div key={i} className="h-20 bg-gray-100 animate-pulse rounded" />
+            ))}
+          </div>
+        ) : error ? (
+          <div role="alert" aria-live="polite" className="rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+            {error}
+          </div>
+        ) : filteredPlacements.length === 0 ? (
+          <p className="text-sm text-gray-600">No placements found.</p>
+        ) : (
+          <>
+            {filteredPlacements.map((placement) => (
+              <PlacementCard
+                key={placement.id}
+                placement={placement}
+                onConfigure={() => openModal('configure', placement)}
+                onViewDetails={() => openModal('view-details', placement)}
+                onActivate={() => handleActivatePlacement(placement.id)}
+              />
+            ))}
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                className="px-3 py-1 text-sm border rounded disabled:opacity-50"
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page <= 1}
+              >
+                Prev
+              </button>
+              <span className="text-sm" aria-live="polite">Page {page}</span>
+              <button
+                className="px-3 py-1 text-sm border rounded disabled:opacity-50"
+                onClick={() => setPage((p) => p + 1)}
+                disabled={placements.length < pageSize}
+              >
+                Next
+              </button>
+            </div>
+          </>
+        )}
       </div>
 
       {/* Best Practices */}
@@ -346,7 +385,38 @@ export default function PlacementsPage() {
           </div>
         </div>
       </div>
-      <PlacementModal state={modalState} onClose={closeModal} />
+      <PlacementModal
+        state={modalState}
+        onClose={closeModal}
+        onCreate={async (payload) => {
+          try {
+            await createPlacement(payload);
+            closeModal();
+          } catch (e: any) {
+            setError(e?.message || 'Failed to create placement');
+          }
+        }}
+        onArchive={async (id) => {
+          try {
+            if (confirm('Archive this placement? You can re-activate later.')) {
+              await archivePlacement(id);
+              closeModal();
+            }
+          } catch (e: any) {
+            setError(e?.message || 'Failed to archive placement');
+          }
+        }}
+        onSaveConfig={async (id, patch) => {
+          try {
+            await updatePlacement(id, patch);
+            // Update local state best-effort
+            setPlacements((prev) => prev.map((p) => (p.id === id ? { ...p, ...patch } as Placement : p)));
+            closeModal();
+          } catch (e: any) {
+            setError(e?.message || 'Failed to save');
+          }
+        }}
+      />
     </div>
   );
 }
@@ -506,7 +576,19 @@ type PlacementModalState =
   | { type: 'create' }
   | { type: 'configure' | 'view-details'; placement: Placement };
 
-function PlacementModal({ state, onClose }: { state: PlacementModalState; onClose: () => void }) {
+function PlacementModal({
+  state,
+  onClose,
+  onCreate,
+  onSaveConfig,
+  onArchive,
+}: {
+  state: PlacementModalState;
+  onClose: () => void;
+  onCreate: (payload: { name: string; app: string; format: Placement['format'] }) => Promise<void>;
+  onSaveConfig: (id: string, patch: Partial<Placement>) => Promise<void>;
+  onArchive: (id: string) => Promise<void>;
+}) {
   if (state.type === null) return null;
 
   const title = state.type === 'create'
@@ -514,6 +596,19 @@ function PlacementModal({ state, onClose }: { state: PlacementModalState; onClos
     : state.type === 'configure'
     ? `Configure ${state.placement.name}`
     : `Placement Insights for ${state.placement.name}`;
+
+  // Local form state for create/configure
+  const [form, setForm] = useState<{
+    name: string;
+    app: string;
+    format: Placement['format'];
+  }>(() => ({
+    name: state.type === 'create' ? '' : state.placement.name,
+    app: state.type === 'create' ? '' : state.placement.app,
+    format: state.type === 'create' ? 'banner' : state.placement.format,
+  }));
+  const [saving, setSaving] = useState(false);
+  const formats: Placement['format'][] = ['banner', 'interstitial', 'rewarded', 'native'];
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm px-4">
@@ -529,35 +624,90 @@ function PlacementModal({ state, onClose }: { state: PlacementModalState; onClos
           </button>
         </div>
         <div className="p-6 space-y-4">
-          {state.type === 'create' ? (
-            <ol className="list-decimal list-inside space-y-2 text-sm text-gray-700">
-              <li>Select the app you want to create a placement for.</li>
-              <li>Choose the ad format and frequency caps.</li>
-              <li>Generate the placement ID and add it to your app.</li>
-              <li>Test the placement using ApexMediation sandbox mode.</li>
-            </ol>
-          ) : (
+          {state.type === 'view-details' ? (
             <div className="space-y-3 text-sm text-gray-700">
               <p>Format: <strong className="text-primary-blue">{state.placement.format.toUpperCase()}</strong></p>
               <p>Latest eCPM: <strong className="text-primary-blue">${state.placement.ecpm.toFixed(2)}</strong></p>
               <p>Average Fill Rate: <strong className="text-primary-blue">{state.placement.fillRate}%</strong></p>
             </div>
+          ) : (
+            <form
+              className="space-y-4"
+              onSubmit={async (e) => {
+                e.preventDefault();
+                try {
+                  setSaving(true);
+                  if (state.type === 'create') {
+                    await onCreate({ name: form.name.trim(), app: form.app.trim(), format: form.format });
+                  } else {
+                    await onSaveConfig(state.placement.id, { name: form.name.trim(), app: form.app.trim(), format: form.format } as any);
+                  }
+                } finally {
+                  setSaving(false);
+                }
+              }}
+            >
+              <div>
+                <label className="block text-sm font-medium text-gray-700" htmlFor="pl-name">Name</label>
+                <input
+                  id="pl-name"
+                  type="text"
+                  className="input w-full mt-1"
+                  required
+                  value={form.name}
+                  onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700" htmlFor="pl-app">App</label>
+                <input
+                  id="pl-app"
+                  type="text"
+                  className="input w-full mt-1"
+                  required
+                  value={form.app}
+                  onChange={(e) => setForm((f) => ({ ...f, app: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700" htmlFor="pl-format">Format</label>
+                <select
+                  id="pl-format"
+                  className="input w-full mt-1"
+                  value={form.format}
+                  onChange={(e) => setForm((f) => ({ ...f, format: e.target.value as Placement['format'] }))}
+                >
+                  {formats.map((f) => (
+                    <option key={f} value={f}>{f}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex justify-end gap-3 pt-2">
+                {state.type === 'configure' && (
+                  <button
+                    type="button"
+                    className="px-6 py-3 text-sm border-2 border-red-500 text-red-600 rounded hover:bg-red-50"
+                    onClick={async () => { await onArchive(state.placement.id); }}
+                  >
+                    Archive
+                  </button>
+                )}
+                <button type="button" onClick={onClose} className="btn-outline px-6 py-3 text-sm">Cancel</button>
+                <button type="submit" disabled={saving} className="btn-primary-yellow px-6 py-3 text-sm">
+                  {saving ? 'Saving…' : state.type === 'create' ? 'Create' : 'Save'}
+                </button>
+              </div>
+            </form>
           )}
         </div>
-        <div className="flex justify-end gap-3 border-t border-gray-200 p-6">
-          <button onClick={onClose} className="btn-outline px-6 py-3 text-sm">
-            Close
-          </button>
-          {state.type === 'create' ? (
-            <a href="/documentation#sdk-reference" className="btn-primary-yellow px-6 py-3 text-sm">
-              Open placement guide
-            </a>
-          ) : (
+        {state.type === 'view-details' && (
+          <div className="flex justify-end gap-3 border-t border-gray-200 p-6">
+            <button onClick={onClose} className="btn-outline px-6 py-3 text-sm">Close</button>
             <a href={`/dashboard/placements/${state.placement.id}`} className="btn-primary-yellow px-6 py-3 text-sm">
               View full report
             </a>
-          )}
-        </div>
+          </div>
+        )}
       </div>
     </div>
   );

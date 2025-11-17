@@ -2,11 +2,10 @@
 
 Enterprise-grade ad monetization platform with ML-powered fraud detection, real-time analytics, and seamless ad network integration. Built with Next.js 14, TypeScript, and the Study in Sweden design system.
 
-[![Status](https://img.shields.io/badge/Status-Complete-success)](PROJECT_STATUS.md)
-[![TypeScript](https://img.shields.io/badge/TypeScript-100%25-blue)](https://www.typescriptlang.org/)
-[![Design](https://img.shields.io/badge/Design-100%25_Compliant-yellow)](Design.md)
+[![TypeScript](https://img.shields.io/badge/TypeScript-TS-blue)](https://www.typescriptlang.org/)
+[![Next.js](https://img.shields.io/badge/Next.js-14-black)](https://nextjs.org/)
 
-**📊 Current Status:** All 8 dashboard pages complete | Development server running | Zero compilation errors
+**📊 Current Status:** Production‑safe defaults enabled; dashboards are wired to live APIs with robust loading/error/empty states. Some features are gated by RBAC/feature flags and may be hidden depending on environment.
 
 ---
 
@@ -52,38 +51,52 @@ Enterprise-grade ad monetization platform with ML-powered fraud detection, real-
 ### Installation
 
 ```bash
-# Clone the repository
-cd "/Users/sabelakhoua/Ad Project/website"
-
-# Install dependencies
-npm install
+# From the repo root, install Website workspace deps
+npm --prefix website ci || npm --prefix website install
 ```
 
 ### Development
 
 ```bash
 # Start development server on http://localhost:3000
-npm run dev
-
-# Server starts in ~1.5 seconds
-# ✓ Ready in 1491ms
+npm --prefix website run dev
 ```
 
 ### Build & Deploy
 
 ```bash
 # Production build
-npm run build
+npm --prefix website run build
 
 # Start production server
-npm start
+npm --prefix website start
 
 # Type checking
-npm run type-check
+npm --prefix website run type-check
 
 # Linting
-npm run lint
+npm --prefix website run lint
 ```
+
+### Environment variables (website)
+
+The website uses a small set of environment variables. Public variables (prefixed with `NEXT_PUBLIC_`) are readable in the browser; keep sensitive values server‑only.
+
+- Public (baked into client):
+  - `NEXT_PUBLIC_API_URL` — Base URL for backend APIs (default: https://api.apexmediation.ee/v1)
+  - `NEXT_PUBLIC_CONSOLE_URL` — URL of the Console application
+  - `NEXT_PUBLIC_SITE_URL` — Canonical site URL used for metadata/robots/sitemaps
+  - `NEXT_PUBLIC_ENABLE_GA` — `true|false` to allow Google Analytics hosts in CSP (default: false)
+  - `NEXT_PUBLIC_ENABLE_HOTJAR` — `true|false` to allow Hotjar hosts in CSP (default: false)
+  - `NEXT_PUBLIC_DEFAULT_CURRENCY` — ISO currency code for formatting (default: USD)
+
+- Server‑only (not exposed to browser):
+  - `JWT_SECRET` — Secret used to sign/verify the session cookie in the website (required in prod)
+
+Safe defaults:
+- CSP is strict by default and only allows analytics when the corresponding `NEXT_PUBLIC_ENABLE_*` flags are set.
+- Middleware protects `/dashboard`, `/settings`, and sensitive `/api/*` surfaces. Public auth endpoints (`/api/auth/login|signup|me|logout`) remain accessible.
+- Dark mode is toggled via the `ThemeProvider` and global `.dark` class.
 
 ---
 

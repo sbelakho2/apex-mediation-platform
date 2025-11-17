@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { auctionApi } from '@/lib/auctionApi';
 
 interface DebugEvent {
@@ -21,33 +21,97 @@ export default function MediationDebuggerPage() {
   const [events, setEvents] = useState<DebugEvent[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<number | null>(null);
 
-  const load = async () => {
-    setLoading(true);
-    const res = await auctionApi.getMediationDebugEvents(placementId, limit);
+  // Polling/backoff
+  const pollingRef = useRef<boolean>(true);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const backoffRef = useRef<number>(5000);
+
+  const loadOnce = async (signal?: AbortSignal) => {
+    const res = await auctionApi.getMediationDebugEvents(placementId, limit, { signal });
     if (!res.success) {
       setError(res.error || 'Failed to load debug events');
       setEvents(null);
-    } else {
-      setError(null);
-      setEvents((res.data as DebugEvent[]) || []);
+      return false;
     }
-    setLoading(false);
+    setError(null);
+    setEvents((res.data as DebugEvent[]) || []);
+    setLastUpdated(Date.now());
+    return true;
+  };
+
+  const scheduleNext = (success: boolean) => {
+    backoffRef.current = success ? 5000 : Math.min(60000, Math.max(5000, backoffRef.current * 2));
+    if (!pollingRef.current) return;
+    timeoutRef.current = setTimeout(async () => {
+      if (!pollingRef.current) return;
+      const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : undefined;
+      const ok = await loadOnce(ctrl?.signal).catch(() => false);
+      scheduleNext(!!ok);
+    }, backoffRef.current);
   };
 
   useEffect(() => {
-    load();
-    const id = setInterval(load, 5000);
-    return () => clearInterval(id);
+    let alive = true;
+    pollingRef.current = true;
+    setLoading(true);
+    const controller = typeof AbortController !== 'undefined' ? new AbortController() : undefined;
+    loadOnce(controller?.signal).then((ok) => {
+      if (!alive) return;
+      setLoading(false);
+      scheduleNext(!!ok);
+    }).catch(() => {
+      if (!alive) return;
+      setLoading(false);
+      scheduleNext(false);
+    });
+
+    const onVis = () => {
+      const hidden = typeof document !== 'undefined' && document.hidden;
+      pollingRef.current = !hidden;
+      if (!hidden) {
+        if (timeoutRef.current) clearTimeout(timeoutRef.current);
+        const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : undefined;
+        loadOnce(ctrl?.signal).then((ok) => scheduleNext(!!ok)).catch(() => scheduleNext(false));
+      } else if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
+    };
+    document.addEventListener('visibilitychange', onVis);
+
+    return () => {
+      alive = false;
+      pollingRef.current = false;
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      document.removeEventListener('visibilitychange', onVis);
+      controller?.abort();
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [placementId, limit]);
 
   const grouped = useMemo(() => {
     if (!events) return {} as Record<string, DebugEvent[]>;
-    return events.reduce((acc, ev) => {
+    // Redact PII-like fields in summaries before grouping
+    const redactKeys = ['ip', 'ip_address', 'device_id', 'gaid', 'idfa', 'email'];
+    const redact = (obj: any): any => {
+      if (!obj || typeof obj !== 'object') return obj;
+      if (Array.isArray(obj)) return obj.map(redact);
+      const out: any = {};
+      for (const [k, v] of Object.entries(obj)) {
+        out[k] = redactKeys.includes(k) ? '[redacted]' : redact(v as any);
+      }
+      return out;
+    };
+    const sanitized: DebugEvent[] = events.map((e) => ({
+      ...e,
+      req_summary: redact(e.req_summary || {}),
+      resp_summary: redact(e.resp_summary || {}),
+    }));
+    return sanitized.reduce((acc, ev) => {
       const key = ev.adapter;
-      acc[key] = acc[key] || [];
-      acc[key].push(ev);
+      (acc[key] = acc[key] || []).push(ev);
       return acc;
     }, {} as Record<string, DebugEvent[]>);
   }, [events]);
@@ -77,8 +141,8 @@ export default function MediationDebuggerPage() {
         </div>
       </div>
 
-      {error && <div className="rounded border border-red-200 bg-red-50 p-3 text-red-800">{error}</div>}
-      {loading && <div>Loading…</div>}
+      {error && <div className="rounded border border-red-200 bg-red-50 p-3 text-red-800" role="alert" aria-live="polite">{error}</div>}
+      {loading && <div aria-busy="true">Loading…</div>}
 
       {!loading && events && events.length === 0 && (
         <div className="text-gray-600">No debug events yet. Trigger an auction and try again.</div>
@@ -92,7 +156,10 @@ export default function MediationDebuggerPage() {
                 {adapter} — Last {list.length} events
               </div>
               <div className="divide-y">
-                {list.slice().reverse().map((ev, idx) => (
+                {list.map((_, i) => {
+                  const idx = list.length - 1 - i; // render newest first without array reversal
+                  const ev = list[idx];
+                  return (
                   <div key={idx} className="grid grid-cols-12 gap-2 p-3 text-sm">
                     <div className="col-span-2">
                       <div className="text-gray-500">Time</div>
@@ -115,12 +182,18 @@ export default function MediationDebuggerPage() {
                       <CodeInline obj={ev.timings_ms || {}} />
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           ))}
         </div>
       )}
+
+      {/* Screen reader summary */}
+      <div className="sr-only" aria-live="polite">
+        {lastUpdated && `Debugger events updated ${new Date(lastUpdated).toLocaleTimeString()}.`}
+      </div>
     </div>
   );
 }

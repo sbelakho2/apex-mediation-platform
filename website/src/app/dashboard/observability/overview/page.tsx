@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { auctionApi } from "@/lib/auctionApi";
 
 type LatBins = [number, number, number, number, number, number, number, number];
@@ -36,31 +36,87 @@ export default function ObservabilityOverviewPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [days, setDays] = useState(7);
+  const [lastUpdated, setLastUpdated] = useState<number | null>(null);
 
-  const load = async () => {
-    setLoading(true);
+  // Keep track of polling/backoff
+  const pollingRef = useRef<boolean>(true);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const backoffRef = useRef<number>(5000); // start at 5s
+
+  const loadOnce = async (signal?: AbortSignal) => {
     const [ts, s] = await Promise.all([
-      auctionApi.getAdapterMetricsTimeSeries(days),
-      auctionApi.getAdapterSLO(),
+      auctionApi.getAdapterMetricsTimeSeries(days, { signal }),
+      auctionApi.getAdapterSLO({ signal }),
     ]);
     if (!ts.success) {
       setError(ts.error || "Failed to load time series");
       setSeries(null);
-    } else if (!s.success) {
+      return false;
+    }
+    if (!s.success) {
       setError(s.error || "Failed to load SLO status");
       setSlo(null);
-    } else {
-      setError(null);
-      setSeries((ts.data as AdapterSeriesSnapshot[]) || []);
-      setSlo((s.data as any) || null);
+      return false;
     }
-    setLoading(false);
+    setError(null);
+    setSeries((ts.data as AdapterSeriesSnapshot[]) || []);
+    setSlo((s.data as any) || null);
+    setLastUpdated(Date.now());
+    return true;
+  };
+
+  const scheduleNext = (success: boolean) => {
+    // Reset or increase backoff
+    backoffRef.current = success ? 5000 : Math.min(60000, Math.max(5000, backoffRef.current * 2));
+    if (!pollingRef.current) return;
+    timeoutRef.current = setTimeout(async () => {
+      if (!pollingRef.current) return;
+      const controller = typeof AbortController !== 'undefined' ? new AbortController() : undefined;
+      const ok = await loadOnce(controller?.signal).catch(() => false);
+      scheduleNext(!!ok);
+    }, backoffRef.current);
   };
 
   useEffect(() => {
-    load();
-    const id = setInterval(load, 5000);
-    return () => clearInterval(id);
+    let alive = true;
+    pollingRef.current = true;
+    setLoading(true);
+    const controller = typeof AbortController !== 'undefined' ? new AbortController() : undefined;
+    loadOnce(controller?.signal)
+      .then((ok) => {
+        if (!alive) return;
+        setLoading(false);
+        scheduleNext(!!ok);
+      })
+      .catch(() => {
+        if (!alive) return;
+        setLoading(false);
+        scheduleNext(false);
+      });
+
+    // Pause/resume on tab visibility change
+    const onVis = () => {
+      const hidden = typeof document !== 'undefined' && document.hidden;
+      pollingRef.current = !hidden;
+      if (!hidden) {
+        // Immediately refresh when returning to visible
+        if (timeoutRef.current) clearTimeout(timeoutRef.current);
+        const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : undefined;
+        loadOnce(ctrl?.signal).then((ok) => scheduleNext(!!ok)).catch(() => scheduleNext(false));
+      } else if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
+    };
+    document.addEventListener('visibilitychange', onVis);
+
+    return () => {
+      alive = false;
+      pollingRef.current = false;
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      document.removeEventListener('visibilitychange', onVis);
+      controller?.abort();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [days]);
 
@@ -94,8 +150,8 @@ export default function ObservabilityOverviewPage() {
         </div>
       )}
 
-      {error && <div className="rounded border border-red-200 bg-red-50 p-3 text-red-800">{error}</div>}
-      {loading && <div>Loading…</div>}
+      {error && <div className="rounded border border-red-200 bg-red-50 p-3 text-red-800" role="alert" aria-live="polite">{error}</div>}
+      {loading && <div aria-busy="true">Loading…</div>}
 
       {!loading && series && series.length > 0 && (
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
@@ -108,6 +164,15 @@ export default function ObservabilityOverviewPage() {
       {!loading && series && series.length === 0 && (
         <div className="text-gray-600">No data yet. Trigger some adapter requests and try again.</div>
       )}
+
+      {/* Aria-live summary for screen readers */}
+      <div className="sr-only" aria-live="polite">
+        {slo && (
+          <>SLO status updated {lastUpdated ? new Date(lastUpdated).toLocaleTimeString() : ''}. {slo.window_1h?.length || 0} adapters monitored. {
+            (slo.window_1h || []).filter(s => s.level === 'CRIT').length
+          } critical and {(slo.window_1h || []).filter(s => s.level === 'WARN').length} warnings.</>
+        )}
+      </div>
     </div>
   );
 }

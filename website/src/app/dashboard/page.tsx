@@ -1,5 +1,6 @@
 import RevenueOverview from '@/components/dashboard/RevenueOverview';
 import { getSession } from '@/lib/auth';
+import DashboardStats from '@/components/dashboard/DashboardStats';
 
 export default async function DashboardPage() {
   const user = await getSession();
@@ -18,32 +19,7 @@ export default async function DashboardPage() {
       <RevenueOverview />
 
       {/* Quick Stats */}
-      <div className="mt-8 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard
-          title="Today's Revenue"
-          value="$0.00"
-          change="+0%"
-          trend="up"
-        />
-        <StatCard
-          title="Total Impressions"
-          value="0"
-          change="+0%"
-          trend="up"
-        />
-        <StatCard
-          title="eCPM"
-          value="$0.00"
-          change="+0%"
-          trend="neutral"
-        />
-        <StatCard
-          title="Fill Rate"
-          value="0%"
-          change="+0%"
-          trend="up"
-        />
-      </div>
+      <DashboardStats />
 
       {/* Getting Started */}
       <div className="mt-8 bg-blue-50 border border-blue-200 rounded-lg p-6">
@@ -63,41 +39,6 @@ export default async function DashboardPage() {
           <ChecklistItem completed={false}>
             Configure ad networks
           </ChecklistItem>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function StatCard({
-  title,
-  value,
-  change,
-  trend,
-}: {
-  title: string;
-  value: string;
-  change: string;
-  trend: 'up' | 'down' | 'neutral';
-}) {
-  const trendColor = {
-    up: 'text-green-600',
-    down: 'text-red-600',
-    neutral: 'text-gray-600',
-  }[trend];
-
-  return (
-    <div className="bg-white overflow-hidden shadow rounded-lg">
-      <div className="p-5">
-        <div className="flex items-center">
-          <div className="flex-1">
-            <dt className="text-sm font-medium text-gray-500 truncate">{title}</dt>
-            <dd className="mt-1 text-3xl font-semibold text-gray-900">{value}</dd>
-          </div>
-        </div>
-        <div className="mt-4">
-          <span className={`text-sm font-medium ${trendColor}`}>{change}</span>
-          <span className="text-sm text-gray-500 ml-2">vs yesterday</span>
         </div>
       </div>
     </div>

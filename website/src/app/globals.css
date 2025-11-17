@@ -179,3 +179,111 @@
     text-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
   }
 }
+
+/*
+  Global styles for the Website app
+  - Align tokens with ThemeProvider: toggles `.dark` class on <html>
+  - Provide shared utility classes used across dashboard/components
+  - De‑duplicate any ad‑hoc utilities by centralizing here
+*/
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Theme tokens */
+:root {
+  /* brand */
+  --color-primary-blue: #005293;
+  --color-sunshine-yellow: #fecb00;
+  --color-pale-yellow: #ffe680;
+  --color-cream: #e8e3d1;
+  --color-success-green: #16a34a;
+
+  /* neutrals */
+  --color-text: #0f172a; /* slate-900 */
+  --color-text-muted: #475569; /* slate-600 */
+  --color-surface: #ffffff;
+  --color-surface-2: #f8fafc; /* slate-50 */
+  --ring-primary: rgba(0, 82, 147, 0.5);
+}
+
+.dark {
+  --color-text: #e5e7eb; /* slate-200 */
+  --color-text-muted: #9ca3af; /* slate-400 */
+  --color-surface: #0b1220; /* near slate-950 */
+  --color-surface-2: #111827; /* gray-900 */
+  --ring-primary: rgba(254, 203, 0, 0.6);
+}
+
+/* Base text colors aligned to tokens */
+body {
+  color: var(--color-text);
+  background: var(--color-surface);
+}
+
+/* Shared component utilities */
+@layer components {
+  /* Buttons */
+  .btn-primary-yellow {
+    @apply inline-flex items-center justify-center rounded font-bold uppercase tracking-wide transition;
+    @apply bg-[color:var(--color-sunshine-yellow)] text-[color:var(--color-primary-blue)];
+    @apply focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--color-primary-blue)];
+  }
+  .btn-primary-yellow:hover {
+    background: var(--color-pale-yellow);
+  }
+  .btn-outline {
+    @apply inline-flex items-center justify-center rounded border border-[color:var(--color-primary-blue)] text-[color:var(--color-primary-blue)] font-bold uppercase tracking-wide transition;
+  }
+  .btn-outline:hover {
+    @apply bg-[color:var(--color-primary-blue)] text-white;
+  }
+
+  /* Cards */
+  .card {
+    @apply rounded-lg border border-gray-200 bg-white shadow-sm;
+  }
+  .dark .card {
+    @apply border-gray-700 bg-[color:var(--color-surface-2)] shadow;
+  }
+
+  .card-blue {
+    @apply rounded-lg border-2 border-[color:var(--color-primary-blue)] bg-[color:var(--color-primary-blue)] text-white;
+  }
+  .dark .card-blue {
+    /* Keep brand blue but improve contrast in dark mode */
+    @apply border-[color:var(--color-sunshine-yellow)];
+  }
+
+  /* Inputs */
+  .input {
+    @apply rounded border-2 border-[color:var(--color-primary-blue)] px-4 py-3 transition;
+  }
+  .input:focus {
+    @apply outline-none ring-4;
+    box-shadow: 0 0 0 4px var(--ring-primary);
+    border-color: var(--color-sunshine-yellow);
+  }
+  .dark .input {
+    @apply bg-[color:var(--color-surface-2)] text-[color:var(--color-text)];
+  }
+
+  /* Text helpers matching design tokens */
+  .text-primary-blue { color: var(--color-primary-blue); }
+  .bg-primary-blue { background-color: var(--color-primary-blue); }
+  .text-sunshine-yellow { color: var(--color-sunshine-yellow); }
+  .bg-sunshine-yellow { background-color: var(--color-sunshine-yellow); }
+  .bg-cream { background-color: var(--color-cream); }
+  .text-success-green { color: var(--color-success-green); }
+}
+
+/* Reduce motion preference */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}

@@ -1,7 +1,7 @@
 'use client';
 
 // Reference: Design.md § "Dashboard Pages" & WEBSITE_DESIGN.md § "Networks Page"
-// Ad Networks management page for connecting and monitoring ad network integrations
+// Ad Networks management page — wired to live APIs with resilient UX and accessibility
 
 import {
     CheckCircleIcon,
@@ -9,86 +9,90 @@ import {
     PlusCircleIcon,
     XCircleIcon,
 } from '@heroicons/react/24/outline';
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { api } from '@/lib/api';
 
-interface Network {
+type NetworkStatus = 'active' | 'inactive' | 'error';
+
+interface NetworkRow {
   id: string;
   name: string;
-  status: 'active' | 'inactive' | 'error';
+  status: NetworkStatus;
+  revenueCents?: number;
+  impressions?: number;
+  ecpmCents?: number;
+  fillRate?: number; // 0..1 or 0..100
+  lastSyncAt?: string; // ISO
+  docsUrl?: string;
+  logsUrl?: string;
+}
+
+function normalize(row: any): Required<Pick<NetworkRow, 'id' | 'name' | 'status'>> & {
   revenue: number;
   impressions: number;
   ecpm: number;
-  fillRate: number;
+  fillRatePct: number;
   lastSync: string;
+  docsUrl?: string;
+  logsUrl?: string;
+} {
+  const status: NetworkStatus = (row.status === 'error' ? 'error' : row.status === 'active' ? 'active' : 'inactive');
+  const revenue = Math.max(0, Number(row.revenueCents || 0) / 100);
+  const impressions = Math.max(0, Number(row.impressions || 0));
+  const ecpm = Math.max(0, Number(row.ecpmCents || 0) / 100);
+  const fillRaw = Number(row.fillRate ?? 0);
+  const fillRatePct = Math.max(0, Math.min(100, fillRaw <= 1 ? fillRaw * 100 : fillRaw));
+  const lastSync = row.lastSyncAt ? new Date(row.lastSyncAt).toLocaleString() : 'Not connected';
+  return {
+    id: String(row.id),
+    name: String(row.name || row.adapter || 'Unnamed Network'),
+    status,
+    revenue,
+    impressions,
+    ecpm,
+    fillRatePct,
+    lastSync,
+    docsUrl: row.docsUrl || undefined,
+    logsUrl: row.logsUrl || undefined,
+  };
 }
 
 export default function NetworksPage() {
-  const [networks] = useState<Network[]>([
-    {
-      id: '1',
-      name: 'Google AdMob',
-      status: 'active',
-      revenue: 4234.12,
-      impressions: 285678,
-      ecpm: 14.82,
-      fillRate: 98.3,
-      lastSync: '2 minutes ago',
-    },
-    {
-      id: '2',
-      name: 'Meta Audience Network',
-      status: 'active',
-      revenue: 2145.67,
-      impressions: 159456,
-      ecpm: 13.45,
-      fillRate: 96.7,
-      lastSync: '5 minutes ago',
-    },
-    {
-      id: '3',
-      name: 'Unity Ads',
-      status: 'active',
-      revenue: 1523.89,
-      impressions: 117423,
-      ecpm: 12.98,
-      fillRate: 94.2,
-      lastSync: '8 minutes ago',
-    },
-    {
-      id: '4',
-      name: 'AppLovin',
-      status: 'active',
-      revenue: 1030.50,
-      impressions: 91789,
-      ecpm: 11.23,
-      fillRate: 92.1,
-      lastSync: '12 minutes ago',
-    },
-    {
-      id: '5',
-      name: 'ironSource',
-      status: 'inactive',
-      revenue: 0,
-      impressions: 0,
-      ecpm: 0,
-      fillRate: 0,
-      lastSync: 'Not connected',
-    },
-    {
-      id: '6',
-      name: 'Vungle',
-      status: 'error',
-      revenue: 0,
-      impressions: 0,
-      ecpm: 0,
-      fillRate: 0,
-      lastSync: '2 hours ago',
-    },
-  ]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [rows, setRows] = useState<ReturnType<typeof normalize>[]>([]);
 
-  const activeNetworks = networks.filter((n) => n.status === 'active').length;
-  const totalRevenue = networks.reduce((sum, n) => sum + n.revenue, 0);
-  const totalImpressions = networks.reduce((sum, n) => sum + n.impressions, 0);
+  const currency = process.env.NEXT_PUBLIC_DEFAULT_CURRENCY || 'USD';
+  const curFmt = useMemo(() => new Intl.NumberFormat(undefined, { style: 'currency', currency }), [currency]);
+  const numFmt = useMemo(() => new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }), []);
+
+  useEffect(() => {
+    let alive = true;
+    const controller = typeof AbortController !== 'undefined' ? new AbortController() : undefined;
+    setLoading(true);
+    setError(null);
+    (async () => {
+      const res = await api.get<{ items: NetworkRow[] }>(`/api/v1/networks`, { signal: controller?.signal });
+      if (!alive) return;
+      if (!res.success || !res.data) {
+        setError(res.error || 'Failed to load networks');
+        setLoading(false);
+        return;
+      }
+      const mapped = (res.data.items || []).map(normalize);
+      setRows(mapped);
+      setLoading(false);
+    })().catch((e) => {
+      if (!alive) return;
+      setError(e?.message || 'Network error');
+      setLoading(false);
+    });
+    return () => { alive = false; controller?.abort(); };
+  }, []);
+
+  const activeNetworks = rows.filter((n) => n.status === 'active').length;
+  const totalRevenue = rows.reduce((sum, n) => sum + n.revenue, 0);
+  const totalImpressions = rows.reduce((sum, n) => sum + n.impressions, 0);
 
   return (
     <div className="p-6 space-y-6">
@@ -114,31 +118,62 @@ export default function NetworksPage() {
           <p className="text-sunshine-yellow font-bold uppercase text-sm mb-2">
             Active Networks
           </p>
-          <p className="text-white text-4xl font-bold">{activeNetworks}</p>
-          <p className="text-white text-sm mt-1">of {networks.length} total</p>
+          {loading ? (
+            <div className="h-9 w-24 bg-white/30 rounded animate-pulse" aria-hidden="true" />
+          ) : (
+            <>
+              <p className="text-white text-4xl font-bold">{activeNetworks}</p>
+              <p className="text-white text-sm mt-1">of {rows.length} total</p>
+            </>
+          )}
         </div>
         <div className="card-blue p-6">
           <p className="text-sunshine-yellow font-bold uppercase text-sm mb-2">
             Total Revenue (Week)
           </p>
-          <p className="text-white text-4xl font-bold">${totalRevenue.toLocaleString()}</p>
-          <p className="text-white text-sm mt-1">across all networks</p>
+          {loading ? (
+            <div className="h-9 w-40 bg-white/30 rounded animate-pulse" aria-hidden="true" />
+          ) : (
+            <>
+              <p className="text-white text-4xl font-bold">{curFmt.format(Math.max(0, totalRevenue))}</p>
+              <p className="text-white text-sm mt-1">across all networks</p>
+            </>
+          )}
         </div>
         <div className="card-blue p-6">
           <p className="text-sunshine-yellow font-bold uppercase text-sm mb-2">
             Total Impressions
           </p>
-          <p className="text-white text-4xl font-bold">{totalImpressions.toLocaleString()}</p>
-          <p className="text-white text-sm mt-1">this week</p>
+          {loading ? (
+            <div className="h-9 w-40 bg-white/30 rounded animate-pulse" aria-hidden="true" />
+          ) : (
+            <>
+              <p className="text-white text-4xl font-bold">{numFmt.format(Math.max(0, totalImpressions))}</p>
+              <p className="text-white text-sm mt-1">this week</p>
+            </>
+          )}
         </div>
       </div>
 
+      {/* Error/empty */}
+      {error && (
+        <div role="alert" aria-live="polite" className="rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-800">{error}</div>
+      )}
+
       {/* Networks Grid */}
-      <div className="grid md:grid-cols-2 gap-6">
-        {networks.map((network) => (
-          <NetworkCard key={network.id} network={network} />
-        ))}
-      </div>
+      {loading ? (
+        <div className="grid md:grid-cols-2 gap-6" aria-busy="true">
+          {[...Array(4)].map((_, i) => (<div key={i} className="h-40 bg-gray-100 animate-pulse rounded" />))}
+        </div>
+      ) : rows.length === 0 ? (
+        <p className="text-sm text-gray-600">No networks connected yet.</p>
+      ) : (
+        <div className="grid md:grid-cols-2 gap-6">
+          {rows.map((network) => (
+            <NetworkCard key={network.id} network={network} curFmt={curFmt} numFmt={numFmt} />
+          ))}
+        </div>
+      )}
 
       {/* Integration Instructions */}
       <div className="card p-6">
@@ -183,26 +218,28 @@ export default function NetworksPage() {
 }
 
 interface NetworkCardProps {
-  network: Network;
+  network: ReturnType<typeof normalize>;
+  curFmt: Intl.NumberFormat;
+  numFmt: Intl.NumberFormat;
 }
 
-function NetworkCard({ network }: NetworkCardProps) {
+function NetworkCard({ network, curFmt, numFmt }: NetworkCardProps) {
   const statusConfig = {
     active: {
       icon: CheckCircleIcon,
-      color: 'text-green-500',
+      color: 'text-green-600',
       bg: 'bg-green-50',
       label: 'Active',
     },
     inactive: {
       icon: XCircleIcon,
-      color: 'text-gray-500',
+      color: 'text-gray-600',
       bg: 'bg-gray-50',
       label: 'Inactive',
     },
     error: {
       icon: ExclamationTriangleIcon,
-      color: 'text-red-500',
+      color: 'text-red-600',
       bg: 'bg-red-50',
       label: 'Error',
     },
@@ -234,26 +271,26 @@ function NetworkCard({ network }: NetworkCardProps) {
         <div className="grid grid-cols-2 gap-4 mb-4">
           <div>
             <p className="text-xs text-gray-600 uppercase">Revenue (Week)</p>
-            <p className="text-lg font-bold text-primary-blue">${network.revenue.toLocaleString()}</p>
+            <p className="text-lg font-bold text-primary-blue">{curFmt.format(Math.max(0, network.revenue))}</p>
           </div>
           <div>
             <p className="text-xs text-gray-600 uppercase">Impressions</p>
-            <p className="text-lg font-bold text-primary-blue">{network.impressions.toLocaleString()}</p>
+            <p className="text-lg font-bold text-primary-blue">{numFmt.format(Math.max(0, network.impressions))}</p>
           </div>
           <div>
             <p className="text-xs text-gray-600 uppercase">eCPM</p>
-            <p className="text-lg font-bold text-primary-blue">${network.ecpm.toFixed(2)}</p>
+            <p className="text-lg font-bold text-primary-blue">{curFmt.format(Math.max(0, network.ecpm))}</p>
           </div>
           <div>
             <p className="text-xs text-gray-600 uppercase">Fill Rate</p>
-            <p className="text-lg font-bold text-primary-blue">{network.fillRate}%</p>
+            <p className="text-lg font-bold text-primary-blue">{network.fillRatePct}%</p>
           </div>
         </div>
       ) : (
         <div className={`${config.bg} p-4 rounded mb-4`}>
           <p className="text-sm text-gray-700">
             {network.status === 'inactive' && 'This network is not connected. Click "Configure" to set up.'}
-            {network.status === 'error' && 'Connection error. Check your credentials and try reconnecting.'}
+            {network.status === 'error' && 'Connection error. Check your credentials and try reconnecting. Review logs for details.'}
           </p>
         </div>
       )}
@@ -262,13 +299,19 @@ function NetworkCard({ network }: NetworkCardProps) {
       <div className="flex items-center justify-between pt-4 border-t border-gray-200">
         <span className="text-xs text-gray-500">Last sync: {network.lastSync}</span>
         <div className="flex gap-2">
-          <button className="px-4 py-2 text-sm font-bold text-primary-blue border border-primary-blue rounded hover:bg-primary-blue hover:text-white transition-colors">
+          <a
+            href={network.docsUrl || '/documentation#networks'}
+            className="px-4 py-2 text-sm font-bold text-primary-blue border border-primary-blue rounded hover:bg-primary-blue hover:text-white transition-colors"
+          >
             Configure
-          </button>
-          {network.status === 'active' && (
-            <button className="px-4 py-2 text-sm font-bold text-white bg-primary-blue rounded hover:bg-primary-blue/90 transition-colors">
-              View Stats
-            </button>
+          </a>
+          {network.logsUrl && (
+            <a
+              href={network.logsUrl}
+              className="px-4 py-2 text-sm font-bold text-white bg-primary-blue rounded hover:bg-primary-blue/90 transition-colors"
+            >
+              View Logs
+            </a>
           )}
         </div>
       </div>

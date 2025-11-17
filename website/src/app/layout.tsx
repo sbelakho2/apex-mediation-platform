@@ -1,6 +1,8 @@
 import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 import './globals.css';
+import SkipToContent from '@/components/SkipToContent';
+import { ThemeProvider } from '@/components/ui/ThemeProvider';
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -49,7 +51,12 @@ export default function RootLayout({
         <meta name="theme-color" content="#005293" />
       </head>
       <body className={inter.className}>
-        {children}
+        <SkipToContent />
+        <ThemeProvider>
+          <main id="main-content" tabIndex={-1}>
+            {children}
+          </main>
+        </ThemeProvider>
       </body>
     </html>
   );

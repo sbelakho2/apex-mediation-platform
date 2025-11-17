@@ -1,22 +1,53 @@
 'use client';
 
-import { FormEvent, useState } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
 
 /**
  * Newsletter signup panel
  * Reference: Design.md § "Newsletter Sign-up Panel"
  */
 export default function NewsletterPanel() {
-  const [status, setStatus] = useState<'idle' | 'success'>('idle');
+  const [status, setStatus] = useState<'idle' | 'success' | 'error' | 'submitting'>('idle');
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+  useEffect(() => {
+    // Persist success until dismissed (simple heuristic)
+    if (typeof window === 'undefined') return;
+    const done = window.localStorage.getItem('newsletter.subscribed')
+    if (done === 'true') setStatus('success')
+  }, [])
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
     const email = formData.get('email');
+    const hp = formData.get('hp'); // honeypot
 
-    if (typeof email === 'string' && email.trim().length > 3) {
+    if (typeof hp === 'string' && hp.trim().length > 0) {
+      // Bot: pretend success
       setStatus('success');
+      try { localStorage.setItem('newsletter.subscribed', 'true'); } catch {}
       event.currentTarget.reset();
+      return;
+    }
+
+    if (typeof email !== 'string' || email.trim().length < 5) return;
+
+    try {
+      setStatus('submitting');
+      const res = await fetch('/api/newsletter', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ email })
+      });
+      if (res.ok) {
+        setStatus('success');
+        try { localStorage.setItem('newsletter.subscribed', 'true'); } catch {}
+        event.currentTarget.reset();
+      } else {
+        setStatus('error');
+      }
+    } catch {
+      setStatus('error');
     }
   };
 
@@ -59,17 +90,25 @@ export default function NewsletterPanel() {
                 </div>
                 <button
                   type="submit"
-                  className="whitespace-nowrap rounded-full bg-sunshine-yellow px-8 py-3 font-bold uppercase text-primary-blue transition hover:bg-pale-yellow focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-blue"
+                  disabled={status === 'submitting'}
+                  className="whitespace-nowrap rounded-full bg-sunshine-yellow px-8 py-3 font-bold uppercase text-primary-blue transition hover:bg-pale-yellow disabled:opacity-60 disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-blue"
                 >
-                  Subscribe
+                  {status === 'submitting' ? 'Subscribing…' : 'Subscribe'}
                 </button>
               </div>
+              {/* Honeypot */}
+              <input type="text" name="hp" aria-hidden="true" tabIndex={-1} className="hidden" />
               <p className="mt-3 text-xs font-semibold uppercase tracking-wide text-primary-blue/60">
                 No spam. Unsubscribe anytime. We respect your privacy.
               </p>
               {status === 'success' && (
                 <p className="mt-3 text-sm font-bold text-success-green" role="status">
                   Thanks for subscribing! Please check your inbox to confirm.
+                </p>
+              )}
+              {status === 'error' && (
+                <p className="mt-3 text-sm font-bold text-red-600" role="status">
+                  Sorry, something went wrong. Please try again later.
                 </p>
               )}
             </form>
