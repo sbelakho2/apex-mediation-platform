@@ -38,6 +38,8 @@ Services will be available at:
 
 > 📝 When the deploy script creates `monitoring/.env` for you, it exits immediately—fill in every placeholder, then rerun `./deploy-monitoring.sh start` so the stack can boot. Use `./deploy-monitoring.sh backup` for validated Prometheus/Loki/Grafana archives (each gzip is checked after creation).
 
+> 🗂 Grafana now reads datasources from `grafana-datasources.generated.yml`, which `./deploy-monitoring.sh` renders each time you run `start`/`restart`. Postgres (`DATABASE_URL`/`DB_USER`/`DB_PASSWORD`) and ClickHouse (`CLICKHOUSE_URL`/`CLICKHOUSE_PASSWORD`) datasources are added only when all required variables exist in `.env`; otherwise Grafana still boots with Prometheus + Loki and prints a warning.
+
 ### Production Deployment
 
 ```bash

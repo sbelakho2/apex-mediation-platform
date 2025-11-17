@@ -1,4 +1,9 @@
 # Grafana datasource configuration
+#
+# This file contains only the always-on datasources (Prometheus, Loki).
+# `deploy-monitoring.sh` renders `grafana-datasources.generated.yml` from this
+# base file and conditionally appends PostgreSQL and ClickHouse datasources when
+# valid credentials exist in `monitoring/.env`.
 apiVersion: 1
 
 datasources:
@@ -28,27 +33,3 @@ datasources:
           name: TraceID
           url: "$${__value.raw}"
 
-  # PostgreSQL - Direct database queries
-  - name: PostgreSQL
-    type: postgres
-    url: ${DATABASE_URL}
-    user: ${DB_USER}
-    secureJsonData:
-      password: ${DB_PASSWORD}
-    jsonData:
-      database: apexmediation
-      sslmode: require
-      maxOpenConns: 10
-      maxIdleConns: 5
-      connMaxLifetime: 14400
-
-  # ClickHouse - Analytics queries
-  - name: ClickHouse
-    type: grafana-clickhouse-datasource
-    url: ${CLICKHOUSE_URL}
-    secureJsonData:
-      password: ${CLICKHOUSE_PASSWORD}
-    jsonData:
-      defaultDatabase: apexmediation
-      dialTimeout: 10
-      queryTimeout: 60

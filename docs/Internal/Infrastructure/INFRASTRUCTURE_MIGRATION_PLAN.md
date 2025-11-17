@@ -315,7 +315,7 @@ services:
       - GF_INSTALL_PLUGINS=grafana-piechart-panel
     volumes:
       - grafana-data:/var/lib/grafana
-      - ./grafana-datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml
+      - ./grafana-datasources.generated.yml:/etc/grafana/provisioning/datasources/datasources.yml
 
 volumes:
   prometheus-data:

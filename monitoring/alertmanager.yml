@@ -20,11 +20,13 @@ route:
 
   # Child routes
   routes:
-    # Critical alerts - immediate notification
+    # Optional SMS channel for critical alerts
+    # OPTIONAL_TWILIO_ROUTE_START
     - match:
         severity: critical
       receiver: 'founder-sms'
       continue: true
+    # OPTIONAL_TWILIO_ROUTE_END
     
     - match:
         severity: critical
@@ -110,6 +112,7 @@ receivers:
 
   # Founder SMS (critical alerts only)
   # Using Twilio webhook (configure via TWILIO_WEBHOOK_URL secret)
+  # OPTIONAL_TWILIO_RECEIVER_START
   - name: 'founder-sms'
     webhook_configs:
       - url: '${TWILIO_WEBHOOK_URL}'
@@ -118,6 +121,7 @@ receivers:
           basic_auth:
             username: '${TWILIO_ACCOUNT_SID}'
             password: '${TWILIO_AUTH_TOKEN}'
+  # OPTIONAL_TWILIO_RECEIVER_END
 
   # Business metrics digest (daily summary)
   - name: 'business-metrics-email'
@@ -139,6 +143,7 @@ receivers:
           <p><a href="https://console.apexmediation.com/analytics">View Full Analytics</a></p>
 
   # Slack notifications (optional, requires Slack webhook)
+  # OPTIONAL_SLACK_RECEIVER_START
   - name: 'slack-notifications'
     slack_configs:
       - api_url: '${SLACK_WEBHOOK_URL}'
@@ -152,9 +157,12 @@ receivers:
           • {{ .Annotations.description }}
           {{ end }}
         send_resolved: true
+  # OPTIONAL_SLACK_RECEIVER_END
 
   # Discord notifications (optional, requires Discord webhook)
+  # OPTIONAL_DISCORD_RECEIVER_START
   - name: 'discord-notifications'
     webhook_configs:
       - url: '${DISCORD_WEBHOOK_URL}'
         send_resolved: true
+  # OPTIONAL_DISCORD_RECEIVER_END

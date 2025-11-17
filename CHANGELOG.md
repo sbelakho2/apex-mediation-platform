@@ -28,6 +28,22 @@ What changed (initial wave)
 - FIX-08-10 — `monitoring/loki-config.yml` now enables auth, enforces sensible max-stream limits, and references a new `loki-tenant-limits.yaml` override file; Promtail injects `LOKI_TENANT_ID`, the file is mounted via Docker Compose, and the README explains how to tune per-tenant caps.
   - **Test note:** `yq -e '.' monitoring/loki-config.yml` validates the updated YAML, and `docker compose config --services` (run inside `monitoring/`) confirms the stack still resolves with the new mount.
 
+What changed (FIX-08-400 → FIX-08-406)
+- FIX-08-400 — `monitoring/deploy-monitoring.sh` now exits after scaffolding `.env`, instructs operators to re-run once real secrets are filled, and the `backup` subcommand validates each gzip archive so corrupt snapshots are caught early; `monitoring/README.md` mirrors the new workflow so folks know to rerun the deploy script before `docker compose up`.
+  - **Test note:** `bash -n monitoring/deploy-monitoring.sh` keeps the script syntax-checked after the guardrails landed.
+- FIX-08-401 — `infrastructure/helm/backend/values.yaml` picked up a `autoscaling.metricsServerEnabled` flag and `templates/hpa.yaml` now fails fast when memory scaling is requested on clusters without the metrics server, preventing pending HPAs from rolling out unnoticed.
+  - **Test note:** `helm lint infrastructure/helm/backend` (Helm 3.15.4) continues to pass with the new validation gate.
+- FIX-08-402 — `infrastructure/helm/console/templates/hpa.yaml` can now read optional `targetCPUOverrides` from `values.yaml`, letting blue/green console colors scale independently (75% default, 65% for `blue`, etc.) instead of copying chart values between Helm releases.
+  - **Test note:** `helm lint infrastructure/helm/console` (Helm 3.15.4) reports no regressions.
+- FIX-08-403 — `infrastructure/helm/fraud-inference/values.yaml` introduces a `customMetricsEnabled` toggle that the HPA template honors before wiring custom metric blocks, so environments without the adapter can flip the feature off without editing manifests.
+  - **Test note:** `helm lint infrastructure/helm/fraud-inference` (Helm 3.15.4) validates the templating change.
+- FIX-08-404 — `monitoring/alerts.yml` now uses the actual `pg_settings_max_connections - pg_stat_activity_count` exporter metrics for `DatabaseConnectionPoolExhausted` (no more `pg_pool_size` phantom series) and continues to group by cluster/host labels.
+  - **Test note:** `/tmp/prometheus-2.53.2.linux-amd64/promtool check rules monitoring/alerts.yml` reports “SUCCESS: 44 rules found”.
+- FIX-08-405 — `monitoring/deploy-monitoring.sh` now renders `grafana-datasources.generated.yml` from the tracked `grafana-datasources.yml`, appending PostgreSQL/ClickHouse entries only when the corresponding `.env` secrets exist; `monitoring/docker-compose.yml`, `.gitignore`, `docs/Internal/Infrastructure/INFRASTRUCTURE_MIGRATION_PLAN.md`, `docs/Internal/Development/AD_PROJECT_FILE_ANALYSIS.md`, and `monitoring/README.md` all note the generated file so operators expect the warning when DB creds are missing.
+  - **Test note:** `bash -n monitoring/deploy-monitoring.sh` (same run as FIX-08-400) covers the new rendering helper.
+- FIX-08-406 — `monitoring/grafana/api_red_dashboard.json` now starts with service-level stat panels, multiplies latency histograms by 1000 to stay in milliseconds, and exposes a `service` templating variable so teams can pivot the RED view per backend/adapter instead of duplicating the `red-metrics-by-route` dashboard.
+  - **Test note:** `jq . monitoring/grafana/api_red_dashboard.json` validates the JSON export after the templating additions.
+
 ---
 
 Changelog — FIX-07 Quality & Testing Automation (2025-11-17)

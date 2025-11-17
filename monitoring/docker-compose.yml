@@ -77,7 +77,7 @@ services:
       - GF_SMTP_PASSWORD=${RESEND_API_KEY}
       - GF_SMTP_FROM_ADDRESS=alerts@apexmediation.com
     volumes:
-      - ./grafana-datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml
+      - ./grafana-datasources.generated.yml:/etc/grafana/provisioning/datasources/datasources.yml
       - ./grafana-dashboards.yml:/etc/grafana/provisioning/dashboards/dashboards.yml
       - ./dashboards:/var/lib/grafana/dashboards
       - grafana-data:/var/lib/grafana
@@ -132,7 +132,7 @@ services:
       - /:/rootfs:ro
       - /var/run:/var/run:ro
       - /sys:/sys:ro
-      - /var/lib/docker/:/var/lib/docker:ro
+      - /var/snap/docker/common/var-lib-docker/:/var/lib/docker:ro
     networks:
       - monitoring
 

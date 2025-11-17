@@ -7,6 +7,7 @@ set -e
 COMMAND=${1:-start}
 MONITORING_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ALERTMANAGER_RENDERED="$MONITORING_DIR/alertmanager.generated.yml"
+GRAFANA_DATASOURCES_RENDERED="$MONITORING_DIR/grafana-datasources.generated.yml"
 
 echo "🔍 ApexMediation Monitoring Stack"
 echo "   Directory: $MONITORING_DIR"
@@ -63,8 +64,77 @@ render_alertmanager_config() {
 
   envsubst '$RESEND_API_KEY $TWILIO_WEBHOOK_URL $TWILIO_ACCOUNT_SID $TWILIO_AUTH_TOKEN $SLACK_WEBHOOK_URL $DISCORD_WEBHOOK_URL' \
     < "$MONITORING_DIR/alertmanager.yml" > "$ALERTMANAGER_RENDERED"
-  chmod 600 "$ALERTMANAGER_RENDERED"
+    strip_optional_alertmanager_block() {
+      local marker="$1"
+      sed -i "/# OPTIONAL_${marker}_START/,/# OPTIONAL_${marker}_END/d" "$ALERTMANAGER_RENDERED"
+    }
+
+    if [ -z "$TWILIO_WEBHOOK_URL" ]; then
+      strip_optional_alertmanager_block "TWILIO_ROUTE"
+      strip_optional_alertmanager_block "TWILIO_RECEIVER"
+      echo "⚠️  Disabled Twilio SMS alerts (set TWILIO_WEBHOOK_URL to enable)."
+    fi
+
+    if [ -z "$SLACK_WEBHOOK_URL" ]; then
+      strip_optional_alertmanager_block "SLACK_RECEIVER"
+      echo "⚠️  Disabled Slack notifications (set SLACK_WEBHOOK_URL to enable)."
+    fi
+
+    if [ -z "$DISCORD_WEBHOOK_URL" ]; then
+      strip_optional_alertmanager_block "DISCORD_RECEIVER"
+      echo "⚠️  Disabled Discord notifications (set DISCORD_WEBHOOK_URL to enable)."
+    fi
+
+  chmod 644 "$ALERTMANAGER_RENDERED"
   echo "✅ Rendered Alertmanager config -> $ALERTMANAGER_RENDERED"
+}
+
+render_grafana_datasources() {
+  if [ ! -f "$MONITORING_DIR/grafana-datasources.yml" ]; then
+    echo "❌ monitoring/grafana-datasources.yml is missing; cannot render Grafana datasources."
+    exit 1
+  fi
+
+  cp "$MONITORING_DIR/grafana-datasources.yml" "$GRAFANA_DATASOURCES_RENDERED"
+  printf "\n" >> "$GRAFANA_DATASOURCES_RENDERED"
+
+  if [[ -n "$DATABASE_URL" && -n "$DB_USER" && -n "$DB_PASSWORD" ]]; then
+    cat >> "$GRAFANA_DATASOURCES_RENDERED" <<EOF
+  - name: PostgreSQL
+    type: postgres
+    url: "$DATABASE_URL"
+    user: "$DB_USER"
+    secureJsonData:
+      password: "$DB_PASSWORD"
+    jsonData:
+      database: apexmediation
+      sslmode: require
+      maxOpenConns: 10
+      maxIdleConns: 5
+      connMaxLifetime: 14400
+EOF
+  else
+    echo "⚠️  Skipping PostgreSQL datasource — set DATABASE_URL, DB_USER, and DB_PASSWORD in monitoring/.env to enable it."
+  fi
+
+  if [[ -n "$CLICKHOUSE_URL" && -n "$CLICKHOUSE_PASSWORD" ]]; then
+    cat >> "$GRAFANA_DATASOURCES_RENDERED" <<EOF
+  - name: ClickHouse
+    type: grafana-clickhouse-datasource
+    url: "$CLICKHOUSE_URL"
+    secureJsonData:
+      password: "$CLICKHOUSE_PASSWORD"
+    jsonData:
+      defaultDatabase: apexmediation
+      dialTimeout: 10
+      queryTimeout: 60
+EOF
+  else
+    echo "⚠️  Skipping ClickHouse datasource — set CLICKHOUSE_URL and CLICKHOUSE_PASSWORD in monitoring/.env to enable it."
+  fi
+
+  chmod 600 "$GRAFANA_DATASOURCES_RENDERED"
+  echo "✅ Rendered Grafana datasources -> $GRAFANA_DATASOURCES_RENDERED"
 }
 
 verify_backup_archive() {
@@ -80,6 +150,7 @@ verify_backup_archive() {
 case $COMMAND in
   start)
     render_alertmanager_config
+    render_grafana_datasources
     echo "🚀 Starting monitoring stack..."
     cd "$MONITORING_DIR"
     docker-compose up -d
@@ -136,6 +207,7 @@ case $COMMAND in
   
   restart)
     render_alertmanager_config
+    render_grafana_datasources
     echo "🔄 Restarting monitoring stack..."
     cd "$MONITORING_DIR"
     docker-compose restart
