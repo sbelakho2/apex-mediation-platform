@@ -14,6 +14,8 @@ This directory contains the complete monitoring stack for Rival Ad Platform, inc
 
 ### Local Development
 
+> ⚠️ Before running any containers, create a `.env` file in this directory (or run `./deploy-monitoring.sh start` once to scaffold it) and replace every placeholder secret. Docker Compose automatically reads `.env`, so values such as `GRAFANA_PASSWORD`, `RESEND_API_KEY`, `DATABASE_URL`, and `CLICKHOUSE_URL` must be present before the stack boots.
+
 ```bash
 # Start the monitoring stack
 docker-compose up -d
@@ -26,9 +28,15 @@ docker-compose down
 ```
 
 Services will be available at:
-- Grafana: http://localhost:3001 (admin/admin)
+- Grafana: http://localhost:3001 (admin / value of `$GRAFANA_PASSWORD` from `.env` — never leave the default `changeme` in shared environments)
 - Prometheus: http://localhost:9090
 - Alertmanager: http://localhost:9093
+
+> 💡 `alertmanager.yml` is a template. Run `./deploy-monitoring.sh start` (or `./deploy-monitoring.sh restart`) to render it to `alertmanager.generated.yml` via `envsubst` before bringing the stack up. Launching `docker-compose up` without rendering leaves `${VAR}` placeholders in Alertmanager and SMTP/Twilio auth will fail.
+
+> 🔐 Loki enforces multi-tenant auth now. Promtail sends logs with `LOKI_TENANT_ID` (default `apex`), and `loki-tenant-limits.yaml` defines per-tenant ingestion/retention caps. Update that file (and the env var in `.env`) if you add more tenants.
+
+> 📝 When the deploy script creates `monitoring/.env` for you, it exits immediately—fill in every placeholder, then rerun `./deploy-monitoring.sh start` so the stack can boot. Use `./deploy-monitoring.sh backup` for validated Prometheus/Loki/Grafana archives (each gzip is checked after creation).
 
 ### Production Deployment
 

@@ -21,6 +21,7 @@ const ALLOWLIST_FILES = new Set([
   'tokens.tsx',
 ]);
 
+const SUPPORTED_EXTENSIONS = new Set(['.ts', '.tsx', '.js', '.jsx', '.css', '.scss', '.sass', '.json']);
 const violations = [];
 
 function shouldSkip(filePath) {
@@ -39,8 +40,8 @@ function scan(filePath) {
     }
     return;
   }
-  const ext = path.extname(filePath);
-  if (!['.ts', '.tsx', '.js', '.jsx', '.css'].includes(ext)) return;
+  const ext = path.extname(filePath).toLowerCase();
+  if (!SUPPORTED_EXTENSIONS.has(ext)) return;
   if (shouldSkip(filePath)) return;
 
   const content = fs.readFileSync(filePath, 'utf8');

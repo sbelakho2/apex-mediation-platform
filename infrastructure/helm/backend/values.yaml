@@ -6,7 +6,7 @@ replicaCount: 3
 image:
   repository: ghcr.io/rivalapexmediation/backend
   pullPolicy: IfNotPresent
-  tag: "latest"
+  tag: ""
 
 imagePullSecrets: []
 nameOverride: ""
@@ -74,6 +74,7 @@ autoscaling:
   enabled: true
   minReplicas: 3
   maxReplicas: 20
+  metricsServerEnabled: true  # Set to false if the cluster lacks metrics-server/custom metrics support
   targetCPUUtilizationPercentage: 70
   targetMemoryUtilizationPercentage: 80
   behavior:
@@ -147,14 +148,19 @@ env:
     value: info
 
 # Environment from secrets
-envFrom:
-  - secretRef:
-      name: backend-secrets
+envFrom: []
 
 # Secrets (create externally and reference here)
 secrets:
   create: false
   name: backend-secrets
+  mount: true
+  requiredKeys:
+    - DATABASE_URL
+    - CLICKHOUSE_URL
+    - REDIS_URL
+    - JWT_SECRET
+    - JWT_REFRESH_SECRET
   data: {}
     # DATABASE_URL: postgresql://...
     # CLICKHOUSE_URL: http://...

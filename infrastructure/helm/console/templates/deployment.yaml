@@ -23,6 +23,7 @@ spec:
         {{- include "console.selectorLabels" . | nindent 8 }}
         color: {{ .Values.deployment.color }}
     spec:
+      automountServiceAccountToken: {{ .Values.podAutomountServiceAccountToken | default false }}
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
@@ -64,9 +65,19 @@ spec:
           {{- toYaml .Values.resources | nindent 12 }}
         env:
           {{- toYaml .Values.env | nindent 10 }}
-        {{- with .Values.envFrom }}
+        {{- $envFromList := list }}
+        {{- if .Values.secrets.mount }}
+        {{- $envFromList = append $envFromList (dict "secretRef" (dict "name" (include "console.secretName" .))) }}
+        {{- end }}
+        {{- if .Values.config.mount }}
+        {{- $envFromList = append $envFromList (dict "configMapRef" (dict "name" (include "console.configMapName" .))) }}
+        {{- end }}
+        {{- range .Values.envFrom }}
+        {{- $envFromList = append $envFromList . }}
+        {{- end }}
+        {{- if gt (len $envFromList) 0 }}
         envFrom:
-          {{- toYaml . | nindent 10 }}
+          {{- toYaml $envFromList | nindent 10 }}
         {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:

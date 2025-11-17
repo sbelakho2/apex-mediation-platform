@@ -13,13 +13,18 @@ spec:
   minReplicas: {{ .Values.autoscaling.minReplicas }}
   maxReplicas: {{ .Values.autoscaling.maxReplicas }}
   metrics:
-  {{- if .Values.autoscaling.targetCPUUtilizationPercentage }}
+  {{- $cpuOverrides := default (dict) .Values.autoscaling.targetCPUOverrides -}}
+  {{- $cpuTarget := .Values.autoscaling.targetCPUUtilizationPercentage -}}
+  {{- if hasKey $cpuOverrides .Values.deployment.color -}}
+    {{- $cpuTarget = index $cpuOverrides .Values.deployment.color -}}
+  {{- end -}}
+  {{- if $cpuTarget }}
   - type: Resource
     resource:
       name: cpu
       target:
         type: Utilization
-        averageUtilization: {{ .Values.autoscaling.targetCPUUtilizationPercentage }}
+        averageUtilization: {{ $cpuTarget }}
   {{- end }}
   {{- if .Values.autoscaling.targetMemoryUtilizationPercentage }}
   - type: Resource

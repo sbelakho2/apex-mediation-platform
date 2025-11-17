@@ -19,9 +19,18 @@ export const options = {
 };
 
 const API_BASE = __ENV.API_BASE || 'http://localhost:4000';
+const ORGANIZATION_ID = __ENV.BILLING_ORG_ID || __ENV.ORGANIZATION_ID;
+const PAGE = __ENV.BILLING_INVOICES_PAGE || '1';
+const LIMIT = __ENV.BILLING_INVOICES_LIMIT || '20';
+
+if (!ORGANIZATION_ID) {
+  throw new Error('Set BILLING_ORG_ID (or ORGANIZATION_ID) to a valid tenant UUID before running the invoices perf test.');
+}
 
 export default function () {
-  const url = `${API_BASE}/api/v1/billing/invoices?organizationId=550e8400-e29b-41d4-a716-446655440000&page=1&limit=20`;
+  const url = `${API_BASE}/api/v1/billing/invoices?organizationId=${encodeURIComponent(
+    ORGANIZATION_ID,
+  )}&page=${PAGE}&limit=${LIMIT}`;
   const res = http.get(url);
   check(res, {
     'status is 200/204': (r) => r.status === 200 || r.status === 204,

@@ -63,6 +63,18 @@ variable "enable_self_evolving_ai" {
   default     = false
 }
 
+variable "openai_allowed_cidrs" {
+  description = "List of CIDR blocks that are permitted to reach the OpenAI APIs"
+  type        = list(string)
+  default     = ["0.0.0.0/0"]
+}
+
+variable "openai_blocked_cidrs" {
+  description = "CIDR blocks that should be excluded from the OpenAI allow list (subset of allowed ranges)"
+  type        = list(string)
+  default     = []
+}
+
 variable "alert_email" {
   description = "Email address for AI cost alerts"
   type        = string
@@ -72,6 +84,28 @@ variable "slack_webhook_url" {
   description = "Slack webhook URL for critical AI cost alerts"
   type        = string
   sensitive   = true
+}
+
+variable "cost_review_retry_attempts" {
+  description = "Number of retry attempts for the daily cost review Slack notification"
+  type        = number
+  default     = 5
+
+  validation {
+    condition     = var.cost_review_retry_attempts > 0 && var.cost_review_retry_attempts <= 10
+    error_message = "Retry attempts must be between 1 and 10."
+  }
+}
+
+variable "cost_review_retry_delay_seconds" {
+  description = "Delay in seconds between Slack notification retries"
+  type        = number
+  default     = 5
+
+  validation {
+    condition     = var.cost_review_retry_delay_seconds >= 1 && var.cost_review_retry_delay_seconds <= 60
+    error_message = "Retry delay must be between 1 and 60 seconds."
+  }
 }
 
 # Kubernetes Secret: OpenAI API Key
@@ -94,6 +128,29 @@ resource "kubernetes_secret" "openai_credentials" {
 
   data = {
     OPENAI_API_KEY = var.openai_api_key
+  }
+
+  type = "Opaque"
+}
+
+# Kubernetes Secret: Slack alerting credentials
+resource "kubernetes_secret" "ai_alerting" {
+  metadata {
+    name      = "ai-cost-alerting"
+    namespace = var.namespace
+
+    labels = {
+      "app.kubernetes.io/name"       = "ai-cost-controls"
+      "app.kubernetes.io/managed-by" = "terraform"
+    }
+
+    annotations = {
+      "created-by" = "terraform"
+    }
+  }
+
+  data = {
+    SLACK_WEBHOOK_URL = var.slack_webhook_url
   }
 
   type = "Opaque"
@@ -170,13 +227,16 @@ resource "kubernetes_network_policy" "openai_egress" {
 
     # Allow egress to OpenAI API
     egress {
-      to {
-        ip_block {
-          cidr = "0.0.0.0/0"
-          except = []
+      dynamic "to" {
+        for_each = var.openai_allowed_cidrs
+        content {
+          ip_block {
+            cidr   = to.value
+            except = var.openai_blocked_cidrs
+          }
         }
       }
-      
+
       ports {
         protocol = "TCP"
         port     = "443"
@@ -238,18 +298,34 @@ resource "kubernetes_cron_job" "daily_cost_review" {
               command = ["/bin/sh", "-c"]
               args = [
                 <<-EOT
+                  set -euo pipefail
                   echo "Checking OpenAI usage..."
-                  # This would typically call your internal API to fetch spend metrics
-                  # and send summary email/Slack notification
-                  curl -X POST $SLACK_WEBHOOK_URL \
+
+                  if [ -z "${SLACK_WEBHOOK_URL:-}" ]; then
+                    echo "[warn] SLACK_WEBHOOK_URL not set; skipping notification"
+                    exit 0
+                  fi
+
+                  MONTHLY_BUDGET_LABEL=${MONTHLY_BUDGET:-unknown}
+                  RETRIES=${RETRY_ATTEMPTS:-5}
+                  RETRY_DELAY=${RETRY_DELAY_SECONDS:-5}
+                  PAYLOAD=$(printf '{"text":"Daily AI Cost Review: Budget $%s. Check Prometheus for openai_monthly_spend_dollars metric."}' "$MONTHLY_BUDGET_LABEL")
+
+                  curl --fail --show-error --retry "$RETRIES" --retry-delay "$RETRY_DELAY" --retry-all-errors \
+                    -X POST "$SLACK_WEBHOOK_URL" \
                     -H 'Content-Type: application/json' \
-                    -d '{"text":"Daily AI Cost Review: Check Prometheus for openai_monthly_spend_dollars metric"}'
+                    -d "$PAYLOAD"
                 EOT
               ]
 
               env {
                 name = "SLACK_WEBHOOK_URL"
-                value = var.slack_webhook_url
+                value_from {
+                  secret_key_ref {
+                    name = kubernetes_secret.ai_alerting.metadata[0].name
+                    key  = "SLACK_WEBHOOK_URL"
+                  }
+                }
               }
 
               env {
@@ -260,6 +336,16 @@ resource "kubernetes_cron_job" "daily_cost_review" {
                     key  = "MONTHLY_BUDGET_DOLLARS"
                   }
                 }
+              }
+
+              env {
+                name  = "RETRY_ATTEMPTS"
+                value = tostring(var.cost_review_retry_attempts)
+              }
+
+              env {
+                name  = "RETRY_DELAY_SECONDS"
+                value = tostring(var.cost_review_retry_delay_seconds)
               }
 
               resources {

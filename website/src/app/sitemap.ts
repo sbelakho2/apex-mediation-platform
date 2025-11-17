@@ -8,7 +8,15 @@ export default function sitemap(): MetadataRoute.Sitemap {
   const base = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, '') || 'http://localhost:3000'
   const now = new Date().toISOString()
 
-  const routes = ['/', '/pricing', '/documentation', '/about', '/contact']
+  // Expand coverage to include quiz and other key marketing routes
+  const routes = [
+    '/',
+    '/pricing',
+    '/documentation',
+    '/about',
+    '/contact',
+    '/quiz',
+  ]
 
   return routes.map((path) => ({
     url: `${base}${path}`,

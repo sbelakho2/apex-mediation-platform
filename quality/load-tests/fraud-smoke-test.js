@@ -23,6 +23,7 @@ export const options = {
 };
 
 const BASE_URL = __ENV.BASE_URL || 'http://localhost:8080';
+const SUMMARY_FILE = __ENV.FRAUD_SUMMARY_FILE || __ENV.K6_SUMMARY_PATH || '/tmp/k6-fraud-smoke-results.json';
 
 export function setup() {
   // Verify service is ready before test
@@ -31,6 +32,11 @@ export function setup() {
     throw new Error(`Service not ready: ${healthRes.status}`);
   }
   console.log('✓ Service ready for testing');
+  if (SUMMARY_FILE === 'none') {
+    console.log('ℹ️  Summary file disabled; only stdout will be written.');
+  } else {
+    console.log(`ℹ️  Summary artifacts will be written to ${SUMMARY_FILE}`);
+  }
 }
 
 export default function () {
@@ -103,8 +109,13 @@ export function handleSummary(data) {
     ).length,
   };
 
-  return {
-    'stdout': JSON.stringify(summary, null, 2),
-    '/tmp/k6-fraud-smoke-results.json': JSON.stringify(data, null, 2),
+  const outputs = {
+    stdout: JSON.stringify(summary, null, 2),
   };
+
+  if (SUMMARY_FILE && SUMMARY_FILE !== 'none') {
+    outputs[SUMMARY_FILE] = JSON.stringify(data, null, 2);
+  }
+
+  return outputs;
 }

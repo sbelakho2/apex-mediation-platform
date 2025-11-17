@@ -13,6 +13,34 @@ async function ensureDir(dir) {
   await fs.promises.mkdir(dir, { recursive: true });
 }
 
+async function pruneOldRuns(rootDir, keepCount = 5) {
+  if (keepCount <= 0) keepCount = 0;
+  let entries = [];
+  try {
+    entries = (await fs.promises.readdir(rootDir, { withFileTypes: true }))
+      .filter((dirent) => dirent.isDirectory())
+      .map((dirent) => ({ name: dirent.name }));
+  } catch (err) {
+    if (err.code === 'ENOENT') return; // Nothing to prune yet
+    throw err;
+  }
+
+  const stats = await Promise.all(entries.map(async (entry) => {
+    const fullPath = path.join(rootDir, entry.name);
+    const stat = await fs.promises.stat(fullPath);
+    return { ...entry, fullPath, mtimeMs: stat.mtimeMs };
+  }));
+
+  stats.sort((a, b) => b.mtimeMs - a.mtimeMs);
+  const stale = stats.slice(keepCount);
+  await Promise.all(
+    stale.map((entry) => fs.promises.rm(entry.fullPath, { recursive: true, force: true }))
+  );
+  if (stale.length > 0) {
+    console.log(`🧹 Removed ${stale.length} old screenshot run(s) from ${rootDir}`);
+  }
+}
+
 async function capture(browserType, baseUrl, outDir, routes, viewports, themes) {
   const browser = await browserType.launch();
   try {
@@ -47,7 +75,8 @@ async function capture(browserType, baseUrl, outDir, routes, viewports, themes) 
   const baseUrl = process.env.WEBSITE_BASE_URL || 'http://localhost:3000';
   const customOut = process.env.OUT_DIR; // optional
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-  const outDir = customOut || path.join(process.cwd(), 'artifacts', 'website-screenshots', timestamp);
+  const screenshotsRoot = path.join(process.cwd(), 'artifacts', 'website-screenshots');
+  const outDir = customOut || path.join(screenshotsRoot, timestamp);
   await ensureDir(outDir);
 
   // Routes can be overridden via env:
@@ -76,6 +105,11 @@ async function capture(browserType, baseUrl, outDir, routes, viewports, themes) 
 
   for (const bt of targets) {
     await capture(bt, baseUrl, outDir, routes, viewports, themes);
+  }
+
+  if (!customOut) {
+    const historyLimit = Number(process.env.WEBSITE_SCREENSHOT_HISTORY || 5);
+    await pruneOldRuns(screenshotsRoot, historyLimit);
   }
 
   console.log(`\nAll screenshots saved under: ${outDir}`);

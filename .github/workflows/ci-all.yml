@@ -404,6 +404,21 @@ jobs:
             quality/playwright-report/
           retention-days: 14
 
+  quality-go-integration:
+    name: Quality — Go integration harness
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: quality/go.mod
+          cache: true
+      - name: Run Go integration tests
+        working-directory: quality
+        run: go test ./integration
+
   android:
     name: Android SDK — unit tests and size gate
     runs-on: ubuntu-22.04

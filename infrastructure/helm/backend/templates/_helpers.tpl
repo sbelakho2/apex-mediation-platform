@@ -59,3 +59,14 @@ Create the name of the service account to use
 {{- default "default" .Values.serviceAccount.name }}
 {{- end }}
 {{- end }}
+
+{{/*
+Resolve the primary secret name for backend envFrom mounts.
+*/}}
+{{- define "backend.secretName" -}}
+{{- if .Values.secrets.name }}
+{{- .Values.secrets.name | trunc 63 | trimSuffix "-" }}
+{{- else }}
+{{- printf "%s-secrets" (include "backend.fullname" .) | trunc 63 | trimSuffix "-" }}
+{{- end }}
+{{- end }}

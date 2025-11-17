@@ -77,6 +77,12 @@ export default function ObservabilityOverviewPage() {
     }, backoffRef.current);
   };
 
+  const reload = async () => {
+    const controller = typeof AbortController !== 'undefined' ? new AbortController() : undefined;
+    const ok = await loadOnce(controller?.signal).catch(() => false);
+    scheduleNext(!!ok);
+  };
+
   useEffect(() => {
     let alive = true;
     pollingRef.current = true;
@@ -140,7 +146,7 @@ export default function ObservabilityOverviewPage() {
               <option key={d} value={d}>{d}d</option>
             ))}
           </select>
-          <button onClick={load} className="px-3 py-2 text-sm font-bold uppercase rounded bg-sunshine-yellow text-primary-blue">Refresh</button>
+          <button onClick={reload} className="px-3 py-2 text-sm font-bold uppercase rounded bg-sunshine-yellow text-primary-blue">Refresh</button>
         </div>
       </div>
 

@@ -1,4 +1,4 @@
-module quality
+module github.com/bel-consulting/rival-ad-stack/quality
 
 go 1.21
 

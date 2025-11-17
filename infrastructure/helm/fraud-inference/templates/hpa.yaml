@@ -21,7 +21,10 @@ spec:
           type: Utilization
           averageUtilization: {{ .Values.autoscaling.targetCPUUtilizationPercentage }}
     {{- end }}
-    {{- if .Values.autoscaling.metrics }}
-    {{- toYaml .Values.autoscaling.metrics | nindent 4 }}
+    {{- if and .Values.autoscaling.customMetricsEnabled (not .Values.autoscaling.customMetrics) }}
+    {{- fail "fraud-inference: autoscaling.customMetricsEnabled=true but no autoscaling.customMetrics provided" -}}
+    {{- end }}
+    {{- if and .Values.autoscaling.customMetricsEnabled .Values.autoscaling.customMetrics }}
+    {{- toYaml .Values.autoscaling.customMetrics | nindent 4 }}
     {{- end }}
 {{- end }}

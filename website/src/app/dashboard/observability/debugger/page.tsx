@@ -52,6 +52,12 @@ export default function MediationDebuggerPage() {
     }, backoffRef.current);
   };
 
+  const reload = async () => {
+    const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : undefined;
+    const ok = await loadOnce(ctrl?.signal).catch(() => false);
+    scheduleNext(!!ok);
+  };
+
   useEffect(() => {
     let alive = true;
     pollingRef.current = true;
@@ -137,7 +143,7 @@ export default function MediationDebuggerPage() {
               <option key={n} value={n}>{n}</option>
             ))}
           </select>
-          <button onClick={load} className="px-3 py-2 text-sm font-bold uppercase rounded bg-sunshine-yellow text-primary-blue">Refresh</button>
+          <button onClick={reload} className="px-3 py-2 text-sm font-bold uppercase rounded bg-sunshine-yellow text-primary-blue">Refresh</button>
         </div>
       </div>
 

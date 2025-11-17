@@ -31,6 +31,7 @@ services:
       - "3100:3100"
     volumes:
       - ./loki-config.yml:/etc/loki/local-config.yaml
+      - ./loki-tenant-limits.yaml:/etc/loki/tenant-limits.yaml
       - loki-data:/loki
     command: -config.file=/etc/loki/local-config.yaml
     networks:
@@ -41,10 +42,18 @@ services:
     image: grafana/promtail:latest
     container_name: promtail
     restart: unless-stopped
+    environment:
+      - BACKEND_LOG_PATH=${BACKEND_LOG_PATH:-/var/log/backend/*.log}
+      - CONSOLE_LOG_PATH=${CONSOLE_LOG_PATH:-/var/log/console/*.log}
+      - SYSTEM_LOG_PATH=${SYSTEM_LOG_PATH:-/var/log/syslog}
+      - PROMTAIL_POSITIONS_PATH=${PROMTAIL_POSITIONS_PATH:-/tmp/positions.yaml}
+      - LOKI_TENANT_ID=${LOKI_TENANT_ID:-apex}
     volumes:
       - ./promtail-config.yml:/etc/promtail/config.yml
       - /var/log:/var/log:ro
-    command: -config.file=/etc/promtail/config.yml
+    command:
+      - '-config.file=/etc/promtail/config.yml'
+      - '-config.expand-env=true'
     networks:
       - monitoring
     depends_on:
@@ -86,7 +95,7 @@ services:
     ports:
       - "9093:9093"
     volumes:
-      - ./alertmanager.yml:/etc/alertmanager/alertmanager.yml
+      - ./alertmanager.generated.yml:/etc/alertmanager/alertmanager.yml
       - alertmanager-data:/alertmanager
     command:
       - '--config.file=/etc/alertmanager/alertmanager.yml'

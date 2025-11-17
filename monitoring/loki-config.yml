@@ -1,4 +1,4 @@
-auth_enabled: false
+auth_enabled: true
 
 server:
   http_listen_port: 3100
@@ -34,6 +34,9 @@ limits_config:
   retention_period: 720h
   ingestion_rate_mb: 10
   ingestion_burst_size_mb: 20
+  max_streams_per_user: 2000
+  max_global_streams_per_tenant: 5000
+  per_tenant_override_config: /etc/loki/tenant-limits.yaml
 
 # Compactor - cleanup old logs
 compactor:

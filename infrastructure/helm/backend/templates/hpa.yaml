@@ -21,7 +21,10 @@ spec:
         type: Utilization
         averageUtilization: {{ .Values.autoscaling.targetCPUUtilizationPercentage }}
   {{- end }}
-  {{- if .Values.autoscaling.targetMemoryUtilizationPercentage }}
+  {{- if and .Values.autoscaling.targetMemoryUtilizationPercentage (not .Values.autoscaling.metricsServerEnabled) }}
+  {{- fail "backend: autoscaling.targetMemoryUtilizationPercentage requires metrics-server support. Set autoscaling.metricsServerEnabled=true once metrics-server is installed." -}}
+  {{- end }}
+  {{- if and .Values.autoscaling.metricsServerEnabled .Values.autoscaling.targetMemoryUtilizationPercentage }}
   - type: Resource
     resource:
       name: memory

@@ -64,7 +64,7 @@ func TestEndToEndAuctionFlow(t *testing.T) {
 			assert.Equal(t, http.StatusOK, impResp.StatusCode)
 
 			// Verify impression recorded in ClickHouse
-			time.Sleep(2 * time.Second) // Allow for async processing
+			waitForAsyncFlush()
 			impressionCount := queryClickHouse(t, fmt.Sprintf(
 				"SELECT count() FROM impressions WHERE auction_id = '%s'",
 				auctionID,
@@ -84,7 +84,7 @@ func TestEndToEndAuctionFlow(t *testing.T) {
 			assert.Equal(t, http.StatusOK, clickResp.StatusCode)
 
 			// Verify click recorded
-			time.Sleep(2 * time.Second)
+			waitForAsyncFlush()
 			clickCount := queryClickHouse(t, fmt.Sprintf(
 				"SELECT count() FROM clicks WHERE impression_id IN (SELECT event_id FROM impressions WHERE auction_id = '%s')",
 				auctionID,
@@ -109,7 +109,7 @@ func TestEndToEndAuctionFlow(t *testing.T) {
 			require.NoError(t, err)
 
 			assert.Greater(t, analytics["total_revenue"], 0.0)
-			assert.Greater(t, analytics["impressions"], 0)
+			assert.Greater(t, analytics["impressions"], 0.0)
 		})
 	})
 }
@@ -162,7 +162,7 @@ func TestFraudDetectionPipeline(t *testing.T) {
 		}
 
 		// Verify fraud alert created
-		time.Sleep(3 * time.Second)
+		waitForAsyncFlush()
 		alertsResp := makeAPIRequest(t, "GET", "/v1/fraud/alerts", publisherID, nil)
 		assert.Equal(t, http.StatusOK, alertsResp.StatusCode)
 
@@ -188,8 +188,8 @@ func TestFraudDetectionPipeline(t *testing.T) {
 		err := json.NewDecoder(resp.Body).Decode(&stats)
 		require.NoError(t, err)
 
-		assert.Greater(t, stats["total_traffic"], 0)
-		assert.Greater(t, stats["fraudulent_traffic"], 0)
+		assert.Greater(t, stats["total_traffic"], 0.0)
+		assert.Greater(t, stats["fraudulent_traffic"], 0.0)
 		assert.Greater(t, stats["fraud_rate"], 0.0)
 	})
 }
@@ -259,7 +259,7 @@ func TestPaymentProcessing(t *testing.T) {
 			assert.Equal(t, http.StatusOK, processResp.StatusCode)
 
 			// Verify payout status updated
-			time.Sleep(2 * time.Second)
+			waitForAsyncFlush()
 			statusResp := makeAPIRequest(t, "GET", fmt.Sprintf("/v1/payments/payouts/%s", payoutID), publisherID, nil)
 
 			var updatedPayout map[string]interface{}
@@ -432,16 +432,3 @@ func TestPerformanceUnderLoad(t *testing.T) {
 			p50.Milliseconds(), p95.Milliseconds(), p99.Milliseconds(), errorRate)
 	})
 }
-
-// Helper functions (implementations omitted for brevity)
-func createTestPublisher(t *testing.T) string { /* ... */ return uuid.New().String() }
-func createTestPlacement(t *testing.T, publisherID string) string { /* ... */
-	return uuid.New().String()
-}
-func configureTestAdapters(t *testing.T, placementID string) { /* ... */ }
-func makeAPIRequest(t *testing.T, method, path, publisherID string, body interface{}) *http.Response { /* ... */
-	return nil
-}
-func queryClickHouse(t *testing.T, query string) int                                     { /* ... */ return 0 }
-func generateTestRevenue(t *testing.T, publisherID, placementID string, amountCents int) { /* ... */ }
-func calculatePercentiles(durations []time.Duration) (p50, p95, p99 time.Duration)       { /* ... */ return }

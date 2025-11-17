@@ -33,7 +33,7 @@ type FeatureFlags = Partial<{
   settings: boolean;
 }>;
 
-type NavItem = { name: string; href: string; icon: (props: any) => JSX.Element; flag?: keyof FeatureFlags };
+type NavItem = { name: string; href: string; icon: any; flag?: keyof FeatureFlags };
 
 const NAV_BLUEPRINT: NavItem[] = [
   { name: 'Dashboard', href: '/dashboard', icon: HomeIcon },
@@ -107,16 +107,16 @@ export default function DashboardSidebar({ mobileOpen = false, onClose }: Dashbo
 
   useEffect(() => {
     if (!mobileOpen) return;
-    const panel = panelRef.current;
-    if (!panel) return;
     function onKeyDown(e: KeyboardEvent) {
+      const p = panelRef.current;
+      if (!p) return;
       if (e.key === 'Escape') {
         e.preventDefault();
         onClose?.();
         return;
       }
       if (e.key === 'Tab') {
-        const focusables = panel.querySelectorAll<HTMLElement>(
+        const focusables = p.querySelectorAll<HTMLElement>(
           'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])'
         );
         if (focusables.length === 0) return;

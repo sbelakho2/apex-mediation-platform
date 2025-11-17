@@ -74,9 +74,16 @@ spec:
           {{- toYaml .Values.resources | nindent 12 }}
         env:
           {{- toYaml .Values.env | nindent 10 }}
-        {{- with .Values.envFrom }}
+        {{- $envFromList := list }}
+        {{- if .Values.secrets.mount }}
+        {{- $envFromList = append $envFromList (dict "secretRef" (dict "name" (include "backend.secretName" .))) }}
+        {{- end }}
+        {{- range .Values.envFrom }}
+        {{- $envFromList = append $envFromList . }}
+        {{- end }}
+        {{- if gt (len $envFromList) 0 }}
         envFrom:
-          {{- toYaml . | nindent 10 }}
+          {{- toYaml $envFromList | nindent 10 }}
         {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:

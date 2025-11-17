@@ -18,6 +18,9 @@ serviceAccount:
   create: true
   annotations: {}
   name: ""
+  automountServiceAccountToken: false
+
+podAutomountServiceAccountToken: false
 
 podAnnotations: {}
 
@@ -50,6 +53,7 @@ ingress:
     nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
   hosts:
     - host: console.rivalapexmediation.com
+      servicePort: null
       paths:
         - path: /
           pathType: Prefix
@@ -71,6 +75,7 @@ autoscaling:
   minReplicas: 2
   maxReplicas: 10
   targetCPUUtilizationPercentage: 70
+  targetCPUOverrides: {}
   targetMemoryUtilizationPercentage: 80
   behavior:
     scaleDown:
@@ -131,18 +136,40 @@ env:
     value: "1"
 
 # Environment from secrets
-envFrom:
-  - secretRef:
-      name: console-secrets
+envFrom: []
 
 # Secrets (create externally and reference here)
 secrets:
   create: false
   name: console-secrets
+  mount: true
+  requiredKeys:
+    - NEXTAUTH_URL
+    - NEXTAUTH_SECRET
+    - JWT_SECRET
+    - RESEND_API_KEY
+    - STRIPE_SECRET_KEY
+    - STRIPE_PUBLIC_KEY
+    - SESSION_ENCRYPTION_KEY
   data: {}
     # NEXTAUTH_URL: https://console.rivalapexmediation.com
-    # NEXTAUTH_SECRET: xxx
-    # NEXT_PUBLIC_API_URL: https://api.rivalapexmediation.com
+    # NEXTAUTH_SECRET: super-secret
+    # JWT_SECRET: base64encodedsecret
+    # RESEND_API_KEY: re_...
+    # STRIPE_SECRET_KEY: sk_live_...
+    # STRIPE_PUBLIC_KEY: pk_live_...
+    # SESSION_ENCRYPTION_KEY: base64...
+
+# Runtime (non-secret) config values for NEXT_PUBLIC_* env vars
+config:
+  create: true
+  name: ""
+  mount: true
+  annotations: {}
+  data:
+    NEXT_PUBLIC_API_URL: https://api.rivalapexmediation.com
+    NEXT_PUBLIC_CONSOLE_BASE_URL: https://console.rivalapexmediation.com
+    NEXT_PUBLIC_ENABLE_TRANSPARENCY_REFRESH: "false"
 
 # Pod disruption budget
 podDisruptionBudget:
@@ -169,3 +196,16 @@ networkPolicy:
       ports:
       - protocol: TCP
         port: 443  # External API calls
+
+# Optional ServiceMonitor for Prometheus scraping (requires monitoring CRDs)
+serviceMonitor:
+  enabled: false
+  path: /metrics
+  port: http
+  scheme: http
+  interval: 30s
+  scrapeTimeout: 10s
+  labels: {}
+  annotations: {}
+  metricRelabelings: []
+  relabelings: []

@@ -1,6 +1,8 @@
 import http from 'k6/http'
 import { check, sleep } from 'k6'
 
+const etagCache = new Map()
+
 export const options = {
   vus: Number(__ENV.VUS || 10),
   duration: __ENV.DURATION || '1m',
@@ -16,9 +18,10 @@ export default function () {
   const url = `${baseApi}/billing/invoices/${invoiceId}/pdf`
 
   const headers = { Accept: 'application/pdf' }
-  // Simulate client ETag caching by keeping ETag in local execution context
-  let etag = __ENV.K6_ETAG || ''
-  if (etag) headers['If-None-Match'] = etag
+  // Simulate client ETag caching by keeping ETag per virtual user instead of mutating globals
+  const vuKey = String(__VU || 0)
+  const initialEtag = etagCache.get(vuKey) || __ENV.K6_ETAG || ''
+  if (initialEtag) headers['If-None-Match'] = initialEtag
 
   const res = http.get(url, { headers })
 
@@ -30,8 +33,7 @@ export default function () {
   // Save ETag for next iteration in this VU
   const newEtag = res.headers['ETag']
   if (newEtag) {
-    // eslint-disable-next-line no-global-assign
-    __ENV.K6_ETAG = newEtag
+    etagCache.set(vuKey, newEtag)
   }
 
   sleep(1)

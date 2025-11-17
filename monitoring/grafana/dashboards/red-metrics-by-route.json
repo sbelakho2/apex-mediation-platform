@@ -58,17 +58,17 @@
         "title": "Request Duration p50/p95/p99 by Route",
         "targets": [
           {
-            "expr": "histogram_quantile(0.50, sum(rate(http_request_duration_seconds_bucket[5m])) by (route, le))",
+            "expr": "histogram_quantile(0.50, sum(rate(http_request_duration_seconds_bucket[5m])) by (route, le)) * 1000",
             "legendFormat": "{{route}} p50",
             "refId": "A"
           },
           {
-            "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (route, le))",
+            "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (route, le)) * 1000",
             "legendFormat": "{{route}} p95",
             "refId": "B"
           },
           {
-            "expr": "histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket[5m])) by (route, le))",
+            "expr": "histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket[5m])) by (route, le)) * 1000",
             "legendFormat": "{{route}} p99",
             "refId": "C"
           }
@@ -76,7 +76,7 @@
         "gridPos": { "h": 8, "w": 24, "x": 0, "y": 8 },
         "fieldConfig": {
           "defaults": {
-            "unit": "s",
+            "unit": "ms",
             "color": { "mode": "palette-classic" }
           }
         }
@@ -185,21 +185,21 @@
         "title": "Overall p95 Latency",
         "targets": [
           {
-            "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))",
+            "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le)) * 1000",
             "refId": "A"
           }
         ],
         "gridPos": { "h": 4, "w": 6, "x": 12, "y": 24 },
         "fieldConfig": {
           "defaults": {
-            "unit": "s",
+            "unit": "ms",
             "color": { "mode": "thresholds" },
             "thresholds": {
               "mode": "absolute",
               "steps": [
                 { "value": null, "color": "green" },
-                { "value": 0.5, "color": "yellow" },
-                { "value": 1, "color": "red" }
+                { "value": 200, "color": "yellow" },
+                { "value": 300, "color": "red" }
               ]
             }
           }
@@ -211,21 +211,21 @@
         "title": "Overall p99 Latency",
         "targets": [
           {
-            "expr": "histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))",
+            "expr": "histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket[5m])) by (le)) * 1000",
             "refId": "A"
           }
         ],
         "gridPos": { "h": 4, "w": 6, "x": 18, "y": 24 },
         "fieldConfig": {
           "defaults": {
-            "unit": "s",
+            "unit": "ms",
             "color": { "mode": "thresholds" },
             "thresholds": {
               "mode": "absolute",
               "steps": [
                 { "value": null, "color": "green" },
-                { "value": 1, "color": "yellow" },
-                { "value": 2, "color": "red" }
+                { "value": 500, "color": "yellow" },
+                { "value": 750, "color": "red" }
               ]
             }
           }

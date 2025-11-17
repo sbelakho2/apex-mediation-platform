@@ -12,7 +12,8 @@ module.exports = {
         'http://localhost:3000/about',
         'http://localhost:3000/contact',
       ],
-      numberOfRuns: 1,
+      // Run multiple samples so LHCI can report medians instead of single-run noise
+      numberOfRuns: Number(process.env.LHCI_RUNS || 3),
     },
     assert: {
       assertions: {

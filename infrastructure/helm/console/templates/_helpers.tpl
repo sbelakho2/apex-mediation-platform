@@ -59,3 +59,25 @@ Create the name of the service account to use
 {{- default "default" .Values.serviceAccount.name }}
 {{- end }}
 {{- end }}
+
+{{/*
+Resolve the secret name used for envFrom mounts.
+*/}}
+{{- define "console.secretName" -}}
+{{- if .Values.secrets.name }}
+{{- .Values.secrets.name | trunc 63 | trimSuffix "-" }}
+{{- else }}
+{{- printf "%s-secrets" (include "console.fullname" .) | trunc 63 | trimSuffix "-" }}
+{{- end }}
+{{- end }}
+
+{{/*
+Resolve the config map name used for runtime NEXT_PUBLIC envs.
+*/}}
+{{- define "console.configMapName" -}}
+{{- if .Values.config.name }}
+{{- .Values.config.name | trunc 63 | trimSuffix "-" }}
+{{- else }}
+{{- printf "%s-config" (include "console.fullname" .) | trunc 63 | trimSuffix "-" }}
+{{- end }}
+{{- end }}

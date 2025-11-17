@@ -49,14 +49,14 @@ groups:
           description: "Backend API is using {{ $value }}MB of memory (limit: 512MB)."
 
       - alert: DatabaseConnectionPoolExhausted
-        expr: pg_pool_size - pg_pool_available < 5
+        expr: (pg_settings_max_connections - pg_stat_activity_count) < 5
         for: 5m
         labels:
           severity: warning
           service: backend
         annotations:
           summary: "Database connection pool nearly exhausted"
-          description: "Only {{ $value }} database connections available in pool."
+          description: "Only {{ $value }} Postgres connections remain before reaching max_connections."
 
   # Payment processing alerts
   - name: payments

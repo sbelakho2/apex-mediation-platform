@@ -35,7 +35,8 @@ export default function InformationalPage({ params }: PageProps) {
   const page = renderContent(slugKey, breadcrumbs);
 
   if (!page) {
-    return renderFallback(breadcrumbs);
+    // For unknown slugs, return a 404 to avoid generic placeholder pages surfacing in prod
+    notFound();
   }
 
   return page;

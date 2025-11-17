@@ -351,7 +351,7 @@ function FraudTypeBar({ type, count, percentage, color }: FraudTypeBarProps) {
 
 interface CountryBlockProps {
   country: string;
-  flag: string;
+  flag?: string;
   blocked: number;
   percentage: number;
 }

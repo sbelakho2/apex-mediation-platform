@@ -65,8 +65,9 @@ autoscaling:
   minReplicas: 2
   maxReplicas: 10
   targetCPUUtilizationPercentage: 70
+  customMetricsEnabled: false
   # Custom metrics for HPA based on p95 latency and QPS
-  metrics:
+  customMetrics:
     - type: Pods
       pods:
         metric:

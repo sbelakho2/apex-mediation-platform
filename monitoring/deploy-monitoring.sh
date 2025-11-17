@@ -6,6 +6,7 @@ set -e
 
 COMMAND=${1:-start}
 MONITORING_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ALERTMANAGER_RENDERED="$MONITORING_DIR/alertmanager.generated.yml"
 
 echo "🔍 ApexMediation Monitoring Stack"
 echo "   Directory: $MONITORING_DIR"
@@ -45,12 +46,40 @@ SLACK_WEBHOOK_URL=
 # Optional: Discord notifications
 DISCORD_WEBHOOK_URL=
 EOF
-  echo "⚠️  Please edit .env file with your credentials, then run again"
+  echo "⚠️  Please edit monitoring/.env with real credentials, then re-run ./deploy-monitoring.sh start"
   exit 1
 fi
 
+render_alertmanager_config() {
+  if ! command -v envsubst >/dev/null 2>&1; then
+    echo "❌ 'envsubst' command not found. Install gettext (e.g., 'sudo apt install gettext-base') before running the monitoring stack."
+    exit 1
+  fi
+
+  if [ -z "$RESEND_API_KEY" ]; then
+    echo "❌ RESEND_API_KEY is not set in monitoring/.env; required for SMTP auth."
+    exit 1
+  fi
+
+  envsubst '$RESEND_API_KEY $TWILIO_WEBHOOK_URL $TWILIO_ACCOUNT_SID $TWILIO_AUTH_TOKEN $SLACK_WEBHOOK_URL $DISCORD_WEBHOOK_URL' \
+    < "$MONITORING_DIR/alertmanager.yml" > "$ALERTMANAGER_RENDERED"
+  chmod 600 "$ALERTMANAGER_RENDERED"
+  echo "✅ Rendered Alertmanager config -> $ALERTMANAGER_RENDERED"
+}
+
+verify_backup_archive() {
+  local archive_path="$1"
+  if gzip -t "$archive_path" >/dev/null 2>&1; then
+    echo "  ✅ Verified $(basename "$archive_path")"
+  else
+    echo "  ❌ Failed to verify $(basename "$archive_path"). The archive may be corrupt."
+    exit 1
+  fi
+}
+
 case $COMMAND in
   start)
+    render_alertmanager_config
     echo "🚀 Starting monitoring stack..."
     cd "$MONITORING_DIR"
     docker-compose up -d
@@ -106,6 +135,7 @@ case $COMMAND in
     ;;
   
   restart)
+    render_alertmanager_config
     echo "🔄 Restarting monitoring stack..."
     cd "$MONITORING_DIR"
     docker-compose restart
@@ -142,8 +172,11 @@ case $COMMAND in
     
     cd "$MONITORING_DIR"
     docker-compose exec -T prometheus tar czf - /prometheus > "$BACKUP_DIR/prometheus.tar.gz"
+    verify_backup_archive "$BACKUP_DIR/prometheus.tar.gz"
     docker-compose exec -T loki tar czf - /loki > "$BACKUP_DIR/loki.tar.gz"
+    verify_backup_archive "$BACKUP_DIR/loki.tar.gz"
     docker-compose exec -T grafana tar czf - /var/lib/grafana > "$BACKUP_DIR/grafana.tar.gz"
+    verify_backup_archive "$BACKUP_DIR/grafana.tar.gz"
     
     echo "✅ Backup saved to $BACKUP_DIR"
     ;;
