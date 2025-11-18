@@ -1,7 +1,11 @@
-## PCI Scope — Billing (Stripe)
+# PCI Scope — Billing (Stripe)
 
-Last updated: 2025-11-12
-Owner: Security/Platform
+_Last updated: 2025-11-18_  
+_Owner: Security Team / Platform Engineering_  
+_Review Cycle: Annually or when architecture changes (next review: 2026-11-18)_  
+_Status: Active - SAQ-A eligibility maintained_
+
+> **FIX-10 governance:** This document defines PCI compliance scope. Review required whenever payment architecture changes. For current deployment status, see `docs/Internal/Deployment/PROJECT_STATUS.md`.
 
 Summary
 - We do not handle raw cardholder data (CHD) on our servers or in our Console.

@@ -12,6 +12,7 @@
 import { Request, Response } from 'express';
 import { Pool } from 'pg';
 import { FinancialReportingService } from '../services/FinancialReportingService';
+import logger from '../utils/logger';
 
 export class FinancialReportingController {
   private reportingService: FinancialReportingService;
@@ -44,7 +45,7 @@ export class FinancialReportingController {
       res.setHeader('Content-Disposition', `attachment; filename="transaction_log_${fiscalYear}.xlsx"`);
       res.send(buffer);
     } catch (error) {
-      console.error('[FinancialReporting] Error exporting transaction log:', error);
+      logger.error('[FinancialReporting] Error exporting transaction log', { error });
       res.status(500).json({ 
         error: 'Failed to generate transaction log',
         message: error instanceof Error ? error.message : 'Unknown error'
@@ -84,7 +85,7 @@ export class FinancialReportingController {
       res.setHeader('Content-Disposition', `attachment; filename="vat_report_${fiscalYear}_Q${quarter}.xlsx"`);
       res.send(buffer);
     } catch (error) {
-      console.error('[FinancialReporting] Error exporting VAT report:', error);
+      logger.error('[FinancialReporting] Error exporting VAT report', { error });
       res.status(500).json({ 
         error: 'Failed to generate VAT report',
         message: error instanceof Error ? error.message : 'Unknown error'
@@ -114,7 +115,7 @@ export class FinancialReportingController {
       res.setHeader('Content-Disposition', `attachment; filename="annual_pnl_${fiscalYear}.xlsx"`);
       res.send(buffer);
     } catch (error) {
-      console.error('[FinancialReporting] Error exporting P&L statement:', error);
+      logger.error('[FinancialReporting] Error exporting P&L statement', { error });
       res.status(500).json({ 
         error: 'Failed to generate P&L statement',
         message: error instanceof Error ? error.message : 'Unknown error'
@@ -141,7 +142,7 @@ export class FinancialReportingController {
       res.setHeader('Content-Disposition', `attachment; filename="cash_flow_${fiscalYear}.xlsx"`);
       res.send(buffer);
     } catch (error) {
-      console.error('[FinancialReporting] Error exporting cash flow statement:', error);
+      logger.error('[FinancialReporting] Error exporting cash flow statement', { error });
       res.status(500).json({ 
         error: 'Failed to generate cash flow statement',
         message: error instanceof Error ? error.message : 'Unknown error'
@@ -168,7 +169,7 @@ export class FinancialReportingController {
       res.setHeader('Content-Disposition', `attachment; filename="customer_revenue_${fiscalYear}.xlsx"`);
       res.send(buffer);
     } catch (error) {
-      console.error('[FinancialReporting] Error exporting customer revenue:', error);
+      logger.error('[FinancialReporting] Error exporting customer revenue', { error });
       res.status(500).json({ 
         error: 'Failed to generate customer revenue report',
         message: error instanceof Error ? error.message : 'Unknown error'
@@ -194,7 +195,7 @@ export class FinancialReportingController {
 
       res.json({ years });
     } catch (error) {
-      console.error('[FinancialReporting] Error fetching available years:', error);
+      logger.error('[FinancialReporting] Error fetching available years', { error });
       res.status(500).json({ 
         error: 'Failed to fetch available years',
         message: error instanceof Error ? error.message : 'Unknown error'
@@ -247,7 +248,7 @@ export class FinancialReportingController {
         ],
       });
     } catch (error) {
-      console.error('[FinancialReporting] Error fetching report summary:', error);
+      logger.error('[FinancialReporting] Error fetching report summary', { error });
       res.status(500).json({ 
         error: 'Failed to fetch report summary',
         message: error instanceof Error ? error.message : 'Unknown error'

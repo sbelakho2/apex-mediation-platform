@@ -8,6 +8,9 @@ import {
 } from '../services/analyticsPipeline';
 import analyticsService from '../services/analyticsService';
 import logger from '../utils/logger';
+import config from '../config/index';
+import { queueManager, QueueName } from '../queues/queueManager';
+import { analyticsEventsEnqueuedTotal } from '../utils/prometheus';
 
 const parseQueryParam = (value: unknown): string | undefined => {
   if (typeof value === 'string') {
@@ -112,6 +115,120 @@ export const getPerformance = async (
       success: true,
       data: performance,
     });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// =============================
+// Ingestion helpers (producer)
+// =============================
+
+async function enqueueIfEnabled(kind: 'impressions' | 'clicks' | 'revenue', events: unknown[], publisherId?: string) {
+  // Only enqueue when flag enabled and queue is ready; otherwise let callers fall back to direct service path
+  try {
+    if (!config.useRedisStreamsForAnalytics || !queueManager || !queueManager.isReady()) return false;
+    const queue = (queueManager as any).getQueue ? (queueManager as any).getQueue(QueueName.ANALYTICS_INGEST) : null;
+    if (!queue) return false;
+    await queue.add(kind, { kind, events, publisherId }, {
+      removeOnComplete: true,
+      removeOnFail: { age: 3600 },
+    });
+    try { analyticsEventsEnqueuedTotal.inc({ kind }); } catch { /* noop */ }
+    return true;
+  } catch (e) {
+    // On any error, skip enqueue so API path can attempt synchronous processing
+    logger.warn('[Analytics] enqueue failed, falling back to direct insert', { error: (e as Error).message });
+    return false;
+  }
+}
+
+/**
+ * POST /api/v1/analytics/events/impressions
+ */
+export const recordImpressions = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const publisherId = req.user?.publisherId; // may be undefined for SDK calls
+    const events = Array.isArray(req.body) ? req.body : (req.body?.events ?? []);
+    if (!Array.isArray(events) || events.length === 0) {
+      throw new AppError('No events provided', 400);
+    }
+    const enqueued = await enqueueIfEnabled('impressions', events, publisherId);
+    if (enqueued) { res.status(202).json({ success: true, queued: events.length }); return; }
+    await analyticsService.recordImpressions(events);
+    res.status(201).json({ success: true, inserted: events.length });
+  } catch (error) {
+    logger.error('Failed to record impressions', { error });
+    next(error);
+  }
+};
+
+/**
+ * POST /api/v1/analytics/events/clicks
+ */
+export const recordClicks = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const publisherId = req.user?.publisherId;
+    const events = Array.isArray(req.body) ? req.body : (req.body?.events ?? []);
+    if (!Array.isArray(events) || events.length === 0) {
+      throw new AppError('No events provided', 400);
+    }
+    const enqueued = await enqueueIfEnabled('clicks', events, publisherId);
+    if (enqueued) { res.status(202).json({ success: true, queued: events.length }); return; }
+    await analyticsService.recordClicks(events);
+    res.status(201).json({ success: true, inserted: events.length });
+  } catch (error) {
+    logger.error('Failed to record clicks', { error });
+    next(error);
+  }
+};
+
+/**
+ * POST /api/v1/analytics/events/revenue
+ */
+export const recordRevenue = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const publisherId = req.user?.publisherId;
+    const events = Array.isArray(req.body) ? req.body : (req.body?.events ?? []);
+    if (!Array.isArray(events) || events.length === 0) {
+      throw new AppError('No events provided', 400);
+    }
+    const enqueued = await enqueueIfEnabled('revenue', events, publisherId);
+    if (enqueued) { res.status(202).json({ success: true, queued: events.length }); return; }
+    await analyticsService.recordRevenue(events);
+    res.status(201).json({ success: true, inserted: events.length });
+  } catch (error) {
+    logger.error('Failed to record revenue', { error });
+    next(error);
+  }
+};
+
+/**
+ * GET /api/v1/analytics/buffer-stats
+ * Include queue metrics when available
+ */
+export const getBufferStats = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const base = await analyticsService.getBufferStats?.();
+    const stats: any = { ...(base || {}) };
+    try {
+      if (queueManager && queueManager.isReady()) {
+        const q = (queueManager as any).getQueue ? (queueManager as any).getQueue(QueueName.ANALYTICS_INGEST) : null;
+        if (q && typeof q.getWaitingCount === 'function') {
+          const [waiting, active, delayed, failed] = await Promise.all([
+            q.getWaitingCount?.() ?? 0,
+            q.getActiveCount?.() ?? 0,
+            q.getDelayedCount?.() ?? 0,
+            q.getFailedCount?.() ?? 0,
+          ]);
+          stats.queue = { waiting, active, delayed, failed };
+        }
+      }
+    } catch (e) {
+      // Non-fatal
+      stats.queue = { error: (e as Error).message };
+    }
+    res.json({ success: true, data: stats });
   } catch (error) {
     next(error);
   }

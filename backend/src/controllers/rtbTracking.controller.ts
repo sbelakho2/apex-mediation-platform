@@ -7,6 +7,7 @@ import { getClickHouseClient } from '../utils/clickhouse';
 import { queueManager, QueueName } from '../queues/queueManager';
 import { analyticsEventsEnqueuedTotal } from '../utils/prometheus';
 import crypto from 'crypto';
+import { URL } from 'url';
 
 const parseToken = (token: string) => {
   const decoded = verifyToken<any>(token);
@@ -22,11 +23,12 @@ export async function getCreative(req: Request, res: Response) {
     const token = String(req.query.token || '');
     if (!token) return res.status(400).send('missing token');
     const decoded: any = verifyToken<any>(token);
-    if (decoded.purpose !== 'delivery' || typeof decoded.url !== 'string') {
+    if (decoded.purpose !== 'delivery') {
       return res.status(400).send('invalid token');
     }
     // Optionally: log delivery view for diagnostics (not an impression)
-    return res.redirect(302, decoded.url);
+    const target = typeof decoded.url === 'string' ? decoded.url : '/';
+    return res.redirect(302, sanitizeRedirect(target, req));
   } catch (e) {
     return res.status(400).send('invalid token');
   }
@@ -118,8 +120,31 @@ export async function trackClick(req: Request, res: Response) {
 
     await recordEvent('click', claims, req);
     // Redirect to advertiser landing if available in token (optional)
-    return res.redirect(302, '/');
+    const target = typeof (claims as any).url === 'string' ? (claims as any).url : '/';
+    return res.redirect(302, sanitizeRedirect(target, req));
   } catch (e) {
     return res.status(400).send('invalid token');
+  }
+}
+
+// Enforce safe redirects: same-origin or allow-listed hosts; otherwise fallback '/'
+function sanitizeRedirect(targetUrl: string, req: Request): string {
+  try {
+    const proto = (req.headers['x-forwarded-proto'] as string) || req.protocol || 'http';
+    const host = (req.headers['x-forwarded-host'] as string) || req.get('host') || '';
+    const base = `${proto}://${host}`;
+    const url = new URL(targetUrl, base);
+    const allowed = (process.env.ALLOWED_REDIRECT_HOSTS || '')
+      .split(',')
+      .map(h => h.trim())
+      .filter(Boolean);
+    const isSameHost = url.host === host;
+    const isAllowed = allowed.includes(url.host);
+    if (isSameHost || isAllowed) return url.toString();
+    logger.warn('Blocked redirect to non-allowed host', { to: url.host, path: url.pathname });
+    return '/';
+  } catch (e) {
+    logger.warn('Invalid redirect target, falling back to /', { error: (e as Error).message });
+    return '/';
   }
 }

@@ -22,6 +22,16 @@ export const receivePostback = async (
   next: NextFunction
 ): Promise<void> => {
   try {
+    // Basic shared-secret check (can be upgraded to signature verification)
+    const expected = process.env.SKADNETWORK_SHARED_SECRET;
+    if (expected) {
+      const provided = (req.header('X-SKAN-Secret') || req.header('x-skan-secret') || '').trim();
+      if (!provided || provided !== expected) {
+        res.status(401).json({ success: false, error: 'Unauthorized postback' });
+        return;
+      }
+    }
+
     const postback = req.body as SKAdNetworkPostback;
 
     logger.info('Received SKAdNetwork postback', {

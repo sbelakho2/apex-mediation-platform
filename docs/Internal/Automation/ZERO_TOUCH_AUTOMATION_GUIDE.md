@@ -1,8 +1,13 @@
 # Zero-Touch Automation System - Complete Implementation Guide
+_Last updated: 2025-11-18 16:57 UTC_
+
+> **FIX-10 governance:** This guide documents the target automation architecture. Actual readiness must be confirmed in `docs/Internal/Deployment/PROJECT_STATUS.md`, with implementation tracked in `docs/Internal/Development/FIXES.md` and risks recorded in `docs/Internal/Development/AD_PROJECT_FILE_ANALYSIS.md`.
 
 ## Executive Summary
 
-ApexMediation now features a **fully automated, self-evolving platform** that requires <5 minutes/week of human oversight. The system continuously monitors health, predicts issues, applies optimizations, prevents churn, and grows revenue—all without manual intervention.
+> **Reality check:** Automation claims here remain aspirational until corresponding FIX IDs close and evidence appears in `PROJECT_STATUS.md`. Treat this as a blueprint, not a live status report.
+
+ApexMediation targets a **fully automated, self-evolving platform** that requires <5 minutes/week of human oversight. The system continuously monitors health, predicts issues, applies optimizations, prevents churn, and grows revenue—all without manual intervention.
 
 ## System Architecture Overview
 
@@ -360,3 +365,9 @@ ApexMediation now operates as a **fully autonomous, self-improving platform**:
 4. Deploy to production
 5. Monitor system_health_dashboard weekly
 6. **Let the system evolve itself** 🚀
+
+
+## Change Log
+| Date | Change |
+| --- | --- |
+| 2025-11-18 | Added FIX-10 governance banner, reality-check disclaimer, and blueprint framing tied to `PROJECT_STATUS.md`/`FIXES.md`. |

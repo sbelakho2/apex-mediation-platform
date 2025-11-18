@@ -87,7 +87,8 @@ This directory contains utility scripts for development, deployment, and operati
 ```bash
 ./scripts/validate-deployment.sh
 # Parameterize minimum expected migrations
-EXPECTED_MIGRATIONS_MIN=10 ./scripts/validate-deployment.sh
+./scripts/validate-deployment.sh --expected-migrations-min 10
+EXPECTED_MIGRATIONS_MIN=10 ./scripts/validate-deployment.sh  # env override equivalent
 ```
 
 **Prerequisites**:
@@ -276,7 +277,7 @@ API_BASE_URL=https://staging.api.example.com API_TOKEN=*** ./scripts/verify-bill
 
 **What it does**:
 1. Static checks: files, imports, route mounts, types, controllers
-2. Optional live probes: `/health` and `/api/v1/billing/usage/current` (token optional)
+2. Optional live probes: `/health`, `/api/v1/billing/usage/current`, `/api/v1/billing/invoices`, and `/api/v1/meta/features` (token optional for billing/meta)
 
 **Idempotency**: ✅ Yes - Uses unique test customer ID. Cleans up test data.
 
@@ -301,6 +302,8 @@ WEBSITE_BASE_URL=http://localhost:3000 ROUTES='["/","/pricing"]' ./scripts/captu
 **Notes**:
 - `--install` performs `npm ci` behind a lockfile checksum cache; skipped otherwise.
 - `--routes FILE` accepts newline-separated paths and converts to JSON.
+- Env overrides: `WEBSITE_BASE_URL`, `ROUTES` (JSON), `CAPTURE_ROUTES` (comma/space-separated), `CAPTURE_ROUTES_FILE`, `WEBSITE_CAPTURE_ROUTES` (highest priority).
+- Set `OUT_DIR` to reuse a specific artifact folder; default is `artifacts/website-screenshots/<timestamp>`.
 
 #### `capture-console.sh`
 **Purpose**: Build/start admin console locally and capture screenshots.
@@ -311,7 +314,26 @@ WEBSITE_BASE_URL=http://localhost:3000 ROUTES='["/","/pricing"]' ./scripts/captu
 ```
 
 **Notes**:
-- Same install caching and routes behavior as `capture-website.sh`.
+- Respects the same install caching as the website script plus an additional root-level checksum guard, so repeated `--install` runs skip redundant `npm ci` when lockfiles have not changed.
+- Route overrides (priority order): `CONSOLE_CAPTURE_ROUTES` (comma/space or JSON), `CAPTURE_ROUTES`, `ROUTES` (legacy JSON). File-based overrides: CLI `--routes`, `CONSOLE_CAPTURE_ROUTES_FILE`, then `CAPTURE_ROUTES_FILE`.
+- Supports `CONSOLE_BASE_URL` (default `http://localhost:3001`) and `OUT_DIR` (default `artifacts/console-screenshots`).
+- `--dry-run` prints resolved routes and skips npm/build/start just like the website variant.
+
+### ML Scripts
+
+#### `ml/fetch_enrichment.sh`
+**Purpose**: Download the enrichment manifests + datasets used by ML pipelines.
+
+**Usage**:
+```bash
+./scripts/ml/fetch_enrichment.sh --region eu --dataset ip-intel
+PYTHON=/opt/venvs/ml/bin/python ./scripts/ml/fetch_enrichment.sh
+```
+
+**Notes**:
+- Honors the `PYTHON` environment variable to select a custom interpreter (default `python3`).
+- Forwards all other CLI args directly to `python -m ML.scripts.fetch_enrichment`.
+- Warns if the interpreter is older than Python 3.9 to match ML tooling requirements.
 
 ---
 

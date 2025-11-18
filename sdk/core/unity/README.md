@@ -1,5 +1,9 @@
 Platform Unity package (UPM) — Mediation
 
+_Last updated: 2025-11-18_
+
+> **FIX-10 governance:** This README documents Unity SDK scaffolding. For SDK backlog and production readiness, see `docs/Internal/Deployment/PROJECT_STATUS.md` and `docs/Internal/Development/FIXES.md` (FIX-05).
+
 This folder contains a minimal Unity Package scaffolding for the Platform mediation SDK.
 
 What I added:

@@ -1,5 +1,9 @@
 ML — Data & ML Pipeline Quick‑Start (FIX‑06)
 
+_Last updated: 2025-11-18_
+
+> **FIX-10 governance:** This README documents ML pipeline tooling and local workflows. For production readiness and ML-specific backlog items, see `docs/Internal/Deployment/PROJECT_STATUS.md` and `docs/Internal/Development/FIXES.md` (FIX-06).
+
 Overview
 - This folder contains the ML data enrichment, feature engineering, and training utilities used to produce artifacts for the inference services (`services/*`) and models in `models/`.
 - FIX‑06 completes the hardening work by delivering CI lanes, manifest integrity enforcement, dependency parity, and a documented local workflow.

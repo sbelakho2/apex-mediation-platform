@@ -1,5 +1,12 @@
 # Invoicing & Payments Guide
 
+_Last updated: 2025-11-18_  
+_Owner: Finance / Billing Team_  
+_Review Cycle: Quarterly or when payment terms change (next review: 2026-02-18)_  
+_Status: Draft - SLA and late fee policy pending_
+
+> **FIX-10 governance:** This guide documents current billing practices. For actual implementation status, see `docs/Internal/Deployment/PROJECT_STATUS.md` and `docs/Internal/Development/FIXES.md` (FIX-02 covers billing). Payment terms are subject to change; customers will be notified 30 days in advance of material changes.
+
 Complete guide to payments, invoicing, and financial operations for ApexMediation customers.
 
 ## Table of Contents

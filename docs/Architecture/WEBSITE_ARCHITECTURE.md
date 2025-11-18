@@ -1,7 +1,12 @@
 # Customer-Facing Website Architecture
-**ApexMediation Platform – Bel Consulting OÜ / Starz Energies**
 
-*Last Updated: January 2025*
+_Platform: ApexMediation_  
+_Entity: Bel Consulting OÜ (subsidiary of Starz Energies)_  
+_Last updated: 2025-11-18_  
+_Owner: Platform Engineering / Marketing_  
+_Review Cycle: When architecture changes or annually (next review: 2026-11-18)_
+
+> **FIX-10 governance:** This architecture document outlines website technical design. For actual implementation status, see `docs/Internal/Deployment/PROJECT_STATUS.md` and `docs/Internal/Development/FIXES.md` (FIX-04 covers website). Legal entity names must be kept current.
 
 ---
 

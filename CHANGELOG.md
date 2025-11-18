@@ -1,3 +1,30 @@
+Changelog — FIX-10 Documentation Governance & Accuracy (2025-11-18)
+
+Summary
+- Establishes canonical documentation sources, archives duplicate/stale completion reports, and adds governance banners to customer-facing and internal docs to prevent conflicting status claims.
+
+What changed (highlights)
+- FIX-10-01 — Created `docs/Internal/Deployment/PROJECT_STATUS.md` as the single canonical deployment/readiness narrative, replacing conflicting claims in `PROJECT_COMPLETE.md`, `PROJECT_COMPLETION.md`, and `SYSTEM_COMPLETE.md` which are now archived with redirect notes (2025-11-18).
+- FIX-10-02 — Updated `docs/INDEX.md` with a banner calling out the canonical status doc and marking legacy completion files as historical context only (2025-11-18).
+- FIX-10-03 — Revised `docs/Internal/Development/DEVELOPMENT_TODO_CHECKLIST.md` and `DEVELOPMENT_ROADMAP.md` to reference `FIXES.md` + `PROJECT_STATUS.md` instead of stale TODO sources, added governance reminders, and included change logs (2025-11-18).
+- FIX-10-04 — Added FIX-10 governance banners to `docs/ORGANIZATION_SUMMARY.md` and `docs/ORIGINAL_README.md` with canonical source links, accurate delivery snapshots, and change logs; updated next steps to align with `PROJECT_STATUS.md` instead of promising completion (2025-11-18).
+- FIX-10-05 — Added FIX-10 governance banners and change logs to `docs/Architecture/enhanced_ad_stack_srs_v2_0.md`, `docs/Internal/Automation/ZERO_TOUCH_AUTOMATION_GUIDE.md`, and `docs/Internal/Security/COMPREHENSIVE_AUDIT_REPORT.md`; each now references the canonical status/backlog sources (2025-11-18).
+- FIX-10-06 — Updated `docs/Customer-Facing/README.md` and `website/README.md` with FIX-10 governance banners, accurate status descriptions replacing "production-ready" claims with work-in-progress reality checks, refreshed structures, and change logs (2025-11-18).
+
+Canonical documentation sources established
+- **Deployment status:** `docs/Internal/Deployment/PROJECT_STATUS.md`
+- **Prioritized backlog:** `docs/Internal/Development/FIXES.md` (163 TODOs across FIX-01 through FIX-11)
+- **Risk inventory:** `docs/Internal/Development/AD_PROJECT_FILE_ANALYSIS.md`
+- **Master index:** `docs/INDEX.md`
+
+How to validate
+- All customer-facing and major internal docs now reference canonical sources instead of making standalone completion claims
+- Legacy "project complete" files archived with clear redirect notes
+- Change logs added to track documentation governance updates
+- Future doc updates should reference FIX IDs from `FIXES.md` and actual progress from `PROJECT_STATUS.md`
+
+---
+
 Changelog — FIX-09 Automation & Tooling Readiness (2025-11-18)
 
 Summary
@@ -114,6 +141,44 @@ What changed (FIX-08-417 → FIX-08-426)
     - `sudo docker run --rm -v "$PWD/infrastructure/helm:/charts" -w /charts/backend alpine/helm:3.13.3 lint`
     - `sudo docker run --rm -v "$PWD/infrastructure/helm:/charts" -w /charts/console alpine/helm:3.13.3 lint`
     - `sudo docker run --rm -v "$PWD/infrastructure/helm:/charts" -w /charts/fraud-inference alpine/helm:3.13.3 lint`
+
+What changed (FIX-08-427 → FIX-09-436)
+- FIX-08-427 — `monitoring/grafana-dashboards.yml` now provisions read-only dashboards (`allowUiUpdates=false`, `editable=false`) and the README calls out the new `deploy-monitoring.sh export-dashboards` helper so runtime edits are pulled back into source control instead of diverging in Grafana’s UI.
+- FIX-08-428 — `monitoring/grafana/db-queue.json` introduces a `queue_filter` regex variable used by every queue-focused panel, letting operators isolate noisy queues without cloning the dashboard; JSON validated via `jq . monitoring/grafana/db-queue.json`.
+- FIX-08-429 — `monitoring/grafana/migration-studio.json` adds a textbox variable (`metric_ns`) and rewires every recording-rule query to honor it, so clusters that rename the `migration:*` namespace can switch metrics without editing hundreds of lines per export.
+- FIX-08-430 — `monitoring/grafana/rtb-overview.json` exposes an `adapter_filter` template applied to wins/no-fill tables plus latency + timeout panels, making the dashboard usable on high-cardinality adapter fleets.
+- FIX-08-431 — `monitoring/grafana/tracking-ingest.json` now drives stat thresholds from textbox variables (`failed_warn`, `failed_crit`, `success_warn`, `success_pass`) and includes documentation in `monitoring/README.md` about overriding them per environment or via URL query params; JSON verified with `jq . monitoring/grafana/tracking-ingest.json`.
+- FIX-09-432 — `scripts/ml/prepare_dataset.py` accepts optional sample column fallbacks, column maps, and gracefully picks the first available candidate instead of hard-failing when `network` is missing, preventing KeyErrors on alternative enrichment schemas.
+- FIX-09-433 — `scripts/capture-website.sh` now honors `CAPTURE_ROUTES`, `CAPTURE_ROUTES_FILE`, or an explicit `--routes FILE`, normalizes comma/space lists into JSON arrays, and optionally runs `npm ci` when `--install` is provided so CI can override routes without editing the script.
+- FIX-09-434 — `scripts/run-billing-migrations.sh` discovers billing migrations dynamically via keyword regexes, supports `--keywords`, `--from`, `--to`, and `--plan`, and prints the actual file list before execution so the script never goes stale as new migrations land.
+- FIX-09-435 — `scripts/validate-billing-tests.sh` was rewritten to auto-discover billing-focused tests via `git ls-files`, summarize required files per FIX section, optionally emit a JSON manifest (`--update`), and exit cleanly when run under `bash -n`.
+- FIX-09-436 — `scripts/verify-console-connection.sh` reads credentials from `CONSOLE_CREDENTIALS_FILE`, prefers bearer tokens when present, and masks secret output while still verifying backend health, console config, and key API endpoints.
+
+  - **Test note:**
+    - `bash -n monitoring/deploy-monitoring.sh`
+    - `jq . monitoring/grafana/db-queue.json`
+    - `jq . monitoring/grafana/migration-studio.json`
+    - `jq . monitoring/grafana/rtb-overview.json`
+    - `jq . monitoring/grafana/tracking-ingest.json`
+    - `bash -n scripts/validate-billing-tests.sh`
+
+What changed (FIX-09-437 → FIX-09-446)
+- FIX-09-437 — `scripts/dev-transparency-metrics.sh` now loads variables from an optional `--env-file`, resolves the private key via `TRANSPARENCY_PRIVKEY`/file-only sources (no inline literals), and refuses to chmod/read keys with overly permissive modes, preventing accidental secret leaks during local runs.
+- FIX-09-438 — `scripts/setup-s3-accounting.sh` makes the irreversible compliance-mode toggle explicit: operators must type the randomly generated confirmation token (or pass `--yes --token ...`) before enabling Object Lock, ensuring new hires don’t click through unknowingly.
+- FIX-09-439 — `scripts/capture-console.sh` inherits the website capture ergonomics: checksum-based `npm ci` caching for repo root + console, expanded env/file route overrides (`CONSOLE_CAPTURE_ROUTES*`, `CAPTURE_ROUTES*`, `ROUTES`), and a configurable `OUT_DIR` (`artifacts/console-screenshots` default) so CI can reuse artifacts without editing the script.
+- FIX-09-440 — `scripts/README.md` now documents the capture script env flags, the new ML helper section, and calls out how to set `OUT_DIR`/route env vars so contributors don’t need to read each script to discover the knobs.
+- FIX-09-441 — `scripts/install-accounting-deps.sh` refuses to mutate manifests implicitly: the `--upgrade` flag now requires an explicit `pkg@version` (rejects `@latest`), dependency “ensures” only verify declared packages, and missing libs produce actionable instructions instead of running `npm install` behind the scenes.
+- FIX-09-442 — `scripts/ios-docs.sh` auto-detects the DocC/Jazzy module target by parsing `swift package describe --type json` (regex fallback if Swift unavailable) so the default scheme stays in sync with `Package.swift` even after renames; `--module` still overrides when needed.
+- FIX-09-443 — Added `scripts/ml/fetch_enrichment.sh` coverage to the script catalog, including the `PYTHON` override example and version warning so ML contributors know how to point the helper at their virtualenvs.
+- FIX-09-444 — `scripts/ml/train_models.py` expands `~`/relative dataset paths, validates the file exists (not a directory) before constructing configs, and warns on unexpected extensions so missing parquet/CSV files error out immediately with the resolved absolute path.
+- FIX-09-445 — `scripts/validate-deployment.sh` gained `--expected-migrations-min` (mirrors the `EXPECTED_MIGRATIONS_MIN` env var) along with integer validation, making the once-hardcoded migration count tweakable per environment without editing the script.
+- FIX-09-446 — `scripts/verify-billing-wiring.sh` now performs real API probes when `API_BASE_URL` is set: `/health`, `/api/v1/billing/usage/current`, `/api/v1/billing/invoices`, and `/api/v1/meta/features` (auth optional) run through a shared `probe_endpoint` helper alongside the existing static file/route checks.
+  - **Test note:**
+    - `bash -n scripts/capture-console.sh`
+    - `bash -n scripts/install-accounting-deps.sh`
+    - `bash -n scripts/ios-docs.sh`
+    - `bash -n scripts/validate-deployment.sh`
+    - `bash -n scripts/verify-billing-wiring.sh`
 
 ---
 
@@ -752,5 +817,48 @@ Notes
 
 Result
 - FIX‑04 is fully signed off. Subsequent improvements (e.g., expanding the security header tests for production‑only directives or adding additional component tests) can be scheduled outside FIX‑04 as iterative hardening work.
+
+---
+Changelog — FIX-11 Batch 1: Security, Access Control, and Input Validation (2025-11-18)
+
+Summary
+- Implements Batch 1 of FIX-11 (security-first hardening across high-risk endpoints). Adds strict input validation, rate limiting, safe redirects, authenticated context requirements, and consistent logging/readiness checks.
+
+What changed (highlights)
+- RTB Tracking (FIX-11-612):
+  - Sanitized redirects with same-host/allow-list enforcement via `ALLOWED_REDIRECT_HOSTS`; safe fallback to `/` and structured warnings.
+  - Preserved tracking dedupe rate-limiter; improved token schema to optionally carry `url` and validated via `TrackingTokenSchema`.
+- RTB Controller (FIX-11-669):
+  - Returns structured 400s for auction failures (non-control/shadow), keeping 204 for control/shadow paths. Better diagnostics for clients and observability.
+- Billing (FIX-11-648, 693):
+  - `reconcile` now requires `Idempotency-Key` request header (not body).
+  - Throttled expensive billing routes (`/invoices`, `/invoices/:id/pdf`, `/reconcile`) via Redis-backed limiter.
+- Payouts (FIX-11-667):
+  - Capped `getHistory` `limit` to 100 and added audit log on settings updates.
+- Two-factor (FIX-11-649):
+  - All 2FA endpoints now require authenticated user (no `anon` fallbacks) with proper 401 responses.
+- Analytics (FIX-11-624, 645 perimeter):
+  - SDK ingestion endpoints (`/events/*`) protected by Redis-backed rate limiter; dashboard endpoints remain auth + cache.
+- A/B Testing (FIX-11-623):
+  - `recordEvent` now requires publisher auth, verifies experiment ownership, and caps metadata payload size; responds 401/403/413 accordingly.
+- Health/Readiness (FIX-11-666):
+  - Replaced `console.*` with shared `logger`; readiness now includes Redis readiness and ClickHouse health details.
+- Financial Reporting (FIX-11-622):
+  - Replaced `console.*` with `logger` in all error paths.
+- SKAdNetwork (FIX-11-629):
+  - Public postback endpoint now optionally enforces `X-SKAN-Secret` shared-secret header when `SKADNETWORK_SHARED_SECRET` is set.
+
+Notes
+- CSRF helper (FIX-11-670) already guarded against non-string inputs; no change required.
+- Redis limiter fallback (FIX-11-671) already fails open when Redis is not ready; headers now set coherently.
+- Migration routes (FIX-11-628 perimeter): existing 5MB upload limit and auth remain in place; no change required in Batch 1.
+
+How to validate
+- RTB: exercise `/api/v1/rtb/bid` with failing reasons and confirm 400 JSON (except control/shadow 204). Click/delivery redirects honor allow-list.
+- Billing: call `/api/v1/billing/reconcile` with and without `Idempotency-Key` header; observe 400/200 and idempotent behavior. Rate limit headers present on throttle.
+- Payouts: verify `limit` >100 clamps to 100; settings update emits audit log.
+- 2FA: unauthenticated requests to enroll/verify/regen/disable return 401; authenticated flows continue to work.
+- Analytics: POST `/api/v1/analytics/events/*` rate limited; GET endpoints remain auth + cache.
+- Health: `/ready` JSON includes DB latency, Redis ready, and ClickHouse health.
 
 ---

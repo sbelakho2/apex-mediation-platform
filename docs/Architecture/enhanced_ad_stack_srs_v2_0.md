@@ -1,9 +1,18 @@
 # Rival ApexMediation SRS v2.0 — Enhanced Unity Competitor Platform
+_Last updated: 2025-11-18 16:55 UTC_
+
+> **FIX-10 governance:** This SRS outlines the target architecture. For real delivery status, reference `docs/Internal/Deployment/PROJECT_STATUS.md` and map any implementation evidence back to `docs/Internal/Development/FIXES.md`. New risks, deviations, or sign-offs captured here must also be logged in `docs/Internal/Development/AD_PROJECT_FILE_ANALYSIS.md`.
+
 **Entity:** Bel Consulting OÜ (Estonia), daughter of Starz Energies (US)  
 **Owner:** Solo founder + targeted contractors  
 **Mission:** Build and deploy a Unity-rival ad mediation platform that addresses Unity's critical failures while delivering **OTA-proof reliability**, **<0.02% ANR contribution**, **transparent bid landscapes**, **multi-rail payments**, and **developer-first trust**.
 
-**Document Enhancement:** This v2.0 incorporates verified Unity platform failures (Aug 2024 crash incident, IronSource merger issues, Tipalti payment problems), industry best practices, and battle-tested technical patterns for building a production-grade ad mediation platform.
+**Document Enhancement:** This v2.0 incorporates verified Unity platform failures (Aug 2024 crash incident, IronSource merger issues, Tipalti payment problems), industry best practices, and battle-tested technical patterns for building a production-grade ad mediation platform. Claims about completion must reference the canonical status doc above.
+
+## Change Log
+| Date | Change |
+| --- | --- |
+| 2025-11-18 | Added FIX-10 governance banner tying this SRS to `PROJECT_STATUS.md`, `FIXES.md`, and `AD_PROJECT_FILE_ANALYSIS.md`. |
 
 ---
 

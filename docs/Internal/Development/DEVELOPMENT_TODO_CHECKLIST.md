@@ -1,13 +1,16 @@
 # Development TODO Checklist (Phased, Check‑off)
 
-Last updated: 2025-11-13 21:05 UTC
+Last updated: 2025-11-18 16:10 UTC
 Owner: Platform Engineering
 
+> **FIX-10 governance:** Treat this checklist as an execution view of `docs/Internal/Development/FIXES.md`. Only update items when you can cite the owning FIX ID and evidence that also appears in `docs/Internal/Deployment/PROJECT_STATUS.md`.
+
 Source of truth for tasks:
-- Roadmap: docs/Internal/Development/DEVELOPMENT_ROADMAP.md
-- Competitive gaps: docs/Internal/COMPETITIVE_GAP_ANALYSIS.md
-- ML data sources: docs/Internal/ML_FRAUD_TRAINING_DATA_SOURCES.md
-- Current system gaps summary: GAPS_RESOLUTION.md
+- Backlog & prioritization: `docs/Internal/Development/FIXES.md`
+- Canonical readiness narrative: `docs/Internal/Deployment/PROJECT_STATUS.md`
+- Risk inventory feeding the backlog: `docs/Internal/Development/AD_PROJECT_FILE_ANALYSIS.md`
+- Recorded releases: `CHANGELOG.md` (required before marking a phase “done”)
+- Legacy references: `docs/Internal/Development/DEVELOPMENT_ROADMAP.md`, `docs/Internal/COMPETITIVE_GAP_ANALYSIS.md`, `docs/Internal/ML_FRAUD_TRAINING_DATA_SOURCES.md`, `GAPS_RESOLUTION.md` (read-only context)
 
 How to use
 - Check items off only when acceptance criteria are met.
@@ -18,6 +21,11 @@ Legend
 - [ ] Not started
 - [~] In progress
 - [x] Done
+
+## Change Log
+| Date | Change |
+| --- | --- |
+| 2025-11-18 | Added FIX-10 governance banner, refreshed sources of truth, and tied checklist updates to `FIXES.md` + `PROJECT_STATUS.md`. |
 
 ## Master Numbered Development Checklist (authoritative, updated 2025-11-10 00:45)
 

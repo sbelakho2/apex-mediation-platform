@@ -1,5 +1,9 @@
 # Customer Documentation Structure
 
+_Last updated: 2025-11-18 16:40 UTC_
+
+> **FIX-10 governance:** This index explains where customer-facing docs live. It does **not** assert product completion. Always cross-check `docs/Internal/Deployment/PROJECT_STATUS.md` for readiness and `docs/Internal/Development/FIXES.md` for the prioritized backlog before promising features externally.
+
 This directory contains all customer-facing documentation for the ApexMediation Platform.
 
 ## Documentation Categories
@@ -59,14 +63,15 @@ This directory contains all customer-facing documentation for the ApexMediation 
 ## File Structure
 
 ```
-docs/
-├── 01-getting-started/
+docs/Customer-Facing/
+├── README.md
+├── Getting-Started/
 │   ├── quickstart.md
 │   ├── account-setup.md
 │   ├── platform-overview.md
 │   └── basic-concepts.md
 │
-├── 02-integration-guides/
+├── Integration-Guides/
 │   ├── unity-sdk.md
 │   ├── ios-sdk.md
 │   ├── android-sdk.md
@@ -74,14 +79,14 @@ docs/
 │   ├── prebid-adapter.md
 │   └── server-to-server.md
 │
-├── 03-api-reference/
+├── API-Reference/
 │   ├── authentication.md
 │   ├── rest-api.md
 │   ├── websocket-api.md
 │   ├── webhooks.md
 │   └── rate-limits.md
 │
-├── 04-features/
+├── Features/
 │   ├── mediation.md
 │   ├── rtb.md
 │   ├── fraud-detection.md
@@ -89,7 +94,7 @@ docs/
 │   ├── payments.md
 │   └── geographic-discounts.md
 │
-├── 05-billing-compliance/
+├── Billing-Compliance/
 │   ├── pricing.md
 │   ├── payment-terms.md
 │   ├── invoicing.md
@@ -99,13 +104,13 @@ docs/
 │   ├── privacy-policy.md
 │   └── terms-of-service.md
 │
-├── 06-troubleshooting/
+├── Troubleshooting/
 │   ├── common-issues.md
 │   ├── error-codes.md
 │   ├── faq.md
 │   └── support.md
 │
-└── 07-advanced/
+└── Advanced/
     ├── custom-bidding.md
     ├── ab-testing.md
     ├── self-evolving-ai.md
@@ -151,3 +156,8 @@ Internal team members can contribute to documentation:
 ---
 
 **Next Steps**: See individual documentation files in subdirectories.
+
+## Change Log
+| Date | Change |
+| --- | --- |
+| 2025-11-18 | Added FIX-10 governance notice, updated folder structure, and aligned guidance with `PROJECT_STATUS.md`/`FIXES.md`. |

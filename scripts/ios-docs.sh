@@ -14,7 +14,9 @@ if [[ -f "$PWD/Package.swift" && -d "$PWD/Sources" ]]; then
 fi
 
 SCHEME=""
-MODULE_NAME="RivalApexMediationSDK"
+MODULE_NAME=""
+MODULE_OVERRIDE=0
+MODULE_FALLBACK="RivalApexMediationSDK"
 
 usage(){ cat <<USAGE
 Generate SDK docs using DocC or Jazzy.
@@ -23,20 +25,80 @@ Usage:
   $(basename "$0") [--scheme NAME] [--module NAME]
 
 If --scheme not provided, attempts to auto-detect from xcodebuild -list.
-Defaults: module '$MODULE_NAME'.
+Module auto-detected from Package.swift (falls back to '$MODULE_FALLBACK').
 USAGE
 }
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --scheme) SCHEME="$2"; shift 2 ;;
-    --module) MODULE_NAME="$2"; shift 2 ;;
+    --module) MODULE_NAME="$2"; MODULE_OVERRIDE=1; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown arg: $1" >&2; usage; exit 2 ;;
   esac
 done
 
+auto_detect_module(){
+  local dir="$1"
+  local detected=""
+  if command -v swift >/dev/null 2>&1; then
+    if json=$(cd "$dir" && swift package describe --type json 2>/dev/null); then
+      detected=$(printf '%s' "$json" | python3 - <<'PY' 2>/dev/null
+import json, sys
+data = json.load(sys.stdin)
+candidates = []
+for product in data.get('products', []):
+    if product.get('type') == 'library':
+        name = product.get('name')
+        if name:
+            candidates.append(name)
+if not candidates:
+    for target in data.get('targets', []):
+        if target.get('type') != 'test':
+            name = target.get('name')
+            if name:
+                candidates.append(name)
+if not candidates:
+    name = data.get('name')
+    if name:
+        candidates.append(name)
+print(candidates[0] if candidates else '')
+PY
+)
+    fi
+  fi
+  if [[ -z "$detected" && -f "$dir/Package.swift" ]]; then
+    if command -v python3 >/dev/null 2>&1; then
+      detected=$(python3 - "$dir/Package.swift" <<'PY' 2>/dev/null
+import re, sys
+from pathlib import Path
+text = Path(sys.argv[1]).read_text()
+patterns = [r"\.library\s*\(.*?name:\s*\"([^\"]+)\"", r"\.target\s*\(.*?name:\s*\"([^\"]+)\""]
+for pattern in patterns:
+    match = re.search(pattern, text, re.S)
+    if match:
+        print(match.group(1))
+        sys.exit(0)
+print('')
+PY
+)
+    fi
+  fi
+  printf '%s' "$detected"
+}
+
 cd "$IOS_DIR"
+
+if [[ $MODULE_OVERRIDE -eq 0 ]]; then
+  detected_module=$(auto_detect_module "$IOS_DIR")
+  if [[ -n "$detected_module" ]]; then
+    MODULE_NAME="$detected_module"
+  fi
+fi
+
+if [[ -z "$MODULE_NAME" ]]; then
+  MODULE_NAME="$MODULE_FALLBACK"
+fi
 
 if [[ -z "$SCHEME" ]]; then
   if command -v xcodebuild >/dev/null 2>&1; then

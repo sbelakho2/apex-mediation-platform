@@ -170,12 +170,28 @@ export async function stopExperiment(req: Request, res: Response): Promise<void>
 export async function recordEvent(req: Request, res: Response): Promise<void> {
   try {
     const { experimentId } = req.params;
+    const publisherId = req.user?.publisherId;
+    if (!publisherId) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+
+    // Verify experiment ownership
+    const experiment = await abTestingService.getExperiment(experimentId);
+    if (experiment.publisherId !== publisherId) {
+      res.status(403).json({ error: 'Forbidden' });
+      return;
+    }
+
     const body = recordEventSchema.parse(req.body);
 
-    await abTestingService.recordEvent({
-      experimentId,
-      ...body,
-    });
+    // Enforce a small metadata payload limit to prevent abuse
+    if (body.metadata && JSON.stringify(body.metadata).length > 4_096) {
+      res.status(413).json({ error: 'Metadata too large' });
+      return;
+    }
+
+    await abTestingService.recordEvent({ experimentId, ...body });
 
     res.status(201).json({
       success: true,

@@ -1,8 +1,13 @@
 # Cost Budget Policy — Platform + LLM (Hard Cap $500/month)
 
-Last updated: 2025-11-06
-Owner: Platform Engineering / Autonomy WG
-Status: Draft v1 (enforced via process + CI; programmatic enforcers WIP)
+_Last updated: 2025-11-18_  
+_Owner: Platform Engineering / Autonomy WG_  
+_Review Cycle: Monthly spend review, policy review quarterly (next review: 2026-02-18)_  
+_Status: Active - enforced via process + CI; programmatic enforcers in progress_
+
+> **FIX-10 governance:** This policy sets spending limits. Actual spend must be tracked in monthly cost reports under `docs/Internal/CostReports/`. For implementation status, see `docs/Internal/Development/FIXES.md` (FIX-11 tracking).
+
+**Current Month Budget Compliance:** _[To be updated monthly with actual vs cap]_
 
 Purpose
 - Ensure the entire system (infrastructure + LLM autonomy) operates under a hard budget cap of $500/month.

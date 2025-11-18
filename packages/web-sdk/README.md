@@ -1,5 +1,9 @@
 Rival Apex Mediation Web SDK
 
+_Last updated: 2025-11-18_
+
+> **FIX-10 governance:** This README documents Web SDK capabilities. For SDK backlog and production readiness, see `docs/Internal/Deployment/PROJECT_STATUS.md` and `docs/Internal/Development/FIXES.md` (FIX-05).
+
 A lightweight browser SDK for consent, auction requests, and ad delivery integration.
 
 Public API

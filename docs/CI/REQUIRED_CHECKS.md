@@ -1,6 +1,12 @@
-Required PR Checks and CI Artifacts
+# Required PR Checks and CI Artifacts
 
-Overview
+_Last updated: 2025-11-18_  
+_Owner: Platform Engineering / DevOps_  
+_Review Cycle: When CI workflows change (next review: when new workflows added)_
+
+> **FIX-10 governance:** This document lists required CI checks. Automation to validate compliance is tracked in `docs/Internal/Development/FIXES.md` (FIX-09). For CI implementation status, see `docs/Internal/Deployment/PROJECT_STATUS.md`.
+
+## Overview
 - The following GitHub Actions workflows must run and pass on all Pull Requests touching the respective areas. Configure these as required checks in branch protection settings.
 
 Workflows and required artifacts

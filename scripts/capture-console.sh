@@ -12,13 +12,21 @@ DEFAULT_ROUTES='["/","/billing","/billing/invoices","/settings/billing"]'
 DRY_RUN=0
 DO_INSTALL=0
 ROUTES_FILE=""
-ROUTES_JSON="${ROUTES:-$DEFAULT_ROUTES}"
+RAW_ROUTES="${ROUTES:-$DEFAULT_ROUTES}"
 
 usage(){ cat <<USAGE
 Capture Console (admin) screenshots using Playwright.
 
 Usage:
   $(basename "$0") [--dry-run] [--install] [--routes FILE] [--base-url URL]
+
+Env:
+  CONSOLE_BASE_URL            Base URL (default http://localhost:3001)
+  ROUTES                      JSON array of routes (legacy)
+  CONSOLE_CAPTURE_ROUTES      Comma/space-separated routes (converted to JSON)
+  CAPTURE_ROUTES              Same as above; kept for parity with website script
+  CONSOLE_CAPTURE_ROUTES_FILE Path to newline-separated routes
+  CAPTURE_ROUTES_FILE         Same format; used if CLI flag not supplied
 USAGE
 }
 
@@ -37,8 +45,58 @@ if [[ -n "$ROUTES_FILE" ]]; then
   if [[ ! -f "$ROUTES_FILE" ]]; then echo "Routes file not found: $ROUTES_FILE" >&2; exit 2; fi
   mapfile -t lines <"$ROUTES_FILE"
   json="["; sep=""; for r in "${lines[@]}"; do json+="$sep\"$r\""; sep=","; done; json+="]"
-  ROUTES_JSON="$json"
+  RAW_ROUTES="$json"
 fi
+
+if [[ -z "$ROUTES_FILE" && -n "${CONSOLE_CAPTURE_ROUTES_FILE:-}" ]]; then
+  if [[ ! -f "$CONSOLE_CAPTURE_ROUTES_FILE" ]]; then
+    echo "Routes file not found: $CONSOLE_CAPTURE_ROUTES_FILE" >&2
+    exit 2
+  fi
+  mapfile -t lines <"$CONSOLE_CAPTURE_ROUTES_FILE"
+  json="["; sep=""; for r in "${lines[@]}"; do json+="$sep\"$r\""; sep=","; done; json+="]"
+  RAW_ROUTES="$json"
+fi
+
+if [[ -z "$ROUTES_FILE" && -z "${CONSOLE_CAPTURE_ROUTES_FILE:-}" && -n "${CAPTURE_ROUTES_FILE:-}" ]]; then
+  if [[ ! -f "$CAPTURE_ROUTES_FILE" ]]; then
+    echo "Routes file not found: $CAPTURE_ROUTES_FILE" >&2
+    exit 2
+  fi
+  mapfile -t lines <"$CAPTURE_ROUTES_FILE"
+  json="["; sep=""; for r in "${lines[@]}"; do json+="$sep\"$r\""; sep=","; done; json+="]"
+  RAW_ROUTES="$json"
+fi
+
+if [[ -n "${CONSOLE_CAPTURE_ROUTES:-}" ]]; then
+  RAW_ROUTES="${CONSOLE_CAPTURE_ROUTES}"
+elif [[ -n "${CAPTURE_ROUTES:-}" ]]; then
+  RAW_ROUTES="${CAPTURE_ROUTES}"
+fi
+
+normalize_routes_json() {
+  local input="$1"
+  if [[ "$input" =~ ^\[.*\]$ ]]; then
+    printf '%s' "$input"
+    return
+  fi
+  local json="["
+  local first=1
+  while IFS= read -r route; do
+    route="${route//\r/}"
+    route="${route## }"
+    route="${route%% }"
+    [[ -z "$route" ]] && continue
+    route=${route//\"/\\\"}
+    if [[ $first -eq 0 ]]; then json+=","; fi
+    json+="\"$route\""
+    first=0
+  done < <(printf '%s' "$input" | tr ',;' '\n')
+  json+=']'
+  printf '%s' "$json"
+}
+
+ROUTES_JSON=$(normalize_routes_json "$RAW_ROUTES")
 
 if [[ "$DRY_RUN" -eq 1 ]]; then
   echo "[DRY-RUN] Would capture routes: $ROUTES_JSON from $BASE_URL"
@@ -50,7 +108,19 @@ echo "[1/7] Preparing dependencies (root + console)"
 cd "$ROOT_DIR"
 checksum() { shasum -a 256 "$1" 2>/dev/null | awk '{print $1}' || sha256sum "$1" 2>/dev/null | awk '{print $1}'; }
 if [[ "$DO_INSTALL" -eq 1 ]]; then
-  npm ci
+  if [[ -f package-lock.json ]]; then
+    cur_hash=$(checksum package-lock.json)
+    stamp=".capture_console_root.stamp"
+    prev_hash=""; [[ -f "$stamp" ]] && prev_hash=$(cat "$stamp") || true
+    if [[ "$cur_hash" != "$prev_hash" ]]; then
+      npm ci
+      echo "$cur_hash" > "$stamp"
+    else
+      echo "Root lockfile unchanged; skipping npm ci"
+    fi
+  else
+    npm ci
+  fi
 else
   echo "Skipping npm ci at root (use --install)"
 fi

@@ -1,9 +1,14 @@
 # Estonian E-Systems Integration Guide
 
-**Last Updated:** 2025-11-03  
-**Company:** Bel Consulting OÜ  
-**Registry Code:** 16736399  
-**VAT Number:** EE102736890
+_Last updated: 2025-11-18_  
+_Company: Bel Consulting OÜ_  
+_Registry Code: 16736399_  
+_VAT Number: EE102736890_  
+_Owner: Finance / Legal / Platform Engineering_  
+_Review Cycle: Annually or when Estonian regulations change (next review: 2026-11-18)_  
+_Status: Requires legal review for jurisdiction-specific compliance_
+
+> **FIX-10 governance:** This guide covers Estonia-specific e-government integration. Legal review required before implementing X-Road integrations. For deployment status, see `docs/Internal/Deployment/PROJECT_STATUS.md`.
 
 This document provides comprehensive information about Estonian government e-systems and how to integrate with them for business compliance and automation.
 

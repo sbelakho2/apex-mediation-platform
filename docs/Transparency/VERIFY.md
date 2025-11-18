@@ -1,4 +1,10 @@
-### Transparency Verification — API, CLI, and Console
+# Transparency Verification — API, CLI, and Console
+
+_Last updated: 2025-11-18_  
+_Owner: Platform Engineering / Trust & Safety_  
+_Review Cycle: When transparency implementation changes (next review: when FIX-01 transparency features complete)_
+
+> **FIX-10 governance:** This guide documents transparency verification features. For implementation status, see `docs/Internal/Deployment/PROJECT_STATUS.md` and `docs/Internal/Development/FIXES.md` (FIX-01 covers transparency APIs).
 
 This guide explains how to verify auction integrity records end-to-end using:
 - Backend API endpoints

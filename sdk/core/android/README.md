@@ -1,5 +1,9 @@
 # Android SDK
 
+_Last updated: 2025-11-18_
+
+> **FIX-10 governance:** This README documents Android SDK capabilities and integration. For SDK backlog and production readiness, see `docs/Internal/Deployment/PROJECT_STATUS.md` and `docs/Internal/Development/FIXES.md` (FIX-05).
+
 Thread-safe, ANR-proof ad mediation SDK for Android.
 
 ## Features

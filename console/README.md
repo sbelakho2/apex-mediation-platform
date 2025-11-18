@@ -1,5 +1,9 @@
 # Ad Platform Console
 
+_Last updated: 2025-11-18_
+
+> **FIX-10 governance:** This README describes console features and architecture. For actual deployment readiness, see `docs/Internal/Deployment/PROJECT_STATUS.md`. For prioritized backlog (including console work), see `docs/Internal/Development/FIXES.md` (FIX-03).
+
 ## Overview
 
 Modern Next.js 14 web application providing publishers with a comprehensive dashboard for ad mediation management, revenue analytics, fraud detection, and payout tracking.

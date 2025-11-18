@@ -74,7 +74,9 @@ export const requestBid = async (
         res.status(204).send();
         return;
       }
-      res.status(204).send();
+      // Provide structured error response to aid debugging and instrumentation
+      const reason = (result as any).reason || 'UNKNOWN';
+      res.status(400).json({ success: false, error: 'Auction failed', reason });
       return;
     }
 

@@ -253,8 +253,10 @@ export const reconcileBilling = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { idempotencyKey } = req.body;
-    
+    // Enforce header-based idempotency per FIX-11 (648)
+    const idempotencyKeyHeader = req.header('Idempotency-Key') || req.header('idempotency-key');
+    const idempotencyKey = idempotencyKeyHeader?.trim();
+
     if (!idempotencyKey) {
       throw new AppError('Idempotency-Key header required', 400);
     }

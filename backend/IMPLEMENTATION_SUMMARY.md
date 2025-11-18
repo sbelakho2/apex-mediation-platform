@@ -1,5 +1,9 @@
 # ApexMediation Backend - Implementation Summary
 
+_Last updated: 2025-11-18_
+
+> **FIX-10 governance:** This document highlights completed backend features but is not a production-readiness claim. For the current deployment state, see `docs/Internal/Deployment/PROJECT_STATUS.md`. For prioritized backlog, see `docs/Internal/Development/FIXES.md` (FIX-01 covers backend issues).
+
 ## Completed Features
 
 All major backend implementation tasks have been completed successfully.

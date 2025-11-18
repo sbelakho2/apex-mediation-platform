@@ -1,173 +1,32 @@
-# ApexMediation Platform - Development Complete
+# ApexMediation Platform – Archival Executive Summary
 
-**Status:** ✅ All Major Systems Implemented  
-**Date:** 2025-11-03  
-**Solo Operator:** Sabel Akhoua (Bel Consulting OÜ, Estonia)
+> **Status:** Archived on 2025-11-18. This document used to market the platform as "development complete". It is retained only for historical reference.
 
----
+The authoritative delivery status now lives in `docs/Internal/Deployment/PROJECT_STATUS.md`, which consolidates every production readiness claim with evidence from:
 
-## Executive Summary
+- `docs/Internal/Development/FIXES.md` (ordered FIX backlog)
+- `docs/Internal/Development/AD_PROJECT_FILE_ANALYSIS.md` (file-by-file risk inventory)
 
-The ApexMediation platform is now **100% production-ready** with complete automation across all business functions. The platform can operate as a **solo venture with <5 hours/week** human intervention while maintaining **95% profit margins** at scale.
+## Original Scope (for context only)
 
-### Key Achievements
+- Provide a high-level, marketing-oriented executive summary.
+- Highlight aspirational cost/profit models for the ultra-lean stack.
+- Describe automation themes (SDK releases, accounting, sales) at a narrative level.
 
-✅ **6 of 6 Major Systems Complete** (100%)
-- Console Backend Integration
-- SDK Implementation (iOS, Android, Unity)
-- CI/CD Pipeline Setup
-- Automated Accounting & Estonian Compliance
-- Self-Service Sales Automation
-- **Automated Platform Updates & Maintenance** ← Just Completed
+## Why It Was Retired
 
-✅ **Ultra-Lean Infrastructure** ($175-300/month vs $1,100-3,050 traditional)
-- 85% cost reduction through self-hosting and open-source replacements
-- Break-even at just **2 customers** (vs 8-21 in traditional model)
-- 95% profit margin at 100 customers ($14,050 profit on $15,000 MRR)
+- The completion claims conflicted with the open risks tracked in the FIX backlog.
+- Multiple downstream docs copied this narrative verbatim, making it difficult to spot regressions.
 
-✅ **Zero-Touch Operations**
-- Self-service customer onboarding with instant API key provisioning
-- Automated usage metering with Stripe billing integration
-- Smart dunning management (3 retries over 7 days, 20-30% recovery rate)
-- Email automation with 10+ transactional templates
-- SDK releases fully automated from tag to customer notification
-- Documentation auto-deployment with version switcher
-- Backward compatibility testing with breaking change detection
+## Where to Go Now
+
+1. Read `PROJECT_STATUS.md` for the live deployment state.
+2. Tie any new claims back to a FIX ID and accompanying test/deploy evidence.
+3. Treat this file strictly as historical messaging; do not update it with new status language.
 
 ---
 
-## System Architecture
-
-### Sales Automation (Completed 2025-11-03)
-
-**Components:**
-1. **Usage Metering Service** (450 lines)
-   - Dual storage: PostgreSQL (billing) + ClickHouse (analytics)
-   - Daily Stripe sync for usage-based billing
-   - Hourly limit checks with alerts at 80%, 90%, 100%, 110%
-   - Plan-based overage calculations ($0.10-$0.05 per 1K overages)
-
-2. **Dunning Management Service** (420 lines)
-   - Progressive retry schedule: Day 1, 3, 7 after grace period
-   - Automatic suspension after max retries
-   - Instant reactivation on successful payment
-   - Email notifications at each stage
-   - 20-30% payment recovery rate (industry average: 15-20%)
-
-3. **Email Automation Service** (520 lines)
-   - 10+ templates: welcome, trial, payment, usage, SDK updates
-   - Event-driven architecture (PostgreSQL events table)
-   - Resend.com integration (free 3K emails/month)
-   - Deduplication to prevent spam
-   - HTML formatting with inline CSS
-
-4. **Cron Jobs** (100 lines)
-   - Every minute: Email queue processing
-   - Hourly: Usage limit checks
-   - Daily 2 AM: Stripe usage sync
-   - Daily 3 AM: Dunning retries
-   - Daily 9 AM: Trial ending reminders
-   - Monthly: Usage summaries
-
-5. **API Endpoints** (150 lines)
-   - `POST /api/usage/track`: Record SDK telemetry
-   - `GET /api/usage/current`: Current period usage
-   - `GET /api/usage/analytics`: 30-day analytics
-   - `GET /api/usage/limits`: Plan limits & percentage used
-
-**Database Schema:**
-- `usage_records`: Usage tracking (impressions, API calls, data transfer)
-- `usage_alerts`: Alert deduplication
-- `dunning_attempts`: Payment retry state machine
-- `events`: Async event queue
-- `email_log`: Email deduplication
-
-**Result:** 90%+ customer lifecycle automation, <2 hours/week operations for 100 customers
-
----
-
-### Platform Updates Automation (Completed 2025-11-03)
-
-**Components:**
-
-1. **SDK Release Automation** (.github/workflows/sdk-release.yml, 500 lines)
-   - Triggered on git tag push (v*.*.*) 
-   - Semantic version validation
-   - Conventional commit changelog generation
-   - Multi-platform SDK builds (iOS, Android, Unity) in parallel
-   - Backward compatibility testing
-   - Publish to CocoaPods, Maven Central, NPM
-   - GitHub Release creation with artifacts
-   - Customer notification automation
-   - Total time: **15-25 minutes** from tag to live
-
-2. **Changelog Generation Service** (450 lines)
-   - Parses conventional commits (Angular convention)
-   - Groups by type (feat, fix, perf, refactor, docs, test, chore)
-   - Detects breaking changes (! or BREAKING CHANGE footer)
-   - Generates CHANGELOG.md in Keep a Changelog format
-   - Creates migration guides for breaking changes
-   - Formats for email (HTML with inline CSS)
-   - CLI: `node ChangelogGenerationService.ts <version>`
-
-3. **SDK Update Notification Service** (400 lines)
-   - Notifies all active customers about SDK updates
-   - Email with changelog, installation instructions, migration guide
-   - Console notifications with priority (high for breaking changes)
-   - Tracks SDK adoption rates
-   - Sends upgrade reminders to outdated customers (14 days)
-   - Notifies users of deprecated APIs
-   - CLI: `node SDKUpdateNotificationService.ts notify <version>`
-
-4. **Backward Compatibility Testing** (.github/workflows/compatibility-testing.yml, 400 lines)
-   - API change detection (Microsoft API Extractor)
-   - Matrix testing: SDK v1/v2 × Backend v1/v2
-   - Integration tests with previous SDK version
-   - Contract testing with Pact
-   - Deprecation checks
-   - PR comments with breaking change warnings
-   - Enforces semantic versioning (blocks merge if major not bumped)
-
-5. **Documentation Auto-Deployment** (.github/workflows/docs-deployment.yml, 300 lines)
-   - TypeDoc (backend), Jazzy (iOS), Dokka (Android), JSDoc (Unity)
-   - Version switcher with dropdown
-   - Deploy to Cloudflare Pages (free CDN) or GitHub Pages (fallback)
-   - Algolia DocSearch integration
-   - URL: https://docs.apexmediation.com
-   - Time: **3-5 minutes** per deployment
-
-**Result:** Zero-touch SDK releases, <5 minutes human time per release
-
----
-
-## Cost Structure
-
-### Ultra-Lean Stack ($175-300/month avg $237.50/month)
-
-| Service | Traditional | Ultra-Lean | Savings |
-|---------|------------|------------|---------|
-| Compute | AWS EC2 $50-200/mo | Fly.io 2×VMs $14/mo | $36-186/mo |
-| Database | AWS RDS $89/mo | Supabase Pro $25/mo | $64/mo |
-| Cache | ElastiCache $50/mo | Upstash Redis $10/mo | $40/mo |
-| Analytics DB | - | ClickHouse $50-100/mo | - |
-| Storage | AWS S3 $23/TB | R2+B2 $10/mo | $13/mo |
-| Monitoring | Datadog $300/mo | Self-hosted $8/mo | $292/mo |
-| Email | SendGrid $90/mo | Resend.com free | $90/mo |
-| Error Tracking | Sentry $50/mo | GlitchTip self-hosted | $50/mo |
-| Support | Intercom $74/mo | Discord+GitHub free | $74/mo |
-| Status Page | Statuspage $29/mo | Upptime GitHub free | $29/mo |
-| Secrets Mgmt | AWS Secrets $40/mo | Infisical self-hosted | $40/mo |
-| Marketing | Mailchimp $350/mo | Listmonk self-hosted | $350/mo |
-| Automation | Zapier $70/mo | n8n self-hosted | $70/mo |
-| CI/CD | CircleCI $70/mo | GitHub Actions free | $70/mo |
-| **TOTAL** | **$1,185-3,050/mo** | **$175-300/mo** | **$1,010-2,750/mo** |
-
-**Annual Savings:** $12,120-33,000
-
----
-
-## Financial Model
-
+_Last touched: 2025-11-18 during FIX-10 documentation alignment._
 ### Break-Even Analysis
 
 **Traditional Stack:**

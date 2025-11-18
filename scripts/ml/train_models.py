@@ -42,15 +42,21 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
-    # Early dataset path validation
-    if not args.dataset.exists():
-        print(f"ERROR: Dataset path does not exist: {args.dataset}", file=sys.stderr)
+    dataset_path = args.dataset.expanduser().resolve()
+    if not dataset_path.exists():
+        print(f"ERROR: Dataset path does not exist: {dataset_path}", file=sys.stderr)
         sys.exit(2)
-    if args.dataset.is_dir():
-        print(f"ERROR: Dataset path points to a directory, expected file: {args.dataset}", file=sys.stderr)
+    if dataset_path.is_dir():
+        print(f"ERROR: Dataset path points to a directory, expected file: {dataset_path}", file=sys.stderr)
         sys.exit(2)
+    allowed_suffixes = {".csv", ".parquet", ".pq"}
+    if dataset_path.suffix and dataset_path.suffix.lower() not in allowed_suffixes:
+        print(
+            f"WARNING: Unexpected dataset extension '{dataset_path.suffix}'. Supported: {', '.join(sorted(allowed_suffixes))}",
+            file=sys.stderr,
+        )
     config = TrainingConfig(
-        dataset_path=args.dataset,
+        dataset_path=dataset_path,
         output_root=args.output_root,
         run_id=args.run_id,
         target_column=args.target,
@@ -67,17 +73,17 @@ def main() -> None:
     if args.dry_run:
         # Load only a small sample to validate headers without full training
         try:
-            if args.dataset.suffix.lower() in (".parquet", ".pq"):
-                df = pd.read_parquet(args.dataset)
+            if dataset_path.suffix.lower() in (".parquet", ".pq"):
+                df = pd.read_parquet(dataset_path)
             else:
-                df = pd.read_csv(args.dataset, nrows=10)
+                df = pd.read_csv(dataset_path, nrows=10)
             cols = list(df.columns)
         except Exception as e:
             print(f"ERROR: Failed to read dataset: {e}", file=sys.stderr)
             sys.exit(2)
         print(json.dumps({
             "ok": True,
-            "dataset": str(args.dataset),
+            "dataset": str(dataset_path),
             "columns": cols,
             "rows_previewed": len(df)
         }, indent=2))

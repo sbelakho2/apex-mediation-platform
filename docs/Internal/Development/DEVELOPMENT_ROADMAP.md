@@ -1,5 +1,9 @@
 # Development Roadmap — Coding First, External Testing Last
 
+_Last updated: 2025-11-18 16:12 UTC_
+
+> **FIX-10 governance:** Every status claim in this roadmap must trace back to `docs/Internal/Development/FIXES.md` and align with the canonical readiness record in `docs/Internal/Deployment/PROJECT_STATUS.md`. Add new work here only after the risk is logged in `docs/Internal/Development/AD_PROJECT_FILE_ANALYSIS.md` and a FIX ID exists.
+
 Document purpose: Translate COMPETITIVE_GAP_ANALYSIS insights into a concrete, engineering-first roadmap. All coding work is done before final external/sandbox integration tests. Sandbox credentials for ad networks, MMPs/SKAN, payment processors, etc., will be used only in the Final Test & Certification phase.
 
 Status legend:
@@ -146,3 +150,8 @@ Acceptance criteria (FT)
 - Treat sections as epics with issues per bullet.
 - Keep external creds out of CI; use mocked tests until FT.
 - Update this file as epics land; move items between phases only with justification.
+
+## Change Log
+| Date | Change |
+| --- | --- |
+| 2025-11-18 | Added FIX-10 governance banner tying roadmap claims to `FIXES.md`, `PROJECT_STATUS.md`, and `AD_PROJECT_FILE_ANALYSIS.md`. |

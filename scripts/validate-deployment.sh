@@ -11,6 +11,45 @@ else
   set +e
 fi
 
+EXPECTED_MIGRATIONS_DEFAULT=1
+EXPECTED_MIGRATIONS_MIN="${EXPECTED_MIGRATIONS_MIN:-$EXPECTED_MIGRATIONS_DEFAULT}"
+
+usage() {
+    cat <<USAGE
+Pre-deployment validator.
+
+Usage:
+    $(basename "$0") [--expected-migrations-min N]
+
+Env overrides:
+    STRICT=1                     Exit on first error (default: show all)
+    EXPECTED_MIGRATIONS_MIN=N    Same as --expected-migrations-min
+USAGE
+}
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --expected-migrations-min)
+            EXPECTED_MIGRATIONS_MIN="$2"
+            shift 2
+            ;;
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        *)
+            echo "Unknown argument: $1" >&2
+            usage
+            exit 2
+            ;;
+    esac
+done
+
+if ! [[ "$EXPECTED_MIGRATIONS_MIN" =~ ^[0-9]+$ ]]; then
+    echo "Expected migrations minimum must be an integer (got '$EXPECTED_MIGRATIONS_MIN')." >&2
+    exit 2
+fi
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -74,13 +113,12 @@ fi
 
 # Check migrations (parameterized)
 check_info "Verifying database migrations..."
-EXPECTED_MIN=${EXPECTED_MIGRATIONS_MIN:-1}
 if [ -d "backend/migrations" ]; then
     MIGRATION_COUNT=$(find backend/migrations -name "*.sql" | wc -l | tr -d ' ')
-    if [ "$MIGRATION_COUNT" -ge "$EXPECTED_MIN" ]; then
-        check_pass "Found $MIGRATION_COUNT migration(s) (>= expected minimum $EXPECTED_MIN)"
+    if [ "$MIGRATION_COUNT" -ge "$EXPECTED_MIGRATIONS_MIN" ]; then
+        check_pass "Found $MIGRATION_COUNT migration(s) (>= expected minimum $EXPECTED_MIGRATIONS_MIN)"
     else
-        check_fail "Found $MIGRATION_COUNT migration(s), below expected minimum $EXPECTED_MIN"
+        check_fail "Found $MIGRATION_COUNT migration(s), below expected minimum $EXPECTED_MIGRATIONS_MIN"
     fi
 else
     check_fail "backend/migrations/ directory not found"

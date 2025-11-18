@@ -1,5 +1,12 @@
 # Pricing & Plans
 
+_Last updated: 2025-11-18_  
+_Owner: Business / Finance Team_  
+_Review Cycle: Quarterly or when pricing changes (next review: 2026-02-18)_  
+_Status: Draft - Revenue share tiers subject to business validation_
+
+> **FIX-10 governance:** Pricing information must stay consistent with actual billing implementation. For billing system status, see `docs/Internal/Deployment/PROJECT_STATUS.md` and `docs/Internal/Development/FIXES.md` (FIX-02). Customers will be notified 30 days before pricing changes.
+
 Transparent pricing with no hidden fees. Pay only for what you use.
 
 ## Pricing Model

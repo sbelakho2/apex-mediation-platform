@@ -5,7 +5,10 @@ import { twofaEventsTotal } from '../utils/prometheus';
 import { safeInc } from '../utils/metrics';
 
 export async function enroll(req: Request, res: Response) {
-  const userId = req.user?.userId || 'anon';
+  const userId = req.user?.userId;
+  if (!userId) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
   const email = (req.user as any)?.email || 'user@example.com';
   const issuer = process.env.TWOFA_ISSUER || 'ApexMediation';
   const data = await twofaService.enroll(userId, email, issuer);
@@ -15,7 +18,10 @@ export async function enroll(req: Request, res: Response) {
 }
 
 export async function verify(req: Request, res: Response) {
-  const userId = req.user?.userId || 'anon';
+  const userId = req.user?.userId;
+  if (!userId) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
   const token = String(req.body?.token || '');
   try {
     const data = await twofaService.verifyAndEnable(userId, token);
@@ -29,7 +35,10 @@ export async function verify(req: Request, res: Response) {
 }
 
 export async function regenerateBackupCodes(req: Request, res: Response) {
-  const userId = req.user?.userId || 'anon';
+  const userId = req.user?.userId;
+  if (!userId) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
   try {
     const data = await twofaService.regenerateBackupCodes(userId);
     safeInc(twofaEventsTotal, { event: 'regen', outcome: 'success' });
@@ -41,7 +50,10 @@ export async function regenerateBackupCodes(req: Request, res: Response) {
 }
 
 export async function disable(req: Request, res: Response) {
-  const userId = req.user?.userId || 'anon';
+  const userId = req.user?.userId;
+  if (!userId) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
   const password: string = String(req.body?.password || '');
   const code: string = String(req.body?.code || '');
   try {

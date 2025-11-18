@@ -5,6 +5,7 @@ import logger from '../utils/logger';
 import { AppDataSource } from '../database';
 import { ApiKey } from '../database/entities/apiKey.entity';
 import { User } from '../database/entities/user.entity';
+import { sha256Hex } from '../utils/crypto';
 
 const apiKeyRepository = AppDataSource.getRepository(ApiKey);
 const userRepository = AppDataSource.getRepository(User);
@@ -39,10 +40,12 @@ export async function createKey(req: Request, res: Response, _next: NextFunction
   const prefix = live ? 'sk_live' : 'sk_test';
   const secret = genSecret(prefix as any);
   const secretHash = await bcrypt.hash(secret, 10);
+  const secretDigest = sha256Hex(secret);
 
   const newKey = apiKeyRepository.create({
     user,
     secret: secretHash,
+    secretDigest,
     prefix,
     last4: secret.slice(-4),
   });
@@ -68,10 +71,12 @@ export async function rotateKey(req: Request, res: Response, _next: NextFunction
   const prefix = live ? 'sk_live' : 'sk_test';
   const secret = genSecret(prefix as any);
   const secretHash = await bcrypt.hash(secret, 10);
+  const secretDigest = sha256Hex(secret);
 
   const newKey = apiKeyRepository.create({
     user: key.user,
     secret: secretHash,
+    secretDigest,
     prefix,
     last4: secret.slice(-4),
   });

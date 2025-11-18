@@ -2,6 +2,8 @@
 
 **Complete documentation for the ApexMediation platform organized by audience and purpose.**
 
+> **FIX-10 Governance:** Status claims must reference both `docs/Internal/Development/AD_PROJECT_FILE_ANALYSIS.md` (inventory) and `docs/Internal/Development/FIXES.md` (ordered backlog). Deployment readiness is centralized in `docs/Internal/Deployment/PROJECT_STATUS.md`.
+
 ---
 
 ## 📁 Documentation Structure
@@ -100,6 +102,7 @@ Docs/
 - **PROJECT_*.md** - Project status reports
 - **IMPLEMENTATION_*.md** - Implementation summaries
 - **FIRST_CUSTOMER_INTEGRATION_CHECKLIST.md** - First customer onboarding
+> **Deployment status canonical:** Use `PROJECT_STATUS.md` for any production-readiness statements. `PROJECT_COMPLETE.md`, `PROJECT_COMPLETION.md`, and `SYSTEM_COMPLETE.md` are archived for historical context only.
 
 ### Infrastructure
 - **INFRASTRUCTURE_MIGRATION_PLAN.md** - Migration guide

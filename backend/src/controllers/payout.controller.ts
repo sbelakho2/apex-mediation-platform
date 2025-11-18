@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { AppError } from '../middleware/errorHandler';
+import logger from '../utils/logger';
 import {
   listPayoutHistory,
   getUpcomingPayouts,
@@ -51,7 +52,10 @@ export const getHistory = async (
       throw new AppError('Invalid limit parameter', 400);
     }
 
-    const history = await listPayoutHistory(publisherId, Math.floor(limit));
+    // Cap maximum to prevent abuse (FIX-11: 667)
+    const bounded = Math.min(Math.floor(limit), 100);
+
+    const history = await listPayoutHistory(publisherId, bounded);
 
     res.json({
       success: true,
@@ -131,6 +135,15 @@ export const updateSettings = async (
 
     const data = updateSettingsSchema.parse(req.body);
     const updated = await updatePayoutSettings(publisherId, data);
+
+    // Emit simple audit log (FIX-11: 667)
+    logger.info('[Payouts] Settings updated', {
+      actor: req.user?.email,
+      publisherId,
+      method: data.method,
+      currency: data.currency,
+      schedule: data.schedule,
+    });
 
     res.json({
       success: true,

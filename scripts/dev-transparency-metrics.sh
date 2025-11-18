@@ -9,10 +9,11 @@ print_usage() {
 Smoke test Transparency API locally with ephemeral infra.
 
 Usage:
-  $(basename "$0") [--dry-run] [--privkey-file PATH | --privkey-env VAR]
+  $(basename "$0") [--dry-run] [--env-file PATH] [--privkey-file PATH | --privkey-env VAR]
 
 Options:
   --dry-run           Prepare and print planned actions without starting services.
+  --env-file PATH     Load environment variables (including TRANSPARENCY_PRIVKEY) from PATH.
   --privkey-file PATH Read private key from file (preferred; ensure chmod 600).
   --privkey-env VAR   Read private key value from environment variable name VAR (e.g., TRANSPARENCY_PRIVKEY).
 
@@ -29,10 +30,13 @@ USAGE
 
 DRY_RUN=0
 PRIVKEY_SRC=""
+ENV_FILE=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --dry-run)
       DRY_RUN=1; shift ;;
+    --env-file)
+      ENV_FILE="$2"; shift 2 ;;
     --privkey-file)
       PRIVKEY_SRC="file:$2"; shift 2 ;;
     --privkey-env)
@@ -43,6 +47,22 @@ while [[ $# -gt 0 ]]; do
       echo "Unknown argument: $1" >&2; print_usage; exit 2 ;;
   esac
 done
+
+if [[ -n "$ENV_FILE" ]]; then
+  if [[ ! -f "$ENV_FILE" ]]; then
+    echo "Env file not found: $ENV_FILE" >&2; exit 2
+  fi
+  if command -v stat >/dev/null 2>&1; then
+    perms=$(stat -c '%a' "$ENV_FILE" 2>/dev/null || stat -f '%OLp' "$ENV_FILE" 2>/dev/null || echo "")
+    if [[ -n "$perms" && "$perms" -gt 644 ]]; then
+      echo "⚠️  Warning: $ENV_FILE is world/group writable; consider chmod 600" >&2
+    fi
+  fi
+  set -a
+  # shellcheck disable=SC1090
+  source "$ENV_FILE"
+  set +a
+fi
 
 SMOKE_ENV_TAG="transparency-smoke-test"
 JWT_SECRET="smoke-test-secret"
@@ -68,8 +88,10 @@ resolve_privkey() {
       fi
       # Warn if permissions are too open
       if command -v stat >/dev/null 2>&1; then
-        # best-effort permission check
-        :
+        perms=$(stat -c '%a' "$path" 2>/dev/null || stat -f '%OLp' "$path" 2>/dev/null || echo "")
+        if [[ -n "$perms" && "$perms" -gt 640 ]]; then
+          echo "⚠️  Warning: $path permissions are $perms, consider chmod 600" >&2
+        fi
       fi
       val="$(cat "$path")"
     elif [[ "$PRIVKEY_SRC" == env:* ]]; then

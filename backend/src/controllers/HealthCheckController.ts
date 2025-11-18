@@ -8,6 +8,9 @@
 
 import { Request, Response } from 'express';
 import { Pool } from 'pg';
+import logger from '../utils/logger';
+import { redis } from '../utils/redis';
+import { checkClickHouseHealth } from '../utils/clickhouse';
 
 export class HealthCheckController {
   constructor(private pool: Pool) {}
@@ -58,6 +61,12 @@ export class HealthCheckController {
         return;
       }
 
+      // Check Redis readiness (fail open: not strictly required)
+      const redisReady = redis.isReady();
+
+      // Check ClickHouse health (optional for readiness, but informative)
+      const clickhouseHealthy = await checkClickHouseHealth().catch(() => false);
+
       res.status(200).json({
         status: 'ready',
         service: 'apexmediation-backend',
@@ -66,10 +75,16 @@ export class HealthCheckController {
           latency_ms: dbLatency,
           status: 'healthy',
         },
+        redis: {
+          ready: redisReady,
+        },
+        clickhouse: {
+          healthy: clickhouseHealthy,
+        },
         timestamp: new Date().toISOString(),
       });
     } catch (error) {
-      console.error('[HealthCheck] Readiness probe failed:', error);
+      logger.error('[HealthCheck] Readiness probe failed', { error });
       res.status(503).json({
         status: 'not_ready',
         message: 'Database connection failed',

@@ -7,6 +7,9 @@
 
 import crypto from 'crypto';
 import logger from '../utils/logger';
+import { AppDataSource } from '../database';
+import { SkanPostback } from '../database/entities/skanPostback.entity';
+import { sha256Hex } from '../utils/crypto';
 
 // ========================================
 // SKAdNetwork Types
@@ -208,8 +211,32 @@ export class SKAdNetworkService {
         };
       }
 
-      // Store postback
-      this.postbacks.push(postback);
+      // Persist postback with replay protection
+      try {
+        const repo = AppDataSource.getRepository(SkanPostback);
+        const fingerprint = this.computeReplayFingerprint(postback);
+        const entity = repo.create({
+          networkId: postback['ad-network-id'],
+          campaignId: postback['campaign-id'],
+          version: postback.version,
+          redownload: Boolean(postback['redownload']),
+          fingerprint,
+          signatureFields: this.pickSignatureFields(postback),
+          raw: postback as any,
+        });
+        await repo.save(entity);
+      } catch (e: any) {
+        // Unique constraint => replay; treat as success (idempotent)
+        const msg = String(e?.message || '');
+        const isUnique = /duplicate key|unique constraint/i.test(msg);
+        if (!isUnique) {
+          throw e;
+        }
+        logger.warn('SKAN replay postback ignored (duplicate)', {
+          networkId: postback['ad-network-id'],
+          campaignId: postback['campaign-id'],
+        });
+      }
 
       // Extract attribution data
       const attribution = {
@@ -239,6 +266,38 @@ export class SKAdNetworkService {
         error: error instanceof Error ? error.message : 'Unknown error',
       };
     }
+  }
+
+  private computeReplayFingerprint(postback: SKAdNetworkPostback): string {
+    // Use stable set of core fields; omit fields that can vary but not identity (e.g., timestamp precision).
+    const core = {
+      v: postback.version,
+      n: postback['ad-network-id'],
+      c: postback['campaign-id'],
+      a: postback['app-id'],
+      t: postback['transaction-id'] || '',
+      s: postback['source-app-id'] || '',
+      f: postback['fidelity-type'] ?? '',
+      cv: postback['conversion-value'] ?? '',
+      ccv: postback['coarse-conversion-value'] || '',
+      dw: postback['redownload'] ? '1' : '0',
+    };
+    return sha256Hex(JSON.stringify(core));
+  }
+
+  private pickSignatureFields(postback: SKAdNetworkPostback): Record<string, unknown> {
+    const fields: Record<string, unknown> = {
+      version: postback.version,
+      ad_network_id: postback['ad-network-id'],
+      campaign_id: postback['campaign-id'],
+      app_id: postback['app-id'],
+      source_app_id: postback['source-app-id'],
+      fidelity_type: postback['fidelity-type'],
+      conversion_value: postback['conversion-value'],
+      coarse_conversion_value: postback['coarse-conversion-value'],
+      did_win: postback['did-win'],
+    };
+    return fields;
   }
 
   /**

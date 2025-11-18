@@ -1,5 +1,9 @@
 # iOS SDK
 
+_Last updated: 2025-11-18_
+
+> **FIX-10 governance:** This README documents iOS SDK capabilities and integration. For SDK backlog and production readiness, see `docs/Internal/Deployment/PROJECT_STATUS.md` and `docs/Internal/Development/FIXES.md` (FIX-05).
+
 Swift-based, thread-safe ad mediation SDK for iOS and tvOS.
 
 ## Features

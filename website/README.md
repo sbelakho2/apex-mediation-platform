@@ -1,17 +1,23 @@
 # ApexMediation Website 🚀
+<!-- markdownlint-disable MD013 MD060 -->
+
+_Last updated: 2025-11-18 16:45 UTC_
+
+> **FIX-10 governance:** Treat this README as a feature overview only. For the real delivery state, defer to `docs/Internal/Deployment/PROJECT_STATUS.md` and the prioritized backlog in `docs/Internal/Development/FIXES.md` before sharing claims externally.
 
 Enterprise-grade ad monetization platform with ML-powered fraud detection, real-time analytics, and seamless ad network integration. Built with Next.js 14, TypeScript, and the Study in Sweden design system.
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-TS-blue)](https://www.typescriptlang.org/)
 [![Next.js](https://img.shields.io/badge/Next.js-14-black)](https://nextjs.org/)
 
-**📊 Current Status:** Production‑safe defaults enabled; dashboards are wired to live APIs with robust loading/error/empty states. Some features are gated by RBAC/feature flags and may be hidden depending on environment.
+**📊 Current Status:** Work in progress. Most dashboard routes still rely on mock data and marketing copy; see `docs/Internal/Deployment/PROJECT_STATUS.md` for the canonical readiness snapshot and FIX IDs driving this work.
 
 ---
 
 ## ✨ Features
 
 ### 🏠 Marketing Website
+
 - **Homepage** with 10 sections: Hero, Popular cards, Features grid, Blog/Quiz callout, Swedish Way branding, Newsletter signup
 - **Responsive Navigation** with hamburger menu for mobile
 - **Cookie Consent Banner** with localStorage persistence
@@ -19,12 +25,14 @@ Enterprise-grade ad monetization platform with ML-powered fraud detection, real-
 - **Golden Yellow CTAs** throughout (Study in Sweden design system)
 
 ### 🔐 Authentication System
+
 - **Sign In/Sign Up** pages with JWT authentication
 - **Protected Routes** via Next.js middleware
 - **httpOnly Cookies** for secure token storage
 - **Form Validation** with error handling
 
 ### 📊 Dashboard (8 Pages)
+
 1. **Revenue** - Time-series charts, top apps/networks, payout schedules
 2. **Analytics** - User engagement funnel, platform distribution, real-time activity
 3. **Networks** - 6 ad networks with status monitoring, integration guides
@@ -34,7 +42,8 @@ Enterprise-grade ad monetization platform with ML-powered fraud detection, real-
 7. **Placements** - Format-specific optimization, performance heatmap
 8. **Settings** - Profile, payment methods, notifications, API keys, 2FA
 
-### 🎨 Design System
+### 🎨 Design System Highlights
+
 - **Colors:** #005293 (primary-blue), #FECB00 (sunshine-yellow), #E8E3D1 (cream)
 - **Typography:** Sweden Sans with responsive scaling
 - **Components:** btn-primary-yellow, btn-secondary-blue, card, card-blue, input
@@ -45,6 +54,7 @@ Enterprise-grade ad monetization platform with ML-powered fraud detection, real-
 ## 🚀 Quick Start
 
 ### Prerequisites
+
 - Node.js 18+ and npm
 - Git
 
@@ -83,7 +93,7 @@ npm --prefix website run lint
 The website uses a small set of environment variables. Public variables (prefixed with `NEXT_PUBLIC_`) are readable in the browser; keep sensitive values server‑only.
 
 - Public (baked into client):
-  - `NEXT_PUBLIC_API_URL` — Base URL for backend APIs (default: https://api.apexmediation.ee/v1)
+  - `NEXT_PUBLIC_API_URL` — Base URL for backend APIs (default: <https://api.apexmediation.ee/v1>)
   - `NEXT_PUBLIC_CONSOLE_URL` — URL of the Console application
   - `NEXT_PUBLIC_SITE_URL` — Canonical site URL used for metadata/robots/sitemaps
   - `NEXT_PUBLIC_ENABLE_GA` — `true|false` to allow Google Analytics hosts in CSP (default: false)
@@ -94,6 +104,7 @@ The website uses a small set of environment variables. Public variables (prefixe
   - `JWT_SECRET` — Secret used to sign/verify the session cookie in the website (required in prod)
 
 Safe defaults:
+
 - CSP is strict by default and only allows analytics when the corresponding `NEXT_PUBLIC_ENABLE_*` flags are set.
 - Middleware protects `/dashboard`, `/settings`, and sensitive `/api/*` surfaces. Public auth endpoints (`/api/auth/login|signup|me|logout`) remain accessible.
 - Dark mode is toggled via the `ThemeProvider` and global `.dark` class.
@@ -102,7 +113,7 @@ Safe defaults:
 
 ## 📁 Project Structure
 
-```
+```text
 website/
 ├── src/
 │   ├── app/
@@ -171,10 +182,11 @@ website/
 | **Body** | 1rem | 1rem | 1.2rem |
 
 **Letter Spacing:**
+
 - Headlines: `-1.5px`
 - Body: `-0.4px`
 
-### Components
+### Components Reference
 
 ```tsx
 // Primary button (golden yellow)
@@ -206,6 +218,7 @@ website/
 ## 📊 Dashboard Features
 
 ### Revenue Page
+
 - **Time Range Selector:** Today, Week, Month, Year
 - **Summary Cards:** Total Revenue ($8,934), Impressions (654k), eCPM ($13.65), Next Payout
 - **7-Day Trend Chart:** Bar chart with golden bars
@@ -214,6 +227,7 @@ website/
 - **Payout Schedule:** Bi-weekly with next date
 
 ### Analytics Page
+
 - **6 Metric Cards:** Users, Session Duration, CTR, Fill Rate, DAU/MAU, Requests (all with sparklines)
 - **User Engagement Funnel:** 5 steps from Opens to Conversions
 - **Platform Distribution:** iOS 58.3%, Android 39.7%, Web 2%
@@ -222,6 +236,7 @@ website/
 - **Real-Time Activity:** Live metrics updated every second
 
 ### Networks Page
+
 - **6 Ad Networks:** AdMob, Meta, Unity, AppLovin, ironSource, Vungle
 - **Status Indicators:** Active (green), Inactive (gray), Error (red)
 - **Metrics per Network:** Revenue, Impressions, eCPM, Fill Rate, Last Sync
@@ -229,6 +244,7 @@ website/
 - **Actions:** Configure, View Stats buttons
 
 ### Fraud Detection Page
+
 - **ML Model Performance:** 99.7% accuracy, <5ms inference, 0.08% false positive
 - **Daily Stats:** Blocked Today (1,247), Money Saved ($2,438), Fraud Rate (3.2%)
 - **Fraud Type Breakdown:** Click Fraud 43.9%, Bot Traffic 31.2%, Install Fraud 16.3%
@@ -237,6 +253,7 @@ website/
 - **ML Features Grid:** 17 features with weights (Historical Fraud Rate +2.574, etc.)
 
 ### A/B Tests Page
+
 - **Summary:** Running Tests (2), Completed (1), Avg Lift (+14.2%), Avg Duration (12 days)
 - **4 Test Cards:** Banner Position, Rewarded Video Timing, Interstitial Frequency, Ad Network Priority
 - **Variant Comparison:** Impressions, Revenue, eCPM for A vs B
@@ -246,6 +263,7 @@ website/
 - **Actions:** Pause, Stop & Choose Winner, Resume
 
 ### Apps Page
+
 - **Platform Support:** iOS 🍎, Android 🤖, Unity 🎮, Web 🌐
 - **6 Apps:** Puzzle Quest Pro (iOS & Android), Racing Thunder, Word Master, Casual Slots, Adventure RPG
 - **Status Management:** Active (green), Paused (yellow), Error (red)
@@ -255,6 +273,7 @@ website/
 - **Latest SDK Card:** Changelog with 4 improvements
 
 ### Placements Page
+
 - **Format Filters:** All, Banner 📱, Interstitial 🖼️, Rewarded 🎁, Native 📰
 - **Performance Heatmap:** 4 formats with avg eCPM, fill rate, CTR
 - **8 Placements:** Home Screen Banner, Level Complete Interstitial, Extra Lives Rewarded, etc.
@@ -264,6 +283,7 @@ website/
 - **Actions:** Configure, View Details buttons
 
 ### Settings Page
+
 **4 Tabs:**
 
 1. **Profile Tab**
@@ -290,7 +310,7 @@ website/
 
 ## 🔧 Configuration
 
-### Environment Variables
+### Environment Variables (Config)
 
 Create `.env.local` in the root directory:
 
@@ -336,13 +356,15 @@ theme: {
 
 ## 🚦 API Routes
 
-### Authentication
+### Authentication Routes
+
 - `POST /api/auth/signin` - User login (returns JWT)
 - `POST /api/auth/signup` - User registration
 - `POST /api/auth/logout` - Clear session
 - `GET /api/auth/me` - Get current user
 
 ### Dashboard Data
+
 - `GET /api/dashboard/revenue` - Revenue metrics
 - `GET /api/dashboard/analytics` - Analytics data
 - `GET /api/dashboard/networks` - Ad network status
@@ -352,6 +374,7 @@ theme: {
 - `GET /api/dashboard/placements` - Placement performance
 
 ### Settings
+
 - `GET /api/settings/profile` - User profile
 - `PUT /api/settings/profile` - Update profile
 - `GET /api/settings/payment-methods` - Payment methods
@@ -361,7 +384,7 @@ theme: {
 
 ---
 
-## 🧪 Testing
+## 🧪 Testing Overview
 
 ```bash
 # Run all tests
@@ -378,6 +401,7 @@ npm run test:e2e
 ```
 
 ### Test Coverage Goals
+
 - **Unit Tests:** 80%+ coverage
 - **Integration Tests:** All API routes
 - **E2E Tests:** Critical user flows (signup, dashboard navigation)
@@ -387,35 +411,46 @@ npm run test:e2e
 ## 📈 Performance
 
 ### Lighthouse Scores (Target)
+
 - **Performance:** 95+
 - **Accessibility:** 100
 - **Best Practices:** 100
 - **SEO:** 100
 
 ### Optimization Strategies
+
 - **Code Splitting:** Automatic via Next.js
 - **Image Optimization:** Next.js Image component
 - **Font Loading:** Preload Sweden Sans
 - **Caching:** Static page generation where possible
 - **Bundle Analysis:** `npm run analyze`
 
+## 🗒️ Documentation Change Log
+
+| Date | Change |
+| --- | --- |
+| 2025-11-18 | Added FIX-10 governance banner and updated status description to align with `PROJECT_STATUS.md` reality. |
+
 ---
 
-## 🔒 Security
+## 🔒 Security Overview
 
-### Authentication
+### Authentication Hardening
+
 - JWT tokens stored in httpOnly cookies
 - Refresh token rotation
 - CSRF protection via SameSite cookies
 - Password hashing with bcrypt (12 rounds)
 
 ### API Security
+
 - Rate limiting on all endpoints
 - Input validation with Zod
 - SQL injection prevention (parameterized queries)
 - XSS protection (React escaping + Content Security Policy)
 
 ### Environment
+
 - Secrets stored in `.env.local` (gitignored)
 - Production secrets in Vercel environment variables
 - API keys rotated quarterly
@@ -451,6 +486,7 @@ npm start
 ### CI/CD Pipeline
 
 GitHub Actions workflow (`.github/workflows/deploy.yml`):
+
 1. **Lint** - ESLint check
 2. **Type Check** - TypeScript validation
 3. **Test** - Run test suite
@@ -459,7 +495,7 @@ GitHub Actions workflow (`.github/workflows/deploy.yml`):
 
 ---
 
-## 📚 Documentation
+## 📚 Documentation References
 
 - **[PROJECT_STATUS.md](PROJECT_STATUS.md)** - Complete project status and metrics
 - **[Design.md](Design.md)** - Full design system specification
@@ -469,7 +505,7 @@ GitHub Actions workflow (`.github/workflows/deploy.yml`):
 
 ---
 
-## 🤝 Contributing
+## 🤝 Contributing (Internal)
 
 1. Fork the repository
 2. Create a feature branch (`git checkout -b feature/amazing-feature`)
@@ -478,6 +514,7 @@ GitHub Actions workflow (`.github/workflows/deploy.yml`):
 5. Open a Pull Request
 
 ### Code Style
+
 - **TypeScript:** Strict mode enabled
 - **Formatting:** Prettier with 2-space indentation
 - **Linting:** ESLint with Next.js config
@@ -485,9 +522,10 @@ GitHub Actions workflow (`.github/workflows/deploy.yml`):
 
 ---
 
-## 🐛 Troubleshooting
+## 🐛 Troubleshooting (Advanced)
 
-### Port Already in Use
+### Port Already in Use (Alt)
+
 ```bash
 # Kill process on port 3000
 lsof -ti:3000 | xargs kill -9
@@ -497,6 +535,7 @@ npm run dev -- -p 3001
 ```
 
 ### Module Not Found
+
 ```bash
 # Clear cache and reinstall
 rm -rf node_modules .next
@@ -504,6 +543,7 @@ npm install
 ```
 
 ### TypeScript Errors
+
 ```bash
 # Restart TypeScript server in VS Code
 # Cmd+Shift+P → "TypeScript: Restart TS Server"
@@ -528,11 +568,11 @@ This project is proprietary and confidential. All rights reserved.
 
 ---
 
-## 📞 Support
+## 📞 Support (Internal)
 
-- **Email:** support@apexmediation.com
+- **Email:** <support@apexmediation.com>
 - **Slack:** #apexmediation-dev
-- **Documentation:** https://docs.apexmediation.com
+- **Documentation:** <https://docs.apexmediation.com>
 
 ---
 
@@ -544,11 +584,11 @@ This project is proprietary and confidential. All rights reserved.
 ✅ **99.7% ML Model Accuracy**
 ✅ **Development Server Running**
 
-**Ready for Production Deployment! 🚀**
+### Ready for Production Deployment 🚀
 
 ---
 
-*Built with ❤️ using Next.js 14, TypeScript, and the Study in Sweden design system.*
+_Built with ❤️ using Next.js 14, TypeScript, and the Study in Sweden design system._
 
 - **Font**: Sweden Sans, Inter (fallback)
 - **Hero Heading**: 5rem (desktop) → 3rem (tablet) → 2rem (mobile)
@@ -650,19 +690,22 @@ Use built-in VS Code tasks for common operations:
 
 ### Vercel Deployment
 
-#### Prerequisites
+#### Deployment Prerequisites
 
 1. Install Vercel CLI:
+
    ```bash
    npm install -g vercel
    ```
 
 2. Login to Vercel:
+
    ```bash
    vercel login
    ```
 
 3. Link project:
+
    ```bash
    vercel link
    ```
@@ -700,7 +743,8 @@ Add these secrets to GitHub repository settings:
 
 #### Deployment Methods
 
-**Method 1: CLI (Manual)**
+#### Method 1: CLI (Manual)
+
 ```bash
 # Preview deployment
 vercel
@@ -711,7 +755,8 @@ vercel --prod
 # Or use VS Code task: "🚀 Deploy Website to Vercel"
 ```
 
-**Method 2: Script (Automated)**
+#### Method 2: Script (Automated)
+
 ```bash
 # Deploy to production with full pipeline
 ./scripts/deploy.sh deploy:prod
@@ -720,7 +765,8 @@ vercel --prod
 ./scripts/deploy.sh deploy:preview
 ```
 
-**Method 3: GitHub Actions (CI/CD)**
+#### Method 3: GitHub Actions (CI/CD)
+
 - Push to `main` branch → Auto-deploys to production
 - Open PR → Auto-deploys to preview (PR comment with URL)
 
@@ -728,14 +774,16 @@ vercel --prod
 
 1. Add domain in Vercel dashboard: `apexmediation.bel-consulting.ee`
 2. Configure DNS records:
-   ```
-   A     @     76.76.21.21
-   CNAME www   cname.vercel-dns.com
-   ```
+
+    ```text
+    A     @     76.76.21.21
+    CNAME www   cname.vercel-dns.com
+    ```
+
 3. Wait for DNS propagation (5-30 minutes)
 4. Verify SSL certificate (auto-provisioned by Vercel)
 
-## 🧪 Testing
+## 🧪 Testing (Extended)
 
 ### Unit Tests
 
@@ -771,6 +819,7 @@ npx playwright test --ui
 ### Vercel Analytics
 
 Enable in Vercel dashboard → Project → Analytics. Tracks:
+
 - Page views
 - Unique visitors
 - Top pages
@@ -781,9 +830,11 @@ Enable in Vercel dashboard → Project → Analytics. Tracks:
 
 1. Get tracking ID from Google Analytics
 2. Add to `.env.local`:
-   ```
-   NEXT_PUBLIC_GA_ID=G-XXXXXXXXXX
-   ```
+
+    ```env
+    NEXT_PUBLIC_GA_ID=G-XXXXXXXXXX
+    ```
+
 3. Integrate in `layout.tsx` (add `<GoogleAnalytics />` component)
 
 ### Health Monitoring
@@ -814,7 +865,7 @@ lighthouse http://localhost:3000
 # - SEO: >95
 ```
 
-## 🔒 Security
+## 🔒 Security Hardening
 
 ### Headers
 
@@ -827,7 +878,7 @@ Next.js configured with security headers in `next.config.js`:
 - **X-XSS-Protection**: 1; mode=block
 - **Referrer-Policy**: origin-when-cross-origin
 
-### Environment Variables
+### Environment Variables (Security)
 
 - **Client-side** (public): Prefix with `NEXT_PUBLIC_`
 - **Server-side** (private): No prefix, never exposed to browser
@@ -844,15 +895,17 @@ Next.js configured with security headers in `next.config.js`:
    - Edge firewall (optional)
    - Preview authentication (optional)
 
-## 🐛 Troubleshooting
+## 🐛 Troubleshooting Basics
 
 ### CSS Lint Warnings
 
 **Issue**: 44 lint warnings for `@tailwind` and `@apply` directives in `globals.css`
 
 **Solution**: These are false positives. Tailwind PostCSS directives work correctly at build time. Options:
+
 1. **Ignore**: Warnings don't affect functionality
 2. **Disable in VS Code**: Add to `.vscode/settings.json`:
+
    ```json
    {
      "css.validate": false,
@@ -860,6 +913,7 @@ Next.js configured with security headers in `next.config.js`:
      "less.validate": false
    }
    ```
+
 3. **Add comment**: `/* stylelint-disable */` at top of `globals.css`
 
 ### Build Errors
@@ -925,7 +979,10 @@ Internal project. For contributions:
 ## 📞 Support
 
 For issues or questions:
-- **Email**: dev@bel-consulting.ee
+
+- **Email**: <dev@bel-consulting.ee>
 - **Internal Docs**: `/Docs/Internal/`
 - **Architecture**: `/WEBSITE_ARCHITECTURE.md`
 - **TODO List**: `/WEBSITE_TODO.md`
+
+<!-- markdownlint-enable MD013 MD060 -->

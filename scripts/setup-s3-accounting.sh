@@ -87,10 +87,18 @@ run aws s3api put-bucket-versioning \
   --versioning-configuration Status=Enabled
 
 echo "🔐 Configuring Object Lock default retention (7 years)..."
+CONFIRM_CODE="lock-$BUCKET_NAME"
 if [[ "$YES" -ne 1 && "$DRY_RUN" -ne 1 ]]; then
-  echo "WARNING: You are about to enable COMPLIANCE retention for 7 years. This is irreversible until expiry."
-  read -p "Proceed? (type 'proceed' to continue): " CONFIRM
-  if [[ "$CONFIRM" != "proceed" ]]; then
+  cat <<WARN
+WARNING: You are about to enable S3 Object Lock in COMPLIANCE mode for seven (7) years.
+This **cannot** be disabled or shortened by any IAM user once applied. Every object and
+version uploaded to $BUCKET_NAME will be undeletable until the retention period expires.
+Type the confirmation token below to continue or press Ctrl+C to abort.
+  Token: $CONFIRM_CODE
+Documentation: docs/Internal/Deployment/ACCOUNTING_IMPLEMENTATION_STATUS.md (Object Lock section)
+WARN
+  read -p "Enter confirmation token: " CONFIRM
+  if [[ "$CONFIRM" != "$CONFIRM_CODE" ]]; then
     echo "Aborted."; exit 0
   fi
 fi

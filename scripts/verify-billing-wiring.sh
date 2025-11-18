@@ -242,29 +242,66 @@ fi
 # Summary
 echo ""
 echo "======================================================================"
+probe_endpoint() {
+    local method="$1"
+    local path="$2"
+    local mode="$3"
+    local label="$4"
+    local base="${API_BASE_URL%/}"
+    local url="$base$path"
+    local curl_args=(-s -o /dev/null -w "%{http_code}" -X "$method")
+    local headers=()
+    local ok_status=()
+
+    case "$mode" in
+        health)
+            ok_status=(200 204)
+            ;;
+        optional)
+            ok_status=(200 401)
+            [[ -n "$API_TOKEN" ]] && headers=(-H "Authorization: Bearer $API_TOKEN")
+            ;;
+        auth)
+            if [[ -z "$API_TOKEN" ]]; then
+                echo -e "  ${YELLOW}⚠${NC} Skipping $label (requires API_TOKEN)"
+                ((warns++))
+                return
+            fi
+            ok_status=(200)
+            headers=(-H "Authorization: Bearer $API_TOKEN")
+            ;;
+        *)
+            ok_status=(200)
+            ;;
+    esac
+
+    local status
+    status=$(curl "${curl_args[@]}" "${headers[@]}" "$url" 2>/dev/null) || status=0
+    local match=1
+    for code in "${ok_status[@]}"; do
+        if [[ "$status" == "$code" ]]; then
+            match=0
+            break
+        fi
+    done
+    if [[ $match -eq 0 ]]; then
+        echo -e "  ${GREEN}✓${NC} $label OK (status $status)"
+    else
+        echo -e "  ${RED}✗${NC} $label unexpected status $status from $url"
+        ((errors++))
+    fi
+}
+
 if [[ -n "$API_BASE_URL" ]]; then
   echo ""
   echo "=== Optional Live API Probes ==="
   if [[ $DRY_RUN -eq 1 ]]; then
     echo "[DRY-RUN] Would probe $API_BASE_URL/health and billing endpoints"
   else
-    # Health probe (no auth)
-    status=$(curl -s -o /dev/null -w "%{http_code}" "$API_BASE_URL/health") || status=0
-    if [[ "$status" != "200" && "$status" != "204" ]]; then
-      echo -e "  ${YELLOW}⚠${NC} Health endpoint returned $status at $API_BASE_URL/health"; ((warns++))
-    else
-      echo -e "  ${GREEN}✓${NC} Health endpoint OK ($status)"
-    fi
-
-    # Billing usage probe (auth optional)
-    hdr=()
-    [[ -n "$API_TOKEN" ]] && hdr=(-H "Authorization: Bearer $API_TOKEN")
-    bstatus=$(curl -s "${hdr[@]}" -o /dev/null -w "%{http_code}" "$API_BASE_URL/api/v1/billing/usage/current") || bstatus=0
-    if [[ "$bstatus" == "200" || "$bstatus" == "401" ]]; then
-      echo -e "  ${GREEN}✓${NC} Billing usage endpoint reachable (status $bstatus)"
-    else
-      echo -e "  ${RED}✗${NC} Billing usage endpoint unexpected status $bstatus"; ((errors++))
-    fi
+        probe_endpoint GET /health health "Health endpoint"
+        probe_endpoint GET /api/v1/billing/usage/current optional "Billing usage"
+        probe_endpoint GET /api/v1/billing/invoices optional "Billing invoices"
+        probe_endpoint GET /api/v1/meta/features optional "Meta features"
   fi
 fi
 

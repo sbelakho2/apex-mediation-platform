@@ -72,6 +72,9 @@ export const TrackingTokenSchema = z.object({
   cpm: z.number().nonnegative(),
   currency: z.literal('USD'),
   purpose: z.enum(['delivery', 'imp', 'click']),
+  // Optional advertiser landing URL for delivery/click redirect flows.
+  // When present, controllers must enforce an allow-list or same-origin policy.
+  url: z.string().url().optional(),
   nonce: z.string().min(8),
   iat: z.number().optional(),
   exp: z.number().optional(),

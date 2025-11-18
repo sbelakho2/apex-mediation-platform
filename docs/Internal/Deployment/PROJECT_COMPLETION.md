@@ -1,26 +1,29 @@
-# Rival ApexMediation - Project Completion Summary
+# Rival ApexMediation – Archived Deliverable Inventory
 
-**Date:** 2025-11-02  
-**Status:** ✅ **PRODUCTION READY**  
-**Version:** 1.0.0
+> **Status:** Archived on 2025-11-18. This file previously advertised the program as "production ready" with a detailed feature matrix. It is now superseded by `docs/Internal/Deployment/PROJECT_STATUS.md`.
 
-## Executive Summary
+## Original Intent
 
-Rival ApexMediation is a complete, production-grade ad mediation platform built to directly compete with Unity LevelPlay. The platform addresses Unity's critical failures through superior technical architecture, transparent operations, and developer-first design.
+- Compare platform capabilities against Unity LevelPlay feature-by-feature.
+- Enumerate deliverables across frontend, backend, SDKs, infrastructure, CI/CD, and observability.
+- Document go-to-market claims (support tiers, pricing, migration incentives).
 
-## 🎯 Core Differentiators Achieved
+## Why It Changed
 
-| Feature | Unity LevelPlay | Rival ApexMediation | Status |
-|---------|----------------|----------------|--------|
-| **Reliability** | OTA crashes (Aug 2024) | Signed configs, staged rollouts | ✅ Complete |
-| **Performance** | High ANR (>0.1%) | <0.02% guaranteed | ✅ Complete |
-| **Transparency** | Opaque bidding | Per-impression landscapes | ✅ Complete |
-| **Payments** | Monthly, Tipalti issues | Weekly, multi-rail | ✅ Complete |
-| **SDK Size** | ~2MB | <500KB | ✅ Complete |
-| **Support** | Enterprise only | White-glove for all | ✅ Complete |
+- The claims were written before the risk inventory in `AD_PROJECT_FILE_ANALYSIS.md` and the FIX backlog existed, so they no longer reflect reality.
+- Maintaining three separate "completion" narratives created ambiguity for auditors and new contributors.
 
-## 📦 Deliverables
+## Where to Find Accurate Information
 
+1. **Canonical status:** `docs/Internal/Deployment/PROJECT_STATUS.md`
+2. **Execution backlog:** `docs/Internal/Development/FIXES.md`
+3. **Evidence log:** `docs/Internal/Development/AD_PROJECT_FILE_ANALYSIS.md`
+
+Any updates about readiness, comparisons, or customer promises must include links to those artifacts (or test runs/PRs) and reference the relevant FIX ID.
+
+---
+
+_Last touched: 2025-11-18 during FIX-10 documentation alignment._
 ### 1. Frontend - Publisher Console ✅
 **Location:** `/console`  
 **Tech Stack:** Next.js 14, React 18, Tailwind CSS, React Query

@@ -1,6 +1,9 @@
 # Production Deployment Guide
 
 _Audience: deployment devs preparing the ApexMediation stack for the first production launch_
+_Last updated: 2025-11-18_
+
+> **FIX-10 governance:** This deployment guide documents _how_ to deploy the platform. For _whether_ the platform is production-ready, see `docs/Internal/Deployment/PROJECT_STATUS.md` and the prioritized backlog in `docs/Internal/Development/FIXES.md`. Note: FIX-07 (quality), FIX-08 (infrastructure), and FIX-09 (automation) have been completed, but FIX-01 through FIX-06 remain in progress.
 
 This guide walks through everything required to ship a fresh production build: prerequisites, quality gates, rollout steps, verification, and known warnings uncovered during FIX-07. Follow each section in order; treat skipped steps as blockers.
 

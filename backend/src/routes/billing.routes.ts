@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { authenticate, authorize } from '../middleware/auth';
 import { requireFeature } from '../utils/featureFlags';
 import * as billingController from '../controllers/billing.controller';
+import { authRateLimiter } from '../middleware/redisRateLimiter';
 
 const router = Router();
 
@@ -21,7 +22,8 @@ router.get('/usage/current', billingController.getCurrentUsage);
  * GET /api/v1/billing/invoices
  * List invoices for authenticated user with pagination and filters
  */
-router.get('/invoices', billingController.listInvoices);
+// List invoices can be expensive: apply a modest rate limit
+router.get('/invoices', authRateLimiter, billingController.listInvoices);
 
 /**
  * GET /api/v1/billing/invoices/:id
@@ -33,7 +35,8 @@ router.get('/invoices/:id', billingController.getInvoice);
  * GET /api/v1/billing/invoices/:id/pdf
  * Download invoice as PDF
  */
-router.get('/invoices/:id/pdf', billingController.getInvoicePDF);
+// PDF generation is relatively heavy; protect with rate limit
+router.get('/invoices/:id/pdf', authRateLimiter, billingController.getInvoicePDF);
 
 /**
  * POST /api/v1/billing/migration/request
@@ -48,6 +51,7 @@ router.post('/migration/request', billingController.requestMigration);
 router.post(
   '/reconcile',
   authorize(['admin']),
+  authRateLimiter,
   billingController.reconcileBilling
 );
 
