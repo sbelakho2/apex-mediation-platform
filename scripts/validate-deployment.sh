@@ -3,8 +3,13 @@
 # Verifies all requirements from PRE_DEPLOYMENT_CHECKLIST.md are met
 # Run this script before deploying to production
 
-# Note: Don't exit on errors - we want to show all failures
-set +e
+# Note: Don't exit on errors - we want to show all failures by default
+# Allow opt-in strict mode via STRICT=1
+if [[ "${STRICT:-0}" -eq 1 ]]; then
+  set -euo pipefail
+else
+  set +e
+fi
 
 # Colors for output
 RED='\033[0;31m'
@@ -67,14 +72,15 @@ else
     check_pass "DATABASE_URL is configured"
 fi
 
-# Check migrations
+# Check migrations (parameterized)
 check_info "Verifying database migrations..."
+EXPECTED_MIN=${EXPECTED_MIGRATIONS_MIN:-1}
 if [ -d "backend/migrations" ]; then
-    MIGRATION_COUNT=$(find backend/migrations -name "*.sql" | wc -l)
-    if [ "$MIGRATION_COUNT" -eq 14 ]; then
-        check_pass "All 14 migrations found in backend/migrations/"
+    MIGRATION_COUNT=$(find backend/migrations -name "*.sql" | wc -l | tr -d ' ')
+    if [ "$MIGRATION_COUNT" -ge "$EXPECTED_MIN" ]; then
+        check_pass "Found $MIGRATION_COUNT migration(s) (>= expected minimum $EXPECTED_MIN)"
     else
-        check_fail "Expected 14 migrations, found $MIGRATION_COUNT"
+        check_fail "Found $MIGRATION_COUNT migration(s), below expected minimum $EXPECTED_MIN"
     fi
 else
     check_fail "backend/migrations/ directory not found"

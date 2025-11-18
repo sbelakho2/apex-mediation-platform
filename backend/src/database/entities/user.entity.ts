@@ -14,10 +14,10 @@ export class User {
   @Column({ select: false })
   passwordHash!: string;
 
-  @Column({ nullable: true })
+  @Column({ type: 'varchar', length: 255, nullable: true })
   firstName?: string | null;
 
-  @Column({ nullable: true })
+  @Column({ type: 'varchar', length: 255, nullable: true })
   lastName?: string | null;
 
   @CreateDateColumn()

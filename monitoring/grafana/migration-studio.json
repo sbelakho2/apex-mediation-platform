@@ -95,7 +95,7 @@
       "pluginVersion": "8.0.0",
       "targets": [
         {
-          "expr": "sum(rate(rtb_wins_total{exp_id=\"$experiment\"}[5m]))",
+          "expr": "sum($metric_ns:rtb_wins:rate5m{exp_id=\"$experiment\"})",
           "refId": "A"
         }
       ],
@@ -153,7 +153,7 @@
       "pluginVersion": "8.0.0",
       "targets": [
         {
-          "expr": "((sum(rate(rtb_wins_total{arm=\"test\",exp_id=\"$experiment\"}[5m])) / sum(rate(rtb_wins_total{arm=\"control\",exp_id=\"$experiment\"}[5m]))) - 1) * 100",
+          "expr": "((sum($metric_ns:rtb_wins:rate5m{arm=\"test\",exp_id=\"$experiment\"}) / sum($metric_ns:rtb_wins:rate5m{arm=\"control\",exp_id=\"$experiment\"})) - 1) * 100",
           "legendFormat": "Uplift",
           "refId": "A"
         }
@@ -348,12 +348,12 @@
       "pluginVersion": "8.0.0",
       "targets": [
         {
-          "expr": "sum by (arm) (rate(rtb_wins_total{exp_id=\"$experiment\"}[5m]))",
+          "expr": "sum by (arm) ($metric_ns:rtb_wins:rate5m{exp_id=\"$experiment\"})",
           "legendFormat": "{{arm}} - wins",
           "refId": "A"
         },
         {
-          "expr": "sum by (arm) (rate(rtb_no_fill_total{exp_id=\"$experiment\"}[5m]))",
+          "expr": "sum by (arm) ($metric_ns:rtb_no_fill:rate5m{exp_id=\"$experiment\"})",
           "legendFormat": "{{arm}} - no fill",
           "refId": "B"
         }
@@ -430,7 +430,7 @@
       "pluginVersion": "8.0.0",
       "targets": [
         {
-          "expr": "sum by (arm, code) (rate(rtb_errors_total{exp_id=\"$experiment\"}[5m]))",
+          "expr": "sum by (arm, code) ($metric_ns:rtb_errors:rate5m_by_code{exp_id=\"$experiment\"})",
           "legendFormat": "{{arm}} - {{code}}",
           "refId": "A"
         }
@@ -511,17 +511,17 @@
       "pluginVersion": "8.0.0",
       "targets": [
         {
-          "expr": "histogram_quantile(0.50, sum by (arm, le) (rate(auction_latency_seconds_bucket{exp_id=\"$experiment\"}[5m]))) * 1000",
+          "expr": "sum by (arm) ($metric_ns:auction_latency_seconds:p50{exp_id=\"$experiment\"}) * 1000",
           "legendFormat": "{{arm}} - p50",
           "refId": "A"
         },
         {
-          "expr": "histogram_quantile(0.95, sum by (arm, le) (rate(auction_latency_seconds_bucket{exp_id=\"$experiment\"}[5m]))) * 1000",
+          "expr": "sum by (arm) ($metric_ns:auction_latency_seconds:p95{exp_id=\"$experiment\"}) * 1000",
           "legendFormat": "{{arm}} - p95",
           "refId": "B"
         },
         {
-          "expr": "histogram_quantile(0.99, sum by (arm, le) (rate(auction_latency_seconds_bucket{exp_id=\"$experiment\"}[5m]))) * 1000",
+          "expr": "sum by (arm) ($metric_ns:auction_latency_seconds:p99{exp_id=\"$experiment\"}) * 1000",
           "legendFormat": "{{arm}} - p99",
           "refId": "C"
         }
@@ -606,7 +606,7 @@
       "pluginVersion": "8.0.0",
       "targets": [
         {
-          "expr": "(sum by (arm) (rate(rtb_wins_total{exp_id=\"$experiment\"}[5m])) / (sum by (arm) (rate(rtb_wins_total{exp_id=\"$experiment\"}[5m]) + rate(rtb_no_fill_total{exp_id=\"$experiment\"}[5m])))) * 100",
+          "expr": "(sum by (arm) ($metric_ns:rtb_wins:rate5m{exp_id=\"$experiment\"}) / (sum by (arm) ($metric_ns:rtb_wins:rate5m{exp_id=\"$experiment\"} + $metric_ns:rtb_no_fill:rate5m{exp_id=\"$experiment\"}))) * 100",
           "legendFormat": "{{arm}} fill rate",
           "refId": "A"
         }
@@ -675,7 +675,7 @@
       "pluginVersion": "8.0.0",
       "targets": [
         {
-          "expr": "sum by (arm) (rate(rtb_wins_total{exp_id=\"$experiment\"}[5m]))",
+          "expr": "sum by (arm) ($metric_ns:rtb_wins:rate5m{exp_id=\"$experiment\"})",
           "legendFormat": "{{arm}} relative eCPM",
           "refId": "A"
         }
@@ -843,6 +843,18 @@
   "templating": {
     "list": [
       {
+        "name": "metric_ns",
+        "type": "textbox",
+        "label": "Metric namespace",
+        "description": "Prefix used by the migration recording rules (default: migration). Change if dashboards use a different recording namespace.",
+        "query": "migration",
+        "current": {
+          "selected": false,
+          "text": "migration",
+          "value": "migration"
+        }
+      },
+      {
         "allValue": null,
         "current": {
           "selected": false,
@@ -850,7 +862,7 @@
           "value": "$__all"
         },
         "datasource": "Prometheus",
-        "definition": "label_values(rtb_wins_total, exp_id)",
+        "definition": "label_values($metric_ns:rtb_wins:rate5m, exp_id)",
         "description": "Migration experiment ID",
         "error": null,
         "hide": 0,
@@ -860,7 +872,7 @@
         "name": "experiment",
         "options": [],
         "query": {
-          "query": "label_values(rtb_wins_total, exp_id)",
+          "query": "label_values($metric_ns:rtb_wins:rate5m, exp_id)",
           "refId": "StandardVariableQuery"
         },
         "refresh": 1,

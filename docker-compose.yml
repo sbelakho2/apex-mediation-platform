@@ -1,5 +1,3 @@
-version: '3.9'
-
 services:
   backend:
     build:
@@ -7,11 +5,12 @@ services:
     ports:
       - "8080:8080" # Aligned with fly.toml
     environment:
-      - NODE_ENV=${NODE_ENV:-development}
+      - NODE_ENV=${NODE_ENV:-production}
       - DATABASE_URL=${DATABASE_URL:-postgresql://postgres:postgres@postgres:5432/apexmediation}
       - REDIS_URL=${REDIS_URL:-redis://redis:6379}
       - CLICKHOUSE_URL=${CLICKHOUSE_URL:-http://clickhouse:8123}
-      - JWT_SECRET=${JWT_SECRET:-change-me-in-production}
+      - JWT_SECRET=${JWT_SECRET:-dev-stack-secret-token-1234567890abcdef}
+      - COOKIE_SECRET=${COOKIE_SECRET:-dev-cookie-secret-1234567890abcdef}
       - JWT_EXPIRES_IN=${JWT_EXPIRES_IN:-7d}
       - PORT=${PORT:-8080}
       - CORS_ALLOWLIST=${CORS_ALLOWLIST:-http://localhost:3000,http://localhost:3001}
@@ -21,9 +20,6 @@ services:
       - clickhouse
     networks:
       - ad-stack
-    volumes:
-      - ./backend:/app
-      - /app/node_modules
     profiles:
       - dev
       - full
@@ -34,15 +30,12 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - NODE_ENV=${NODE_ENV:-development}
+      - NODE_ENV=${NODE_ENV:-production}
       - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8080/api/v1}
     depends_on:
       - backend
     networks:
       - ad-stack
-    volumes:
-      - ./console:/app
-      - /app/node_modules
     profiles:
       - dev
       - full
@@ -53,15 +46,12 @@ services:
     ports:
       - "3001:3000"
     environment:
-      - NODE_ENV=${NODE_ENV:-development}
+      - NODE_ENV=${NODE_ENV:-production}
       - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8080/api/v1}
     depends_on:
       - backend
     networks:
       - ad-stack
-    volumes:
-      - ./website:/app
-      - /app/node_modules
     profiles:
       - dev
       - full

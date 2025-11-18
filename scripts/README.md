@@ -22,7 +22,7 @@ This directory contains utility scripts for development, deployment, and operati
 
 **Usage**:
 ```bash
-./scripts/dev-transparency-metrics.sh
+./scripts/dev-transparency-metrics.sh [--dry-run] [--privkey-file PATH | --privkey-env VAR]
 ```
 
 **Prerequisites**:
@@ -43,6 +43,9 @@ This directory contains utility scripts for development, deployment, and operati
 - `0`: All tests passed
 - `1`: Tests failed or prerequisites missing
 
+**Security**:
+- Private key must be provided via `TRANSPARENCY_PRIVKEY`/`TRANSPARENCY_PRIVKEY_FILE` or flags; never hard-coded.
+
 ---
 
 #### `verify-console-connection.sh`
@@ -50,24 +53,28 @@ This directory contains utility scripts for development, deployment, and operati
 
 **Usage**:
 ```bash
-./scripts/verify-console-connection.sh
+./scripts/verify-console-connection.sh [--dry-run] [--timeout SEC]
 ```
 
 **Prerequisites**:
 - Backend running at `http://localhost:4000` (or `BACKEND_URL` env var)
 - Console running at `http://localhost:3000` (or `CONSOLE_URL` env var)
 
+**Auth options**:
+- `CONSOLE_TOKEN` (preferred) or `CONSOLE_ADMIN_EMAIL` + `CONSOLE_ADMIN_PASSWORD`
+
 **What it does**:
 1. Checks backend health endpoint
-2. Verifies CORS headers
-3. Tests API authentication
-4. Validates proxy configuration
+2. Validates console env config
+3. Optionally tests API authentication (token or login)
+4. Probes key endpoints and reports statuses
 
 **Idempotency**: ✅ Yes - Read-only checks, no state changes.
 
 **Exit codes**:
 - `0`: Connection verified
-- `1`: Connection failed
+- `10`: Auth failed
+- `11`: Network/backend down
 
 ---
 
@@ -79,6 +86,8 @@ This directory contains utility scripts for development, deployment, and operati
 **Usage**:
 ```bash
 ./scripts/validate-deployment.sh
+# Parameterize minimum expected migrations
+EXPECTED_MIGRATIONS_MIN=10 ./scripts/validate-deployment.sh
 ```
 
 **Prerequisites**:
@@ -88,7 +97,7 @@ This directory contains utility scripts for development, deployment, and operati
 **What it does**:
 1. **Database Validation**
    - Verifies DATABASE_URL is set
-   - Checks migration files (expects 14 migrations)
+   - Checks migration files (parameterized via `EXPECTED_MIGRATIONS_MIN`)
    - Validates migration file naming
 
 2. **Build Validation**
@@ -128,29 +137,29 @@ This directory contains utility scripts for development, deployment, and operati
 
 **Usage**:
 ```bash
-./scripts/run-billing-migrations.sh [up|down|status]
+./scripts/run-billing-migrations.sh [--plan] [--from NAME] [--to NAME] [--migrations-path PATH]
+DATABASE_URL=postgresql://... ./scripts/run-billing-migrations.sh
 ```
-
-**Arguments**:
-- `up` (default): Apply pending migrations
-- `down`: Rollback last migration
-- `status`: Show migration status
+ 
+**Flags**:
+- `--plan`: Print pending migrations and exit (no execution)
+- `--from/--to`: Limit range by filename substring match
+- `--migrations-path`: Override migrations directory
 
 **Prerequisites**:
 - PostgreSQL database accessible
 - DATABASE_URL environment variable set
 
 **What it does**:
-- Applies SQL migrations from `backend/migrations/billing/`
-- Tracks migration history in `schema_migrations` table
-- Validates migration checksums
+- Applies SQL migrations from `backend/migrations/`
+- Filters for billing-related migrations (billing/stripe/invoice patterns)
+- Supports planning and range selection
 
 **Idempotency**: ✅ Yes - Migrations are only applied once. Re-running is safe.
 
 **Safety Features**:
 - Transaction-wrapped migrations (rollback on failure)
-- Checksum validation prevents modified migrations
-- Dry-run mode available: `DRY_RUN=1 ./run-billing-migrations.sh`
+- Plan mode to review before executing
 
 **Exit codes**:
 - `0`: Migrations applied successfully
@@ -159,11 +168,11 @@ This directory contains utility scripts for development, deployment, and operati
 ---
 
 #### `validate-billing-tests.sh`
-**Purpose**: Run billing module integration tests.
+**Purpose**: Validate billing module wiring and list/discover related tests.
 
 **Usage**:
 ```bash
-./scripts/validate-billing-tests.sh
+./scripts/validate-billing-tests.sh [--root PATH] [--list] [--update FILE]
 ```
 
 **Prerequisites**:
@@ -171,11 +180,10 @@ This directory contains utility scripts for development, deployment, and operati
 - Stripe API test keys (STRIPE_SECRET_KEY_TEST)
 
 **What it does**:
-1. Creates isolated test database
-2. Runs billing integration tests
-3. Validates Stripe webhook signatures
-4. Tests invoice generation
-5. Cleans up test database
+1. Discovers billing-related tests via `git ls-files`
+2. Writes manifest with `--update FILE` (JSON array)
+3. Prints list with `--list`
+4. Performs static wiring checks (backend/controllers/routes/types)
 
 **Idempotency**: ✅ Yes - Uses isolated test database with unique name.
 
@@ -192,7 +200,7 @@ This directory contains utility scripts for development, deployment, and operati
 
 **Usage**:
 ```bash
-./scripts/setup-s3-accounting.sh
+./scripts/setup-s3-accounting.sh [--dry-run] [--yes]
 ```
 
 **Prerequisites**:
@@ -216,6 +224,8 @@ This directory contains utility scripts for development, deployment, and operati
 
 **Safety Features**:
 - Confirmation prompt if bucket exists
+- `--yes` to run non-interactively in CI (with caution)
+- `--dry-run` prints planned AWS calls only
 - Object Lock prevents accidental deletion
 - Compliance mode retention (cannot be shortened)
 
@@ -226,36 +236,37 @@ This directory contains utility scripts for development, deployment, and operati
 ---
 
 #### `install-accounting-deps.sh`
-**Purpose**: Install Python dependencies for accounting/bookkeeping automation.
+**Purpose**: Ensure Node dependencies required by accounting flows are installed safely.
 
 **Usage**:
 ```bash
-./scripts/install-accounting-deps.sh
+./scripts/install-accounting-deps.sh [--dry-run] [--yes] [--upgrade pkg@ver]
 ```
 
 **Prerequisites**:
-- Python 3.9+
-- pip installed
+- Node.js 18+
 
 **What it does**:
-1. Creates virtual environment (if not exists)
-2. Installs required packages: `stripe`, `boto3`, `reportlab`, `python-dateutil`
-3. Verifies installation
+1. Uses `npm ci` for reproducible installs (non-mutating)
+2. Optionally upgrades a single package when `--upgrade` is provided (with confirmation)
+3. Ensures required libraries are present (stripe, pdfkit, aws-sdk v3, etc.)
 
-**Idempotency**: ✅ Yes - Virtual environment reused if exists. Safe to re-run.
+**Idempotency**: ✅ Yes - Safe to re-run; only installs missing packages unless upgrade requested.
 
 **Exit codes**:
-- `0`: Dependencies installed
-- `1`: Python not found or installation failed
+- `0`: Dependencies ensured/installed
+- `2`: Usage error
 
 ---
 
 #### `verify-billing-wiring.sh`
-**Purpose**: Verify billing module integration (Stripe webhooks, invoice generation, S3 uploads).
+**Purpose**: Verify billing module static wiring, with optional live API probes.
 
 **Usage**:
 ```bash
 ./scripts/verify-billing-wiring.sh
+# Optional live probes when available:
+API_BASE_URL=https://staging.api.example.com API_TOKEN=*** ./scripts/verify-billing-wiring.sh
 ```
 
 **Prerequisites**:
@@ -264,17 +275,43 @@ This directory contains utility scripts for development, deployment, and operati
 - S3 accounting bucket created
 
 **What it does**:
-1. Sends test webhook to `/webhooks/stripe`
-2. Verifies webhook signature validation
-3. Tests invoice PDF generation
-4. Validates S3 upload with Object Lock
-5. Checks database invoice record
+1. Static checks: files, imports, route mounts, types, controllers
+2. Optional live probes: `/health` and `/api/v1/billing/usage/current` (token optional)
 
 **Idempotency**: ✅ Yes - Uses unique test customer ID. Cleans up test data.
 
 **Exit codes**:
-- `0`: All checks passed
+- `0`: All checks passed (warnings possible)
 - `1`: Wiring verification failed
+
+---
+
+### Capture & Visual Scripts
+
+#### `capture-website.sh`
+**Purpose**: Build/start website locally and capture full-page screenshots of routes using Playwright.
+
+**Usage**:
+```bash
+./scripts/capture-website.sh [--dry-run] [--install] [--routes FILE] [--base-url URL]
+# Or via env:
+WEBSITE_BASE_URL=http://localhost:3000 ROUTES='["/","/pricing"]' ./scripts/capture-website.sh
+```
+
+**Notes**:
+- `--install` performs `npm ci` behind a lockfile checksum cache; skipped otherwise.
+- `--routes FILE` accepts newline-separated paths and converts to JSON.
+
+#### `capture-console.sh`
+**Purpose**: Build/start admin console locally and capture screenshots.
+
+**Usage**:
+```bash
+./scripts/capture-console.sh [--dry-run] [--install] [--routes FILE] [--base-url URL]
+```
+
+**Notes**:
+- Same install caching and routes behavior as `capture-website.sh`.
 
 ---
 

@@ -92,6 +92,16 @@ jest.mock('../../controllers/billing.controller', () => ({
     res.setHeader('Content-Type', 'application/pdf');
     res.send(Buffer.from('PDF content'));
   }),
+  requestMigration: jest.fn((req, res) => {
+    res.status(202).json({
+      success: true,
+      data: {
+        requestId: 'migration-req-123',
+        channel: req.body?.channel ?? 'sandbox',
+        notes: req.body?.notes ?? 'mock request',
+      },
+    });
+  }),
   reconcileBilling: jest.fn((req, res) => {
     res.json({
       status: 'completed',

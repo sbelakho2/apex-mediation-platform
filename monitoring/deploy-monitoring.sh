@@ -24,6 +24,8 @@ else
   cat > "$MONITORING_DIR/.env" <<EOF
 # Grafana
 GRAFANA_PASSWORD=changeme
+GRAFANA_URL=http://localhost:3000
+GRAFANA_API_KEY=
 
 # Email alerts
 RESEND_API_KEY=re_...
@@ -164,6 +166,59 @@ render_prometheus_config() {
     < "$MONITORING_DIR/prometheus.yml" > "$PROMETHEUS_RENDERED"
   chmod 644 "$PROMETHEUS_RENDERED"
   echo "✅ Rendered Prometheus config -> $PROMETHEUS_RENDERED"
+}
+
+export_dashboards() {
+  if ! command -v jq >/dev/null 2>&1; then
+    echo "❌ 'jq' is required to export dashboards. Install it (e.g., 'sudo apt install jq')."
+    exit 1
+  fi
+
+  if ! command -v curl >/dev/null 2>&1; then
+    echo "❌ 'curl' is required to reach the Grafana API."
+    exit 1
+  fi
+
+  local api_key="${GRAFANA_API_KEY:-}"
+  if [[ -z "$api_key" ]]; then
+    echo "❌ Set GRAFANA_API_KEY (environment or monitoring/.env) before exporting dashboards."
+    exit 1
+  fi
+
+  local grafana_url="${GRAFANA_URL:-http://localhost:3000}"
+  local dashboards_dir="$MONITORING_DIR/grafana"
+  if [[ ! -d "$dashboards_dir" ]]; then
+    echo "❌ Dashboard directory not found: $dashboards_dir"
+    exit 1
+  fi
+
+  echo "📤 Exporting dashboards from $grafana_url into $dashboards_dir"
+  local failures=0
+  while IFS= read -r -d '' file; do
+    uid=$(jq -r '.uid // empty' "$file")
+    if [[ -z "$uid" ]]; then
+      echo "  ⚠️  Skipping $(basename "$file") (missing uid)"
+      continue
+    fi
+    if ! response=$(curl -fsS -H "Authorization: Bearer $api_key" "$grafana_url/api/dashboards/uid/$uid"); then
+      echo "  ❌ Failed to fetch $uid"
+      failures=$((failures + 1))
+      continue
+    fi
+    if ! printf '%s' "$response" | jq '.dashboard' > "$file"; then
+      echo "  ❌ Failed to write dashboard file $file"
+      failures=$((failures + 1))
+      continue
+    fi
+    echo "  ✅ Exported $uid -> $file"
+  done < <(find "$dashboards_dir" -type f -name '*.json' -print0)
+
+  if [[ $failures -gt 0 ]]; then
+    echo "⚠️  Completed with $failures failure(s)."
+    exit 1
+  fi
+
+  echo "✅ Dashboard export complete."
 }
 
 verify_backup_archive() {
@@ -308,9 +363,12 @@ case $COMMAND in
     echo ""
     echo "✅ Test alert sent. Check your email."
     ;;
+    export-dashboards)
+      export_dashboards
+      ;;
   
   *)
-    echo "Usage: ./deploy-monitoring.sh [start|stop|restart|logs|status|backup|test-alerts]"
+     echo "Usage: ./deploy-monitoring.sh [start|stop|restart|logs|status|backup|test-alerts|export-dashboards]"
     echo ""
     echo "Commands:"
     echo "  start        - Start monitoring stack"
@@ -320,6 +378,7 @@ case $COMMAND in
     echo "  status       - Show service status and resource usage"
     echo "  backup       - Backup monitoring data"
     echo "  test-alerts  - Test alert rules and email delivery"
+     echo "  export-dashboards - Pull the currently running Grafana dashboards back into monitoring/grafana"
     exit 1
     ;;
 esac

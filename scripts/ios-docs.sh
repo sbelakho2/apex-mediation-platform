@@ -13,13 +13,56 @@ if [[ -f "$PWD/Package.swift" && -d "$PWD/Sources" ]]; then
   IOS_DIR="$PWD"
 fi
 
+SCHEME=""
+MODULE_NAME="RivalApexMediationSDK"
+
+usage(){ cat <<USAGE
+Generate SDK docs using DocC or Jazzy.
+
+Usage:
+  $(basename "$0") [--scheme NAME] [--module NAME]
+
+If --scheme not provided, attempts to auto-detect from xcodebuild -list.
+Defaults: module '$MODULE_NAME'.
+USAGE
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --scheme) SCHEME="$2"; shift 2 ;;
+    --module) MODULE_NAME="$2"; shift 2 ;;
+    -h|--help) usage; exit 0 ;;
+    *) echo "Unknown arg: $1" >&2; usage; exit 2 ;;
+  esac
+done
+
 cd "$IOS_DIR"
 
-MODULE_NAME="RivalApexMediationSDK"
+if [[ -z "$SCHEME" ]]; then
+  if command -v xcodebuild >/dev/null 2>&1; then
+    # best-effort scheme detection
+    set +e
+    schemes=$(xcodebuild -list -json 2>/dev/null | /usr/bin/python3 -c 'import sys,json; d=json.load(sys.stdin); s=d.get("project",{}).get("schemes",[]) or d.get("workspace",{}).get("schemes",[]); print("\n".join(s))' 2>/dev/null)
+    set -e || true
+    if [[ -n "$schemes" ]]; then
+      # prefer module name match
+      while IFS= read -r sch; do
+        if [[ "$sch" == "$MODULE_NAME" ]]; then SCHEME="$sch"; break; fi
+        [[ -z "$SCHEME" ]] && SCHEME="$sch"
+      done <<<"$schemes"
+      echo "[docs] Auto-detected scheme: $SCHEME"
+    else
+      echo "[docs] Could not auto-detect schemes via xcodebuild; will attempt DocC by target only"
+    fi
+  else
+    echo "[docs] xcodebuild not available; auto-detection skipped"
+  fi
+fi
+
 OUT_DIR="$IOS_DIR/build/docs"
 ZIP_PATH="$IOS_DIR/build/ios-docs.zip"
 
-echo "[docs] Generating docs for module: $MODULE_NAME"
+echo "[docs] Generating docs for module: $MODULE_NAME (scheme: ${SCHEME:-n/a})"
 mkdir -p "$OUT_DIR"
 
 DOCS_OK=0
@@ -47,12 +90,13 @@ if [[ $DOCS_OK -ne 0 ]]; then
   mkdir -p "$OUT_DIR"
 
   # Use iphonesimulator SDK to build docs for the module
-  jazzy \
-    --clean \
-    --output "$OUT_DIR" \
-    --module "$MODULE_NAME" \
-    --build-tool-arguments -scheme,"$MODULE_NAME",-sdk,iphonesimulator \
-    --min-acl public
+  args=(--clean --output "$OUT_DIR" --module "$MODULE_NAME" --min-acl public)
+  if [[ -n "$SCHEME" ]]; then
+    args+=(--build-tool-arguments -scheme,"$SCHEME",-sdk,iphonesimulator)
+  else
+    args+=(--build-tool-arguments -scheme,"$MODULE_NAME",-sdk,iphonesimulator)
+  fi
+  jazzy "${args[@]}"
 fi
 
 echo "[docs] Zipping docs to $ZIP_PATH"

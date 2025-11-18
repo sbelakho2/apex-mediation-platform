@@ -42,6 +42,10 @@ Services will be available at:
 
 > 🧾 The `logs/` directory stays `.gitignore`d so raw JSONL files never leave your workstation. A sanitized schema sample lives in `docs/log-samples/error.sample.log` with usage notes in `docs/log-samples/README.md`. Update that sample (not the real logs) whenever the log format changes.
 
+> 🗃 Grafana dashboards are provisioned read-only (`allowUiUpdates=false`). To apply tweaks: edit the JSON under `monitoring/grafana/`, copy it into `monitoring/dashboards/` (or `kubectl create configmap ... --from-file` in clusters), then restart the stack so Grafana reloads the exported files. Avoid editing dashboards in the UI or changes will be discarded on the next deploy. When you *do* prototype in the UI, capture the results with `./deploy-monitoring.sh export-dashboards` (requires `GRAFANA_API_KEY` + optional `GRAFANA_URL`) so the JSON in source control stays authoritative.
+
+> 🌐 Set `GF_SERVER_ROOT_URL` in `.env` when you want Grafana to advertise a non-localhost URL (e.g., a Fly.io preview). The compose file now defaults this to `http://localhost:3000`, which keeps login redirects working during local development.
+
 > 📡 Prometheus scrape targets live in `.env` (`BACKEND_METRICS_TARGET`, `CONSOLE_METRICS_TARGET`, etc.). Point them at `host.docker.internal:<port>` for local services or keep the default Fly.io hosts for staging/prod. The deploy script rewrites `prometheus.generated.yml` with whatever hosts you configure.
 
 ### Production Deployment
@@ -97,6 +101,7 @@ The dashboards will be automatically loaded by Grafana's provisioning system.
 - Wins by adapter
 - No-fill rates
 - Adapter latency and timeouts
+- Adapter dropdown (`$adapter_filter`) now controls every adapter-aware stat (wins, no-fill, timeout tables) so you can isolate a vendor without duplicating the dashboard.
 
 **Key Metrics:**
 - `auction_latency_seconds` - Auction processing time
@@ -109,6 +114,7 @@ The dashboards will be automatically loaded by Grafana's provisioning system.
 - Analytics event pipeline (enqueued/written/failed)
 - Event breakdown by kind
 - Rate limiting and blocking metrics
+- Thresholds for “Events Failed” and “Write Success Rate” pull from textbox variables (`$failed_warn`, `$failed_crit`, `$success_warn`, `$success_pass`). Set them via the variable picker or append `var-failed_warn=250&var-success_pass=99.5` to the URL per environment—no JSON edits required.
 
 **Key Metrics:**
 - `analytics_events_enqueued_total` - Events queued
@@ -123,6 +129,7 @@ The dashboards will be automatically loaded by Grafana's provisioning system.
 - Slow query detection (>1s)
 - Queue depth and backlog age
 - Processing rates
+- Use the `Queue` regex filter (`$queue_filter`) to focus any panel/table on one or more queues when high-cardinality installs make the legend unreadable.
 
 **Key Metrics:**
 - `db_query_duration_seconds` - Query execution time
@@ -130,6 +137,12 @@ The dashboards will be automatically loaded by Grafana's provisioning system.
 - `queue_oldest_job_timestamp` - Backlog age
 - `queue_jobs_completed_total` - Processing throughput
 - `queue_jobs_failed_total` - Job failures
+
+### 5. Migration Studio — Experiment Monitoring (`migration-studio.json`)
+- Wins/no-fill/latency parity between control vs test arms
+- Guardrail pauses, kill switches, and auto-mirroring stats
+- Auction integrity + payout comparisons scoped to `$experiment`
+- Metric names follow the `migration:*` recording rule namespace; if your cluster renames that prefix, update the `metric_ns` textbox variable instead of editing every panel.
 
 ## Alerting
 

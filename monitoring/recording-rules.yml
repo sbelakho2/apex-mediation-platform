@@ -95,6 +95,28 @@ groups:
       - record: job:rtb_adapter_latency_seconds:p95_by_adapter
         expr: histogram_quantile(0.95, sum(rate(rtb_adapter_latency_seconds_bucket[5m])) by (job, adapter, le))
 
+  # Migration Studio experiment metrics derived from RTB series
+  - name: migration_studio
+    interval: 30s
+    rules:
+      - record: migration:rtb_wins:rate5m
+        expr: sum(rate(rtb_wins_total{exp_id!=""}[5m])) by (exp_id, arm)
+
+      - record: migration:rtb_no_fill:rate5m
+        expr: sum(rate(rtb_no_fill_total{exp_id!=""}[5m])) by (exp_id, arm)
+
+      - record: migration:rtb_errors:rate5m_by_code
+        expr: sum(rate(rtb_errors_total{exp_id!=""}[5m])) by (exp_id, arm, code)
+
+      - record: migration:auction_latency_seconds:p50
+        expr: histogram_quantile(0.50, sum(rate(auction_latency_seconds_bucket{exp_id!=""}[5m])) by (exp_id, arm, le))
+
+      - record: migration:auction_latency_seconds:p95
+        expr: histogram_quantile(0.95, sum(rate(auction_latency_seconds_bucket{exp_id!=""}[5m])) by (exp_id, arm, le))
+
+      - record: migration:auction_latency_seconds:p99
+        expr: histogram_quantile(0.99, sum(rate(auction_latency_seconds_bucket{exp_id!=""}[5m])) by (exp_id, arm, le))
+
   # Analytics/Tracking metrics
   - name: analytics_aggregates
     interval: 30s

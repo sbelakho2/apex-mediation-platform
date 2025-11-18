@@ -9,6 +9,34 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 WEBSITE_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
+DRY_RUN=0
+ENVIRONMENT="preview"   # preview|production
+SKIP_TESTS=0
+
+usage(){ cat <<USAGE
+Deploy Website workspace using Vercel.
+
+Usage:
+  $(basename "$0") [--dry-run] [--env preview|production] [--skip-tests]
+
+Notes:
+  - --dry-run prints planned steps without executing them (safe for CI rehearsals).
+  - --env controls Vercel mode (preview by default).
+USAGE
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --dry-run) DRY_RUN=1; shift ;;
+    --env) ENVIRONMENT="$2"; shift 2 ;;
+    --skip-tests) SKIP_TESTS=1; shift ;;
+    -h|--help) usage; exit 0 ;;
+    *) echo "Unknown arg: $1" >&2; usage; exit 2 ;;
+  esac
+done
+
+run(){ echo "+ $*"; [[ "$DRY_RUN" -eq 1 ]] && return 0; "$@"; }
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -54,7 +82,7 @@ check_prerequisites() {
     # Check Vercel CLI
     if ! command -v vercel &> /dev/null; then
         log_warning "Vercel CLI not found. Installing..."
-        npm install -g vercel
+        run npm install -g vercel
     fi
     log_success "Vercel CLI found"
 }
@@ -65,9 +93,9 @@ install_dependencies() {
     cd "$WEBSITE_ROOT"
     if command -v npm &> /dev/null; then
       if [ -f package-lock.json ]; then
-        npm ci
+        run npm ci
       else
-        npm install
+        run npm install
       fi
     else
       log_error "npm is not available"
@@ -80,7 +108,7 @@ install_dependencies() {
 build_website() {
     log_info "Building website..."
     cd "$WEBSITE_ROOT"
-    npm run build
+    run npm run build
     log_success "Website built successfully"
 }
 
@@ -88,6 +116,8 @@ build_website() {
 run_tests() {
     log_info "Running tests..."
     cd "$WEBSITE_ROOT"
+    if [[ "$DRY_RUN" -eq 1 ]]; then
+      echo "[DRY-RUN] Would run: npm test"; return 0; fi
     npm test || {
       log_warning "Tests failed. Review output above."
       exit 1
@@ -101,14 +131,23 @@ deploy_to_vercel() {
 
     if [ "$environment" == "production" ]; then
         log_info "Deploying to PRODUCTION..."
-        vercel --prod
+        run vercel --prod
     else
         log_info "Deploying to PREVIEW..."
-        vercel
+        run vercel
     fi
 
     log_success "Deployment complete!"
 }
+
+# --- Main ---
+log_info "Website deploy script starting (env=$ENVIRONMENT, dry-run=$DRY_RUN)"
+check_prerequisites
+install_dependencies
+build_website
+if [[ "$SKIP_TESTS" -ne 1 ]]; then run_tests; else log_warning "Skipping tests per --skip-tests"; fi
+deploy_to_vercel "$ENVIRONMENT"
+log_success "Deployment flow finished"
 
 # Start development server
 start_dev_server() {

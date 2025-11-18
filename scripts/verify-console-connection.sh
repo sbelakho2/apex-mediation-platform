@@ -1,9 +1,58 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # Console Backend Connection Verification Script
-# This script verifies the console can connect to the backend API
+# Verifies the console can connect to the backend API.
 
-set -e
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "$0")"/.. && pwd)"
+cd "$ROOT_DIR"
+
+DRY_RUN=0
+TIMEOUT=10
+CREDENTIALS_FILE="${CONSOLE_CREDENTIALS_FILE:-}"
+
+print_usage() {
+  cat <<USAGE
+Verify Console ↔ Backend connectivity and configuration.
+
+Usage:
+  $(basename "$0") [--dry-run] [--timeout SEC] [--credentials FILE]
+
+Environment:
+  BACKEND_URL           Backend base (default http://localhost:4000)
+  CONSOLE_URL           Console base (default http://localhost:3000)
+  CONSOLE_TOKEN         Optional bearer token to probe authed endpoints [sensitive]
+  CONSOLE_ADMIN_EMAIL   Optional email for login smoke (fallback when token absent) [sensitive]
+  CONSOLE_ADMIN_PASSWORD Optional password for login smoke [sensitive]
+  CONSOLE_CREDENTIALS_FILE Path to env-style file containing CONSOLE_ADMIN_EMAIL/PASSWORD
+
+Exit codes:
+  0 OK; 10 auth failed; 11 network/backend down; 2 usage error.
+USAGE
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --dry-run) DRY_RUN=1; shift ;;
+    --timeout) TIMEOUT="${2:-10}"; shift 2 ;;
+    --credentials) CREDENTIALS_FILE="$2"; shift 2 ;;
+    -h|--help) print_usage; exit 0 ;;
+    *) echo "Unknown arg: $1" >&2; print_usage; exit 2 ;;
+  esac
+done
+
+if [[ -n "$CREDENTIALS_FILE" ]]; then
+  if [[ -f "$CREDENTIALS_FILE" ]]; then
+    set -a
+    # shellcheck disable=SC1090
+    source "$CREDENTIALS_FILE"
+    set +a
+    echo "Loaded console credentials from $CREDENTIALS_FILE"
+  else
+    echo "⚠️  Credential file not found: $CREDENTIALS_FILE" >&2
+  fi
+fi
 
 echo "🔍 Verifying Console-Backend Connection..."
 echo ""
@@ -15,22 +64,32 @@ YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
 # Configuration
-BACKEND_URL="http://localhost:4000"
-CONSOLE_URL="http://localhost:3000"
+BACKEND_URL="${BACKEND_URL:-http://localhost:4000}"
+CONSOLE_URL="${CONSOLE_URL:-http://localhost:3000}"
+LOGIN_EMAIL="${CONSOLE_ADMIN_EMAIL:-}"
+LOGIN_PASSWORD="${CONSOLE_ADMIN_PASSWORD:-}"
+TOKEN="${CONSOLE_TOKEN:-}"
 
 # Check if backend is running
+if [[ "$DRY_RUN" -eq 1 ]]; then
+  echo "[DRY-RUN] Would GET $BACKEND_URL/health"
+  echo "[DRY-RUN] Would read console/.env.local and check NEXT_PUBLIC_*"
+  echo "[DRY-RUN] Would probe selected endpoints with token=${TOKEN:+******}"
+  exit 0
+fi
+
 echo "1. Checking backend health..."
-if curl -s "${BACKEND_URL}/health" > /dev/null; then
+if curl -s --max-time "$TIMEOUT" "${BACKEND_URL}/health" > /dev/null; then
     echo -e "${GREEN}✓${NC} Backend is running at ${BACKEND_URL}"
     
     # Get health details
-    HEALTH=$(curl -s "${BACKEND_URL}/health")
+    HEALTH=$(curl -s --max-time "$TIMEOUT" "${BACKEND_URL}/health")
     echo "   Services:"
     echo "   $(echo $HEALTH | jq -r '.services | to_entries[] | "   - \(.key): \(.value)"')"
 else
     echo -e "${RED}✗${NC} Backend is not responding at ${BACKEND_URL}"
     echo "   Start backend with: cd backend && npm run dev"
-    exit 1
+    exit 11
 fi
 echo ""
 
@@ -74,17 +133,27 @@ echo ""
 # Test API endpoints
 echo "4. Testing API endpoints..."
 
-# Test auth endpoint
-if curl -s -X POST "${BACKEND_URL}/api/v1/auth/login" \
-    -H "Content-Type: application/json" \
-    -d '{"email":"test@example.com","password":"test"}' > /dev/null 2>&1; then
-    echo -e "${GREEN}✓${NC} Auth endpoint responding"
+# Prefer bearer token if provided
+AUTH_HEADER=()
+if [[ -n "$TOKEN" ]]; then
+  AUTH_HEADER=(-H "Authorization: Bearer $TOKEN")
+  echo "Using bearer token: ******"
+elif [[ -n "$LOGIN_EMAIL" && -n "$LOGIN_PASSWORD" ]]; then
+  echo "No token provided; attempting login with provided email/password (not printed)"
+  LOGIN_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST "${BACKEND_URL}/api/v1/auth/login" \
+        -H "Content-Type: application/json" \
+        -d "{\"email\":\"$LOGIN_EMAIL\",\"password\":\"$LOGIN_PASSWORD\"}")
+  if [[ "$LOGIN_STATUS" != "200" && "$LOGIN_STATUS" != "204" ]]; then
+    echo -e "${RED}✗${NC} Auth endpoint login failed (status $LOGIN_STATUS)"; exit 10
+  else
+    echo -e "${GREEN}✓${NC} Auth endpoint responded using provided credentials"
+  fi
 else
-    echo -e "${YELLOW}⚠${NC} Auth endpoint may have issues (expected for test credentials)"
+  echo -e "${YELLOW}⚠${NC} Skipping auth login test (set CONSOLE_TOKEN or CONSOLE_ADMIN_EMAIL/CONSOLE_ADMIN_PASSWORD)"
 fi
 
 # Test placements endpoint (requires auth, expect 401)
-STATUS=$(curl -s -o /dev/null -w "%{http_code}" "${BACKEND_URL}/api/v1/placements")
+STATUS=$(curl -s "${AUTH_HEADER[@]}" -o /dev/null -w "%{http_code}" "${BACKEND_URL}/api/v1/placements")
 if [ "$STATUS" = "401" ]; then
     echo -e "${GREEN}✓${NC} Placements endpoint responding (auth required as expected)"
 elif [ "$STATUS" = "200" ]; then
@@ -94,7 +163,7 @@ else
 fi
 
 # Test analytics endpoint
-STATUS=$(curl -s -o /dev/null -w "%{http_code}" "${BACKEND_URL}/api/v1/analytics/overview")
+STATUS=$(curl -s "${AUTH_HEADER[@]}" -o /dev/null -w "%{http_code}" "${BACKEND_URL}/api/v1/analytics/overview")
 if [ "$STATUS" = "401" ] || [ "$STATUS" = "200" ]; then
     echo -e "${GREEN}✓${NC} Analytics endpoint responding"
 else
@@ -102,7 +171,7 @@ else
 fi
 
 # Test queues endpoint
-STATUS=$(curl -s -o /dev/null -w "%{http_code}" "${BACKEND_URL}/api/v1/queues/metrics")
+STATUS=$(curl -s "${AUTH_HEADER[@]}" -o /dev/null -w "%{http_code}" "${BACKEND_URL}/api/v1/queues/metrics")
 if [ "$STATUS" = "401" ] || [ "$STATUS" = "200" ]; then
     echo -e "${GREEN}✓${NC} Queues endpoint responding"
 else

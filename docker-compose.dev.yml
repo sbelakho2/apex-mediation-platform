@@ -1,0 +1,15 @@
+services:
+  backend:
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+
+  console:
+    volumes:
+      - ./console:/app
+      - /app/node_modules
+
+  website:
+    volumes:
+      - ./website:/app
+      - /app/node_modules

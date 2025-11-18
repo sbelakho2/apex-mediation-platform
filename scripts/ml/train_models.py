@@ -36,11 +36,19 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--hidden-dim", type=int, default=32, help="Hidden dimension for deep models")
     parser.add_argument("--test-size", type=float, default=0.25, help="Validation split proportion")
     parser.add_argument("--random-state", type=int, default=42, help="Random seed")
+    parser.add_argument("--dry-run", action="store_true", help="Parse config and dataset headers only; no training")
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
+    # Early dataset path validation
+    if not args.dataset.exists():
+        print(f"ERROR: Dataset path does not exist: {args.dataset}", file=sys.stderr)
+        sys.exit(2)
+    if args.dataset.is_dir():
+        print(f"ERROR: Dataset path points to a directory, expected file: {args.dataset}", file=sys.stderr)
+        sys.exit(2)
     config = TrainingConfig(
         dataset_path=args.dataset,
         output_root=args.output_root,
@@ -55,6 +63,25 @@ def main() -> None:
         test_size=args.test_size,
         random_state=args.random_state,
     )
+
+    if args.dry_run:
+        # Load only a small sample to validate headers without full training
+        try:
+            if args.dataset.suffix.lower() in (".parquet", ".pq"):
+                df = pd.read_parquet(args.dataset)
+            else:
+                df = pd.read_csv(args.dataset, nrows=10)
+            cols = list(df.columns)
+        except Exception as e:
+            print(f"ERROR: Failed to read dataset: {e}", file=sys.stderr)
+            sys.exit(2)
+        print(json.dumps({
+            "ok": True,
+            "dataset": str(args.dataset),
+            "columns": cols,
+            "rows_previewed": len(df)
+        }, indent=2))
+        return
 
     artifacts = train_models(config)
     manifest_path = config.output_dir / "training_manifest.json"

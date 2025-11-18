@@ -61,7 +61,7 @@
       "title": "Queue Depth",
       "targets": [
         {
-          "expr": "sum(queue_depth)",
+          "expr": "sum(queue_depth{queue=~\"$queue\"})",
           "legendFormat": "depth"
         }
       ],
@@ -85,7 +85,7 @@
       "title": "Queue Backlog Age",
       "targets": [
         {
-          "expr": "max(time() - queue_oldest_job_timestamp)",
+          "expr": "max(time() - queue_oldest_job_timestamp{queue=~\"$queue\"})",
           "legendFormat": "age"
         }
       ],
@@ -207,7 +207,7 @@
       "title": "Queue Depth by Queue",
       "targets": [
         {
-          "expr": "sum by (queue) (queue_depth)",
+          "expr": "sum by (queue) (queue_depth{queue=~\"$queue\"})",
           "legendFormat": "{{queue}}"
         }
       ],
@@ -227,11 +227,11 @@
       "title": "Queue Processing Rate",
       "targets": [
         {
-          "expr": "sum by (queue) (rate(queue_jobs_completed_total[5m]))",
+          "expr": "sum by (queue) (rate(queue_jobs_completed_total{queue=~\"$queue\"}[5m]))",
           "legendFormat": "{{queue}} completed"
         },
         {
-          "expr": "sum by (queue) (rate(queue_jobs_failed_total[5m]))",
+          "expr": "sum by (queue) (rate(queue_jobs_failed_total{queue=~\"$queue\"}[5m]))",
           "legendFormat": "{{queue}} failed"
         }
       ],
@@ -251,7 +251,7 @@
       "title": "Queue Backlog Growth Rate",
       "targets": [
         {
-          "expr": "deriv(sum by (queue) (queue_depth)[5m:])",
+          "expr": "deriv(sum by (queue) (queue_depth{queue=~\"$queue\"})[5m:])",
           "legendFormat": "{{queue}} growth rate"
         }
       ],
@@ -271,19 +271,19 @@
       "title": "Queue Summary (5m)",
       "targets": [
         {
-          "expr": "sum by (queue) (queue_depth)",
+          "expr": "sum by (queue) (queue_depth{queue=~\"$queue\"})",
           "legendFormat": "{{queue}}",
           "format": "table",
           "instant": true
         },
         {
-          "expr": "sum by (queue) (increase(queue_jobs_completed_total[5m]))",
+          "expr": "sum by (queue) (increase(queue_jobs_completed_total{queue=~\"$queue\"}[5m]))",
           "legendFormat": "{{queue}}",
           "format": "table",
           "instant": true
         },
         {
-          "expr": "sum by (queue) (increase(queue_jobs_failed_total[5m]))",
+          "expr": "sum by (queue) (increase(queue_jobs_failed_total{queue=~\"$queue\"}[5m]))",
           "legendFormat": "{{queue}}",
           "format": "table",
           "instant": true
@@ -313,7 +313,29 @@
   "schemaVersion": 36,
   "style": "dark",
   "tags": ["database", "queue", "performance"],
-  "templating": { "list": [] },
+  "templating": {
+    "list": [
+      {
+        "name": "queue_filter",
+        "type": "query",
+        "label": "Queue",
+        "datasource": "Prometheus",
+        "definition": "label_values(queue_depth, queue)",
+        "query": "label_values(queue_depth, queue)",
+        "refresh": 2,
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "current": {
+          "selected": true,
+          "text": "All queues",
+          "value": ".*"
+        },
+        "sort": 1,
+        "description": "Regex queue selector applied to every panel so large installs can focus on one or more queues."
+      }
+    ]
+  },
   "timezone": "",
   "title": "Database & Queue Health",
   "uid": "db-queue",

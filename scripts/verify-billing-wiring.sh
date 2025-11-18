@@ -1,12 +1,17 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Verify all billing platform imports and wiring
 # Sections 7.1-7.5
 
-set -e
+set -euo pipefail
+
+DRY_RUN=${DRY_RUN:-0}
+API_BASE_URL=${API_BASE_URL:-}
+API_TOKEN=${API_TOKEN:-${BILLING_API_TOKEN:-}}
 
 echo "======================================================================"
 echo "  BILLING PLATFORM WIRING VERIFICATION"
 echo "  Checking all imports and path resolution"
+echo "  (optional) Live API probe: ${API_BASE_URL:+enabled}${API_BASE_URL:-(disabled)}"
 echo "======================================================================"
 echo ""
 
@@ -16,6 +21,7 @@ YELLOW='\033[1;33m'
 NC='\033[0m'
 
 errors=0
+warns=0
 
 # Check 1: Backend services exist
 echo "=== Backend Services ==="
@@ -236,21 +242,51 @@ fi
 # Summary
 echo ""
 echo "======================================================================"
+if [[ -n "$API_BASE_URL" ]]; then
+  echo ""
+  echo "=== Optional Live API Probes ==="
+  if [[ $DRY_RUN -eq 1 ]]; then
+    echo "[DRY-RUN] Would probe $API_BASE_URL/health and billing endpoints"
+  else
+    # Health probe (no auth)
+    status=$(curl -s -o /dev/null -w "%{http_code}" "$API_BASE_URL/health") || status=0
+    if [[ "$status" != "200" && "$status" != "204" ]]; then
+      echo -e "  ${YELLOW}⚠${NC} Health endpoint returned $status at $API_BASE_URL/health"; ((warns++))
+    else
+      echo -e "  ${GREEN}✓${NC} Health endpoint OK ($status)"
+    fi
+
+    # Billing usage probe (auth optional)
+    hdr=()
+    [[ -n "$API_TOKEN" ]] && hdr=(-H "Authorization: Bearer $API_TOKEN")
+    bstatus=$(curl -s "${hdr[@]}" -o /dev/null -w "%{http_code}" "$API_BASE_URL/api/v1/billing/usage/current") || bstatus=0
+    if [[ "$bstatus" == "200" || "$bstatus" == "401" ]]; then
+      echo -e "  ${GREEN}✓${NC} Billing usage endpoint reachable (status $bstatus)"
+    else
+      echo -e "  ${RED}✗${NC} Billing usage endpoint unexpected status $bstatus"; ((errors++))
+    fi
+  fi
+fi
+
 if [ $errors -eq 0 ]; then
+  if [[ $warns -gt 0 ]]; then
+    echo -e "${YELLOW}  ⚠ WARNINGS: ${warns}${NC}"
+  else
     echo -e "${GREEN}  ✅ ALL WIRING VERIFIED - NO ERRORS${NC}"
-    echo "======================================================================"
-    echo ""
-    echo "API Endpoints accessible at:"
-    echo "  - GET  /api/v1/billing/usage/current"
-    echo "  - GET  /api/v1/billing/invoices"
-    echo "  - GET  /api/v1/billing/invoices/:id"
-    echo "  - GET  /api/v1/billing/invoices/:id/pdf"
-    echo "  - POST /api/v1/billing/reconcile"
-    echo "  - GET  /api/v1/meta/features"
-    echo "  - POST /api/v1/webhooks/stripe"
-    exit 0
+  fi
+  echo "======================================================================"
+  echo ""
+  echo "API Endpoints (expected):"
+  echo "  - GET  /api/v1/billing/usage/current"
+  echo "  - GET  /api/v1/billing/invoices"
+  echo "  - GET  /api/v1/billing/invoices/:id"
+  echo "  - GET  /api/v1/billing/invoices/:id/pdf"
+  echo "  - POST /api/v1/billing/reconcile"
+  echo "  - GET  /api/v1/meta/features"
+  echo "  - POST /api/v1/webhooks/stripe"
+  exit 0
 else
-    echo -e "${RED}  ✗ WIRING ERRORS FOUND: ${errors}${NC}"
-    echo "======================================================================"
-    exit 1
+  echo -e "${RED}  ✗ WIRING ERRORS FOUND: ${errors}${NC}"
+  echo "======================================================================"
+  exit 1
 fi

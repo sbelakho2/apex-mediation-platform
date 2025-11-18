@@ -1,9 +1,41 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # S3 Accounting Bucket Setup
 # Creates S3 bucket with Object Lock for 7-year document retention (Estonian Accounting Act compliance)
 
-set -e
+set -euo pipefail
+
+DRY_RUN=${DRY_RUN:-0}
+YES=${YES:-0}
+
+print_usage() {
+  cat <<USAGE
+Provision or update the Accounting S3 bucket with Object Lock (COMPLIANCE, 7 years).
+
+Usage:
+  $(basename "$0") [--dry-run] [--yes]
+
+Environment:
+  S3_ACCOUNTING_BUCKET   Bucket name (default rivalapexmediation-accounting)
+  AWS_REGION             Region (default eu-north-1)
+  AWS_PROFILE            Optional AWS profile
+
+Flags:
+  --dry-run   Print planned AWS calls, do not execute.
+  --yes       Do not prompt for irreversible actions.
+
+WARNING: Enabling COMPLIANCE retention is IRREVERSIBLE for the retention window.
+USAGE
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --dry-run) DRY_RUN=1; shift ;;
+    --yes|-y) YES=1; shift ;;
+    -h|--help) print_usage; exit 0 ;;
+    *) echo "Unknown argument: $1" >&2; print_usage; exit 2 ;;
+  esac
+done
 
 BUCKET_NAME="${S3_ACCOUNTING_BUCKET:-rivalapexmediation-accounting}"
 AWS_REGION="${AWS_REGION:-eu-north-1}"  # Stockholm (closest to Estonia)
@@ -14,15 +46,24 @@ echo "=================================================="
 echo ""
 echo "Bucket: $BUCKET_NAME"
 echo "Region: $AWS_REGION"
+echo "Profile: ${AWS_PROFILE:-default}"
 echo ""
 
+run() {
+  echo "+ $*"
+  if [[ "$DRY_RUN" -eq 1 ]]; then return 0; fi
+  "$@"
+}
+
 # Check if bucket exists
-if aws s3api head-bucket --bucket "$BUCKET_NAME" 2>/dev/null; then
+if run aws s3api head-bucket --bucket "$BUCKET_NAME" 2>/dev/null; then
   echo "⚠️  Bucket already exists: $BUCKET_NAME"
-  read -p "Do you want to update its configuration? (y/n) " -n 1 -r
-  echo
-  if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-    exit 0
+  if [[ "$YES" -ne 1 ]]; then
+    read -p "Do you want to update its configuration? (y/n) " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+      exit 0
+    fi
   fi
   BUCKET_EXISTS=true
 else
@@ -31,7 +72,7 @@ fi
 
 if [ "$BUCKET_EXISTS" = false ]; then
   echo "📦 Creating bucket with Object Lock enabled..."
-  aws s3api create-bucket \
+  run aws s3api create-bucket \
     --bucket "$BUCKET_NAME" \
     --region "$AWS_REGION" \
     --create-bucket-configuration LocationConstraint="$AWS_REGION" \
@@ -41,12 +82,19 @@ if [ "$BUCKET_EXISTS" = false ]; then
 fi
 
 echo "🔒 Enabling versioning (required for Object Lock)..."
-aws s3api put-bucket-versioning \
+run aws s3api put-bucket-versioning \
   --bucket "$BUCKET_NAME" \
   --versioning-configuration Status=Enabled
 
 echo "🔐 Configuring Object Lock default retention (7 years)..."
-aws s3api put-object-lock-configuration \
+if [[ "$YES" -ne 1 && "$DRY_RUN" -ne 1 ]]; then
+  echo "WARNING: You are about to enable COMPLIANCE retention for 7 years. This is irreversible until expiry."
+  read -p "Proceed? (type 'proceed' to continue): " CONFIRM
+  if [[ "$CONFIRM" != "proceed" ]]; then
+    echo "Aborted."; exit 0
+  fi
+fi
+run aws s3api put-object-lock-configuration \
   --bucket "$BUCKET_NAME" \
   --object-lock-configuration '{
     "ObjectLockEnabled": "Enabled",
@@ -59,7 +107,7 @@ aws s3api put-object-lock-configuration \
   }'
 
 echo "🔒 Configuring encryption..."
-aws s3api put-bucket-encryption \
+run aws s3api put-bucket-encryption \
   --bucket "$BUCKET_NAME" \
   --server-side-encryption-configuration '{
     "Rules": [{
@@ -71,7 +119,7 @@ aws s3api put-bucket-encryption \
   }'
 
 echo "🚫 Blocking public access..."
-aws s3api put-public-access-block \
+run aws s3api put-public-access-block \
   --bucket "$BUCKET_NAME" \
   --public-access-block-configuration \
     BlockPublicAcls=true,\
@@ -117,14 +165,14 @@ cat > /tmp/lifecycle-policy.json <<EOF
 }
 EOF
 
-aws s3api put-bucket-lifecycle-configuration \
+run aws s3api put-bucket-lifecycle-configuration \
   --bucket "$BUCKET_NAME" \
   --lifecycle-configuration file:///tmp/lifecycle-policy.json
 
 rm /tmp/lifecycle-policy.json
 
 echo "🏷️  Adding tags..."
-aws s3api put-bucket-tagging \
+run aws s3api put-bucket-tagging \
   --bucket "$BUCKET_NAME" \
   --tagging 'TagSet=[
     {Key=Project,Value=RivalApexMediation},
@@ -134,7 +182,11 @@ aws s3api put-bucket-tagging \
   ]'
 
 echo ""
-echo "✅ S3 bucket configured successfully!"
+if [[ "$DRY_RUN" -eq 1 ]]; then
+  echo "(dry-run) Skipped execution; printed planned steps above."
+else
+  echo "✅ S3 bucket configured successfully!"
+fi
 echo ""
 echo "Bucket details:"
 echo "  Name: $BUCKET_NAME"

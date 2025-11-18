@@ -3,7 +3,9 @@ WORKDIR /app
 RUN apk add --no-cache libc6-compat
 
 FROM base AS deps
+ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
 COPY package.json package-lock.json ./
+COPY scripts ./scripts
 RUN npm ci
 
 FROM base AS builder

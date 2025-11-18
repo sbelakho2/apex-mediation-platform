@@ -3,12 +3,46 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BACKEND_DIR="$ROOT_DIR/backend"
-PRIVATE_KEY=$(cat <<'EOF'
------BEGIN PRIVATE KEY-----
-MC4CAQAwBQYDK2VwBCIEIHAl7613DK3tf/nayn8Q9FPzfPDT+oyfHTbS3XZL8yRg
------END PRIVATE KEY-----
-EOF
-)
+
+print_usage() {
+  cat <<USAGE
+Smoke test Transparency API locally with ephemeral infra.
+
+Usage:
+  $(basename "$0") [--dry-run] [--privkey-file PATH | --privkey-env VAR]
+
+Options:
+  --dry-run           Prepare and print planned actions without starting services.
+  --privkey-file PATH Read private key from file (preferred; ensure chmod 600).
+  --privkey-env VAR   Read private key value from environment variable name VAR (e.g., TRANSPARENCY_PRIVKEY).
+
+Environment:
+  TRANSPARENCY_PRIVKEY        Private key content (alternative to --privkey-* options). [sensitive]
+  TRANSPARENCY_PRIVKEY_FILE   Path to private key file. [sensitive]
+  POSTGRES_URL, CLICKHOUSE_URL, REDIS_URL  Override service URLs.
+
+Notes:
+  - No private keys are printed. Logs redact sensitive values.
+  - Use --dry-run in CI to verify dependencies and configuration without side effects.
+USAGE
+}
+
+DRY_RUN=0
+PRIVKEY_SRC=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --dry-run)
+      DRY_RUN=1; shift ;;
+    --privkey-file)
+      PRIVKEY_SRC="file:$2"; shift 2 ;;
+    --privkey-env)
+      PRIVKEY_SRC="env:$2"; shift 2 ;;
+    -h|--help)
+      print_usage; exit 0 ;;
+    *)
+      echo "Unknown argument: $1" >&2; print_usage; exit 2 ;;
+  esac
+done
 
 SMOKE_ENV_TAG="transparency-smoke-test"
 JWT_SECRET="smoke-test-secret"
@@ -19,9 +53,52 @@ if [[ -z "$JWT_TOKEN" ]]; then
   exit 1
 fi
 
-POSTGRES_URL="postgresql://postgres:postgres@localhost:5432/apexmediation"
-CLICKHOUSE_URL="http://localhost:8123"
-REDIS_URL="redis://localhost:6379"
+POSTGRES_URL="${POSTGRES_URL:-postgresql://postgres:postgres@localhost:5432/apexmediation}"
+CLICKHOUSE_URL="${CLICKHOUSE_URL:-http://localhost:8123}"
+REDIS_URL="${REDIS_URL:-redis://localhost:6379}"
+
+# Resolve private key from file/env
+resolve_privkey() {
+  local val=""
+  if [[ -n "$PRIVKEY_SRC" ]]; then
+    if [[ "$PRIVKEY_SRC" == file:* ]]; then
+      local path="${PRIVKEY_SRC#file:}"
+      if [[ ! -f "$path" ]]; then
+        echo "Private key file not found: $path" >&2; return 1
+      fi
+      # Warn if permissions are too open
+      if command -v stat >/dev/null 2>&1; then
+        # best-effort permission check
+        :
+      fi
+      val="$(cat "$path")"
+    elif [[ "$PRIVKEY_SRC" == env:* ]]; then
+      local var="${PRIVKEY_SRC#env:}"
+      val="${!var-}"
+    fi
+  elif [[ -n "${TRANSPARENCY_PRIVKEY_FILE:-}" ]]; then
+    if [[ ! -f "$TRANSPARENCY_PRIVKEY_FILE" ]]; then
+      echo "Private key file not found: $TRANSPARENCY_PRIVKEY_FILE" >&2; return 1
+    fi
+    val="$(cat "$TRANSPARENCY_PRIVKEY_FILE")"
+  else
+    val="${TRANSPARENCY_PRIVKEY:-}"
+  fi
+
+  if [[ -z "$val" ]]; then
+    echo "Transparency private key not provided. Set TRANSPARENCY_PRIVKEY, TRANSPARENCY_PRIVKEY_FILE, or pass --privkey-*" >&2
+    return 1
+  fi
+  printf '%s' "$val"
+}
+
+if [[ "$DRY_RUN" -eq 1 ]]; then
+  echo "[DRY-RUN] Would start postgres/redis/clickhouse via docker compose"
+  echo "[DRY-RUN] Would run backend migrations and ClickHouse init"
+  echo "[DRY-RUN] Would build and start backend with transparency enabled"
+  echo "[DRY-RUN] Would send sample transparency requests with JWT (token not printed)"
+  exit 0
+fi
 
 if ! command -v python3 >/dev/null 2>&1; then
   echo "python3 is required for the transparency smoke test" >&2
@@ -97,6 +174,7 @@ echo "Building backend..."
 npm --prefix "$BACKEND_DIR" run build > /dev/null
 
 echo "Starting backend server..."
+TRANSPARENCY_PRIVATE_KEY="$(resolve_privkey)" || { echo "Failed to resolve transparency private key" >&2; exit 1; }
 PORT=4000 \
 NODE_ENV=test \
 APP_ENV="$SMOKE_ENV_TAG" \
@@ -108,7 +186,7 @@ REDIS_URL="$REDIS_URL" \
 TRANSPARENCY_ENABLED=1 \
 TRANSPARENCY_API_ENABLED=true \
 TRANSPARENCY_SAMPLE_BPS=10000 \
-TRANSPARENCY_PRIVATE_KEY="$PRIVATE_KEY" \
+TRANSPARENCY_PRIVATE_KEY="$TRANSPARENCY_PRIVATE_KEY" \
 TRANSPARENCY_KEY_ID="dev-ed25519" \
 TRANSPARENCY_RETRY_ATTEMPTS=1 \
 TRANSPARENCY_RETRY_MIN_DELAY_MS=5 \

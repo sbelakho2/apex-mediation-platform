@@ -7,9 +7,9 @@ providers:
     folder: 'ApexMediation'
     type: file
     disableDeletion: false
-    editable: true
+    editable: false
     updateIntervalSeconds: 10
-    allowUiUpdates: true
+    allowUiUpdates: false
     options:
       path: /var/lib/grafana/dashboards
       foldersFromFilesStructure: true

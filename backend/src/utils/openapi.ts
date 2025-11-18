@@ -1,10 +1,11 @@
 import { OpenAPIRegistry, OpenApiGeneratorV3 } from '@asteasolutions/zod-to-openapi';
+import { OpenAPIObject } from 'openapi3-ts/dist/model/openapi30';
 import { loginSchema, registerSchema, refreshSchema } from '../controllers/auth.controller';
 import { AuctionRequestSchema } from '../schemas/rtb';
 
-let cachedDoc: Record<string, unknown> | null = null;
+let cachedDoc: OpenAPIObject | null = null;
 
-export function getOpenAPIDocument(): Record<string, unknown> {
+export function getOpenAPIDocument(): OpenAPIObject {
   if (cachedDoc) return cachedDoc;
 
   const registry = new OpenAPIRegistry();

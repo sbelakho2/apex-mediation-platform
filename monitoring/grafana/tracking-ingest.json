@@ -57,8 +57,8 @@
             "mode": "absolute",
             "steps": [
               { "value": null, "color": "green" },
-              { "value": 10, "color": "yellow" },
-              { "value": 100, "color": "red" }
+               { "value": "${failed_warn}", "color": "yellow" },
+               { "value": "${failed_crit}", "color": "red" }
             ]
           }
         }
@@ -82,8 +82,8 @@
             "mode": "absolute",
             "steps": [
               { "value": null, "color": "red" },
-              { "value": 95, "color": "yellow" },
-              { "value": 99, "color": "green" }
+               { "value": "${success_warn}", "color": "yellow" },
+               { "value": "${success_pass}", "color": "green" }
             ]
           }
         }
@@ -252,7 +252,38 @@
   "schemaVersion": 36,
   "style": "dark",
   "tags": ["tracking", "analytics", "ingest"],
-  "templating": { "list": [] },
+  "templating": {
+    "list": [
+      {
+        "name": "failed_warn",
+        "type": "textbox",
+        "label": "Failed warn",
+        "query": "10",
+        "current": { "text": "10", "value": "10" }
+      },
+      {
+        "name": "failed_crit",
+        "type": "textbox",
+        "label": "Failed crit",
+        "query": "100",
+        "current": { "text": "100", "value": "100" }
+      },
+      {
+        "name": "success_warn",
+        "type": "textbox",
+        "label": "Success warn %",
+        "query": "95",
+        "current": { "text": "95", "value": "95" }
+      },
+      {
+        "name": "success_pass",
+        "type": "textbox",
+        "label": "Success pass %",
+        "query": "99",
+        "current": { "text": "99", "value": "99" }
+      }
+    ]
+  },
   "timezone": "",
   "title": "Tracking & Ingest",
   "uid": "tracking-ingest",

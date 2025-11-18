@@ -15,6 +15,30 @@ mkdir -p "$LOG_DIR"
 WEBSITE_URL="${WEBSITE_URL:-https://apexmediation.bel-consulting.ee}"
 CHECK_INTERVAL="${CHECK_INTERVAL:-60}" # seconds
 ALERT_EMAIL="${ALERT_EMAIL:-dev@bel-consulting.ee}"
+DRY_RUN=${DRY_RUN:-0}
+
+usage(){ cat <<USAGE
+Monitor website health and basic performance.
+
+Usage:
+  $(basename "$0") [--dry-run] [--url URL] [--interval SECONDS]
+
+Environment:
+  WEBSITE_URL     Base URL to monitor (default: $WEBSITE_URL)
+  CHECK_INTERVAL  Interval in seconds between checks (default: $CHECK_INTERVAL)
+  ALERT_EMAIL     Optional email for alerts when 'mail' is available
+USAGE
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --dry-run) DRY_RUN=1; shift ;;
+    --url) WEBSITE_URL="$2"; shift 2 ;;
+    --interval) CHECK_INTERVAL="$2"; shift 2 ;;
+    -h|--help) usage; exit 0 ;;
+    *) echo "Unknown arg: $1" >&2; usage; exit 2 ;;
+  esac
+done
 
 # Colors
 RED='\033[0;31m'
@@ -103,6 +127,8 @@ monitor() {
     local max_failures=3
 
     while true; do
+        if [[ "$DRY_RUN" -eq 1 ]]; then
+          echo "[DRY-RUN] Would request: $WEBSITE_URL"; echo "[DRY-RUN] Would sleep $CHECK_INTERVAL"; exit 0; fi
         # Check health
         local health=$(check_health "$WEBSITE_URL")
         local status_code=$(echo "$health" | cut -d'|' -f1)

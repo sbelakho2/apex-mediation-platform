@@ -59,7 +59,7 @@
       "title": "Total Wins (5m)",
       "targets": [
         {
-          "expr": "sum(increase(rtb_wins_total[5m]))",
+          "expr": "sum(increase(rtb_wins_total{adapter=~\"$adapter_filter\"}[5m]))",
           "legendFormat": "wins"
         }
       ],
@@ -76,7 +76,7 @@
       "title": "No-Fill Rate (5m)",
       "targets": [
         {
-          "expr": "sum(increase(rtb_no_fill_total[5m]))",
+          "expr": "sum(increase(rtb_no_fill_total{adapter=~\"$adapter_filter\"}[5m]))",
           "legendFormat": "no-fill"
         }
       ],
@@ -121,7 +121,7 @@
       "title": "RTB Wins by Adapter",
       "targets": [
         {
-          "expr": "sum by (adapter) (rate(rtb_wins_total[5m]))",
+          "expr": "sum by (adapter) (rate(rtb_wins_total{adapter=~\"$adapter\"}[5m]))",
           "legendFormat": "{{adapter}}"
         }
       ],
@@ -142,7 +142,7 @@
       "title": "RTB No-Fill Rate",
       "targets": [
         {
-          "expr": "sum(rate(rtb_no_fill_total[5m]))",
+          "expr": "sum(rate(rtb_no_fill_total{adapter=~\"$adapter_filter\"}[5m]))",
           "legendFormat": "no-fill rate"
         }
       ],
@@ -159,7 +159,7 @@
       "title": "Adapter Latency (p95 by adapter)",
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum by (le, adapter) (rate(rtb_adapter_latency_seconds_bucket[5m])))",
+          "expr": "histogram_quantile(0.95, sum by (le, adapter) (rate(rtb_adapter_latency_seconds_bucket{adapter=~\"$adapter\"}[5m])))",
           "legendFormat": "{{adapter}} p95"
         }
       ],
@@ -179,7 +179,7 @@
       "title": "Adapter Timeouts",
       "targets": [
         {
-          "expr": "sum by (adapter) (rate(rtb_adapter_timeouts_total[5m]))",
+          "expr": "sum by (adapter) (rate(rtb_adapter_timeouts_total{adapter=~\"$adapter\"}[5m]))",
           "legendFormat": "{{adapter}}"
         }
       ],
@@ -200,19 +200,19 @@
       "title": "Adapter Performance Summary",
       "targets": [
         {
-          "expr": "sum by (adapter) (increase(rtb_wins_total[1h]))",
+          "expr": "sum by (adapter) (increase(rtb_wins_total{adapter=~\"$adapter\"}[1h]))",
           "legendFormat": "{{adapter}}",
           "format": "table",
           "instant": true
         },
         {
-          "expr": "histogram_quantile(0.95, sum by (le, adapter) (rate(rtb_adapter_latency_seconds_bucket[1h])))",
+          "expr": "histogram_quantile(0.95, sum by (le, adapter) (rate(rtb_adapter_latency_seconds_bucket{adapter=~\"$adapter_filter\"}[1h])))",
           "legendFormat": "{{adapter}}",
           "format": "table",
           "instant": true
         },
         {
-          "expr": "sum by (adapter) (increase(rtb_adapter_timeouts_total[1h]))",
+          "expr": "sum by (adapter) (increase(rtb_adapter_timeouts_total{adapter=~\"$adapter\"}[1h]))",
           "legendFormat": "{{adapter}}",
           "format": "table",
           "instant": true
@@ -242,7 +242,29 @@
   "schemaVersion": 36,
   "style": "dark",
   "tags": ["rtb", "auction", "adapters"],
-  "templating": { "list": [] },
+  "templating": {
+    "list": [
+      {
+        "name": "adapter_filter",
+        "type": "query",
+        "label": "Adapter",
+        "datasource": "Prometheus",
+        "definition": "label_values(rtb_wins_total, adapter)",
+        "query": "label_values(rtb_wins_total, adapter)",
+        "refresh": 2,
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "current": {
+          "selected": true,
+          "text": "All adapters",
+          "value": ".*"
+        },
+        "sort": 1,
+        "description": "Regex adapter selector applied to every adapter-aware panel."
+      }
+    ]
+  },
   "timezone": "",
   "title": "RTB Overview",
   "uid": "rtb-overview",

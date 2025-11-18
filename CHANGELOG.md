@@ -1,3 +1,45 @@
+Changelog — FIX-09 Automation & Tooling Readiness (2025-11-18)
+
+Summary
+- Hardens repo automation scripts for safety, reproducibility, and CI verifiability. Removes embedded secrets, parameterizes assumptions, and adds consistent `--help/--dry-run/--yes` UX with repo‑root normalization.
+
+What changed (highlights)
+- FIX-09-A — `scripts/ml/prepare_dataset.py` now supports `--columns`, `--column-map`, and `--sample-network-column`; early schema validation and improved `--dry-run`.
+- FIX-09-B — `scripts/capture-website.sh` accepts `--routes FILE`, `--base-url`, `--install` (lockfile checksum caching), and `--dry-run`.
+- FIX-09-C — `scripts/run-billing-migrations.sh` removes hardcoded counts; adds discovery by pattern, `--plan`, `--from/--to`, `--migrations-path`.
+- FIX-09-D — `scripts/validate-billing-tests.sh` gains `--root`, `--list`, and `--update` to generate a JSON manifest from `git ls-files`.
+- FIX-09-E — `scripts/verify-console-connection.sh` supports `CONSOLE_TOKEN` or admin creds; `--dry-run`, timeout, masked logs, distinct exit codes (0/10/11).
+- FIX-09-F — `scripts/dev-transparency-metrics.sh` removes inline key; `--dry-run`; resolves key via env or file; redacts sensitive output.
+- FIX-09-G — `scripts/setup-s3-accounting.sh` adds `--dry-run` and `--yes`, explicit irreversible compliance confirmation, and parameterized bucket/region.
+- FIX-09-H — `scripts/capture-console.sh` mirrors website script flags and caching; supports `--routes FILE` and `--base-url`.
+- FIX-09-I — `scripts/README.md` updated with a Script Catalog, prerequisites, safety notes, and examples.
+- FIX-09-J — `scripts/install-accounting-deps.sh` defaults to reproducible `npm ci`, supports `--upgrade pkg@ver` with confirmation, and `--dry-run`.
+- FIX-09-K — `scripts/ios-docs.sh` adds `--scheme` with auto‑detection via `xcodebuild`; DocC first, Jazzy fallback; zipped output.
+- FIX-09-L — `scripts/ml/fetch_enrichment.sh` documents `PYTHON`, validates interpreter existence, warns if <3.9.
+- FIX-09-M — `scripts/ml/train_models.py` validates dataset path early and adds `--dry-run` that prints a JSON summary.
+- FIX-09-N — `scripts/validate-deployment.sh` replaces exact counts with `EXPECTED_MIGRATIONS_MIN` and supports `STRICT=1`.
+- FIX-09-O — `scripts/verify-billing-wiring.sh` keeps static checks and adds optional live probes via `API_BASE_URL` (+ optional token) with categorized results.
+- Website parity — `website/scripts/deploy.sh` and `website/scripts/monitor.sh` now support `--help` and `--dry-run`, normalize cwd, and avoid destructive defaults.
+
+CI additions
+- New workflow `.github/workflows/scripts-guardrails.yml` runs `bash -n` and `shellcheck` on `scripts/*.sh` and `website/scripts/*.sh`, plus safe dry‑runs:
+  - `./scripts/capture-website.sh --dry-run`
+  - `./scripts/verify-console-connection.sh --dry-run`
+  - `./scripts/run-billing-migrations.sh --plan`
+  - `./scripts/setup-s3-accounting.sh --dry-run`
+- Optional staging smoke probes are gated on secrets (`API_TOKEN`, `API_BASE_URL`).
+
+How to validate locally
+- Syntax/lint: `bash -n scripts/*.sh website/scripts/*.sh` and `shellcheck -S warning scripts/*.sh`
+- Dry‑runs:
+  - `./scripts/capture-website.sh --dry-run`
+  - `./scripts/verify-console-connection.sh --dry-run`
+  - `./scripts/run-billing-migrations.sh --plan`
+  - `./scripts/setup-s3-accounting.sh --dry-run`
+  - Optional: `API_BASE_URL=https://... API_TOKEN=*** ./scripts/verify-billing-wiring.sh`
+
+---
+
 Changelog — FIX-08 Infrastructure & Observability Maturity (2025-11-17)
 
 Summary
@@ -58,6 +100,20 @@ What changed (FIX-08-407 → FIX-08-416)
     - `docker run --rm -v "$PWD/monitoring":/etc/prometheus prom/prometheus:v2.53.2 promtool check rules /etc/prometheus/recording-rules.yml`
     - `docker run --rm -v "$PWD/infrastructure/helm/backend":/charts -w /charts alpine/helm:3.15.2 lint .`
     - `docker run --rm -v "$PWD/infrastructure/helm/fraud-inference":/charts -w /charts alpine/helm:3.15.2 lint .`
+
+What changed (FIX-08-417 → FIX-08-426)
+- FIX-08-417/418/419 — `infrastructure/helm/console/Chart.yaml` now tracks version `1.1.0` with `values.yaml` inheriting the tag from `appVersion`, and the new helper in `_helpers.tpl` enforces that `service.selector.color` matches `deployment.color` while computing ingress hostnames when a rule omits `host`. `templates/service.yaml` consumes the helper so Services silently inherit the deployment color and fail fast on mismatches, keeping rolling blue/green cutovers from orphaning pods.
+- FIX-08-420/421/422/423 — The fraud-inference chart adopted the same label helper used by the ServiceMonitor, documents the target port in `values.yaml`, allows the Deployment container port to follow the configured `service.targetPort`, and introduces `templates/servicemonitor.yaml` so Prometheus Operator clusters scrape `/metrics` without hand-written manifests. Ingress remains opt-in but `values.yaml` now calls out that the default Service stays cluster-internal until toggled.
+- FIX-08-424 — `infrastructure/terraform/modules/ai-cost-controls/README.md` retargets both runbook links to `../../runbooks/AI_COST_CONTROLS.md`, so module consumers land on the actual checklist instead of the stale `infrastructure/runbooks` path.
+- FIX-08-425 — Replaced tracked runtime logs with `docs/log-samples/README.md` + `docs/log-samples/error.sample.log`, giving teams a sanitized schema example and explicit guidance to capture real logs outside git (the existing `monitoring/README.md` points here now) so stack traces/tenant IDs never leak from `logs/*.log` again.
+- FIX-08-426 — `monitoring/docker-compose.yml` no longer pins Grafana’s `GF_SERVER_ROOT_URL` to the production domain; it defaults to `http://localhost:3000` and can be overridden via `.env`, and the README tells operators to set it whenever Grafana is exposed on a public hostname so login redirects keep working in every environment.
+
+  - **Test note:**
+    - `bash -n monitoring/deploy-monitoring.sh`
+    - `sudo docker run --rm -v "$PWD/monitoring:/etc/prometheus" --entrypoint promtool prom/prometheus:v2.50.1 check rules /etc/prometheus/recording-rules.yml`
+    - `sudo docker run --rm -v "$PWD/infrastructure/helm:/charts" -w /charts/backend alpine/helm:3.13.3 lint`
+    - `sudo docker run --rm -v "$PWD/infrastructure/helm:/charts" -w /charts/console alpine/helm:3.13.3 lint`
+    - `sudo docker run --rm -v "$PWD/infrastructure/helm:/charts" -w /charts/fraud-inference alpine/helm:3.13.3 lint`
 
 ---
 
