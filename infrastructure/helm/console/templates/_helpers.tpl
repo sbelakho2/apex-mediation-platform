@@ -56,7 +56,10 @@ Create the name of the service account to use
 {{- if .Values.serviceAccount.create }}
 {{- default (include "console.fullname" .) .Values.serviceAccount.name }}
 {{- else }}
-{{- default "default" .Values.serviceAccount.name }}
+	{{- if not .Values.serviceAccount.name }}
+		{{- fail "serviceAccount.name must be set when serviceAccount.create=false" }}
+	{{- end }}
+{{- .Values.serviceAccount.name }}
 {{- end }}
 {{- end }}
 
@@ -80,4 +83,31 @@ Resolve the config map name used for runtime NEXT_PUBLIC envs.
 {{- else }}
 {{- printf "%s-config" (include "console.fullname" .) | trunc 63 | trimSuffix "-" }}
 {{- end }}
+{{- end }}
+
+{{/*
+Compute ingress host from explicit entry or defaults.
+*/}}
+{{- define "console.ingressHost" -}}
+{{- $root := .root -}}
+{{- $host := .host -}}
+{{- if $host.host }}
+{{- $host.host -}}
+{{- else if $root.Values.ingress.defaultDomain }}
+{{- printf "%s.%s" (default "console" $root.Values.ingress.hostnamePrefix) $root.Values.ingress.defaultDomain -}}
+{{- else -}}
+{{- printf "%s.%s" (default "console" $root.Values.ingress.hostnamePrefix) $root.Release.Name -}}
+{{- end -}}
+{{- end }}
+
+{{/*
+Determine the color selector for Services and validate overrides.
+*/}}
+{{- define "console.selectorColor" -}}
+{{- $deploymentColor := .Values.deployment.color -}}
+{{- $serviceColor := .Values.service.selector.color -}}
+{{- if and $serviceColor (ne $serviceColor $deploymentColor) -}}
+	{{- fail "service.selector.color must match deployment.color" -}}
+{{- end -}}
+{{- default $deploymentColor $serviceColor -}}
 {{- end }}

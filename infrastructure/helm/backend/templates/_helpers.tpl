@@ -46,7 +46,7 @@ Selector labels
 {{- define "backend.selectorLabels" -}}
 app.kubernetes.io/name: {{ include "backend.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
-app: backend
+app: {{ include "backend.name" . }}
 {{- end }}
 
 {{/*
@@ -56,8 +56,26 @@ Create the name of the service account to use
 {{- if .Values.serviceAccount.create }}
 {{- default (include "backend.fullname" .) .Values.serviceAccount.name }}
 {{- else }}
-{{- default "default" .Values.serviceAccount.name }}
+	{{- if not .Values.serviceAccount.name }}
+		{{- fail "serviceAccount.name must be set when serviceAccount.create=false" }}
+	{{- end }}
+{{- .Values.serviceAccount.name }}
 {{- end }}
+{{- end }}
+
+{{/*
+Compute ingress host from either explicit value or defaults.
+*/}}
+{{- define "backend.ingressHost" -}}
+{{- $root := .root -}}
+{{- $host := .host -}}
+{{- if $host.host }}
+{{- $host.host -}}
+{{- else if $root.Values.ingress.defaultDomain }}
+{{- printf "%s.%s" (default "api" $root.Values.ingress.hostnamePrefix) $root.Values.ingress.defaultDomain -}}
+{{- else -}}
+{{- printf "%s.%s" (default "api" $root.Values.ingress.hostnamePrefix) $root.Release.Name -}}
+{{- end -}}
 {{- end }}
 
 {{/*

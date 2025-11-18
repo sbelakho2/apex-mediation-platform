@@ -46,6 +46,7 @@ Selector labels
 {{- define "fraud-inference.selectorLabels" -}}
 app.kubernetes.io/name: {{ include "fraud-inference.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
+app: {{ include "fraud-inference.name" . }}
 {{- end }}
 
 {{/*

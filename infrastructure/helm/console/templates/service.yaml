@@ -4,13 +4,14 @@ metadata:
   name: {{ include "console.fullname" . }}
   labels:
     {{- include "console.labels" . | nindent 4 }}
+{{- $serviceColor := include "console.selectorColor" . }}
 spec:
   type: {{ .Values.service.type }}
   ports:
     - port: {{ .Values.service.port }}
-      targetPort: http
+      targetPort: {{ .Values.service.targetPort | default 3000 }}
       protocol: TCP
       name: http
   selector:
     {{- include "console.selectorLabels" . | nindent 4 }}
-    color: {{ .Values.service.selector.color }}
+    color: {{ $serviceColor }}

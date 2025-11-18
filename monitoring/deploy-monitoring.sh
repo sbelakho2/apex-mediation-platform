@@ -8,6 +8,7 @@ COMMAND=${1:-start}
 MONITORING_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ALERTMANAGER_RENDERED="$MONITORING_DIR/alertmanager.generated.yml"
 GRAFANA_DATASOURCES_RENDERED="$MONITORING_DIR/grafana-datasources.generated.yml"
+PROMETHEUS_RENDERED="$MONITORING_DIR/prometheus.generated.yml"
 
 echo "🔍 ApexMediation Monitoring Stack"
 echo "   Directory: $MONITORING_DIR"
@@ -46,10 +47,25 @@ SLACK_WEBHOOK_URL=
 
 # Optional: Discord notifications
 DISCORD_WEBHOOK_URL=
+
+# Prometheus target overrides (set to localhost services for local dev)
+PROMETHEUS_CLUSTER_LABEL=apexmediation
+PROMETHEUS_ENVIRONMENT_LABEL=production
+BACKEND_METRICS_TARGET=apexmediation-backend.fly.dev:8080
+CONSOLE_METRICS_TARGET=apexmediation-console.fly.dev:3000
+CLICKHOUSE_METRICS_TARGET=clickhouse.cloud:8123
+REDIS_METRICS_TARGET=upstash-redis-exporter:9121
 EOF
   echo "⚠️  Please edit monitoring/.env with real credentials, then re-run ./deploy-monitoring.sh start"
   exit 1
 fi
+
+BACKEND_METRICS_TARGET=${BACKEND_METRICS_TARGET:-apexmediation-backend.fly.dev:8080}
+CONSOLE_METRICS_TARGET=${CONSOLE_METRICS_TARGET:-apexmediation-console.fly.dev:3000}
+CLICKHOUSE_METRICS_TARGET=${CLICKHOUSE_METRICS_TARGET:-clickhouse.cloud:8123}
+REDIS_METRICS_TARGET=${REDIS_METRICS_TARGET:-upstash-redis-exporter:9121}
+PROMETHEUS_CLUSTER_LABEL=${PROMETHEUS_CLUSTER_LABEL:-apexmediation}
+PROMETHEUS_ENVIRONMENT_LABEL=${PROMETHEUS_ENVIRONMENT_LABEL:-production}
 
 render_alertmanager_config() {
   if ! command -v envsubst >/dev/null 2>&1; then
@@ -64,26 +80,27 @@ render_alertmanager_config() {
 
   envsubst '$RESEND_API_KEY $TWILIO_WEBHOOK_URL $TWILIO_ACCOUNT_SID $TWILIO_AUTH_TOKEN $SLACK_WEBHOOK_URL $DISCORD_WEBHOOK_URL' \
     < "$MONITORING_DIR/alertmanager.yml" > "$ALERTMANAGER_RENDERED"
-    strip_optional_alertmanager_block() {
-      local marker="$1"
-      sed -i "/# OPTIONAL_${marker}_START/,/# OPTIONAL_${marker}_END/d" "$ALERTMANAGER_RENDERED"
-    }
 
-    if [ -z "$TWILIO_WEBHOOK_URL" ]; then
-      strip_optional_alertmanager_block "TWILIO_ROUTE"
-      strip_optional_alertmanager_block "TWILIO_RECEIVER"
-      echo "⚠️  Disabled Twilio SMS alerts (set TWILIO_WEBHOOK_URL to enable)."
-    fi
+  strip_optional_alertmanager_block() {
+    local marker="$1"
+    sed -i "/# OPTIONAL_${marker}_START/,/# OPTIONAL_${marker}_END/d" "$ALERTMANAGER_RENDERED"
+  }
 
-    if [ -z "$SLACK_WEBHOOK_URL" ]; then
-      strip_optional_alertmanager_block "SLACK_RECEIVER"
-      echo "⚠️  Disabled Slack notifications (set SLACK_WEBHOOK_URL to enable)."
-    fi
+  if [ -z "$TWILIO_WEBHOOK_URL" ]; then
+    strip_optional_alertmanager_block "TWILIO_ROUTE"
+    strip_optional_alertmanager_block "TWILIO_RECEIVER"
+    echo "⚠️  Disabled Twilio SMS alerts (set TWILIO_WEBHOOK_URL to enable)."
+  fi
 
-    if [ -z "$DISCORD_WEBHOOK_URL" ]; then
-      strip_optional_alertmanager_block "DISCORD_RECEIVER"
-      echo "⚠️  Disabled Discord notifications (set DISCORD_WEBHOOK_URL to enable)."
-    fi
+  if [ -z "$SLACK_WEBHOOK_URL" ]; then
+    strip_optional_alertmanager_block "SLACK_RECEIVER"
+    echo "⚠️  Disabled Slack notifications (set SLACK_WEBHOOK_URL to enable)."
+  fi
+
+  if [ -z "$DISCORD_WEBHOOK_URL" ]; then
+    strip_optional_alertmanager_block "DISCORD_RECEIVER"
+    echo "⚠️  Disabled Discord notifications (set DISCORD_WEBHOOK_URL to enable)."
+  fi
 
   chmod 644 "$ALERTMANAGER_RENDERED"
   echo "✅ Rendered Alertmanager config -> $ALERTMANAGER_RENDERED"
@@ -137,6 +154,18 @@ EOF
   echo "✅ Rendered Grafana datasources -> $GRAFANA_DATASOURCES_RENDERED"
 }
 
+render_prometheus_config() {
+  if ! command -v envsubst >/dev/null 2>&1; then
+    echo "❌ 'envsubst' command not found. Install gettext (e.g., 'sudo apt install gettext-base') before running the monitoring stack."
+    exit 1
+  fi
+
+  envsubst '$PROMETHEUS_CLUSTER_LABEL $PROMETHEUS_ENVIRONMENT_LABEL $BACKEND_METRICS_TARGET $CONSOLE_METRICS_TARGET $CLICKHOUSE_METRICS_TARGET $REDIS_METRICS_TARGET' \
+    < "$MONITORING_DIR/prometheus.yml" > "$PROMETHEUS_RENDERED"
+  chmod 644 "$PROMETHEUS_RENDERED"
+  echo "✅ Rendered Prometheus config -> $PROMETHEUS_RENDERED"
+}
+
 verify_backup_archive() {
   local archive_path="$1"
   if gzip -t "$archive_path" >/dev/null 2>&1; then
@@ -151,6 +180,7 @@ case $COMMAND in
   start)
     render_alertmanager_config
     render_grafana_datasources
+    render_prometheus_config
     echo "🚀 Starting monitoring stack..."
     cd "$MONITORING_DIR"
     docker-compose up -d
@@ -208,6 +238,7 @@ case $COMMAND in
   restart)
     render_alertmanager_config
     render_grafana_datasources
+    render_prometheus_config
     echo "🔄 Restarting monitoring stack..."
     cd "$MONITORING_DIR"
     docker-compose restart

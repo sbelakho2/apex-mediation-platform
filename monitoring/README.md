@@ -32,13 +32,17 @@ Services will be available at:
 - Prometheus: http://localhost:9090
 - Alertmanager: http://localhost:9093
 
-> 💡 `alertmanager.yml` is a template. Run `./deploy-monitoring.sh start` (or `./deploy-monitoring.sh restart`) to render it to `alertmanager.generated.yml` via `envsubst` before bringing the stack up. Launching `docker-compose up` without rendering leaves `${VAR}` placeholders in Alertmanager and SMTP/Twilio auth will fail.
+> 💡 `alertmanager.yml` and `prometheus.yml` are templates. Run `./deploy-monitoring.sh start` (or `./deploy-monitoring.sh restart`) to render them to `alertmanager.generated.yml` / `prometheus.generated.yml` via `envsubst` before bringing the stack up. Launching `docker-compose up` without rendering leaves `${VAR}` placeholders in Alertmanager or Prometheus targets and SMTP/metrics auth will fail.
 
 > 🔐 Loki enforces multi-tenant auth now. Promtail sends logs with `LOKI_TENANT_ID` (default `apex`), and `loki-tenant-limits.yaml` defines per-tenant ingestion/retention caps. Update that file (and the env var in `.env`) if you add more tenants.
 
 > 📝 When the deploy script creates `monitoring/.env` for you, it exits immediately—fill in every placeholder, then rerun `./deploy-monitoring.sh start` so the stack can boot. Use `./deploy-monitoring.sh backup` for validated Prometheus/Loki/Grafana archives (each gzip is checked after creation).
 
 > 🗂 Grafana now reads datasources from `grafana-datasources.generated.yml`, which `./deploy-monitoring.sh` renders each time you run `start`/`restart`. Postgres (`DATABASE_URL`/`DB_USER`/`DB_PASSWORD`) and ClickHouse (`CLICKHOUSE_URL`/`CLICKHOUSE_PASSWORD`) datasources are added only when all required variables exist in `.env`; otherwise Grafana still boots with Prometheus + Loki and prints a warning.
+
+> 🧾 The `logs/` directory stays `.gitignore`d so raw JSONL files never leave your workstation. A sanitized schema sample lives in `docs/log-samples/error.sample.log` with usage notes in `docs/log-samples/README.md`. Update that sample (not the real logs) whenever the log format changes.
+
+> 📡 Prometheus scrape targets live in `.env` (`BACKEND_METRICS_TARGET`, `CONSOLE_METRICS_TARGET`, etc.). Point them at `host.docker.internal:<port>` for local services or keep the default Fly.io hosts for staging/prod. The deploy script rewrites `prometheus.generated.yml` with whatever hosts you configure.
 
 ### Production Deployment
 

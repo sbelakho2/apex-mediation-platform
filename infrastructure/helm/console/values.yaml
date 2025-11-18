@@ -5,7 +5,7 @@ replicaCount: 2
 image:
   repository: ghcr.io/rivalapexmediation/console
   pullPolicy: IfNotPresent
-  tag: "latest"
+  tag: ""  # inherit from Chart.appVersion when unset
 
 imagePullSecrets: []
 nameOverride: ""
@@ -42,7 +42,7 @@ service:
   targetPort: 3000
   selector:
     app: console
-    color: blue  # Match deployment.color
+    color: blue  # Overridden automatically when unset; must match deployment.color
 
 ingress:
   enabled: true
@@ -51,6 +51,8 @@ ingress:
     cert-manager.io/cluster-issuer: "letsencrypt-prod"
     nginx.ingress.kubernetes.io/ssl-redirect: "true"
     nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+  hostnamePrefix: console
+  defaultDomain: rivalapexmediation.com
   hosts:
     - host: console.rivalapexmediation.com
       servicePort: null

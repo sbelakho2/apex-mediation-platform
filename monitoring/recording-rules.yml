@@ -123,9 +123,12 @@ groups:
       # Event processing lag (enqueued - written)
       - record: job:analytics_events:processing_lag
         expr: |
-          sum(rate(analytics_events_enqueued_total[5m])) by (job)
-          -
-          sum(rate(analytics_events_written_total[5m])) by (job)
+          clamp_min(
+            sum(rate(analytics_events_enqueued_total[5m])) by (job)
+            -
+            sum(rate(analytics_events_written_total[5m])) by (job),
+            0
+          )
 
       # Rate limiting rate
       - record: job:tracking_rate_limited:rate5m
@@ -229,13 +232,16 @@ groups:
       # Fill rate percentage (hourly)
       - record: job:fill_rate:percentage1h
         expr: |
-          (
-            1 - (
-              sum(increase(rtb_no_fill_total[1h])) by (job)
-              /
-              sum(increase(auction_latency_seconds_count[1h])) by (job)
-            )
-          ) * 100
+          clamp_min(
+            (
+              1 - (
+                sum(increase(rtb_no_fill_total[1h])) by (job)
+                /
+                sum(increase(auction_latency_seconds_count[1h])) by (job)
+              )
+            ) * 100,
+            0
+          )
 
       # Average CPM (hourly)
       - record: job:cpm_usd:avg1h

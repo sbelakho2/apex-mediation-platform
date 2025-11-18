@@ -4,6 +4,10 @@ metadata:
   name: {{ include "backend.fullname" . }}
   labels:
     {{- include "backend.labels" . | nindent 4 }}
+{{- $serviceColor := default .Values.deployment.color .Values.service.selector.color }}
+{{- if and .Values.service.selector.color (ne .Values.service.selector.color .Values.deployment.color) }}
+{{- fail "service.selector.color must match deployment.color" }}
+{{- end }}
 spec:
   type: {{ .Values.service.type }}
   ports:
@@ -13,4 +17,4 @@ spec:
       name: http
   selector:
     {{- include "backend.selectorLabels" . | nindent 4 }}
-    color: {{ .Values.service.selector.color }}
+    color: {{ $serviceColor }}

@@ -44,6 +44,21 @@ What changed (FIX-08-400 → FIX-08-406)
 - FIX-08-406 — `monitoring/grafana/api_red_dashboard.json` now starts with service-level stat panels, multiplies latency histograms by 1000 to stay in milliseconds, and exposes a `service` templating variable so teams can pivot the RED view per backend/adapter instead of duplicating the `red-metrics-by-route` dashboard.
   - **Test note:** `jq . monitoring/grafana/api_red_dashboard.json` validates the JSON export after the templating additions.
 
+What changed (FIX-08-407 → FIX-08-416)
+- FIX-08-407 — `monitoring/prometheus.yml` is now a template rendered into `prometheus.generated.yml` by `deploy-monitoring.sh`, pulling scrape target hosts (`BACKEND_METRICS_TARGET`, `CONSOLE_METRICS_TARGET`, etc.) and external labels from `.env` so local Compose runs can point at `host.docker.internal` while Fly.io deployments retain the original hostnames. `docker-compose.yml`, `.gitignore`, and `monitoring/README.md` were updated to reflect the generated file and document the new environment variables.
+- FIX-08-408 — `monitoring/recording-rules.yml` wraps subtraction-heavy expressions (processing lag, fill-rate percentage) with `clamp_min(...)` to keep the resulting series non-negative even when counters temporarily drift.
+- FIX-08-409 — `infrastructure/helm/fraud-inference/Chart.yaml` and `values.yaml` now reference the real `ghcr.io/rivalapexmediation/fraud-inference` image (and bump the chart version) so releases pull the published container rather than the placeholder repo.
+- FIX-08-410/411/414/415 — `infrastructure/helm/backend` bumped its chart version, updated selector helpers to respect name overrides, now enforces that the Service selector color matches the deployment color (failing fast on mismatches) while defaulting to the deployment color when unset, and requires `serviceAccount.name` to be provided whenever `serviceAccount.create=false` so we never reference an uncreated account. The migrations job image tag inherits the chart appVersion instead of floating on `latest`.
+- FIX-08-412 — `templates/deployment.yaml` consumes a new `lifecycle.preStop` value (default 10-second sleep) so rolling updates give the Node process time to drain DB connections before Kubernetes sends SIGTERM.
+- FIX-08-413 — `templates/ingress.yaml` gained a helper that derives hostnames from `ingress.hostnamePrefix` + `ingress.defaultDomain` when `hosts[].host` is empty, letting staging releases reuse the same values without editing hard-coded domains. TLS entries inherit those computed hosts when none are provided.
+- FIX-08-416 — `templates/servicemonitor.yaml` now emits the ServiceMonitor by default whenever the Prometheus Operator CRDs are installed and silently skips the resource otherwise, so instrumentation is on by default without forcing clusters that lack the CRDs to toggle the value.
+
+  - **Test note:**
+    - `bash -n monitoring/deploy-monitoring.sh`
+    - `docker run --rm -v "$PWD/monitoring":/etc/prometheus prom/prometheus:v2.53.2 promtool check rules /etc/prometheus/recording-rules.yml`
+    - `docker run --rm -v "$PWD/infrastructure/helm/backend":/charts -w /charts alpine/helm:3.15.2 lint .`
+    - `docker run --rm -v "$PWD/infrastructure/helm/fraud-inference":/charts -w /charts alpine/helm:3.15.2 lint .`
+
 ---
 
 Changelog — FIX-07 Quality & Testing Automation (2025-11-17)

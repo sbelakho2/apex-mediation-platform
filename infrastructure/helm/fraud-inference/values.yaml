@@ -3,7 +3,7 @@
 replicaCount: 2
 
 image:
-  repository: fraud-inference
+  repository: ghcr.io/rivalapexmediation/fraud-inference
   pullPolicy: IfNotPresent
   tag: ""
 
@@ -36,10 +36,10 @@ securityContext:
 service:
   type: ClusterIP
   port: 80
-  targetPort: 8080
+  targetPort: 8080  # Matches containerPort; adjust if sidecars expose a different port
 
 ingress:
-  enabled: false
+  enabled: false  # With ingress disabled the Service remains cluster-internal; enable or change service.type for external access
   className: ""
   annotations: {}
   hosts:
@@ -65,7 +65,7 @@ autoscaling:
   minReplicas: 2
   maxReplicas: 10
   targetCPUUtilizationPercentage: 70
-  customMetricsEnabled: false
+  customMetricsEnabled: false  # Requires the metrics adapter described in docs/runbooks before enabling
   # Custom metrics for HPA based on p95 latency and QPS
   customMetrics:
     - type: Pods
@@ -158,7 +158,12 @@ serviceMonitor:
   enabled: true
   interval: 30s
   path: /metrics
+  scheme: http
+  scrapeTimeout: 10s
+  port: http
   labels: {}
+  metricRelabelings: []
+  relabelings: []
 
 # Pod Disruption Budget
 podDisruptionBudget:

@@ -275,7 +275,7 @@ All changes to AI feature flags are:
 1. **Version Controlled:** Tracked in Terraform state
 2. **Auditable:** Kubernetes annotations include `last-updated` timestamp
 3. **Reversible:** Full rollback capability via Terraform
-4. **Documented:** Runbook at `infrastructure/runbooks/AI_COST_CONTROLS.md`
+4. **Documented:** Runbook at `../../runbooks/AI_COST_CONTROLS.md`
 
 ## Troubleshooting
 
@@ -317,7 +317,7 @@ kubectl port-forward -n monitoring svc/prometheus 9090:9090
 
 ## References
 
-- **Full Runbook:** `infrastructure/runbooks/AI_COST_CONTROLS.md`
+- **Full Runbook:** `../../runbooks/AI_COST_CONTROLS.md`
 - **Prometheus Alerts:** `monitoring/alerts.yml` (ai_cost_controls group)
 - **Backend Implementation:** `backend/services/sales/InfluenceBasedSalesService.ts`
 - **Deployment Guide:** `docs/production-deployment.md` (Step 5.5)

@@ -40,6 +40,15 @@ spec:
         - name: http
           containerPort: {{ .Values.service.targetPort }}
           protocol: TCP
+        {{- if .Values.lifecycle.preStop.enabled }}
+        lifecycle:
+          preStop:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - "sleep {{ .Values.lifecycle.preStop.sleepSeconds | default 10 }}"
+        {{- end }}
         {{- if .Values.probes.liveness.enabled }}
         livenessProbe:
           httpGet:

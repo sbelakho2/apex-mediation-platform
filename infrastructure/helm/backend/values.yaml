@@ -15,6 +15,11 @@ fullnameOverride: ""
 deployment:
   color: blue  # blue or green for blue-green deployments
 
+lifecycle:
+  preStop:
+    enabled: true
+    sleepSeconds: 10
+
 serviceAccount:
   create: true
   annotations: {}
@@ -42,8 +47,7 @@ service:
   port: 3001
   targetPort: 3001
   selector:
-    app: backend
-    color: blue  # Match deployment.color
+    color: blue  # Match deployment.color (validated by the template)
 
 ingress:
   enabled: true
@@ -52,8 +56,10 @@ ingress:
     cert-manager.io/cluster-issuer: "letsencrypt-prod"
     nginx.ingress.kubernetes.io/ssl-redirect: "true"
     nginx.ingress.kubernetes.io/rate-limit: "100"
+  hostnamePrefix: api
+  defaultDomain: rivalapexmediation.com
   hosts:
-    - host: api.rivalapexmediation.com
+    - host: ""
       paths:
         - path: /
           pathType: Prefix
@@ -173,14 +179,14 @@ migrations:
   enabled: true
   image:
     repository: ghcr.io/rivalapexmediation/backend
-    tag: "latest"
+    tag: ""
   restartPolicy: Never
   backoffLimit: 3
   activeDeadlineSeconds: 300
 
 # Service monitor for Prometheus
 serviceMonitor:
-  enabled: false
+  enabled: true
   interval: 30s
   path: /metrics
   labels: {}
