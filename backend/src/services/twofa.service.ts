@@ -5,11 +5,30 @@ import logger from '../utils/logger';
 import { AppDataSource } from '../database';
 import { TwoFactorAuth } from '../database/entities/twoFactorAuth.entity';
 import { User } from '../database/entities/user.entity';
+import { AuditTwofa } from '../database/entities/auditTwofa.entity';
+import { aesGcmEncrypt, aesGcmDecrypt, md5_16 } from '../utils/crypto';
 
 const tfaRepository = AppDataSource.getRepository(TwoFactorAuth);
 const userRepository = AppDataSource.getRepository(User);
+const auditRepository = AppDataSource.getRepository(AuditTwofa);
 
 const maskSecret = (secret: string) => secret.replace(/.(?=.{4})/g, '*');
+
+type AuditCtx = { actorEmail?: string | null; ip?: string | null };
+
+async function writeAudit(userId: string, action: 'enroll' | 'enable' | 'regen' | 'disable', ctx?: AuditCtx) {
+  try {
+    const row = auditRepository.create({
+      user: { id: userId } as any,
+      action,
+      actorEmail: ctx?.actorEmail ?? null,
+      ipHash: ctx?.ip ? md5_16(ctx.ip) : null,
+    });
+    await auditRepository.save(row);
+  } catch (e) {
+    logger.warn('Failed to write 2FA audit row', { userId, action, error: (e as Error).message });
+  }
+}
 
 export const twofaService = {
   async isEnabled(userId: string): Promise<boolean> {
@@ -17,29 +36,65 @@ export const twofaService = {
     return tfaRecord?.enabled === true;
   },
 
-  async enroll(userId: string, email: string, issuer = 'ApexMediation') {
+  async enroll(userId: string, email: string, issuer = 'ApexMediation', auditCtx?: AuditCtx) {
     const user = await userRepository.findOneBy({ id: userId });
     if (!user) throw new Error('User not found');
 
     let tfaRecord = await tfaRepository.findOne({ where: { user: { id: userId } } });
     if (!tfaRecord) {
       const secret = authenticator.generateSecret();
-      tfaRecord = tfaRepository.create({ user, secret, enabled: false, backupCodes: [] });
+      try {
+        const ct = aesGcmEncrypt(secret);
+        tfaRecord = tfaRepository.create({ user, secret: null, secretCiphertext: JSON.stringify(ct), enabled: false, backupCodes: [] });
+      } catch (e) {
+        // Fallback to legacy plaintext if APP_KMS_KEY is not configured
+        logger.warn('APP_KMS_KEY not set; storing 2FA secret in legacy plaintext column (dev only).');
+        tfaRecord = tfaRepository.create({ user, secret, secretCiphertext: null, enabled: false, backupCodes: [] });
+      }
+    } else if (!tfaRecord.secretCiphertext && tfaRecord.secret) {
+      // Backfill: if legacy plaintext secret exists, attempt to encrypt it now
+      try {
+        const ct = aesGcmEncrypt(tfaRecord.secret);
+        tfaRecord.secret = null;
+        tfaRecord.secretCiphertext = JSON.stringify(ct);
+      } catch (e) {
+        // Keep legacy secret if encryption unavailable
+        logger.warn('2FA encryption unavailable; continuing with legacy plaintext secret for this record.');
+      }
     }
     
     await tfaRepository.save(tfaRecord);
 
-    const otpauthUrl = authenticator.keyuri(email, issuer, tfaRecord.secret);
+    let secret: string;
+    try {
+      secret = tfaRecord.secretCiphertext
+        ? aesGcmDecrypt(JSON.parse(tfaRecord.secretCiphertext))
+        : (tfaRecord.secret as string);
+    } catch (e) {
+      // Decryption failed (likely missing key); fall back to legacy secret if present
+      secret = (tfaRecord.secret as string);
+    }
+
+    const otpauthUrl = authenticator.keyuri(email, issuer, secret);
     const qrDataUrl = await qrcode.toDataURL(otpauthUrl);
     logger.info('2FA enroll started', { userId, issuer });
-    return { otpauthUrl, qrDataUrl, maskedSecret: maskSecret(tfaRecord.secret) };
+    await writeAudit(userId, 'enroll', auditCtx);
+    return { otpauthUrl, qrDataUrl, maskedSecret: maskSecret(secret) };
   },
 
-  async verifyAndEnable(userId: string, token: string): Promise<{ backupCodes: string[] }> {
+  async verifyAndEnable(userId: string, token: string, auditCtx?: AuditCtx): Promise<{ backupCodes: string[] }> {
     const tfaRecord = await tfaRepository.findOne({ where: { user: { id: userId } }, relations: ['user'] });
     if (!tfaRecord) throw new Error('No enrollment in progress');
 
-    const ok = authenticator.verify({ token, secret: tfaRecord.secret });
+    let secret: string;
+    try {
+      secret = tfaRecord.secretCiphertext
+        ? aesGcmDecrypt(JSON.parse(tfaRecord.secretCiphertext))
+        : (tfaRecord.secret as string);
+    } catch (e) {
+      secret = (tfaRecord.secret as string);
+    }
+    const ok = authenticator.verify({ token, secret });
     if (!ok) throw new Error('Invalid token');
 
     const codes = Array.from({ length: 10 }, () =>
@@ -53,6 +108,7 @@ export const twofaService = {
     await tfaRepository.save(tfaRecord);
 
     logger.info('2FA enabled', { userId });
+    await writeAudit(userId, 'enable', auditCtx);
     return { backupCodes: codes };
   },
 
@@ -60,7 +116,15 @@ export const twofaService = {
     const tfaRecord = await tfaRepository.findOne({ where: { user: { id: userId } } });
     if (!tfaRecord) return false;
 
-    if (authenticator.check(code, tfaRecord.secret)) return true;
+    let secret: string;
+    try {
+      secret = tfaRecord.secretCiphertext
+        ? aesGcmDecrypt(JSON.parse(tfaRecord.secretCiphertext))
+        : (tfaRecord.secret as string);
+    } catch (e) {
+      secret = (tfaRecord.secret as string);
+    }
+    if (authenticator.check(code, secret)) return true;
 
     for (let i = 0; i < tfaRecord.backupCodes.length; i++) {
       const hashedCode = tfaRecord.backupCodes[i];
@@ -74,7 +138,7 @@ export const twofaService = {
     return false;
   },
 
-  async regenerateBackupCodes(userId: string): Promise<{ backupCodes: string[] }> {
+  async regenerateBackupCodes(userId: string, auditCtx?: AuditCtx): Promise<{ backupCodes: string[] }> {
     const tfaRecord = await tfaRepository.findOne({ where: { user: { id: userId } } });
     if (!tfaRecord || !tfaRecord.enabled) throw new Error('2FA not enabled');
 
@@ -86,10 +150,11 @@ export const twofaService = {
     await tfaRepository.save(tfaRecord);
 
     logger.info('2FA backup codes regenerated', { userId });
+    await writeAudit(userId, 'regen', auditCtx);
     return { backupCodes: codes };
   },
 
-  async disable(userId: string) {
+  async disable(userId: string, auditCtx?: AuditCtx) {
     const tfaRecord = await tfaRepository.findOne({ where: { user: { id: userId } } });
     if (!tfaRecord) return;
 
@@ -98,6 +163,7 @@ export const twofaService = {
     await tfaRepository.save(tfaRecord);
     
     logger.info('2FA disabled', { userId });
+    await writeAudit(userId, 'disable', auditCtx);
   },
 };
 

@@ -1,8 +1,8 @@
-import { AdapterDefinition, AdapterBidRequest, AdapterBid, NoBid, AuctionContext } from './types';
+import { AdapterDefinition, AdapterBidRequest, AdapterBid, NoBid, AuctionContext, makeAbortError, isAbortError, validateAdapterBidRequest } from './types';
 import { rtbAdapterLatencySeconds, rtbAdapterTimeoutsTotal } from '../../../utils/prometheus';
 import { safeInc } from '../../../utils/metrics';
+import logger from '../../../utils/logger';
 
-const makeAbortError = () => { const e: any = new Error('Aborted'); e.name = 'AbortError'; return e; };
 const sleep = (ms: number, signal?: AbortSignal) => new Promise<void>((resolve, reject) => {
   const t = setTimeout(() => resolve(), ms);
   if (signal) {
@@ -29,6 +29,7 @@ export function mockAdmob(): AdapterDefinition {
         if (ctx.signal.aborted) {
           throw makeAbortError();
         }
+        validateAdapterBidRequest(req);
         await sleep(latency, ctx.signal);
         // Very simple mock: bid only if floor <= 1.2
         const base = 1.5;
@@ -44,10 +45,11 @@ export function mockAdmob(): AdapterDefinition {
           latencyMs: latency,
         };
       } catch (e: any) {
-        if ((e as any)?.name === 'AbortError') {
+        if (isAbortError(e)) {
           safeInc(rtbAdapterTimeoutsTotal, { adapter: name });
           return { nobid: true, reason: 'TIMEOUT' };
         }
+        logger.warn('[RTB][mockAdmob] requestBid error', { error: (e as Error)?.message, latency, timeoutMs, placementId: (req as any)?.placementId });
         return { nobid: true, reason: 'ERROR' };
       } finally {
         try { end({ adapter: name }); } catch (e3) { void e3; }

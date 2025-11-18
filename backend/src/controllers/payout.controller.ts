@@ -14,7 +14,7 @@ const updateSettingsSchema = z.object({
   threshold: z.number().min(0),
   method: z.enum(['stripe', 'paypal', 'wire']),
   currency: z.string().length(3),
-  schedule: z.enum(['weekly', 'biweekly', 'monthly']),
+  schedule: z.enum(['monthly']), // NET 30 payment terms only
 });
 
 const parseQueryParam = (value: unknown): string | undefined => {

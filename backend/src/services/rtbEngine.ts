@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import { auctionLatencySeconds } from '../utils/prometheus';
+import { signToken } from '../utils/signing';
 
 export interface BidRequest {
   requestId: string;
@@ -84,6 +85,19 @@ export const executeBid = async (request: BidRequest): Promise<BidResponse | nul
 
     const bidId = crypto.randomUUID();
 
+    // Build authenticated tracking URLs using signed tokens
+    const baseTrack = process.env.TRACK_BASE_URL || 'https://track.apexmediation.com';
+    const tokenClaims = {
+      bidId,
+      placementId: request.placementId,
+      adapter: winner.adapter,
+      cpm: winner.cpm,
+      currency: 'USD' as const,
+      nonce: crypto.randomBytes(6).toString('base64url'),
+    };
+    const impToken = signToken({ ...tokenClaims, purpose: 'imp' as const }, 600);
+    const clickToken = signToken({ ...tokenClaims, purpose: 'click' as const }, 600);
+
     return {
       requestId: request.requestId,
       bidId,
@@ -93,14 +107,15 @@ export const executeBid = async (request: BidRequest): Promise<BidResponse | nul
       creativeUrl: winner.creativeUrl,
       ttlSeconds: 300,
       tracking: {
-        impression: `https://track.apexmediation.com/${bidId}/imp`,
-        click: `https://track.apexmediation.com/${bidId}/click`,
+        impression: `${baseTrack}/${bidId}/imp?t=${impToken}`,
+        click: `${baseTrack}/${bidId}/click?t=${clickToken}`,
       },
       payload: {
         waterfallRank: 1,
         decisionTimeMs: 42,
         metadata: winner.metadata || {},
         originalBidCount: eligibleBids.length,
+        consentEcho: request.signal && (request.signal as any).consent ? (request.signal as any).consent : undefined,
       },
     };
   } finally {

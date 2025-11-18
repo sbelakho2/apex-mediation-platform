@@ -6,9 +6,11 @@
   "scripts": {
     "dev": "nodemon --exec ts-node src/index.ts",
     "dev:secure": "infisical run --env=development -- nodemon --exec ts-node src/index.ts",
+    "dev:worker:analytics": "nodemon --exec ts-node src/workers/analyticsWorker.ts",
     "build": "tsc",
     "start": "node dist/src/index.js",
     "start:secure": "infisical run --env=production -- node dist/src/index.js",
+    "worker:analytics": "node dist/src/workers/analyticsWorker.js",
     "test": "jest --passWithNoTests",
     "test:secure": "infisical run --env=development -- jest --passWithNoTests",
     "test:fast": "jest --passWithNoTests",

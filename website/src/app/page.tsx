@@ -83,7 +83,7 @@ function HeroSection() {
 
         <div className="flex flex-wrap justify-center gap-3">
           <HeroPill>Unity • ironSource • AppLovin</HeroPill>
-          <HeroPill>Weekly payouts</HeroPill>
+          <HeroPill>NET 30 payment terms</HeroPill>
           <HeroPill>Fraud detection &lt;5ms</HeroPill>
           <HeroPill>SDKs for iOS, Android, Unity</HeroPill>
         </div>
@@ -250,7 +250,7 @@ function FeaturesSection() {
           />
           <FeatureCard
             emoji="💸"
-            title="Weekly payouts"
+            title="NET 30 payment terms"
             description="Wire, SEPA, PayPal or Stripe—no minimums, no waiting, just predictable cash flow."
           />
           <FeatureCard

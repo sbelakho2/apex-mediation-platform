@@ -241,7 +241,7 @@ Body: {
                   <li>✅ Verify GDPR/CCPA consent flow for European and Californian users.</li>
                   <li>✅ Test rewarded and interstitial placements using device test mode.</li>
                   <li>✅ Enable analytics streaming to your data warehouse of choice.</li>
-                  <li>✅ Configure weekly payout preferences in <Link href="/dashboard/settings?tab=payment" className="font-bold underline">Settings → Payment Methods</Link>.</li>
+                  <li>✅ View payout schedule and invoices (NET 30 payment terms) in <Link href="/dashboard/settings?tab=payment" className="font-bold underline">Settings → Payment Methods</Link>.</li>
                 </ul>
               </section>
 
@@ -384,7 +384,7 @@ Body: {
             <section className="rounded-3xl bg-white p-8 text-primary-blue shadow-xl ring-1 ring-primary-blue/10">
               <h2 className="text-h3 font-bold uppercase">Billing & Payouts</h2>
               <p className="mt-4 text-sm text-gray-700">
-                Weekly payouts are processed every Tuesday. Bank transfers can take up to 48 hours. View invoices and remittance files in <Link href="/dashboard/settings?tab=payment" className="font-bold underline">Settings → Payment Methods</Link>.
+                Monthly payouts with NET 30 terms - invoiced on the 1st of each month, payment processed 30 days later. Bank transfers can take 2-5 business days. View invoices and remittance files in <Link href="/dashboard/settings?tab=payment" className="font-bold underline">Settings → Payment Methods</Link>.
               </p>
               <p className="mt-4 text-sm text-gray-700">To update banking info, submit a signed W-9/W-8BEN to <a href="mailto:billing@apexmediation.com" className="underline">billing@apexmediation.com</a>.</p>
             </section>
@@ -625,7 +625,7 @@ Body: {
               },
               {
                 date: '2025-09-05',
-                title: 'Weekly payouts + in-app billing view',
+                title: 'NET 30 payment terms + in-app billing view',
                 items: ['Upload tax forms directly in Settings', 'Real-time payout timeline widget', 'Webhook for payout status changes'],
               },
             ].map((entry) => (

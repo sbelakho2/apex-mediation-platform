@@ -10,18 +10,24 @@
 
 import { createClient, ClickHouseClient } from '@clickhouse/client';
 import logger from './logger';
+import config from '../config/index';
 
 let client: ClickHouseClient | null = null;
 
 const resolveClickHouseUrl = (): string => {
-  if (process.env.CLICKHOUSE_URL) {
-    return process.env.CLICKHOUSE_URL;
-  }
+  const url = process.env.CLICKHOUSE_URL?.trim();
+  if (url) return url;
 
   const host = process.env.CLICKHOUSE_HOST?.trim();
-  const port = process.env.CLICKHOUSE_PORT || '8123';
+  const port = (process.env.CLICKHOUSE_PORT || '8123').trim();
 
   if (!host) {
+    // If CH is required in this environment, fail fast with actionable message
+    if (config.clickhouseRequired) {
+      const hint = 'Set CLICKHOUSE_URL or CLICKHOUSE_HOST/CLICKHOUSE_PORT (default 8123).';
+      throw new Error(`ClickHouse configuration required but missing. ${hint}`);
+    }
+    // Not strictly required: fall back to localhost to support dev
     return `http://localhost:${port}`;
   }
 

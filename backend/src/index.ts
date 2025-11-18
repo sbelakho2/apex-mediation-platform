@@ -17,6 +17,7 @@ import { authRateLimiter } from './middleware/redisRateLimiter';
 import swaggerUi from 'swagger-ui-express';
 import { getOpenAPIDocument } from './utils/openapi';
 import csrfProtection from './middleware/csrf';
+import metricsRouteMiddleware from './middleware/metricsRouteMiddleware';
 
 // Validate environment variables (fails fast with helpful errors)
 import { env } from './config/env';
@@ -70,6 +71,8 @@ app.use(cookieParser());
 
 // Request context middleware (must be early to capture all logs)
 app.use(requestContextMiddleware);
+// Record RED metrics with low‑cardinality route_id labels
+app.use(metricsRouteMiddleware);
 
 // CSRF protection (double-submit cookie). Safe methods are ignored by csurf.
 // Must be after cookie parser and before routes.

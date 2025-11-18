@@ -15,7 +15,7 @@ export interface PayoutSettingsInput {
   threshold: number;
   method: 'stripe' | 'paypal' | 'wire';
   currency: string;
-  schedule: 'weekly' | 'biweekly' | 'monthly';
+  schedule: 'monthly'; // NET 30 payment terms only
 }
 
 export interface PayoutSettingsRow extends PayoutSettingsInput {
@@ -88,7 +88,7 @@ export const fetchPayoutSettings = async (
     threshold: string | number | null;
     method: 'stripe' | 'paypal' | 'wire';
     currency: string;
-    schedule: 'weekly' | 'biweekly' | 'monthly';
+    schedule: 'monthly'; // NET 30 payment terms only
     updated_at: Date;
   }>(
     `SELECT threshold, method, currency, schedule, updated_at
@@ -118,7 +118,7 @@ export const upsertPayoutSettings = async (
     threshold: string | number | null;
     method: 'stripe' | 'paypal' | 'wire';
     currency: string;
-    schedule: 'weekly' | 'biweekly' | 'monthly';
+    schedule: 'monthly'; // NET 30 payment terms only
     updated_at: Date;
   }>(
     `INSERT INTO payout_settings (publisher_id, threshold, method, currency, schedule, updated_at)

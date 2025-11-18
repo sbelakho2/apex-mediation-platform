@@ -74,12 +74,37 @@ const EXPLORATION_RATE = 0.1; // 10% of time use exploration
 
 export class ThompsonSamplingService {
   private experiments: Map<string, BidFloorExperiment> = new Map();
+  private rand: () => number;
+  private lastUpdateAt: Map<string, number> = new Map();
 
   constructor() {
+    // Seeded RNG to avoid flakiness and allow deterministic tests
+    const seedStr = process.env.THOMPSON_RNG_SEED || '';
+    const seed = seedStr ? this.hashSeed(seedStr) : Date.now();
+    this.rand = this.mulberry32(seed);
     // Initialize from database
     this.loadExperiments().catch((error) => {
       logger.error('Failed to load Thompson sampling experiments', { error });
     });
+  }
+
+  private hashSeed(str: string): number {
+    let h = 2166136261 >>> 0;
+    for (let i = 0; i < str.length; i++) {
+      h ^= str.charCodeAt(i);
+      h = Math.imul(h, 16777619);
+    }
+    return h >>> 0;
+  }
+
+  private mulberry32(a: number) {
+    let t = a >>> 0;
+    return function() {
+      t += 0x6D2B79F5;
+      let x = Math.imul(t ^ (t >>> 15), 1 | t);
+      x ^= x + Math.imul(x ^ (x >>> 7), 61 | x);
+      return ((x ^ (x >>> 14)) >>> 0) / 4294967296;
+    };
   }
 
   /**
@@ -105,7 +130,7 @@ export class ThompsonSamplingService {
    */
   private sampleGamma(shape: number, scale: number): number {
     if (shape < 1) {
-      return this.sampleGamma(shape + 1, scale) * Math.pow(Math.random(), 1 / shape);
+      return this.sampleGamma(shape + 1, scale) * Math.pow(this.rand(), 1 / shape);
     }
 
     const d = shape - 1 / 3;
@@ -119,7 +144,7 @@ export class ThompsonSamplingService {
       } while (v <= 0);
 
       v = v * v * v;
-      const u = Math.random();
+      const u = this.rand();
       const xSquared = x * x;
 
       if (u < 1 - 0.0331 * xSquared * xSquared) {
@@ -136,8 +161,9 @@ export class ThompsonSamplingService {
    * Generate normally distributed random number (Box-Muller transform)
    */
   private normalRandom(): number {
-    const u1 = Math.random();
-    const u2 = Math.random();
+    let u1 = this.rand();
+    if (u1 <= 1e-12) u1 = 1e-12; // avoid log(0)
+    const u2 = this.rand();
     return Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
   }
 
@@ -167,11 +193,11 @@ export class ThompsonSamplingService {
 
     // Exploration vs. Exploitation
     const shouldExplore =
-      totalTrials < MIN_TRIALS_BEFORE_EXPLORATION || Math.random() < EXPLORATION_RATE;
+      totalTrials < MIN_TRIALS_BEFORE_EXPLORATION || this.rand() < EXPLORATION_RATE;
 
     if (shouldExplore) {
       // Random exploration
-      const randomIndex = Math.floor(Math.random() * experiment.candidates.length);
+      const randomIndex = Math.floor(this.rand() * experiment.candidates.length);
       logger.debug('Thompson sampling: exploration mode', {
         adapterId,
         geo,
@@ -212,7 +238,25 @@ export class ThompsonSamplingService {
    * Update bid floor experiment with new data
    */
   async updateBidFloor(update: BidFloorUpdate): Promise<void> {
+    // Basic input validation & rate limiting
+    if (!update || typeof update !== 'object') return;
+    const { adapterId, geo, format } = update;
+    if (!adapterId || !geo || !format) return;
+    if (!Number.isFinite(update.bidFloor) || update.bidFloor < 0) return;
+    if (!Number.isFinite(update.bidAmount) || update.bidAmount < 0) return;
+    if (typeof update.won !== 'boolean') return;
+    if (!Number.isFinite(update.revenue) || update.revenue < 0) return;
+
     const key = this.getExperimentKey(update.adapterId, update.geo, update.format);
+
+    const now = Date.now();
+    const minMs = Math.max(100, +(process.env.THOMPSON_UPDATE_MIN_MS || '250'));
+    const last = this.lastUpdateAt.get(key) || 0;
+    if (now - last < minMs) {
+      // Skip frequent updates for same key to reduce DB churn
+      return;
+    }
+
     const experiment = this.experiments.get(key);
 
     if (!experiment) {
@@ -235,9 +279,13 @@ export class ThompsonSamplingService {
       return;
     }
 
-    // Update Beta distribution parameters
+    // Revenue-aware updates: treat Beta params as real-valued pseudo-counts
+    // Weight successes by revenue relative to bid amount (capped)
+    const denom = update.bidAmount > 0 ? update.bidAmount : 1;
+    const revenueWeightRaw = update.revenue / denom;
+    const revenueWeight = isFinite(revenueWeightRaw) ? Math.max(0, Math.min(5, revenueWeightRaw)) : 0;
     if (update.won) {
-      candidate.alphaSuccesses += 1;
+      candidate.alphaSuccesses += 1 + revenueWeight;
     } else {
       candidate.betaFailures += 1;
     }
@@ -247,6 +295,7 @@ export class ThompsonSamplingService {
     // Persist to database
     await this.saveExperiment(experiment);
 
+    this.lastUpdateAt.set(key, now);
     logger.info('Bid floor experiment updated', {
       adapterId: update.adapterId,
       geo: update.geo,
@@ -255,6 +304,8 @@ export class ThompsonSamplingService {
       won: update.won,
       alphaSuccesses: candidate.alphaSuccesses,
       betaFailures: candidate.betaFailures,
+      revenue: update.revenue,
+      bidAmount: update.bidAmount,
     });
   }
 

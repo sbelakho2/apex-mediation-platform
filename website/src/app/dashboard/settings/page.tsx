@@ -227,7 +227,7 @@ function PaymentTab() {
               Next Payout
             </h2>
             <p className="text-white text-3xl font-bold mb-1">$8,934.18</p>
-            <p className="text-white text-sm">Scheduled for Friday, 2025-11-08</p>
+            <p className="text-white text-sm">Monthly payout (NET 30)</p>
           </div>
           <BanknotesIcon className="w-12 h-12 text-sunshine-yellow" />
         </div>
@@ -265,8 +265,7 @@ function PaymentTab() {
           <div>
             <label className="block text-sm font-bold text-primary-blue mb-2">Payout Schedule</label>
             <select className="input w-full">
-              <option>Weekly (Fridays)</option>
-              <option>Bi-weekly (1st and 15th)</option>
+              <option>Monthly (NET 30)</option>
               <option>Monthly (1st of month)</option>
             </select>
           </div>
@@ -370,7 +369,7 @@ function NotificationsTab() {
         <div className="space-y-4">
           <NotificationToggle
             title="Revenue Reports"
-            description="Weekly revenue summaries and performance insights"
+            description="Monthly revenue summaries and performance insights"
             defaultChecked
           />
           <NotificationToggle

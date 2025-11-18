@@ -11,7 +11,7 @@ export async function enroll(req: Request, res: Response) {
   }
   const email = (req.user as any)?.email || 'user@example.com';
   const issuer = process.env.TWOFA_ISSUER || 'ApexMediation';
-  const data = await twofaService.enroll(userId, email, issuer);
+  const data = await twofaService.enroll(userId, email, issuer, { actorEmail: email, ip: req.ip || null });
   // Labels must match metric definition: { event, outcome }
   safeInc(twofaEventsTotal, { event: 'enroll', outcome: 'success' });
   return res.json({ data });
@@ -24,7 +24,7 @@ export async function verify(req: Request, res: Response) {
   }
   const token = String(req.body?.token || '');
   try {
-    const data = await twofaService.verifyAndEnable(userId, token);
+    const data = await twofaService.verifyAndEnable(userId, token, { actorEmail: (req.user as any)?.email, ip: req.ip || null });
     safeInc(twofaEventsTotal, { event: 'verify', outcome: 'success' });
     return res.json({ data });
   } catch (e: any) {
@@ -40,7 +40,7 @@ export async function regenerateBackupCodes(req: Request, res: Response) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
   try {
-    const data = await twofaService.regenerateBackupCodes(userId);
+    const data = await twofaService.regenerateBackupCodes(userId, { actorEmail: (req.user as any)?.email, ip: req.ip || null });
     safeInc(twofaEventsTotal, { event: 'regen', outcome: 'success' });
     return res.json({ data });
   } catch (e: any) {
@@ -68,7 +68,7 @@ export async function disable(req: Request, res: Response) {
     // Verify provided 2FA code or backup code
     const ok2fa = await twofaService.verifyTokenOrBackupCode(userId, code);
     if (!ok2fa) return res.status(400).json({ error: 'Invalid 2FA code' });
-    await twofaService.disable(userId);
+    await twofaService.disable(userId, { actorEmail: (req.user as any)?.email, ip: req.ip || null });
     safeInc(twofaEventsTotal, { event: 'disable', outcome: 'success' });
     return res.json({ data: { disabled: true } });
   } catch (e: any) {

@@ -55,4 +55,16 @@ router.post(
   billingController.reconcileBilling
 );
 
+/**
+ * POST /api/v1/billing/revenue-share/calculate
+ * Calculate revenue share with marginal tier breakdown
+ */
+router.post('/revenue-share/calculate', billingController.calculateRevenueShare);
+
+/**
+ * GET /api/v1/billing/tiers
+ * Get revenue share tier configuration
+ */
+router.get('/tiers', billingController.getTiers);
+
 export default router;

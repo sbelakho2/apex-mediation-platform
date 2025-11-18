@@ -3,7 +3,7 @@
 _Last updated: 2025-11-18_  
 _Owner: Finance / Billing Team_  
 _Review Cycle: Quarterly or when payment terms change (next review: 2026-02-18)_  
-_Status: Draft - SLA and late fee policy pending_
+_Status: Active_
 
 > **FIX-10 governance:** This guide documents current billing practices. For actual implementation status, see `docs/Internal/Deployment/PROJECT_STATUS.md` and `docs/Internal/Development/FIXES.md` (FIX-02 covers billing). Payment terms are subject to change; customers will be notified 30 days in advance of material changes.
 
@@ -16,52 +16,38 @@ Complete guide to payments, invoicing, and financial operations for ApexMediatio
 3. [Invoicing Process](#invoicing-process)
 4. [Payment Methods](#payment-methods)
 5. [Tax Information](#tax-information)
-6. [Minimum Payout](#minimum-payout)
-7. [Currency & Exchange Rates](#currency--exchange-rates)
-8. [Disputes & Adjustments](#disputes--adjustments)
-9. [Financial Reporting](#financial-reporting)
+6. [Currency & Exchange Rates](#currency--exchange-rates)
+7. [Disputes & Adjustments](#disputes--adjustments)
+8. [Financial Reporting](#financial-reporting)
 
 ---
 
 ## Payment Schedule
 
-### Weekly Payouts
+### Monthly Payouts with NET 30 Terms
 
-**ApexMediation pays weekly** - unlike competitors with monthly cycles or high minimums.
+**ApexMediation uses industry-standard NET 30 payment terms** - payment due 30 days after invoice.
 
 **Payment Schedule:**
 ```
-Monday-Sunday:    Revenue earned
-Following Friday: Payment issued
-+2-5 business days: Payment received
+Calendar month:          Revenue earned (e.g., Oct 1-31)
+1st of following month:  Invoice issued (e.g., Nov 1)
+NET 30 from invoice:     Payment due date (e.g., Nov 30)
+Due date:                Payment processed
++2-5 business days:      Payment received
 ```
 
 **Example:**
 ```
-Oct 28 - Nov 3: Earn $1,234.56
-Nov 8 (Friday):  Payment issued
-Nov 10-13:      Payment received in your account
+Oct 1-31:       Earn $12,345.67
+Nov 1:          Invoice issued
+Nov 30:         Payment due (NET 30)
+Dec 2-5:        Payment received in your account
 ```
 
-### Payment Calendar
+### Minimum Payout Threshold
 
-**Dashboard → Billing → Payment Calendar**
-
-```
-November 2025 Payment Schedule
-
-┌─────────┬──────────────┬────────────┬────────────┐
-│ Week    │ Earn Period  │ Pay Date   │ Amount     │
-├─────────┼──────────────┼────────────┼────────────┤
-│ Week 1  │ Oct 28-Nov 3 │ Nov 8      │ $1,234.56  │
-│ Week 2  │ Nov 4-10     │ Nov 15     │ $1,156.78  │
-│ Week 3  │ Nov 11-17    │ Nov 22     │ $1,289.34  │
-│ Week 4  │ Nov 18-24    │ Nov 29     │ $1,345.67  │
-│ Week 5  │ Nov 25-Dec 1 │ Dec 6      │ Pending    │
-└─────────┴──────────────┴────────────┴────────────┘
-
-Next Payment: 2025-11-15 ($1,156.78)
-```
+**€100 minimum threshold** - standard to cover payment processing costs. Earnings below threshold automatically roll over to the next month and never expire.
 
 ### Holiday Schedule
 
@@ -77,63 +63,86 @@ Next Payment: 2025-11-15 ($1,156.78)
 
 ## Revenue Sharing
 
-### Standard Plan (15%)
+### Revenue Base Definition
 
-**ApexMediation fee:** 15% of ad revenue
-**Your share:** 85% of ad revenue
+**"Your Monthly Revenue"** = Publisher-recognized, IVT-adjusted revenue after network clawbacks for the period, aggregated at the account level across all apps & platforms (mobile, web, CTV).
 
-**Example:**
+**Key points:**
+- Invalid traffic (IVT/fraud) is filtered out
+- Network clawbacks/adjustments applied
+- Negative adjustments carry forward (prevents gaming)
+- Aggregated across all your apps and platforms
+- Calculated monthly for billing period
+
+### Marginal Tier Pricing
+
+**We use marginal (banded) tiers** - each revenue slice is charged at its tier rate. You never lose money by earning more.
+
+| Revenue Band | Our Share | You Keep |
+|--------------|-----------|----------|
+| €0 - €10,000 | 15% | 85% |
+| €10,001 - €50,000 | 12% | 88% |
+| €50,001 - €100,000 | 10% | 90% |
+| €100,000+ | 8% | 92% |
+
+**Example at €1,000 revenue:**
 ```
-Ad revenue:    $1,000.00
-ApexMediation fee:  -$150.00 (15%)
-Your payment:   $850.00 (85%)
-```
-
-### Premium Plan (12%)
-
-**Requirements:**
-- $10,000+ monthly revenue
-- 500K+ monthly active users
-- 6+ months with ApexMediation
-
-**ApexMediation fee:** 12% of ad revenue
-**Your share:** 88% of ad revenue
-
-**Example:**
-```
-Ad revenue:    $10,000.00
-ApexMediation fee:  -$1,200.00 (12%)
-Your payment:   $8,800.00 (88%)
-
-Savings vs Standard: $300/month
-```
-
-### Enterprise Plan (10%)
-
-**Requirements:**
-- $50,000+ monthly revenue
-- 2M+ monthly active users
-- 12+ months with ApexMediation
-- Dedicated account manager
-
-**ApexMediation fee:** 10% of ad revenue
-**Your share:** 90% of ad revenue
-
-**Example:**
-```
-Ad revenue:    $50,000.00
-ApexMediation fee:  -$5,000.00 (10%)
-Your payment:  $45,000.00 (90%)
-
-Savings vs Standard: $2,500/month
-Savings vs Premium: $1,000/month
+Revenue:           €1,000.00
+Band 1 (€1,000 @ 15%):  -€150.00
+───────────────────────────
+Your payment:      €850.00
+Effective rate:    15%
 ```
 
-### Upgrade Process
+**Example at €25,000 revenue:**
+```
+Revenue:                      €25,000.00
+Band 1 (€10,000 @ 15%):        -€1,500.00
+Band 2 (€15,000 @ 12%):        -€1,800.00
+──────────────────────────────────
+Total ApexMediation fee:        -€3,300.00
+Your payment:                 €21,700.00
+Effective rate:               13.2%
+```
 
-**Automatic upgrade:** When you meet criteria, we'll email you and upgrade your account.
+**Example at €120,000 revenue:**
+```
+Revenue:                      €120,000.00
+Band 1 (€10,000 @ 15%):         -€1,500.00
+Band 2 (€40,000 @ 12%):         -€4,800.00
+Band 3 (€50,000 @ 10%):         -€5,000.00
+Band 4 (€20,000 @ 8%):          -€1,600.00
+──────────────────────────────────
+Total ApexMediation fee:        -€12,900.00
+Your payment:                €107,100.00
+Effective rate:               10.75%
+```
 
-**Manual request:** Contact sales@apexmediation.ee if you believe you qualify.
+### CTV/Web Video Premium
+
+**CTV/OTT and web video** adds **+2 percentage points** to each tier rate.
+
+| Revenue Band | Standard | CTV/Web |
+|--------------|----------|---------|
+| €0 - €10,000 | 15% | 17% |
+| €10,001 - €50,000 | 12% | 14% |
+| €50,001 - €100,000 | 10% | 12% |
+| €100,000+ | 8% | 10% |
+
+**Example at €120,000 CTV revenue:**
+```
+Revenue:                      €120,000.00
+Band 1 (€10,000 @ 17%):         -€1,700.00
+Band 2 (€40,000 @ 14%):         -€5,600.00
+Band 3 (€50,000 @ 12%):         -€6,000.00
+Band 4 (€20,000 @ 10%):         -€2,000.00
+──────────────────────────────────
+Total ApexMediation fee:        -€15,300.00
+Your payment:                €104,700.00
+Effective rate:               12.75%
+```
+
+We track CTV/web video revenue automatically. Mixed traffic is properly segmented - mobile display ads use standard rates, CTV/web video uses premium rates.
 
 ---
 
@@ -141,7 +150,7 @@ Savings vs Premium: $1,000/month
 
 ### Automatic Invoices
 
-**Every Friday:** Invoice generated automatically for previous week's revenue.
+**1st of each month:** Invoice generated automatically for previous month's revenue.
 
 **Dashboard → Billing → Invoices**
 
@@ -151,10 +160,10 @@ Recent Invoices
 ┌────────────────┬──────────────┬────────────┬──────────┐
 │ Invoice #      │ Period       │ Amount     │ Status   │
 ├────────────────┼──────────────┼────────────┼──────────┤
-│ INV-2025-11-01 │ Oct 28-Nov 3 │ $1,234.56  │ Paid ✅  │
-│ INV-2025-10-04 │ Oct 21-27    │ $1,156.78  │ Paid ✅  │
-│ INV-2025-10-03 │ Oct 14-20    │ $1,089.45  │ Paid ✅  │
-│ INV-2025-10-02 │ Oct 7-13     │ $945.67    │ Paid ✅  │
+│ INV-2025-11    │ Oct 2025     │ $12,345.67 │ Paid ✅  │
+│ INV-2025-10    │ Sep 2025     │ $11,567.89 │ Paid ✅  │
+│ INV-2025-09    │ Aug 2025     │ $10,894.56 │ Paid ✅  │
+│ INV-2025-08    │ Jul 2025     │ $9,456.78  │ Paid ✅  │
 └────────────────┴──────────────┴────────────┴──────────┘
 ```
 
@@ -164,7 +173,7 @@ Recent Invoices
 
 ```
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-                   AD STACK
+                   APEX MEDIATION
            Bel Consulting OÜ
        Reg: 16558645 | VAT: EE102569407
          Sepise 4-2, Tallinn, Estonia
@@ -172,10 +181,10 @@ Recent Invoices
 
 INVOICE
 
-Invoice #:      INV-2025-11-01
-Issue Date:     2025-11-08
-Due Date:       2025-11-08 (Immediate)
-Period:         October 28 - 2025-11-03
+Invoice #:      INV-2025-11
+Issue Date:     2025-11-01
+Due Date:       2025-11-30 (NET 30)
+Period:         October 1-31, 2025
 
 Bill To:
 [Your Company Name]
@@ -209,13 +218,19 @@ By Geography:
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-CALCULATION
+CALCULATION (Marginal Tier Pricing)
 
-Gross Ad Revenue:                      $1,452.42
-ApexMediation Service Fee (15%):            -$217.86
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Net Payment:                           $1,234.56
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Gross Ad Revenue:                      $14,523.89
+
+Marginal Tier Breakdown:
+  Band 1 ($10,000 @ 15%):              -$1,500.00
+  Band 2 ($4,523.89 @ 12%):            -$542.87
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Total ApexMediation Fee:                    -$2,042.87
+Net Payment:                           $12,481.02
+(Effective rate: 14.1%)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 VAT (if applicable):                   $0.00
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -223,9 +238,9 @@ TOTAL DUE:                             $1,234.56
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 Payment Status: PAID ✅
-Payment Date: 2025-11-08
-Payment Method: Bank Transfer
-Transaction ID: TXN-ABC123DEF456
+Payment Date: 2025-11-30
+Payment Method: Bank Transfer (SEPA)
+Transaction ID: TXN-202511-ABC123
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -244,12 +259,12 @@ Dashboard: https://console.apexmediation.ee/billing
 **API:**
 ```bash
 # Download invoice PDF
-curl "https://api.apexmediation.ee/v1/invoices/INV-2025-11-01/download?format=pdf" \
+curl "https://api.apexmediation.ee/v1/invoices/INV-2025-11/download?format=pdf" \
   -H "Authorization: Bearer YOUR_API_KEY" \
   > invoice.pdf
 
 # Download invoice CSV
-curl "https://api.apexmediation.ee/v1/invoices/INV-2025-11-01/download?format=csv" \
+curl "https://api.apexmediation.ee/v1/invoices/INV-2025-11/download?format=csv" \
   -H "Authorization: Bearer YOUR_API_KEY" \
   > invoice.csv
 ```
@@ -308,20 +323,6 @@ PayPal Fee:        -$36.13 (2.9% + $0.30)
 You Receive:       $1,198.43
 ```
 
-### Cryptocurrency (Coming Soon)
-
-**Planned support:**
-- Bitcoin (BTC)
-- Ethereum (ETH)
-- USDC (stablecoin)
-
-**Benefits:**
-- Lower fees (~1%)
-- Faster settlement (minutes)
-- Global accessibility
-
-**Waitlist:** Contact billing@apexmediation.ee
-
 ---
 
 ## Tax Information
@@ -367,15 +368,6 @@ TOTAL:                      $1,481.47
 - Remit to tax authority
 - Provide certificate to ApexMediation
 
-**Example (US withholding):**
-```
-Gross Payment:              $1,234.56
-US Withholding (30%):       -$370.37
-Net Transferred:            $864.19
-
-[Provide Form 1042-S to ApexMediation]
-```
-
 **Our support:**
 - We provide W-8BEN-E form (US)
 - Tax residence certificate (Estonia)
@@ -390,7 +382,7 @@ Net Transferred:            $864.19
 2025 Tax Year Summary
 
 Total Gross Revenue:        $63,456.78
-Total ApexMediation Fees:        -$9,518.52
+Total ApexMediation Fees:   -$9,518.52
 Total Net Payments:         $53,938.26
 
 VAT Charged (if applicable): $0.00
@@ -406,51 +398,17 @@ Payments by Quarter:
 
 ---
 
-## Minimum Payout
-
-### No Minimum!
-
-**Unlike competitors:**
-- Google AdMob: $100 minimum
-- Meta Audience Network: $100 minimum
-- Unity Ads: $100 minimum
-
-**ApexMediation: $0 minimum** ✅
-
-**We pay weekly regardless of amount.**
-
-**Why?**
-- Cash flow for small publishers
-- No waiting months to reach threshold
-- Fair and transparent
-
-**Example:**
-```
-Week 1: Earn $12.34  → Paid Friday
-Week 2: Earn $23.45  → Paid Friday
-Week 3: Earn $45.67  → Paid Friday
-
-No waiting for $100 threshold!
-```
-
----
-
 ## Currency & Exchange Rates
 
-### Primary Currency: USD
+### Primary Currency: EUR
 
-**All revenue reported in USD** (industry standard).
-
-**Why USD?**
-- Ad networks pay in USD
-- Industry standard
-- Simplifies comparison
+**All revenue reported in EUR** (European standard).
 
 ### Payout Currency
 
 **You choose payout currency:**
-- USD
 - EUR
+- USD
 - GBP
 - Other (on request)
 
@@ -461,9 +419,9 @@ No waiting for $100 threshold!
 
 **Example:**
 ```
-Revenue:           $1,234.56 USD
-Exchange Rate:     1 USD = 0.92 EUR (2025-11-08)
-Payout:            €1,135.79 EUR
+Revenue:           €1,234.56 EUR
+Exchange Rate:     1 EUR = 1.09 USD (2025-11-04)
+Payout:            $1,345.67 USD
 ```
 
 **Dashboard → Settings → Billing → Payout Currency**
@@ -476,18 +434,18 @@ Payout:            €1,135.79 EUR
 Recent Exchange Rates
 
 ┌─────────────┬──────────┬──────────────┐
-│ Date        │ USD/EUR  │ Source       │
+│ Date        │ EUR/USD  │ Source       │
 ├─────────────┼──────────┼──────────────┤
-│ 2025-11-08 │ 0.9200   │ ECB          │
-│ 2025-11-07 │ 0.9198   │ ECB          │
-│ 2025-11-06 │ 0.9205   │ ECB          │
-│ 2025-11-05 │ 0.9203   │ ECB          │
+│ 2025-11-04 │ 1.0900   │ ECB          │
+│ 2025-11-03 │ 1.0898   │ ECB          │
+│ 2025-11-02 │ 1.0905   │ ECB          │
+│ 2025-11-01 │ 1.0903   │ ECB          │
 └─────────────┴──────────┴──────────────┘
 ```
 
 **API:**
 ```bash
-curl "https://api.apexmediation.ee/v1/billing/exchange-rates?date=2025-11-08" \
+curl "https://api.apexmediation.ee/v1/billing/exchange-rates?date=2025-11-04" \
   -H "Authorization: Bearer YOUR_API_KEY"
 ```
 
@@ -506,29 +464,6 @@ curl "https://api.apexmediation.ee/v1/billing/exchange-rates?date=2025-11-08" \
    - Actual amount
    - Explanation
 
-**Example email:**
-```
-Subject: Invoice Discrepancy - INV-2025-11-01
-
-Hi ApexMediation Billing Team,
-
-I noticed a discrepancy in invoice INV-2025-11-01:
-
-- Expected revenue: $1,500.00
-- Invoiced revenue: $1,234.56
-- Difference: -$265.44
-
-According to my dashboard analytics, I had:
-- 1,500,000 impressions
-- $1.00 eCPM average
-- Expected: $1,500
-
-Can you investigate?
-
-Thanks,
-[Your Name]
-```
-
 ### Response Time
 
 **Initial response:** Within 24 hours
@@ -540,9 +475,10 @@ Thanks,
    - We filter fraud/invalid clicks
    - Refunds from ad networks
    - Typically 1-3% of traffic
+   - Deducted before revenue share calculation
 
 2. **Currency Exchange**
-   - Some networks pay in EUR/GBP
+   - Some networks pay in different currencies
    - Exchange rate fluctuations
    - Check "Revenue Breakdown" in invoice
 
@@ -551,10 +487,17 @@ Thanks,
    - Previous week's adjustments
    - Check "Prior Period Adjustments"
 
-4. **Chargebacks**
+4. **Chargebacks & Network Clawbacks**
    - Advertiser disputes charge
-   - Rare (<0.1%)
+   - Network adjustments for invalid traffic
+   - Rare (<0.5%)
    - Detailed in invoice notes
+   - Negative adjustments carry forward
+
+5. **CTV/Video Premium**
+   - +2pp surcharge for CTV/OTT/web video traffic
+   - Itemized separately in invoice
+   - We track this automatically
 
 ### Adjustments
 
@@ -604,42 +547,7 @@ Revenue Trend (Last 30 Days)
 
 ### Revenue Breakdown
 
-**By Network:**
-```
-┌─────────────────┬────────────┬──────────┐
-│ Network         │ Revenue    │ %        │
-├─────────────────┼────────────┼──────────┤
-│ Google AdMob    │ $15,234.56 │ 35.7%    │
-│ Meta Audience   │ $12,345.67 │ 28.9%    │
-│ Unity Ads       │ $9,876.54  │ 23.1%    │
-│ AppLovin        │ $4,567.89  │ 10.7%    │
-│ Others          │ $678.90    │ 1.6%     │
-└─────────────────┴────────────┴──────────┘
-```
-
-**By Geography:**
-```
-┌─────────────────┬────────────┬──────────┐
-│ Country         │ Revenue    │ %        │
-├─────────────────┼────────────┼──────────┤
-│ United States   │ $23,456.78 │ 54.9%    │
-│ Germany         │ $6,789.01  │ 15.9%    │
-│ United Kingdom  │ $5,678.90  │ 13.3%    │
-│ Canada          │ $3,456.78  │ 8.1%     │
-│ Others          │ $3,345.79  │ 7.8%     │
-└─────────────────┴────────────┴──────────┘
-```
-
-**By Ad Type:**
-```
-┌─────────────────┬────────────┬──────────┐
-│ Ad Type         │ Revenue    │ %        │
-├─────────────────┼────────────┼──────────┤
-│ Interstitial    │ $23,456.78 │ 54.9%    │
-│ Rewarded Video  │ $15,678.90 │ 36.7%    │
-│ Banner          │ $3,567.89  │ 8.4%     │
-└─────────────────┴────────────┴──────────┘
-```
+**By Network, Geography, Ad Type** - all available in dashboard.
 
 ### Export Reports
 
@@ -675,11 +583,11 @@ curl "https://api.apexmediation.ee/v1/billing/reports?period=30d&format=csv" \
 
 ### When do I get paid?
 
-**Every Friday** for previous week's revenue (Monday-Sunday). Payment arrives in your account 2-5 business days later.
+**Monthly with NET 30 terms** - Invoice issued on the 1st of the month for prior month's revenue. Payment due 30 days later. Payment arrives in your account 2-5 business days after processing.
 
 ### Is there a minimum payout?
 
-**No!** We pay weekly regardless of amount (even $1).
+**Yes, €100 minimum** - Industry standard to cover payment processing costs. Earnings below threshold automatically roll over to the next month.
 
 ### Can I change my payment method?
 
@@ -694,13 +602,9 @@ Email billing@apexmediation.ee with:
 
 We'll investigate and resend if needed.
 
-### Can I get an advance payment?
-
-**No.** We pay after revenue is earned and confirmed by ad networks.
-
 ### Do you charge any fees?
 
-**No!** Our revenue share (15%/12%/10%) is all-inclusive. No setup fees, no monthly fees, no hidden fees.
+**No!** Our revenue share (8-15%) is all-inclusive. No setup fees, no monthly fees, no hidden fees.
 
 Exception: PayPal transactions have PayPal's standard fees (2.9% + $0.30).
 

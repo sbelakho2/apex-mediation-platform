@@ -61,7 +61,7 @@ export default function NewsletterPanel() {
               Stay Updated 📬
             </h2>
             <p className="text-body leading-relaxed text-primary-blue">
-              Get weekly insights on ad monetization, new features, and industry trends.
+              Get monthly insights on ad monetization, new features, and industry trends.
               Join 5,000+ developers in our newsletter.
             </p>
           </div>

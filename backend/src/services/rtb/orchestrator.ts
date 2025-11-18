@@ -6,6 +6,8 @@ import { safeInc } from '../../utils/metrics';
 import type { ExperimentArm, ExperimentMode } from '../../types/migration';
 import { signToken } from '../../utils/signing';
 import { recordShadowOutcome, OutcomeStatus, CandidateBidSnapshot } from './shadowRecorder';
+import config from '../../config/index';
+import * as breaker from '../../utils/redisCircuitBreaker';
 
 const envInt = (key: string, dflt: number) => {
   const v = parseInt(process.env[key] || '', 10);
@@ -313,6 +315,13 @@ async function bidWithAdapter(adapter: AdapterDefinition, req: AdapterBidRequest
   const onAbort = () => ctl.abort();
   signal.addEventListener('abort', onAbort, { once: true });
   try {
+    // If breakers enabled and circuit is open, skip calling the adapter
+    if (config.redisBreakersEnabled) {
+      const allowed = await breaker.allow(adapter.name);
+      if (!allowed) {
+        return { nobid: true, reason: 'CIRCUIT_OPEN', adapter: adapter.name } as any;
+      }
+    }
     const result = await withTimeout(
       adapter.requestBid({ signal: ctl.signal, deadlineMs: perAdapterTimeout }, req),
       perAdapterTimeout,
@@ -320,11 +329,17 @@ async function bidWithAdapter(adapter: AdapterDefinition, req: AdapterBidRequest
     );
 
     if (result && (result as any).nobid) {
+      // nobid is a valid outcome, not a failure
+      if (config.redisBreakersEnabled) { await breaker.recordSuccess(adapter.name); }
       return { ...(result as any), adapter: adapter.name } as any;
     }
 
+    // Successful bid
+    if (config.redisBreakersEnabled) { await breaker.recordSuccess(adapter.name); }
     return result;
   } catch (e) {
+    // Record failure for breaker logic
+    if (config.redisBreakersEnabled) { await breaker.recordFailure(adapter.name); }
     return {
       nobid: true,
       reason: (e as any)?.name === 'AbortError' ? 'TIMEOUT' : 'ERROR',

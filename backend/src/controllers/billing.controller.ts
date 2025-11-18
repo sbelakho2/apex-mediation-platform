@@ -6,6 +6,7 @@ import { usageMeteringService } from '../services/billing/UsageMeteringService';
 import { invoiceService } from '../services/invoiceService';
 import { reconciliationService } from '../services/reconciliationService';
 import { migrationAssistantService } from '../services/billing/migrationAssistantService';
+import { revenueShareService } from '../services/billing/revenueShareService';
 
 /**
  * GET /api/v1/billing/usage/current
@@ -291,6 +292,64 @@ export const reconcileBilling = async (
     });
   } catch (error) {
     logger.error('Error during billing reconciliation', { error, user: req.user });
+    next(error);
+  }
+};
+
+/**
+ * POST /api/v1/billing/revenue-share/calculate
+ * Calculate revenue share with marginal tier breakdown
+ */
+export const calculateRevenueShare = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { gross_revenue_cents, is_ctv = false } = req.body;
+
+    if (typeof gross_revenue_cents !== 'number' || gross_revenue_cents < 0) {
+      throw new AppError('Invalid gross_revenue_cents (must be non-negative number)', 400);
+    }
+
+    const calculation = revenueShareService.calculateRevenueShare(
+      gross_revenue_cents,
+      Boolean(is_ctv)
+    );
+
+    res.json({
+      success: true,
+      data: calculation,
+    });
+  } catch (error) {
+    logger.error('Error calculating revenue share', { error, body: req.body });
+    next(error);
+  }
+};
+
+/**
+ * GET /api/v1/billing/tiers
+ * Get revenue share tier configuration
+ */
+export const getTiers = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const tiers = revenueShareService.getTiers();
+    const ctvPremium = revenueShareService.getCTVPremium();
+
+    res.json({
+      success: true,
+      data: {
+        tiers,
+        ctv_premium_points: ctvPremium,
+        note: 'CTV/web video adds +2pp to each tier rate',
+      },
+    });
+  } catch (error) {
+    logger.error('Error fetching tier configs', { error });
     next(error);
   }
 };

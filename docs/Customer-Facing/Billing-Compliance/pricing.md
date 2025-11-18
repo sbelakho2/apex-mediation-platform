@@ -1,127 +1,77 @@
-# Pricing & Plans
+# Pricing
 
 _Last updated: 2025-11-18_  
 _Owner: Business / Finance Team_  
 _Review Cycle: Quarterly or when pricing changes (next review: 2026-02-18)_  
-_Status: Draft - Revenue share tiers subject to business validation_
+_Status: Active_
 
 > **FIX-10 governance:** Pricing information must stay consistent with actual billing implementation. For billing system status, see `docs/Internal/Deployment/PROJECT_STATUS.md` and `docs/Internal/Development/FIXES.md` (FIX-02). Customers will be notified 30 days before pricing changes.
 
-Transparent pricing with no hidden fees. Pay only for what you use.
+Transparent pricing with no hidden fees. Pay only for what you earn.
 
-## Pricing Model
+---
 
-We use a **revenue share model** - you only pay when you earn. No upfront costs, no monthly fees.
+## Revenue Share Model
 
-### Revenue Share
+We use **revenue share** - you only pay when you earn. No upfront costs, no monthly minimums.
 
-| Your Monthly Revenue | Our Share | You Keep |
-|---------------------|-----------|----------|
+### Revenue Base Definition
+
+**"Your Monthly Revenue"** = Publisher-recognized, IVT-adjusted revenue after network clawbacks for the period, aggregated at the account level across all apps & platforms (mobile, web, CTV). Negative adjustments carry forward to prevent gaming.
+
+### Marginal Tier Pricing
+
+We use **marginal (banded) pricing** - each revenue slice is charged at its tier rate. This prevents cliff behavior and ensures you never lose money by earning more.
+
+| Revenue Band | Our Share | You Keep |
+|--------------|-----------|----------|
 | €0 - €10,000 | 15% | 85% |
 | €10,001 - €50,000 | 12% | 88% |
 | €50,001 - €100,000 | 10% | 90% |
 | €100,000+ | 8% | 92% |
 
-**Example Calculation**:
-- Your app generates **€25,000** in ad revenue this month
-- First €10,000 → You keep 85% = **€8,500**
-- Remaining €15,000 → You keep 88% = **€13,200**
-- **Total you receive: €21,700**
-- Our share: €3,300 (13.2% effective rate)
+**Example Calculation at €120,000/month**:
+- First €10,000 @ 15% = **€1,500**
+- Next €40,000 (€10,001-€50,000) @ 12% = **€4,800**
+- Next €50,000 (€50,001-€100,000) @ 10% = **€5,000**
+- Remaining €20,000 (€100,000-€120,000) @ 8% = **€1,600**
+- **Total ApexMediation fee: €12,900** (10.75% effective rate)
+- **You receive: €107,100** (89.25%)
+
+**Why marginal tiers?** You never lose money by earning more. Each euro above a threshold is simply charged at the next tier rate - standard in financial services and fair for publishers.
 
 ---
 
-## Plans
+## CTV/Web Video Premium
 
-### Free Trial
-**Duration**: 30 days  
-**Revenue Cap**: €1,000  
-**Features**:
-- ✅ All SDK platforms (Unity, iOS, Android, Web)
-- ✅ Basic mediation (5 ad networks)
-- ✅ Real-time analytics
-- ✅ Test mode (sandbox environment)
-- ✅ Email support (48-hour response time)
-- ❌ Live ads (test ads only)
-- ❌ Payouts
+**CTV (Connected TV) and web video** drive higher eCPMs but also require additional infrastructure and support.
 
-**Perfect for**: Testing integration before going live
+**Premium:** Add **+2 percentage points** to each tier
 
----
+| Revenue Band | Standard Rate | CTV/Web Rate |
+|--------------|---------------|--------------|
+| €0 - €10,000 | 15% | **17%** |
+| €10,001 - €50,000 | 12% | **14%** |
+| €50,001 - €100,000 | 10% | **12%** |
+| €100,000+ | 8% | **10%** |
 
-### Starter
-**Monthly Minimum**: €0  
-**Revenue Share**: 15% (up to €10k/month)  
-**Features**:
-- ✅ All Free Trial features
-- ✅ Live ads (real advertiser demand)
-- ✅ Monthly payouts (min €100)
-- ✅ 10 ad networks
-- ✅ Basic fraud detection
-- ✅ Email support (24-hour response time)
+**Example at €120,000 CTV revenue:**
+- First €10,000 @ 17% = €1,700
+- Next €40,000 @ 14% = €5,600
+- Next €50,000 @ 12% = €6,000
+- Remaining €20,000 @ 10% = €2,000
+- **Total fee: €15,300** (12.75% effective)
+- **You receive: €104,700** (87.25%)
 
-**Perfect for**: New apps and indie developers
+**Applies to:**
+- CTV/OTT platforms (Roku, Fire TV, Apple TV, etc.)
+- Web video inventory
+- Premium video ad formats
 
----
-
-### Growth
-**Monthly Minimum**: €500  
-**Revenue Share**: Tiered (12-15%)  
-**Features**:
-- ✅ All Starter features
-- ✅ 20+ ad networks
-- ✅ Advanced fraud detection
-- ✅ A/B testing
-- ✅ Custom reporting
-- ✅ Weekly payouts (min €500)
-- ✅ Priority email support (4-hour response time)
-- ✅ Dedicated account manager
-
-**Perfect for**: Growing apps with 10k+ DAU
-
----
-
-### Enterprise
-**Monthly Minimum**: Custom  
-**Revenue Share**: 8-10% (negotiable)  
-**Features**:
-- ✅ All Growth features
-- ✅ Custom ad network integrations
-- ✅ White-label solution
-- ✅ Self-evolving AI optimization
-- ✅ Custom SLA (99.9% uptime guarantee)
-- ✅ Daily payouts (no minimum)
-- ✅ 24/7 phone & chat support (< 1 hour response time)
-- ✅ Dedicated technical team
-- ✅ Custom contract terms
-
-**Perfect for**: Large publishers with 1M+ DAU
-
-**Contact**: enterprise@bel-consulting.ee
-
----
-
-## Add-On Features
-
-Enhance any plan with optional add-ons:
-
-### Geographic Discount Optimizer
-**Price**: +2% revenue share  
-**Benefit**: Automatically adjusts CPM rates based on user location for maximum eCPM  
-**ROI**: Typically increases revenue by 15-25%
-
-### Self-Evolving AI System
-**Price**: +3% revenue share  
-**Benefit**: AI continuously optimizes ad placements, formats, and timing  
-**ROI**: Typically increases revenue by 20-40%
-
-### Premium Support
-**Price**: €500/month  
-**Benefit**: 1-hour response time, phone support, dedicated Slack channel
-
-### Custom Analytics Dashboard
-**Price**: €1,000 one-time + €200/month  
-**Benefit**: Fully customized analytics with your branding, custom metrics
+**Does NOT apply to:**
+- Mobile in-app display ads (standard rates)
+- Mobile banner/interstitial ads (standard rates)
+- Audio-only ads (standard rates)
 
 ---
 
@@ -129,149 +79,69 @@ Enhance any plan with optional add-ons:
 
 ### Payout Schedule
 
-| Plan | Frequency | Minimum Threshold |
-|------|-----------|-------------------|
-| Starter | Monthly | €100 |
-| Growth | Weekly | €500 |
-| Enterprise | Daily | No minimum |
+**Monthly payouts with NET 30 terms** - industry standard payment schedule.
 
-**Payout Date**:
-- **Monthly**: 15th of following month (e.g., January earnings paid Feb 15)
-- **Weekly**: Every Monday for previous week
-- **Daily**: Next business day
+**Payment Schedule:**
+- Revenue earned during calendar month (e.g., October 1-31)
+- Invoice issued on 1st of following month (e.g., November 1)
+- Payment due NET 30 (30 days after invoice date)
+- Payment processed and issued by due date
+- Funds arrive 2-5 business days after processing
+
+**Example:**
+```
+Oct 1-31:        Revenue earned
+Nov 1:           Invoice issued
+Nov 30:          Payment due (NET 30)
+Dec 2-5:         Payment received in your account
+```
+
+### Minimum Payout
+
+**€100 minimum threshold** - industry standard to cover processing costs. Earnings below threshold roll over to next month.
 
 ### Payment Methods
 
-**Bank Transfer** (Default, Free)
-- SEPA (Europe): 1-2 business days
-- SWIFT (International): 3-5 business days
-
-**PayPal** (+2% fee)
-- Available for payouts < €10,000
-- Instant transfer
-
-**Cryptocurrency** (Enterprise only, +1% fee)
-- Bitcoin, Ethereum, USDC
-- Processed within 24 hours
+- **Bank Transfer (SEPA)**: Free, 1-2 business days (Europe)
+- **Wire Transfer (SWIFT)**: Free, 3-5 business days (International)
+- **PayPal**: Available, 2.9% + $0.30 fee applies
 
 ### Currency
 
 - **Primary**: EUR (Euro)
 - **Reporting**: Revenue shown in your local currency for convenience
-- **Exchange Rate**: ECB (European Central Bank) daily rates
-- **Conversion**: Automatic at payout time
+- **Exchange**: ECB (European Central Bank) daily rates
 
 ---
 
-## Billing & Invoices
+## What's Included
 
-### Invoices
+### All Customers Get
 
-- **Frequency**: Same as payout schedule
-- **Format**: PDF via email + downloadable in dashboard
-- **Contents**: Detailed breakdown of revenue, our share, taxes
-- **VAT**: Included for EU customers (reverse charge for B2B)
+✅ **Full SDK Access**: Unity, iOS, Android, Web, CTV  
+✅ **20+ Ad Networks**: Google AdMob, Meta, Unity, AppLovin, etc.  
+✅ **Real-time Analytics**: Revenue, eCPM, fill rates, geo breakdown  
+✅ **Fraud Detection**: Basic IVT filtering included  
+✅ **Monthly Payouts**: NET 30 payment terms  
+✅ **Dashboard Access**: 24/7 self-service portal  
+✅ **Email Support**: Best effort, typically <48 hours  
+✅ **API Access**: Full REST API for automation  
 
-### Estonian Tax Compliance
+### Optional Add-Ons
 
-We comply with Estonian e-MTA (Tax and Customs Board) requirements:
+**Geographic Discount Optimizer**  
+**Price**: +2% revenue share  
+**Benefit**: Auto-adjusts CPM by user location for max eCPM  
+**ROI**: Typically +15-25% revenue increase  
 
-- ✅ Automatic VAT calculation
-- ✅ Quarterly VAT reports
-- ✅ Annual profit & loss statements
-- ✅ 7-year transaction retention
-- ✅ e-Business Register integration
+**Self-Evolving AI System**  
+**Price**: +3% revenue share  
+**Benefit**: AI continuously optimizes placements, formats, timing  
+**ROI**: Typically +20-40% revenue increase  
 
-**See**: [Estonian Tax Compliance Guide](/docs/billing-compliance/estonian-tax)
-
----
-
-## Discounts & Credits
-
-### Startup Credit
-**Amount**: €500  
-**Eligibility**:
-- New account (< 90 days old)
-- First-time using ad mediation platform
-- Completed integration
-
-**How to Apply**: Contact sales@bel-consulting.ee with proof of app launch
-
-### Referral Program
-**Reward**: €1,000 per referral  
-**Terms**:
-- Referred customer must reach €10,000 in revenue
-- Paid as credit to your account
-- No limit on number of referrals
-
-**Referral Link**: Available in dashboard → Referrals
-
-### Volume Discount
-**Eligibility**: €500k+ monthly revenue  
-**Discount**: Negotiate custom revenue share (as low as 6%)
-
-**Contact**: enterprise@bel-consulting.ee
-
----
-
-## FAQs
-
-### When do I start paying?
-
-You start paying our revenue share **after** your first payout. During the free trial, there are no charges.
-
-### What if I don't reach the minimum payout threshold?
-
-Your earnings roll over to the next month/week. No earnings expire.
-
-**Example**: You earn €75 in January (below €100 minimum). In February, you earn €50. In March 1st, you receive €125.
-
-### Are there any hidden fees?
-
-No. The only costs are:
-- Our revenue share (clearly stated)
-- Optional add-on features (opt-in only)
-- Payment method fees (if using PayPal or crypto)
-
-### Can I switch plans?
-
-Yes, anytime. Changes take effect at the start of next billing cycle.
-
-**Downgrading**: You can downgrade, but some features may become unavailable.  
-**Upgrading**: Instant access to new features.
-
-### What happens if I cancel?
-
-- Your account remains active until end of current billing period
-- You receive final payout for any earnings (even below minimum threshold)
-- Historical data remains accessible for 1 year
-- You can reactivate anytime within 1 year (data restored)
-
-### Do you offer discounts for non-profits?
-
-Yes! Non-profit organizations and educational institutions qualify for **50% off** our revenue share.
-
-**Contact**: support@bel-consulting.ee with proof of non-profit status.
-
----
-
-## Price Comparison
-
-How we compare to competitors:
-
-| Feature | ApexMediation | AdMob | Unity Ads | ironSource |
-|---------|----------|-------|-----------|------------|
-| **Revenue Share** | 8-15% | ~30-40% | ~30% | ~25% |
-| **Upfront Cost** | €0 | €0 | €0 | €0 |
-| **Monthly Fee** | €0 | €0 | €0 | €0-€500 |
-| **Minimum Payout** | €100 | €100 | €100 | €250 |
-| **Payout Frequency** | Daily-Monthly | Monthly | Monthly | Monthly |
-| **Setup Time** | < 10 min | ~30 min | ~20 min | ~1 hour |
-| **Free Trial** | 30 days | No | No | No |
-| **AI Optimization** | ✅ | ❌ | Limited | Limited |
-| **Custom Integrations** | ✅ | ❌ | ❌ | ✅ ($$$) |
-
-**Bottom Line**: Our revenue share is **2-3x lower** than competitors, meaning you keep more of your earnings.
+**Premium Support**  
+**Price**: €500/month  
+**Benefit**: 1-hour response time, phone support, dedicated Slack  
 
 ---
 
@@ -287,6 +157,54 @@ How we compare to competitors:
 
 ---
 
-**Last Updated**: January 2025  
-**Pricing effective**: 2025-01-01  
+## Price Comparison
+
+How we compare to competitors:
+
+| Feature | ApexMediation | AdMob | Unity Ads | ironSource |
+|---------|---------------|-------|-----------|------------|
+| **Revenue Share** | 8-15% (marginal) | ~30-40% (opaque) | ~30% (cliff) | ~25% (cliff) |
+| **Upfront Cost** | €0 | €0 | €0 | €0 |
+| **Monthly Minimum** | €0 | €0 | €0 | €0 |
+| **Minimum Payout** | €100 | €100 | €100 | €250 |
+| **Payment Terms** | NET 30 | NET 60 | NET 60 | NET 60 |
+| **Setup Time** | < 10 min | ~30 min | ~20 min | ~1 hour |
+| **CTV/Web Video** | ✅ +2pp | Limited | ✅ | ✅ |
+| **Transparent Pricing** | ✅ Fully documented | ❌ Opaque | Partial | Partial |
+
+**Bottom Line**: Our **marginal tier pricing** means you never lose money by earning more. Revenue share is **2-3x lower** than competitors at high volumes, with faster **NET 30 payment terms** compared to competitors' NET 60.
+
+---
+
+## FAQs
+
+### When do I start paying?
+
+You start paying our revenue share **immediately** when you earn revenue. We deduct our share and pay you the remainder monthly via NET 30 terms (30 days after month-end invoice).
+
+### Are there any hidden fees?
+
+**No.** The only costs are:
+- Our revenue share (clearly stated above)
+- Optional add-on features (opt-in only)
+- Payment method fees (only if using PayPal)
+
+### Can I test before committing?
+
+**Yes!** Sign up free, integrate the SDK, and test with live traffic. If you're not happy, remove the SDK - no contracts, no cancellation fees.
+
+### What if I have both mobile and CTV traffic?
+
+The CTV premium (+2pp) only applies to CTV/web video revenue. Your mobile display ad revenue uses standard rates. We track this automatically.
+
+### Do you offer discounts for non-profits?
+
+Yes! Non-profit organizations and educational institutions qualify for **50% off** our revenue share.
+
+**Contact**: support@bel-consulting.ee with proof of non-profit status.
+
+---
+
+**Last Updated**: 2025-11-18  
+**Pricing effective**: 2025-11-18  
 **Subject to change**: We'll notify you 30 days before any price changes

@@ -819,6 +819,65 @@ Result
 - FIX‑04 is fully signed off. Subsequent improvements (e.g., expanding the security header tests for production‑only directives or adding additional component tests) can be scheduled outside FIX‑04 as iterative hardening work.
 
 ---
+Changelog — FIX‑11 Batch 2: Persistence & State Externalization (2025-11-18)
+
+Summary
+- Implements FIX‑11 Batch 2 with durability, shared state, and operability improvements. Replaces in‑memory state with Postgres/Redis, introduces queue/worker patterns, DB‑backed adapter configs with hot reload (including Redis pub/sub invalidation), Redis circuit breakers, stricter dependency readiness, and low‑cardinality metrics labeling.
+
+What changed (highlights)
+- 641 Two‑factor (2FA) secrets and audits:
+  - Stores TOTP secrets encrypted at rest (AES‑GCM via `APP_KMS_KEY`) in `two_factor_auth.secretCiphertext`; legacy plaintext auto‑migrated when possible.
+  - Backup codes are hashed; added `audit_twofa` table; controllers pass actor/IP for audit provenance.
+- 689/692 ClickHouse configuration & readiness:
+  - Fail‑fast on missing required CH config when `CLICKHOUSE_REQUIRED=1`.
+  - `/ready` includes DB latency plus `redis.ready` and `clickhouse.healthy`; returns 503 when CH is required but unhealthy.
+- 645 Analytics ingestion buffering:
+  - Controllers enqueue to a Redis‑backed queue when `USE_REDIS_STREAMS_FOR_ANALYTICS=1`; background worker batches to ClickHouse with retries; `/analytics/buffer-stats` exposes queue counters.
+- 625 API keys persistence & audits:
+  - Keys now have a `secretDigest` (sha256) for constant‑time lookup; added `api_key_usages` table and middleware to authenticate via header and record audits; analytics reads accept API keys or sessions.
+- 619 Adapter registry centralization:
+  - DB‑backed `adapter_configs` with TTL cache; admin endpoints to list/get/upsert/invalidate; registry boot filters with DB enable flags and timeouts; hot‑reload via Redis pub/sub channel `adapter-configs:invalidate` in addition to polling.
+- 640/680/653 Redis circuit breakers:
+  - Breakers wrap RTB adapters; open after failure bursts with cool‑down and probe windows; `/api/v1/rtb/status` now surfaces a safe per‑adapter breaker summary.
+- 701 Logger rotation option:
+  - Logger continues to write to stdout by default; when `LOG_TO_FILES=1`, also writes to `logs/error.log` and `logs/combined.log` with size caps and safe fallback if the path is missing.
+ - 702 Metrics cardinality hygiene:
+  - Added `middleware/metricsRouteMiddleware` and `utils/metricsRoute` to emit HTTP RED metrics with `route_id` instead of raw paths, reducing label cardinality across dashboards.
+
+New environment flags and knobs
+- `CLICKHOUSE_REQUIRED=1` — fail fast on missing/unhealthy CH.
+- `USE_REDIS_STREAMS_FOR_ANALYTICS=1` — enable analytics ingestion queue + worker.
+- `USE_KAFKA_FOR_ANALYTICS=1` — reserved for future Kafka backend (off by default).
+- `ADAPTER_REGISTRY_REFRESH_SEC=60` — TTL for DB‑backed adapter config cache.
+- `REDIS_BREAKERS_ENABLED=1` — enable Redis‑backed circuit breakers.
+- `LOG_TO_FILES=1` — add rotating file transports in addition to stdout.
+- `PROM_EXEMPLARS=1` — gate exemplars in metrics (cardinality policy).
+
+How to validate
+- 2FA flows: enroll/verify/regen/disable; confirm `two_factor_auth.secretCiphertext` populated and `audit_twofa` rows present.
+- Readiness: set `CLICKHOUSE_REQUIRED=1`, bring CH down → `/ready` returns 503 with diagnostics; with CH up → 200 with health fields.
+- Analytics queue: set `USE_REDIS_STREAMS_FOR_ANALYTICS=1`; POST `/api/v1/analytics/events/*` returns 202 and worker drains; `/analytics/buffer-stats` shows queue counters.
+- API keys: authenticate analytics GET endpoints with `Authorization: Bearer sk_*` or `X-Api-Key`; usage records appear in `api_key_usages`.
+- Adapter configs: use admin endpoints to enable/disable adapters and adjust timeouts; changes reflected in orchestrator without restart.
+- RTB status: `GET /api/v1/rtb/status` includes `circuitBreakers` with `{ open, failuresWindow }` per adapter when breakers enabled.
+ - Metrics: scrape `/metrics` and confirm `http_requests_total` and `http_request_duration_seconds` use `route_id` labels.
+
+Notes and rollout
+- All new behaviors are feature‑flagged and degrade gracefully when Redis/ClickHouse are unavailable. Legacy synchronous code paths remain in place until Batch 4 completes ClickHouse heavy lifting.
+
+Done of Definition (DoD)
+- Code merged for 619, 621, 625, 640, 641, 645, 653, 680, 689, 692, 701, 702, 703.
+
+Finalization & sign‑off (2025-11-18 19:24)
+- Pub/sub invalidation for adapter configs shipped; TTL polling remains as fallback.
+- Metrics cardinality helper and middleware shipped repo‑wide.
+- API‑key and 2FA unit tests added; readiness gating tests added; analytics enqueue tests added.
+- Redis behavior policy applied for limiter/enqueue (fail‑open) and idempotency (fail‑closed) per Batch‑2 scope.
+
+Result
+- FIX‑11 Batch 2 is complete. Remaining FIX‑11 work continues in Batches 3–7.
+
+---
 Changelog — FIX-11 Batch 1: Security, Access Control, and Input Validation (2025-11-18)
 
 Summary

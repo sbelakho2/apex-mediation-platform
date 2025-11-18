@@ -182,16 +182,16 @@ function scheduleRecurringJobs(): void {
     '0 2 * * *' // Every day at 2 AM
   );
 
-  // Weekly report generation on Mondays at 8 AM
+  // Monthly report generation on the 1st at 8 AM
   queueManager.scheduleRecurringJob(
     QueueName.REPORT_GENERATION,
-    'weekly-reports',
+    'monthly-reports',
     {
       publisherId: 'all',
-      reportType: 'weekly',
-      date: 'last_week',
+      reportType: 'monthly',
+      date: 'last_month',
     },
-    '0 8 * * 1' // Every Monday at 8 AM
+    '0 8 1 * *' // 1st of every month at 8 AM
   );
 
   // Cache warming every 5 minutes for popular queries

@@ -11,6 +11,7 @@ import { Pool } from 'pg';
 import logger from '../utils/logger';
 import { redis } from '../utils/redis';
 import { checkClickHouseHealth } from '../utils/clickhouse';
+import config from '../config/index';
 
 export class HealthCheckController {
   constructor(private pool: Pool) {}
@@ -61,11 +62,28 @@ export class HealthCheckController {
         return;
       }
 
-      // Check Redis readiness (fail open: not strictly required)
+      // Check Redis readiness (fail open: not strictly required unless policy changes)
       const redisReady = redis.isReady();
 
       // Check ClickHouse health (optional for readiness, but informative)
       const clickhouseHealthy = await checkClickHouseHealth().catch(() => false);
+
+      // If ClickHouse is required and not healthy, report 503 to shed traffic
+      if (config.clickhouseRequired && !clickhouseHealthy) {
+        res.status(503).json({
+          status: 'not_ready',
+          message: 'ClickHouse is required but not healthy',
+          database: {
+            connected: true,
+            latency_ms: dbLatency,
+            status: 'healthy',
+          },
+          redis: { ready: redisReady },
+          clickhouse: { healthy: clickhouseHealthy },
+          timestamp: new Date().toISOString(),
+        });
+        return;
+      }
 
       res.status(200).json({
         status: 'ready',

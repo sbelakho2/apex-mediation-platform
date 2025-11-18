@@ -31,6 +31,8 @@ const router = Router();
 router.use(killSwitchGuard);
 
 // Mount route modules
+// NOTE: Route order is sensitive (see FIX-11/694). Keep /migration before /admin to avoid
+// unintended matches and ensure OpenAPI grouping remains stable.
 router.use('/flags', flagsRoutes);
 router.use('/auth', authRoutes);
 router.use('/keys', keysRoutes);
@@ -52,8 +54,9 @@ router.use('/data-export', dataExportRoutes);
 router.use('/queues', queuesRoutes);
 router.use('/transparency', transparencyRoutes);
 router.use('/billing', billingRoutes);
+// Migration before admin (ordering requirement per FIX-11/694)
+router.use('/migration', migrationRoutes);
 router.use('/admin', adminRoutes);
 router.use('/privacy', privacyRoutes);
-router.use('/migration', migrationRoutes);
 
 export default router;

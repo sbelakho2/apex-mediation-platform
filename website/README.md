@@ -224,7 +224,7 @@ website/
 - **7-Day Trend Chart:** Bar chart with golden bars
 - **Top Apps:** 4 apps with revenue percentages
 - **Top Networks:** 4 networks with eCPM metrics
-- **Payout Schedule:** Bi-weekly with next date
+- **Payout Schedule:** Monthly (NET 30) with invoice date
 
 ### Analytics Page
 
@@ -293,7 +293,7 @@ website/
 2. **Payment Methods Tab**
    - Next payout: $8,934.18 on 2025-11-08
    - Payment methods: Bank Transfer (primary), PayPal
-   - Payout settings: Schedule (weekly/bi-weekly/monthly), minimum threshold, currency
+   - Payout settings: Schedule (monthly NET 30), minimum threshold (€100), currency
    - Tax information: W-9 form submitted
 
 3. **Notifications Tab**

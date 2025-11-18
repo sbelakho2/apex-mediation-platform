@@ -4,6 +4,8 @@ import logger from '../utils/logger';
 import { AuctionRequestBody } from '../schemas/rtb';
 import { runAuction } from '../services/rtb/orchestrator';
 import { getAllAdapters } from '../services/rtb/adapterRegistry';
+import config from '../config/index';
+import * as breaker from '../utils/redisCircuitBreaker';
 
 /**
  * POST /api/v1/rtb/bid
@@ -95,13 +97,31 @@ export const getStatus = async (
   _req: Request,
   res: Response
 ): Promise<void> => {
-  res.json({
-    success: true,
-    data: {
-      adapters: getAllAdapters().map(a => ({ name: a.name, supports: a.supports, timeoutMs: a.timeoutMs })),
-      circuitBreakers: {},
-      waterfall: {},
-      status: 'operational',
-    },
-  });
+  try {
+    const adapters = getAllAdapters();
+    const adapterInfos = adapters.map(a => ({ name: a.name, supports: a.supports, timeoutMs: a.timeoutMs }));
+    let circuitSummary: Record<string, { open: boolean; failuresWindow: number }> = {};
+    if (config.redisBreakersEnabled) {
+      try {
+        circuitSummary = await breaker.getSummary(adapters.map(a => a.name));
+      } catch (e) {
+        // If Redis not available or summary fails, leave empty
+        circuitSummary = {};
+      }
+    }
+
+    res.json({
+      success: true,
+      data: {
+        adapters: adapterInfos,
+        circuitBreakers: circuitSummary,
+        waterfall: {},
+        breakersEnabled: config.redisBreakersEnabled,
+        status: 'operational',
+      },
+    });
+  } catch (error) {
+    logger.error('Failed to get RTB status', { error });
+    res.status(500).json({ success: false, error: 'Failed to get status' });
+  }
 };

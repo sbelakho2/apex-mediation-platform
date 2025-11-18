@@ -1,6 +1,12 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { authenticate, authorize } from '../middleware/auth';
 import { query } from '../utils/postgres';
+import { AppDataSource } from '../database';
+import { AdapterConfig } from '../database/entities/adapterConfig.entity';
+import adapterConfigService from '../services/adapterConfigService';
+import { z } from 'zod';
+import logger from '../utils/logger';
+import { redis } from '../utils/redis';
 
 const router = Router();
 
@@ -171,6 +177,136 @@ router.get('/health/red', async (_req: Request, res: Response) => {
       timestamp: new Date().toISOString(),
     },
   });
+});
+
+/**
+ * Adapter Registry Admin (619)
+ *
+ * Manage RTB adapter configurations stored in DB with TTL cache in adapterConfigService.
+ * All routes below are admin‑only (router is already auth+authorize(['admin'])).
+ */
+
+// GET /api/v1/admin/rtb/adapters — list adapter configs (masked)
+router.get('/rtb/adapters', async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    const repo = AppDataSource.getRepository(AdapterConfig);
+    const rows = await repo.find();
+    const data = rows.map(r => ({
+      id: r.id,
+      name: r.name,
+      enabled: r.enabled,
+      timeoutMs: r.timeoutMs,
+      weights: r.weights ?? null,
+      // never return credentialsCiphertext
+      hasCredentials: Boolean(r.credentialsCiphertext),
+      updatedAt: r.updatedAt,
+      createdAt: r.createdAt,
+    }));
+    res.json({ success: true, data });
+  } catch (e) {
+    next(e);
+  }
+});
+
+// GET /api/v1/admin/rtb/adapters/:name — get single adapter config (masked)
+router.get('/rtb/adapters/:name', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const repo = AppDataSource.getRepository(AdapterConfig);
+    const name = String(req.params.name);
+    const row = await repo.findOne({ where: { name } });
+    if (!row) return res.status(404).json({ success: false, error: 'Not found' });
+    const data = {
+      id: row.id,
+      name: row.name,
+      enabled: row.enabled,
+      timeoutMs: row.timeoutMs,
+      weights: row.weights ?? null,
+      hasCredentials: Boolean(row.credentialsCiphertext),
+      updatedAt: row.updatedAt,
+      createdAt: row.createdAt,
+    };
+    res.json({ success: true, data });
+  } catch (e) {
+    next(e);
+  }
+});
+
+const upsertSchema = z.object({
+  enabled: z.boolean().optional(),
+  timeoutMs: z.number().int().min(100).max(10_000).optional(),
+  weights: z.record(z.unknown()).optional(),
+  // Provide credentials object or string to (re)encrypt; omit to keep existing
+  credentials: z.union([z.string(), z.record(z.unknown())]).optional(),
+});
+
+// PUT /api/v1/admin/rtb/adapters/:name — upsert config; refresh cache immediately
+router.put('/rtb/adapters/:name', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const name = String(req.params.name);
+    const body = upsertSchema.parse(req.body ?? {});
+    const repo = AppDataSource.getRepository(AdapterConfig);
+    let row = await repo.findOne({ where: { name } });
+
+    if (!row) {
+      row = repo.create({
+        name,
+        enabled: body.enabled ?? true,
+        timeoutMs: body.timeoutMs ?? 800,
+        weights: body.weights ?? null,
+      });
+    } else {
+      if (typeof body.enabled === 'boolean') row.enabled = body.enabled;
+      if (typeof body.timeoutMs === 'number') row.timeoutMs = body.timeoutMs;
+      if (body.weights !== undefined) row.weights = body.weights as any;
+    }
+
+    if (body.credentials !== undefined) {
+      try {
+        // Store AES‑GCM ciphertext as base64 JSON (do not log plaintext)
+        const { aesGcmEncrypt } = await import('../utils/crypto');
+        const plaintext = typeof body.credentials === 'string' ? body.credentials : JSON.stringify(body.credentials);
+        row.credentialsCiphertext = JSON.stringify(aesGcmEncrypt(plaintext));
+      } catch (e) {
+        logger.warn('[Admin] Failed to encrypt adapter credentials; leaving unchanged', { name, error: (e as Error).message });
+        // If encrypt fails during create and no prior creds, keep null; otherwise leave existing
+        if (!row.id) row.credentialsCiphertext = null;
+      }
+    }
+
+    await repo.save(row);
+    // Trigger immediate cache refresh (in addition to periodic watcher)
+    await adapterConfigService.refreshCache().catch(() => undefined);
+    // Publish invalidation so other nodes refresh
+    try { if ((redis as any).publish) { await (redis as any).publish('adapter-configs:invalidate', 'upsert'); } } catch { /* noop */ }
+
+    const data = {
+      id: row.id,
+      name: row.name,
+      enabled: row.enabled,
+      timeoutMs: row.timeoutMs,
+      weights: row.weights ?? null,
+      hasCredentials: Boolean(row.credentialsCiphertext),
+      updatedAt: row.updatedAt,
+      createdAt: row.createdAt,
+    };
+    res.json({ success: true, data });
+  } catch (e) {
+    if (e instanceof z.ZodError) {
+      return res.status(400).json({ success: false, error: 'Invalid payload', details: e.errors });
+    }
+    next(e);
+  }
+});
+
+// POST /api/v1/admin/rtb/adapters/invalidate — force cache refresh now
+router.post('/rtb/adapters/invalidate', async (_req: Request, res: Response) => {
+  try {
+    await adapterConfigService.refreshCache();
+    try { if ((redis as any).publish) { await (redis as any).publish('adapter-configs:invalidate', 'manual'); } } catch { /* noop */ }
+    res.json({ success: true, message: 'Adapter config cache refreshed' });
+  } catch (e) {
+    res.status(500).json({ success: false, error: 'Failed to refresh cache' });
+  }
 });
 
 export default router;
