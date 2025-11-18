@@ -27,13 +27,20 @@ interface FraudEvent {
 }
 
 interface FraudSummary {
-  blockedToday: number;
-  moneySavedCents: number;
-  fraudRate: number; // 0..1
-  cleanRequests: number;
-  breakdownByType: { type: FraudType; count: number }[];
-  topBlockedCountries: { countryCode: string; blocked: number }[];
+  totalDetected: number;
+  blockedRevenue: number;
+  detectionRate: number; // percentage 0..100
+  avgFraudScore: number;
+  topTypes: { type: string; count: number; percentage: number }[];
+  lastDetectionAt?: string;
 }
+
+const typeLabels: Record<string, string> = {
+  click_fraud: 'Click Fraud',
+  install_fraud: 'Install Fraud',
+  bot_traffic: 'Bot Traffic',
+  vpn_abuse: 'VPN Abuse',
+};
 
 export default function FraudPage() {
   const [timeRange, setTimeRange] = useState<'today' | 'week' | 'month'>('today');
@@ -43,6 +50,7 @@ export default function FraudPage() {
   const [events, setEvents] = useState<FraudEvent[]>([]);
   const [page, setPage] = useState(1);
   const [pageSize] = useState(20);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -56,24 +64,30 @@ export default function FraudPage() {
     setLoading(true);
     setError(null);
     (async () => {
-      const rangeParam = timeRange === 'today' ? '1d' : timeRange === 'week' ? '7d' : '30d';
-      const [s, a] = await Promise.all([
-        api.get<FraudSummary>(`/api/v1/fraud/summary?range=${rangeParam}`, { signal: controller?.signal }),
-        api.get<{ items: FraudEvent[]; total: number }>(`/api/v1/fraud/alerts?range=${rangeParam}&page=${page}&pageSize=${pageSize}`, { signal: controller?.signal }),
+      const limit = page * pageSize;
+      const [statsRes, alertsRes] = await Promise.all([
+        api.get<FraudSummary>('/fraud/stats', { signal: controller?.signal }),
+        api.get<Array<{ id: string; type: string; severity: string; details?: string; detectedAt: string }>>(`/fraud/alerts?limit=${limit}`, { signal: controller?.signal }),
       ]);
       if (!alive) return;
-      if (!s.success || !s.data) {
-        setError(s.error || 'Failed to load fraud summary');
+      if (!statsRes.success || !statsRes.data) {
+        setError(statsRes.error || 'Failed to load fraud summary');
         setLoading(false);
         return;
       }
-      if (!a.success || !a.data) {
-        setError(a.error || 'Failed to load alerts');
-        setLoading(false);
-        return;
-      }
-      setSummary(s.data);
-      setEvents(a.data.items || []);
+      const alerts = alertsRes.success && Array.isArray(alertsRes.data) ? alertsRes.data : [];
+      const start = (page - 1) * pageSize;
+      const paged = alerts.slice(start, start + pageSize).map((row) => ({
+        id: row.id,
+        ts: row.detectedAt,
+        type: (row.type as FraudType) || 'bot_traffic',
+        severity: (row.severity as Severity) || 'low',
+        blocked: false,
+        details: row.details,
+      }));
+      setSummary(statsRes.data);
+      setEvents(paged);
+      setTotal(alerts.length);
       setLoading(false);
     })().catch((e) => {
       if (!alive) return;
@@ -145,20 +159,20 @@ export default function FraudPage() {
         ) : summary ? (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
             <div>
-              <p className="text-sunshine-yellow text-4xl font-bold">{numberFmt.format(summary.blockedToday)}</p>
-              <p className="text-white text-sm mt-1">Blocked Today</p>
+              <p className="text-sunshine-yellow text-4xl font-bold">{numberFmt.format(summary.totalDetected)}</p>
+              <p className="text-white text-sm mt-1">Detections</p>
             </div>
             <div>
-              <p className="text-sunshine-yellow text-4xl font-bold">{currencyFmt.format(Math.max(0, summary.moneySavedCents / 100))}</p>
-              <p className="text-white text-sm mt-1">Money Saved</p>
+              <p className="text-sunshine-yellow text-4xl font-bold">{currencyFmt.format(Math.max(0, summary.blockedRevenue))}</p>
+              <p className="text-white text-sm mt-1">Blocked Revenue</p>
             </div>
             <div>
-              <p className="text-sunshine-yellow text-4xl font-bold">{percentFmt.format(Math.min(1, Math.max(0, summary.fraudRate)))}</p>
-              <p className="text-white text-sm mt-1">Fraud Rate</p>
+              <p className="text-sunshine-yellow text-4xl font-bold">{percentFmt.format(Math.max(0, summary.detectionRate / 100))}</p>
+              <p className="text-white text-sm mt-1">Detection Rate</p>
             </div>
             <div>
-              <p className="text-sunshine-yellow text-4xl font-bold">{numberFmt.format(summary.cleanRequests)}</p>
-              <p className="text-white text-sm mt-1">Clean Requests</p>
+              <p className="text-sunshine-yellow text-4xl font-bold">{summary.lastDetectionAt ? new Date(summary.lastDetectionAt).toLocaleTimeString() : '—'}</p>
+              <p className="text-white text-sm mt-1">Last Detection</p>
             </div>
           </div>
         ) : null}
@@ -167,30 +181,30 @@ export default function FraudPage() {
       {/* Stats Cards (derived from summary when present) */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         <StatCard
-          title="Blocked Today"
-          value={summary ? numberFmt.format(summary.blockedToday) : '—'}
+          title="Detections"
+          value={summary ? numberFmt.format(summary.totalDetected) : '—'}
           subtitle="Fraud attempts"
           color="red"
           icon={XCircleIcon}
         />
         <StatCard
-          title="Money Saved"
-          value={summary ? currencyFmt.format(Math.max(0, summary.moneySavedCents / 100)) : '—'}
-          subtitle="This period"
+          title="Blocked Revenue"
+          value={summary ? currencyFmt.format(Math.max(0, summary.blockedRevenue)) : '—'}
+          subtitle="Current window"
           color="yellow"
           icon={ShieldCheckIcon}
         />
         <StatCard
-          title="Fraud Rate"
-          value={summary ? percentFmt.format(Math.min(1, Math.max(0, summary.fraudRate))) : '—'}
+          title="Detection Rate"
+          value={summary ? percentFmt.format(Math.max(0, summary.detectionRate / 100)) : '—'}
           subtitle="Of total traffic"
           color="blue"
           icon={ExclamationTriangleIcon}
         />
         <StatCard
-          title="Clean Requests"
-          value={summary ? numberFmt.format(summary.cleanRequests) : '—'}
-          subtitle="Passed verification"
+          title="Avg Fraud Score"
+          value={summary ? summary.avgFraudScore.toFixed(2) : '—'}
+          subtitle="0 (low) to 1 (high)"
           color="green"
           icon={CheckCircleIcon}
         />
@@ -207,16 +221,16 @@ export default function FraudPage() {
             {loading && (
               <div className="animate-pulse h-28 bg-gray-100 rounded" aria-hidden="true" />
             )}
-            {!loading && summary && summary.breakdownByType.length === 0 && (
+              {!loading && summary && summary.topTypes.length === 0 && (
               <p className="text-sm text-gray-600">No fraud detected in this period.</p>
             )}
-            {!loading && summary && summary.breakdownByType.length > 0 && (
-              summary.breakdownByType.map((row) => (
+              {!loading && summary && summary.topTypes.length > 0 && (
+                summary.topTypes.map((row) => (
                 <FraudTypeBar
                   key={row.type}
                   type={typeLabels[row.type]}
                   count={row.count}
-                  percentage={calcPct(row.count, summary.breakdownByType)}
+                    percentage={row.percentage}
                   color={typeColor(row.type)}
                 />
               ))
@@ -231,19 +245,7 @@ export default function FraudPage() {
           </h2>
           <div className="space-y-3">
             {loading && <div className="animate-pulse h-24 bg-gray-100 rounded" aria-hidden="true" />}
-            {!loading && summary && summary.topBlockedCountries.length === 0 && (
-              <p className="text-sm text-gray-600">No blocked traffic by country for this period.</p>
-            )}
-            {!loading && summary && summary.topBlockedCountries.length > 0 && (
-              summary.topBlockedCountries.map((row) => (
-                <CountryBlock
-                  key={row.countryCode}
-                  country={row.countryCode}
-                  blocked={row.blocked}
-                  percentage={calcPct(row.blocked, summary.topBlockedCountries)}
-                />
-              ))
-            )}
+              <p className="text-sm text-gray-600">Country-level blocking data is not yet available.</p>
           </div>
         </div>
       </div>
@@ -381,13 +383,6 @@ function FraudEventCard({ event }: FraudEventCardProps) {
     low: { color: 'border-gray-400 bg-gray-50', badge: 'bg-gray-400', label: 'Low severity' },
   };
 
-  const typeLabels = {
-    click_fraud: 'Click Fraud',
-    install_fraud: 'Install Fraud',
-    bot_traffic: 'Bot Traffic',
-    vpn_abuse: 'VPN Abuse',
-  };
-
   const config = severityConfig[event.severity];
 
   return (
@@ -440,30 +435,7 @@ function Pagination({ page, hasNext, onPageChange }: { page: number; hasNext: bo
       >
         Next
       </button>
-    </div>
-  );
-}
-
-// Helpers
-const typeLabels: Record<FraudType, string> = {
-  click_fraud: 'Click Fraud',
-  install_fraud: 'Install Fraud',
-  bot_traffic: 'Bot Traffic',
-  vpn_abuse: 'VPN Abuse',
-};
-
-function typeColor(t: FraudType): 'red' | 'yellow' | 'blue' | 'gray' {
-  switch (t) {
-    case 'click_fraud': return 'red'
-    case 'bot_traffic': return 'yellow'
-    case 'install_fraud': return 'blue'
-    case 'vpn_abuse':
-    default: return 'gray'
-  }
-}
-
-function calcPct<T extends { [k: string]: any }>(count: number, rows: T[]): number {
-  const total = rows.reduce((acc, r: any) => acc + (r.count ?? r.blocked ?? 0), 0) || 1;
+          // Country-level breakdown pending backend support
   return Math.round((count / total) * 1000) / 10; // one decimal
 }
 

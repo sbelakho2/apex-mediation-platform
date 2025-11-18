@@ -2,9 +2,31 @@ import axios, { AxiosInstance, AxiosError, AxiosHeaders, InternalAxiosRequestCon
 import { getCsrfToken, readXsrfCookie } from './csrf'
 
 const USE_MOCK_API = process.env.NEXT_PUBLIC_USE_MOCK_API === 'true'
-const BASE_URL = USE_MOCK_API ? '/api/mock' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1')
-const FRAUD_API_URL = USE_MOCK_API ? '/api/mock' : (process.env.NEXT_PUBLIC_FRAUD_API_URL || 'http://localhost:4000/api/v1')
-const ANALYTICS_API_URL = USE_MOCK_API ? '/api/mock' : (process.env.NEXT_PUBLIC_ANALYTICS_API_URL || 'http://localhost:4000/api/v1')
+
+const appendApiVersion = (value: string, defaultSuffix = '/api/v1') => {
+  const normalized = value.replace(/\/+$/, '')
+  if (/\/api\/v\d+$/i.test(normalized) || /\/v\d+$/i.test(normalized)) {
+    return normalized
+  }
+  if (/\/api$/i.test(normalized)) {
+    return `${normalized}/v1`
+  }
+  return `${normalized}${defaultSuffix}`
+}
+
+const normalizeBase = (candidate: string | undefined, fallbackHost: string) => {
+  const base = (candidate && candidate.trim().length > 0 ? candidate.trim() : fallbackHost)
+  return appendApiVersion(base)
+}
+
+const CORE_HOST = process.env.NEXT_PUBLIC_API_URL
+const BASE_URL = USE_MOCK_API ? '/api/mock' : normalizeBase(CORE_HOST, 'http://localhost:8080')
+const FRAUD_API_URL = USE_MOCK_API
+  ? '/api/mock'
+  : normalizeBase(process.env.NEXT_PUBLIC_FRAUD_API_URL, CORE_HOST || 'http://localhost:8080')
+const ANALYTICS_API_URL = USE_MOCK_API
+  ? '/api/mock'
+  : normalizeBase(process.env.NEXT_PUBLIC_ANALYTICS_API_URL, CORE_HOST || 'http://localhost:8080')
 
 // Create axios instances
 export const apiClient: AxiosInstance = axios.create({

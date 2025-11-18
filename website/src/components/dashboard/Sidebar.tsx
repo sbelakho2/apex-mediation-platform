@@ -66,7 +66,7 @@ export default function DashboardSidebar({ mobileOpen = false, onClose }: Dashbo
     const controller = typeof AbortController !== 'undefined' ? new AbortController() : undefined;
     (async () => {
       // Try a conventional endpoint; tolerate absence with defaults
-      const res = await api.get<FeatureFlags>('/api/v1/features', { signal: controller?.signal });
+      const res = await api.get<FeatureFlags>('/meta/features', { signal: controller?.signal });
       if (!alive) return;
       if (res.success && res.data) {
         setFeatures(res.data);

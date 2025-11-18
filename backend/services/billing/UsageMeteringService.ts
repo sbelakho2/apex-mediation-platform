@@ -4,6 +4,7 @@
 import { Pool } from 'pg';
 import Stripe from 'stripe';
 import { createClient } from '@clickhouse/client';
+import logger from '../../src/utils/logger';
 
 let stripeClient: Stripe | null = null;
 
@@ -77,7 +78,7 @@ interface PlanLimits {
   overage_price_data_transfer_cents: number; // per GB
 }
 
-const PLAN_LIMITS: Record<string, PlanLimits> = {
+const DEFAULT_PLAN_LIMITS: Record<string, PlanLimits> = {
   indie: {
     plan_type: 'indie',
     included_impressions: 1_000_000,
@@ -107,7 +108,76 @@ const PLAN_LIMITS: Record<string, PlanLimits> = {
   },
 };
 
+function resolvePlanLimitsFromEnv(): Record<string, PlanLimits> {
+  const raw = process.env.BILLING_PLAN_LIMITS_JSON;
+  if (!raw) return DEFAULT_PLAN_LIMITS;
+  try {
+    const parsed = JSON.parse(raw) as Record<string, Partial<PlanLimits>>;
+    const normalized: Record<string, PlanLimits> = {};
+    for (const [key, value] of Object.entries(parsed)) {
+      // Basic shape validation with sensible fallbacks to defaults when available
+      const def = DEFAULT_PLAN_LIMITS[key as keyof typeof DEFAULT_PLAN_LIMITS];
+      if (!def) {
+        // Skip unknown plan keys to avoid accidental activation
+        logger.warn('[UsageMetering] Unknown plan in BILLING_PLAN_LIMITS_JSON; skipping', {
+          plan: key,
+        });
+        continue;
+      }
+      const plan: PlanLimits = {
+        plan_type: String((value.plan_type ?? key) as string),
+        included_impressions: Number(
+          value.included_impressions ?? def.included_impressions
+        ),
+        included_api_calls: Number(value.included_api_calls ?? def.included_api_calls),
+        included_data_transfer_gb: Number(
+          value.included_data_transfer_gb ?? def.included_data_transfer_gb
+        ),
+        overage_price_impressions_cents: Number(
+          value.overage_price_impressions_cents ?? def.overage_price_impressions_cents
+        ),
+        overage_price_api_calls_cents: Number(
+          value.overage_price_api_calls_cents ?? def.overage_price_api_calls_cents
+        ),
+        overage_price_data_transfer_cents: Number(
+          value.overage_price_data_transfer_cents ?? def.overage_price_data_transfer_cents
+        ),
+      };
+      // Quick sanity checks
+      if (
+        plan.included_impressions < 0 ||
+        plan.included_api_calls < 0 ||
+        plan.included_data_transfer_gb < 0 ||
+        plan.overage_price_impressions_cents < 0 ||
+        plan.overage_price_api_calls_cents < 0 ||
+        plan.overage_price_data_transfer_cents < 0
+      ) {
+        logger.warn(
+          '[UsageMetering] Negative values detected in BILLING_PLAN_LIMITS_JSON; using defaults for plan',
+          { plan: key }
+        );
+        normalized[key] = def;
+      } else {
+        normalized[key] = plan;
+      }
+    }
+    // Merge with defaults to ensure all expected plans exist
+    return { ...DEFAULT_PLAN_LIMITS, ...normalized };
+  } catch (e) {
+    logger.warn('[UsageMetering] Failed to parse BILLING_PLAN_LIMITS_JSON; using defaults', {
+      error: (e as Error).message,
+    });
+    return DEFAULT_PLAN_LIMITS;
+  }
+}
+
 export class UsageMeteringService {
+  private planLimits: Record<string, PlanLimits>;
+
+  constructor(planLimits?: Record<string, PlanLimits>) {
+    this.planLimits = planLimits ?? resolvePlanLimitsFromEnv();
+  }
+
   /**
    * Record usage event (called by SDK telemetry endpoint)
    */
@@ -214,7 +284,7 @@ export class UsageMeteringService {
     }
 
     const planType = subscription.rows[0].plan_type;
-    const limits = PLAN_LIMITS[planType];
+    const limits = this.planLimits[planType];
 
     if (!limits) {
       throw new Error(`Unknown plan type: ${planType}`);
@@ -259,7 +329,7 @@ export class UsageMeteringService {
    * Run this daily via cron
    */
   async syncUsageToStripe(): Promise<void> {
-    console.log('[UsageMetering] Starting daily Stripe usage sync...');
+    logger.info('[UsageMetering] Starting daily Stripe usage sync...');
 
     // Get all active subscriptions
     const subscriptions = await db.query(
@@ -331,20 +401,22 @@ export class UsageMeteringService {
             timestamp: Math.floor(yesterday.getTime() / 1000),
           });
 
-          console.log(
-            `[UsageMetering] Synced ${quantity} ${metricType} for customer ${sub.customer_id}`
-          );
+          logger.info('[UsageMetering] Synced usage to Stripe', {
+            customerId: sub.customer_id,
+            metricType,
+            quantity,
+          });
         }
       } catch (error) {
-        console.error(
-          `[UsageMetering] Error syncing usage for customer ${sub.customer_id}:`,
-          error
-        );
+        logger.error('[UsageMetering] Error syncing usage for customer', {
+          customerId: sub.customer_id,
+          error,
+        });
         // Continue with other customers
       }
     }
 
-    console.log('[UsageMetering] Stripe usage sync complete');
+    logger.info('[UsageMetering] Stripe usage sync complete');
   }
 
   /**
@@ -352,7 +424,7 @@ export class UsageMeteringService {
    * Run this daily via cron
    */
   async checkUsageLimits(): Promise<void> {
-    console.log('[UsageMetering] Checking usage limits...');
+    logger.info('[UsageMetering] Checking usage limits...');
 
     const subscriptions = await db.query(
       `SELECT customer_id, plan_type, included_impressions
@@ -363,7 +435,7 @@ export class UsageMeteringService {
     for (const sub of subscriptions.rows) {
       try {
         const usage = await this.getCurrentPeriodUsage(sub.customer_id);
-        const limits = PLAN_LIMITS[sub.plan_type];
+        const limits = this.planLimits[sub.plan_type];
 
         if (!limits) continue;
 
@@ -380,14 +452,14 @@ export class UsageMeteringService {
           await this.sendUsageAlert(sub.customer_id, 110, usage.impressions, limits);
         }
       } catch (error) {
-        console.error(
-          `[UsageMetering] Error checking limits for customer ${sub.customer_id}:`,
-          error
-        );
+        logger.error('[UsageMetering] Error checking usage limits for customer', {
+          customerId: sub.customer_id,
+          error,
+        });
       }
     }
 
-    console.log('[UsageMetering] Usage limit checks complete');
+    logger.info('[UsageMetering] Usage limit checks complete');
   }
 
   /**
@@ -428,7 +500,11 @@ export class UsageMeteringService {
 
     // TODO: Send email via Resend/SES
     // For now, emit event for email service
-    console.log(`[UsageMetering] Alert: ${email} at ${percentUsed}% usage`);
+    logger.info('[UsageMetering] Usage alert threshold reached', {
+      customerId,
+      email,
+      percentUsed,
+    });
 
     // Emit event (to be handled by EmailService)
     await this.emitEvent('usage.alert', {
@@ -462,7 +538,7 @@ export class UsageMeteringService {
     }
 
     const planType = subscription.rows[0].plan_type;
-    const limits = PLAN_LIMITS[planType];
+    const limits = this.planLimits[planType];
 
     if (!limits) {
       throw new Error(`Unknown plan type: ${planType}`);

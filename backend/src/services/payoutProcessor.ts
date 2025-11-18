@@ -5,8 +5,9 @@ import {
   upsertPayoutSettings,
   PayoutSettingsInput,
 } from '../repositories/payoutRepository';
-import { query } from '../utils/postgres';
+import { query, getClient } from '../utils/postgres';
 import logger from '../utils/logger';
+import crypto from 'crypto';
 
 // ========================================
 // Payment Provider Types
@@ -100,7 +101,7 @@ class TipaltiProvider {
         logger.warn('Tipalti API key not configured, simulating success');
       }
 
-      const transactionId = `tipalti_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+      const transactionId = `tipalti_${crypto.randomUUID?.() ?? crypto.randomBytes(8).toString('hex')}`;
       
       logger.info('Tipalti payout successful', {
         payoutId: request.payoutId,
@@ -141,7 +142,7 @@ class WiseProvider {
         logger.warn('Wise API key not configured, simulating success');
       }
 
-      const transactionId = `wise_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+      const transactionId = `wise_${crypto.randomUUID?.() ?? crypto.randomBytes(8).toString('hex')}`;
       
       logger.info('Wise payout successful', {
         payoutId: request.payoutId,
@@ -182,7 +183,7 @@ class PayoneerProvider {
         logger.warn('Payoneer API key not configured, simulating success');
       }
 
-      const transactionId = `payoneer_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+      const transactionId = `payoneer_${crypto.randomUUID?.() ?? crypto.randomBytes(8).toString('hex')}`;
       
       logger.info('Payoneer payout successful', {
         payoutId: request.payoutId,
@@ -346,10 +347,39 @@ export const ledgerService = new PayoutLedgerService();
 // ========================================
 
 export class PaymentProcessor {
+  private static rateLimiter: Map<string, { count: number; resetAt: number }> = new Map();
+  private static readonly RATE_LIMIT_WINDOW_MS = 60_000; // 1 minute
+  private static readonly RATE_LIMIT_MAX = 5; // 5 payouts per publisher per minute
+
+  private isRateLimited(publisherId: string): boolean {
+    const now = Date.now();
+    const key = publisherId;
+    const entry = PaymentProcessor.rateLimiter.get(key);
+    if (!entry || entry.resetAt <= now) {
+      PaymentProcessor.rateLimiter.set(key, { count: 1, resetAt: now + PaymentProcessor.RATE_LIMIT_WINDOW_MS });
+      return false;
+    }
+    if (entry.count >= PaymentProcessor.RATE_LIMIT_MAX) {
+      return true;
+    }
+    entry.count += 1;
+    PaymentProcessor.rateLimiter.set(key, entry);
+    return false;
+  }
   /**
    * Process payout with automatic failover
    */
   async processPayout(request: PayoutRequest): Promise<PayoutResult> {
+    // Simple per-publisher rate limiter to avoid bursts
+    if (this.isRateLimited(request.publisherId)) {
+      logger.warn('Payout rate limit exceeded for publisher', { publisherId: request.publisherId });
+      return {
+        success: false,
+        provider: 'tipalti',
+        error: 'Rate limited: too many payout requests',
+        retryable: true,
+      };
+    }
     logger.info('Starting payout processing', {
       payoutId: request.payoutId,
       publisherId: request.publisherId,
@@ -383,42 +413,63 @@ export class PaymentProcessor {
         const result = await provider.sendPayout(request);
 
         if (result.success) {
-          // Create ledger entries for successful payout
-          await ledgerService.createLedgerEntries(
-            request.payoutId,
-            request.publisherId,
-            request.amount,
-            request.currency,
-            config.name
-          );
+          // Perform ledger creation + status update atomically
+          const client = await getClient();
+          try {
+            await client.query('BEGIN');
 
-          // Validate ledger balance
-          const isBalanced = await ledgerService.validateLedgerBalance(request.payoutId);
-          
-          if (!isBalanced) {
-            logger.error('Ledger validation failed after successful payout', {
+            // Debit entry (money leaving platform)
+            await client.query(
+              `INSERT INTO payout_ledger (payout_id, publisher_id, amount, currency, type, provider, created_at)
+               VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
+              [request.payoutId, request.publisherId, request.amount, request.currency, 'debit', config.name]
+            );
+
+            // Credit entry (publisher receiving money)
+            await client.query(
+              `INSERT INTO payout_ledger (payout_id, publisher_id, amount, currency, type, provider, created_at)
+               VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
+              [request.payoutId, request.publisherId, request.amount, request.currency, 'credit', config.name]
+            );
+
+            // Validate ledger balance within tx
+            const balRes = await client.query<{ balance: number }>(
+              `SELECT SUM(
+                 CASE WHEN type = 'debit' THEN -amount WHEN type = 'credit' THEN amount ELSE 0 END
+               ) as balance FROM payout_ledger WHERE payout_id = $1`,
+              [request.payoutId]
+            );
+            const balance = Number(balRes.rows[0]?.balance ?? 0);
+            if (Math.abs(balance) >= 0.01) {
+              throw new Error(`Ledger not balanced (balance=${balance})`);
+            }
+
+            // Update payout status
+            await client.query(
+              `UPDATE payouts SET status = $1, provider = $2, transaction_id = $3, processed_at = NOW(), updated_at = NOW() WHERE id = $4`,
+              ['processed', config.name, result.transactionId ?? null, request.payoutId]
+            );
+
+            await client.query('COMMIT');
+
+            logger.info('Payout processed successfully', {
               payoutId: request.payoutId,
               provider: config.name,
+              transactionId: result.transactionId,
             });
-            // Continue to try next provider
-            continue;
+
+            return result;
+          } catch (e) {
+            try { await client.query('ROLLBACK'); } catch {}
+            logger.error('Failed to finalize payout atomically, rolled back', {
+              payoutId: request.payoutId,
+              provider: config.name,
+              error: e,
+            });
+            // Continue to next provider on failure
+          } finally {
+            client.release();
           }
-
-          // Update payout status in database
-          await this.updatePayoutStatus(
-            request.payoutId,
-            'processed',
-            config.name,
-            result.transactionId
-          );
-
-          logger.info('Payout processed successfully', {
-            payoutId: request.payoutId,
-            provider: config.name,
-            transactionId: result.transactionId,
-          });
-
-          return result;
         }
 
         // If not retryable, fail immediately

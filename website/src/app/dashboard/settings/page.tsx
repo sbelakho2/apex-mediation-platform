@@ -331,7 +331,7 @@ function NotificationsTab() {
     let isMounted = true;
     (async () => {
       try {
-        const res = await api.get<{ connected: boolean }>('/api/v1/integrations/slack/status', { credentials: 'include' });
+        const res = await api.get<{ connected: boolean }>('/integrations/slack/status', { credentials: 'include' });
         if (!isMounted) return;
         if (res.success) setSlackConnected((res.data as any)?.connected === true);
         else setSlackError(res.error || 'Failed to fetch Slack status');
@@ -347,7 +347,7 @@ function NotificationsTab() {
     setSlackLoading(true);
     setSlackError(null);
     try {
-      const res = await api.get<{ url: string }>('/api/v1/integrations/slack/connect', { credentials: 'include' });
+      const res = await api.get<{ url: string }>('/integrations/slack/connect', { credentials: 'include' });
       if (res.success && (res.data as any)?.url) {
         window.location.href = (res.data as any).url;
       } else {
@@ -454,7 +454,7 @@ function SecurityTab() {
     setKeysLoading(true);
     setKeysError(null);
     try {
-      const res = await api.get<{ keys: ApiKey[] }>('/api/v1/keys', { credentials: 'include' });
+      const res = await api.get<{ keys: ApiKey[] }>('/keys', { credentials: 'include' });
       if (res.success) setKeys((res.data as any)?.keys ?? []);
       else setKeysError(res.error || 'Failed to load API keys');
     } catch (e: any) {
@@ -473,7 +473,7 @@ function SecurityTab() {
     setTwofaMsg(null);
     try {
       const res = await api.post<{ otpauthUrl: string; qrDataUrl: string; maskedSecret: string }>(
-        '/api/v1/auth/2fa/enroll',
+        '/auth/2fa/enroll',
         {},
         { credentials: 'include' }
       );
@@ -497,7 +497,7 @@ function SecurityTab() {
     setBackupCodes(null);
     try {
       const res = await api.post<{ backupCodes: string[] }>(
-        '/api/v1/auth/2fa/verify',
+        '/auth/2fa/verify',
         { token },
         { credentials: 'include' }
       );
@@ -517,7 +517,7 @@ function SecurityTab() {
   const createKey = async (live = false) => {
     try {
       const res = await api.post<{ id: string; secret: string; prefix: string; last4: string }>(
-        '/api/v1/keys',
+        '/keys',
         { live },
         { credentials: 'include' }
       );
@@ -536,7 +536,7 @@ function SecurityTab() {
   const rotateKey = async (id: string) => {
     try {
       const res = await api.post<{ id: string; secret: string; prefix: string; last4: string }>(
-        `/api/v1/keys/${id}/rotate`,
+        `/keys/${id}/rotate`,
         {},
         { credentials: 'include' }
       );
@@ -553,7 +553,7 @@ function SecurityTab() {
 
   const revokeKey = async (id: string) => {
     try {
-      const res = await api.delete(`/api/v1/keys/${id}`, { credentials: 'include' });
+      const res = await api.delete(`/keys/${id}`, { credentials: 'include' });
       if (!res.success && res.error) setKeysError(res.error);
       await fetchKeys();
     } catch (e: any) {

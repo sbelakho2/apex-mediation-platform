@@ -23,6 +23,7 @@ import migrationRoutes from './migration.routes';
 import keysRoutes from './keys.routes';
 import integrationsRoutes from './integrations.routes';
 import flagsRoutes from './flags.routes';
+import dashboardRoutes from './dashboard.routes';
 import { killSwitchGuard } from '../middleware/featureFlags';
 
 const router = Router();
@@ -46,6 +47,7 @@ router.use('/fraud', fraudRoutes);
 router.use('/payouts', payoutRoutes);
 router.use('/analytics', analyticsRoutes);
 router.use('/reporting', reportingRoutes);
+router.use('/dashboard', dashboardRoutes);
 router.use('/rtb', rtbRoutes);
 router.use('/skadnetwork', skadnetworkRoutes);
 router.use('/consent', consentRoutes);

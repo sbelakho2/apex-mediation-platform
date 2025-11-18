@@ -4,67 +4,32 @@
 // Analytics dashboard wired to live APIs with accessible charts and resilient states
 
 import {
-    ArrowPathIcon,
-    ChartPieIcon,
-    ClockIcon,
-    DevicePhoneMobileIcon,
-    GlobeAltIcon,
-    UsersIcon,
+  ArrowPathIcon,
+  ChartPieIcon,
+  CurrencyDollarIcon,
+  DevicePhoneMobileIcon,
+  GlobeAltIcon,
+  UsersIcon,
 } from '@heroicons/react/24/outline';
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '@/lib/api';
 
 type Range = 'today' | 'week' | 'month'
 
-type Overview = Partial<{
-  totalUsers: number
-  avgSessionSeconds: number
-  ctr: number // 0..1
-  fillRate: number // 0..1
-  requests: number
-  dauMau: number // 0..1
-  platform: { name: string; percent: number; users: number }[]
-  topCountries: { country: string; users: number; percent: number }[]
-  formats: { name: string; impressions: number; ecpm: number; ctr: number; fillRate: number }[]
-}>
+type AnalyticsOverview = {
+  revenue: {
+    today: number;
+    yesterday: number;
+    thisMonth: number;
+    lastMonth: number;
+    lifetime: number;
+  };
+  impressions: number;
+  clicks: number;
+  ecpm: number;
+  ctr: number;
+};
 
-type FunnelStepType = { label: string; value: number; percent: number }
-
-export default function AnalyticsPage() {
-  const [timeRange, setTimeRange] = useState<Range>('week');
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [overview, setOverview] = useState<Overview>({});
-  const [funnel, setFunnel] = useState<FunnelStepType[]>([]);
-
-  const numberFmt = useMemo(() => new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }), []);
-  const pctFmt = useMemo(() => new Intl.NumberFormat(undefined, { style: 'percent', maximumFractionDigits: 1 }), []);
-  const currencyFmt = useMemo(() => new Intl.NumberFormat(undefined, { style: 'currency', currency: process.env.NEXT_PUBLIC_DEFAULT_CURRENCY || 'USD' }), []);
-
-  useEffect(() => {
-    let alive = true;
-    const controller = typeof AbortController !== 'undefined' ? new AbortController() : undefined;
-    setLoading(true);
-    setError(null);
-    (async () => {
-      const rangeParam = timeRange === 'today' ? '1d' : timeRange === 'week' ? '7d' : '30d';
-      const [o, f] = await Promise.all([
-        api.get<Overview>(`/api/v1/analytics/overview?range=${rangeParam}`, { signal: controller?.signal }),
-        api.get<{ steps: FunnelStepType[] }>(`/api/v1/analytics/funnels?range=${rangeParam}`, { signal: controller?.signal }),
-      ]);
-      if (!alive) return;
-      if (!o.success || !o.data) {
-        setError(o.error || 'Failed to load analytics overview');
-        setLoading(false);
-        return;
-      }
-      if (!f.success || !f.data) {
-        setError(f.error || 'Failed to load funnel');
-        setLoading(false);
-        return;
-      }
-      setOverview(o.data);
-      setFunnel(f.data.steps || []);
       setLoading(false);
     })().catch((e) => {
       if (!alive) return;
@@ -77,12 +42,76 @@ export default function AnalyticsPage() {
     };
   }, [timeRange]);
 
-  const totalUsers = overview.totalUsers ?? 0;
-  const avgSession = overview.avgSessionSeconds ?? 0;
-  const ctr = Math.min(1, Math.max(0, overview.ctr ?? 0));
-  const fillRate = Math.min(1, Math.max(0, overview.fillRate ?? 0));
-  const requests = overview.requests ?? 0;
-  const dauMau = Math.min(1, Math.max(0, overview.dauMau ?? 0));
+  const totals = useMemo(() => {
+    return series.reduce(
+      (acc, point) => {
+        acc.revenue += Math.max(0, point.revenue || 0);
+        acc.impressions += Math.max(0, point.impressions || 0);
+        acc.clicks += Math.max(0, point.clicks || 0);
+        return acc;
+      },
+      { revenue: 0, impressions: 0, clicks: 0 }
+    );
+  }, [series]);
+
+  const funnel = useMemo(() => {
+    const values = [totals.impressions, totals.clicks, totals.revenue];
+    const maxValue = Math.max(...values, 1);
+    return [
+      { label: 'Impressions', value: totals.impressions, percent: Math.round((totals.impressions / maxValue) * 100) },
+      { label: 'Clicks', value: totals.clicks, percent: Math.round((totals.clicks / maxValue) * 100) },
+      { label: 'Revenue', value: totals.revenue, percent: Math.round((totals.revenue / maxValue) * 100) },
+    ];
+  }, [totals]);
+
+  const ctrValue = Math.max(0, (overview?.ctr ?? 0) / 100);
+  const impressionsPerMinute = totals.impressions / 60;
+
+  const metricCards = overview
+    ? [
+        {
+          title: 'Revenue (Today)',
+          value: currencyFmt.format(Math.max(0, overview.revenue.today)),
+          change: percentDelta(overview.revenue.today, overview.revenue.yesterday),
+          icon: CurrencyDollarIcon,
+          trend: [45, 52, 48, 61, 58, 67, 72],
+        },
+        {
+          title: 'Revenue (This Month)',
+          value: currencyFmt.format(Math.max(0, overview.revenue.thisMonth)),
+          change: percentDelta(overview.revenue.thisMonth, overview.revenue.lastMonth),
+          icon: ArrowPathIcon,
+          trend: [62, 58, 65, 63, 70, 68, 72],
+        },
+        {
+          title: 'Lifetime Revenue',
+          value: currencyFmt.format(Math.max(0, overview.revenue.lifetime)),
+          {loading ? (
+            <div className="h-64 animate-pulse bg-white/30 rounded" aria-hidden="true" />
+          ) : series.length === 0 ? (
+        },
+        {
+          title: 'Impressions',
+              {series.map((p, i) => {
+                const value = Math.max(0, p.revenue || 0);
+                const maxVal = Math.max(
+                  1,
+                  ...series.map((pp) => Math.max(0, pp.revenue || 0))
+                );
+                const height = Math.round((value / maxVal) * 100);
+                const label = new Date(p.date).toLocaleDateString();
+          icon: UsersIcon,
+          trend: [35, 37, 39, 40, 41, 42, 42],
+        },
+        {
+          title: 'Avg eCPM',
+          value: currencyFmt.format(Math.max(0, overview.ecpm)),
+          change: 0,
+          icon: ChartPieIcon,
+          trend: [65, 70, 75, 82, 88, 95, 100],
+        },
+      ]
+    : [];
 
   return (
     <div className="p-6 space-y-6">
@@ -129,12 +158,16 @@ export default function AnalyticsPage() {
           </div>
         ) : (
           <>
-            <MetricCard title="Total Users" value={numberFmt.format(totalUsers)} change={0} icon={UsersIcon} trend={[45,52,48,61,58,67,72]} />
-            <MetricCard title="Avg Session Duration" value={`${Math.floor(avgSession/60)}m ${Math.round(avgSession%60)}s`} change={0} icon={ClockIcon} trend={[62,58,65,63,70,68,72]} />
-            <MetricCard title="Click-Through Rate" value={pctFmt.format(ctr)} change={0} icon={ArrowPathIcon} trend={[58,62,59,55,52,50,48]} />
-            <MetricCard title="Fill Rate" value={pctFmt.format(fillRate)} change={0} icon={ChartPieIcon} trend={[82,85,88,90,93,95,98]} />
-            <MetricCard title="DAU/MAU Ratio" value={pctFmt.format(dauMau)} change={0} icon={DevicePhoneMobileIcon} trend={[35,37,39,40,41,42,42]} />
-            <MetricCard title="Requests" value={numberFmt.format(requests)} change={0} icon={GlobeAltIcon} trend={[65,70,75,82,88,95,100]} />
+            {metricCards.map((card) => (
+              <MetricCard
+                key={card.title}
+                title={card.title}
+                value={card.value}
+                change={card.change}
+                icon={card.icon}
+                trend={card.trend}
+              />
+            ))}
           </>
         )}
       </div>
@@ -165,74 +198,36 @@ export default function AnalyticsPage() {
         )}
       </div>
 
-      {/* Platform & Geography Breakdown */}
-      <div className="grid md:grid-cols-2 gap-6">
-        {/* Platform Distribution */}
-        <div className="card p-6">
-          <h2 className="text-primary-blue font-bold uppercase text-lg mb-4 border-b-2 border-sunshine-yellow pb-2">
-            Platform Distribution
-          </h2>
-          {loading ? (
-            <div className="space-y-3" aria-busy="true">
-              {[...Array(3)].map((_, i) => (<div key={i} className="h-8 bg-gray-100 animate-pulse rounded" />))}
-            </div>
-          ) : error ? (
-            <p className="text-sm text-red-700">{error}</p>
-          ) : (
-            <div className="space-y-4">
-              {(overview.platform ?? []).map((p, i) => (
-                <PlatformBar key={i} platform={p.name} percentage={p.percent} users={p.users} color={i % 2 ? 'yellow' : 'blue'} />
-              ))}
-              {(overview.platform ?? []).length === 0 && (
-                <p className="text-sm text-gray-600">No platform data.</p>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Top Countries */}
-        <div className="card p-6">
-          <h2 className="text-primary-blue font-bold uppercase text-lg mb-4 border-b-2 border-sunshine-yellow pb-2">
-            Top Countries
-          </h2>
-          {loading ? (
-            <div className="space-y-3" aria-busy="true">
-              {[...Array(5)].map((_, i) => (<div key={i} className="h-7 bg-gray-100 animate-pulse rounded" />))}
-            </div>
-          ) : error ? (
-            <p className="text-sm text-red-700">{error}</p>
-          ) : (
-            <div className="space-y-3">
-              {(overview.topCountries ?? []).map((c, i) => (
-                <CountryItem key={i} country={c.country} users={c.users} percentage={c.percent} />
-              ))}
-              {(overview.topCountries ?? []).length === 0 && (
-                <p className="text-sm text-gray-600">No country breakdown.</p>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Ad Format Performance */}
+      {/* Performance Breakdown */}
       <div className="card p-6">
         <h2 className="text-primary-blue font-bold uppercase text-lg mb-4 border-b-2 border-sunshine-yellow pb-2">
-          Ad Format Performance
+          Top Placements
         </h2>
         {loading ? (
-          <div className="grid md:grid-cols-3 gap-6 mt-6" aria-busy="true">
-            {[...Array(3)].map((_, i) => (<div key={i} className="h-28 bg-gray-100 animate-pulse rounded" />))}
+          <div className="space-y-3" aria-busy="true">
+            {[...Array(5)].map((_, i) => (
+              <div key={i} className="h-12 bg-gray-100 animate-pulse rounded" />
+            ))}
           </div>
         ) : error ? (
           <p className="text-sm text-red-700">{error}</p>
+        ) : performance.length === 0 ? (
+          <p className="text-sm text-gray-600">No performance data.</p>
         ) : (
-          <div className="grid md:grid-cols-3 gap-6 mt-6">
-            {(overview.formats ?? []).map((f, i) => (
-              <AdFormatCard key={i} format={f.name} impressions={f.impressions} ecpm={f.ecpm} ctr={f.ctr} fillRate={f.fillRate} />
+          <div className="divide-y divide-gray-100">
+            {performance.slice(0, 6).map((row) => (
+              <div key={row.id} className="flex items-center justify-between py-3">
+                <div>
+                  <p className="text-primary-blue font-bold">{row.name}</p>
+                  <p className="text-xs text-gray-500">{numberFmt.format(Math.max(0, row.impressions))} impressions</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm text-gray-500">Revenue</p>
+                  <p className="text-lg font-bold text-primary-blue">{currencyFmt.format(Math.max(0, row.revenue))}</p>
+                  <p className="text-xs text-gray-500">eCPM {currencyFmt.format(Math.max(0, row.ecpm))}</p>
+                </div>
+              </div>
             ))}
-            {(overview.formats ?? []).length === 0 && (
-              <p className="text-sm text-gray-600">No ad format data.</p>
-            )}
           </div>
         )}
       </div>
@@ -257,20 +252,20 @@ export default function AnalyticsPage() {
         ) : (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
             <div>
-              <p className="text-sunshine-yellow text-3xl font-bold">{numberFmt.format(totalUsers)}</p>
-              <p className="text-white text-sm mt-1">Active Users</p>
+              <p className="text-sunshine-yellow text-3xl font-bold">{currencyFmt.format(Math.max(0, totals.revenue))}</p>
+              <p className="text-white text-sm mt-1">Revenue ({timeRange})</p>
             </div>
             <div>
-              <p className="text-sunshine-yellow text-3xl font-bold">{numberFmt.format(requests / 60)}</p>
-              <p className="text-white text-sm mt-1">Impressions/min</p>
+              <p className="text-sunshine-yellow text-3xl font-bold">{numberFmt.format(Math.max(0, Math.round(impressionsPerMinute)))}</p>
+              <p className="text-white text-sm mt-1">Impressions / min</p>
             </div>
             <div>
-              <p className="text-sunshine-yellow text-3xl font-bold">{currencyFmt.format(0)}</p>
-              <p className="text-white text-sm mt-1">Revenue/hour</p>
+              <p className="text-sunshine-yellow text-3xl font-bold">{numberFmt.format(Math.max(0, totals.clicks))}</p>
+              <p className="text-white text-sm mt-1">Clicks ({timeRange})</p>
             </div>
             <div>
-              <p className="text-sunshine-yellow text-3xl font-bold">{pctFmt.format(fillRate)}</p>
-              <p className="text-white text-sm mt-1">Fill Rate</p>
+              <p className="text-sunshine-yellow text-3xl font-bold">{pctFmt.format(ctrValue)}</p>
+              <p className="text-white text-sm mt-1">CTR</p>
             </div>
           </div>
         )}

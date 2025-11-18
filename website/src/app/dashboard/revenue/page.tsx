@@ -11,23 +11,41 @@ import {
 } from '@heroicons/react/24/outline';
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '@/lib/api';
+import Container from '@/components/ui/Container';
+import Section from '@/components/ui/Section';
+
+type RevenueSeriesResponse = {
+  data: Array<{ timestamp: string; revenue: number; impressions: number; ecpm: number }>;
+  meta?: { currency?: string };
+};
+
+type RevenueSummaryResponse = {
+  totalRevenue: number;
+  totalImpressions: number;
+  totalClicks: number;
+  averageEcpm: number;
+  averageFillRate: number;
+  periodStart: string;
+  periodEnd: string;
+};
 
 type RangeKey = 'today' | 'week' | 'month' | 'year';
 
-type TimePoint = { ts: string; revenueCents: number; impressions: number; ecpmCents: number };
+type TimePoint = { ts: string; revenue: number; impressions: number; ecpm: number };
 
 type RevenueSeries = {
   points: TimePoint[];
 };
 
-type TopApp = { name: string; revenueCents: number; impressions: number; percent: number };
-type TopNetwork = { name: string; revenueCents: number; ecpmCents: number; percent: number };
+type TopApp = { name: string; revenue: number; impressions: number; percent: number };
+type TopNetwork = { name: string; revenue: number; ecpm: number; percent: number };
 
 export default function RevenuePage() {
   const [timeRange, setTimeRange] = useState<RangeKey>('week');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [series, setSeries] = useState<RevenueSeries>({ points: [] });
+  const [summary, setSummary] = useState<RevenueSummaryResponse | null>(null);
   const [topApps, setTopApps] = useState<TopApp[]>([]);
   const [topNetworks, setTopNetworks] = useState<TopNetwork[]>([]);
 
@@ -37,18 +55,28 @@ export default function RevenuePage() {
   const curFmt = useMemo(() => new Intl.NumberFormat(undefined, { style: 'currency', currency }), [currency]);
 
   // Range mapping for API
-  function toApiRange(r: RangeKey): string {
+  function toApiRange(r: RangeKey): { startDate: string; endDate: string } {
+    const end = new Date();
+    const start = new Date(end);
     switch (r) {
       case 'today':
-        return '1d';
+        start.setDate(end.getDate() - 1);
+        break;
       case 'week':
-        return '7d';
+        start.setDate(end.getDate() - 7);
+        break;
       case 'month':
-        return '30d';
+        start.setMonth(end.getMonth() - 1);
+        break;
       case 'year':
       default:
-        return '365d';
+        start.setFullYear(end.getFullYear() - 1);
+        break;
     }
+    return {
+      startDate: start.toISOString().slice(0, 10),
+      endDate: end.toISOString().slice(0, 10),
+    };
   }
 
   useEffect(() => {
@@ -57,21 +85,31 @@ export default function RevenuePage() {
     setLoading(true);
     setError(null);
     (async () => {
-      const range = toApiRange(timeRange);
+      const { startDate, endDate } = toApiRange(timeRange);
+      const query = `startDate=${startDate}&endDate=${endDate}`;
       // Fetch in parallel; tolerate missing routes by handling { success:false }
-      const [s, apps, nets] = await Promise.all([
-        api.get<RevenueSeries>(`/api/v1/revenue/timeseries?range=${range}`, { signal: controller?.signal }),
-        api.get<{ items: TopApp[] }>(`/api/v1/revenue/top-apps?range=${range}`, { signal: controller?.signal }),
-        api.get<{ items: TopNetwork[] }>(`/api/v1/revenue/top-networks?range=${range}`, { signal: controller?.signal }),
+      const [seriesRes, summaryRes, apps, nets] = await Promise.all([
+        api.get<RevenueSeriesResponse>(`/revenue/timeseries?${query}`, { signal: controller?.signal }),
+        api.get<RevenueSummaryResponse>(`/revenue/summary?${query}`, { signal: controller?.signal }),
+        api.get<{ items: TopApp[] }>(`/revenue/top-apps?${query}`, { signal: controller?.signal }),
+        api.get<{ items: TopNetwork[] }>(`/revenue/top-networks?${query}`, { signal: controller?.signal }),
       ]);
 
       if (!alive) return;
-      if (!s.success || !s.data) {
-        setError(s.error || 'Failed to load revenue data');
+      if (!seriesRes.success || !seriesRes.data) {
+        setError(seriesRes.error || 'Failed to load revenue data');
         setLoading(false);
         return;
       }
-      setSeries({ points: s.data.points || [] });
+      setSeries({
+        points: seriesRes.data.map((point) => ({
+          ts: point.timestamp,
+          revenue: point.revenue,
+          impressions: point.impressions,
+          ecpm: point.ecpm,
+        })),
+      });
+      setSummary(summaryRes.success && summaryRes.data ? summaryRes.data : null);
       setTopApps((apps.success && apps.data?.items) ? apps.data.items : []);
       setTopNetworks((nets.success && nets.data?.items) ? nets.data.items : []);
       setLoading(false);
@@ -88,7 +126,7 @@ export default function RevenuePage() {
 
   // Derive current headline stats from the time series
   const totals = useMemo(() => {
-    const revenue = series.points.reduce((acc, p) => acc + Math.max(0, (p.revenueCents || 0) / 100), 0);
+    const revenue = series.points.reduce((acc, p) => acc + Math.max(0, p.revenue || 0), 0);
     const impressions = series.points.reduce((acc, p) => acc + Math.max(0, p.impressions || 0), 0);
     const ecpm = impressions > 0 ? (revenue / impressions) * 1000 : 0;
     return { revenue, impressions, ecpm };
@@ -98,7 +136,7 @@ export default function RevenuePage() {
   const changePct = useMemo(() => {
     if (series.points.length < 2) return 0;
     const mid = Math.floor(series.points.length / 2);
-    const sum = (pts: TimePoint[]) => pts.reduce((a, p) => a + Math.max(0, (p.revenueCents || 0) / 100), 0);
+    const sum = (pts: TimePoint[]) => pts.reduce((a, p) => a + Math.max(0, p.revenue || 0), 0);
     const prev = sum(series.points.slice(0, mid));
     const curr = sum(series.points.slice(mid));
     if (prev <= 0) return curr > 0 ? 100 : 0;
@@ -106,7 +144,8 @@ export default function RevenuePage() {
   }, [series]);
 
   return (
-    <div className="p-6 space-y-6">
+    <Section>
+      <Container className="space-y-6">
       {/* Page Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -155,21 +194,21 @@ export default function RevenuePage() {
           <>
             <StatCard
               title="Total Revenue"
-              value={curFmt.format(Math.max(0, totals.revenue))}
+              value={curFmt.format(Math.max(0, summary?.totalRevenue ?? totals.revenue))}
               change={changePct}
               icon={CurrencyDollarIcon}
               color="yellow"
             />
             <StatCard
               title="Impressions"
-              value={numFmt.format(Math.max(0, totals.impressions))}
+              value={numFmt.format(Math.max(0, summary?.totalImpressions ?? totals.impressions))}
               change={undefined}
               icon={ChartBarIcon}
               color="blue"
             />
             <StatCard
               title="eCPM"
-              value={curFmt.format(Math.max(0, totals.ecpm))}
+              value={curFmt.format(Math.max(0, summary?.averageEcpm ?? totals.ecpm))}
               change={undefined}
               icon={ArrowTrendingUpIcon}
               color="yellow"
@@ -197,11 +236,11 @@ export default function RevenuePage() {
         ) : (
           <div className="h-64 flex items-end justify-between gap-2" aria-live="polite">
             {series.points.map((p, i) => {
-              const value = Math.max(0, (p.revenueCents || 0) / 100);
+              const value = Math.max(0, p.revenue || 0);
               // Normalize heights within this series (avoid division by zero)
               const maxVal = Math.max(
                 1,
-                ...series.points.map((pp) => Math.max(0, (pp.revenueCents || 0) / 100))
+                ...series.points.map((pp) => Math.max(0, pp.revenue || 0))
               );
               const height = Math.round((value / maxVal) * 100);
               const label = new Date(p.ts).toLocaleDateString();
@@ -241,7 +280,7 @@ export default function RevenuePage() {
                 <AppRevenueItem
                   key={i}
                   name={a.name}
-                  revenue={Math.max(0, a.revenueCents / 100)}
+                  revenue={Math.max(0, a.revenue)}
                   percentage={Math.max(0, Math.min(100, a.percent))}
                   impressions={Math.max(0, a.impressions)}
                   curFmt={curFmt}
@@ -270,9 +309,9 @@ export default function RevenuePage() {
                 <NetworkRevenueItem
                   key={i}
                   name={n.name}
-                  revenue={Math.max(0, n.revenueCents / 100)}
+                  revenue={Math.max(0, n.revenue)}
                   percentage={Math.max(0, Math.min(100, n.percent))}
-                  ecpm={Math.max(0, n.ecpmCents / 100)}
+                  ecpm={Math.max(0, n.ecpm)}
                   curFmt={curFmt}
                 />
               ))}
@@ -310,7 +349,8 @@ export default function RevenuePage() {
           </a>
         </div>
       </div>
-    </div>
+      </Container>
+    </Section>
   );
 }
 

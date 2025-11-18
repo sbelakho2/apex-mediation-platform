@@ -56,7 +56,7 @@ export default function AppDetailClient({ id }: { id: string }) {
     setLoading(true);
     setError(null);
     (async () => {
-      const res = await api.get(`/api/v1/apps/${encodeURIComponent(id)}`, { signal: controller?.signal });
+      const res = await api.get(`/apps/${encodeURIComponent(id)}`, { signal: controller?.signal });
       if (!alive) return;
       if (!res.success || !res.data) {
         setError(res.error || 'App not found');
@@ -82,7 +82,7 @@ export default function AppDetailClient({ id }: { id: string }) {
     setError(null);
     const next = !appConfig.enabled;
     const res = await api.put(
-      `/api/v1/apps/${encodeURIComponent(appConfig.id)}`,
+      `/apps/${encodeURIComponent(appConfig.id)}`,
       { enabled: next },
       { headers: { ...(csrf ? { 'X-CSRF-Token': csrf } : {}) } }
     );
@@ -99,7 +99,7 @@ export default function AppDetailClient({ id }: { id: string }) {
     setSaving(true);
     setError(null);
     const res = await api.post(
-      `/api/v1/apps/${encodeURIComponent(appConfig.id)}/rotate-key`,
+      `/apps/${encodeURIComponent(appConfig.id)}/rotate-key`,
       {},
       { headers: { ...(csrf ? { 'X-CSRF-Token': csrf } : {}) } }
     );

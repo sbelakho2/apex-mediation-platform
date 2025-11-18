@@ -2,10 +2,22 @@
  * Backend API client configuration — with credentials, retries, and de‑duping.
  */
 
-const BACKEND_URL =
+const appendApiVersion = (value: string, defaultSuffix = '/api/v1') => {
+  const normalized = value.replace(/\/+$/, '');
+  if (/\/api\/v\d+$/i.test(normalized) || /\/v\d+$/i.test(normalized)) {
+    return normalized;
+  }
+  if (/\/api$/i.test(normalized)) {
+    return `${normalized}/v1`;
+  }
+  return `${normalized}${defaultSuffix}`;
+};
+
+const BACKEND_URL = appendApiVersion(
   process.env.NEXT_PUBLIC_BACKEND_URL ||
-  process.env.NEXT_PUBLIC_API_URL ||
-  'http://localhost:3001';
+    process.env.NEXT_PUBLIC_API_URL ||
+    'http://localhost:8080'
+);
 
 export interface ApiResponse<T = any> {
   success: boolean;

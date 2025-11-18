@@ -94,7 +94,7 @@ STRIPE_WEBHOOK_SECRET=whsec_...
 ### Console
 ```bash
 NEXT_PUBLIC_BILLING_ENABLED=true
-NEXT_PUBLIC_API_URL=http://localhost:4000/api/v1
+NEXT_PUBLIC_API_URL=http://localhost:8080/api/v1
 ```
 
 ## Architecture

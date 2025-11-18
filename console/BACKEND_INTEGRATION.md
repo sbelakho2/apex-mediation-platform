@@ -13,9 +13,9 @@ The console uses environment variables to configure API connections. Create a `.
 NEXT_PUBLIC_USE_MOCK_API=false
 
 # Backend API URLs (services may run on different hosts/ports)
-NEXT_PUBLIC_API_URL=http://localhost:4000/api/v1
-NEXT_PUBLIC_FRAUD_API_URL=http://localhost:4200/api/v1
-NEXT_PUBLIC_ANALYTICS_API_URL=http://localhost:4300/api/v1
+NEXT_PUBLIC_API_URL=http://localhost:8080/api/v1
+NEXT_PUBLIC_FRAUD_API_URL=http://localhost:8080/api/v1
+NEXT_PUBLIC_ANALYTICS_API_URL=http://localhost:8080/api/v1
 
 # NextAuth configuration
 NEXTAUTH_URL=http://localhost:3000
@@ -28,10 +28,7 @@ NEXT_PUBLIC_ENABLE_FRAUD_DETECTION=true
 
 ### Backend Requirements
 
-Each service can sit behind its own host/port combination. The example above matches a typical local stack where:
-- Core API traffic goes through `localhost:4000`
-- Fraud service is proxied on `localhost:4200`
-- Analytics service is available on `localhost:4300`
+Each service can sit behind its own host/port combination. The example above matches the default Docker/Fly stack where everything is exposed via the backend container on `localhost:8080`. If you split services across hosts, keep the `/api/v1` suffix and update the host/port for each `NEXT_PUBLIC_*_API_URL` accordingly.
 
 Make sure your `.env.local` entries point to the correct hosts for your environment (Fly, Docker, or local dev). Supporting infrastructure usually includes:
 - PostgreSQL (port 5432)
@@ -153,29 +150,15 @@ All API endpoints are accessed through `/api/v1/*` base path:
 The console uses Axios with three client instances:
 
 ```typescript
-// All clients use the same base URL
-const BASE_URL = 'http://localhost:4000/api/v1'
+import { apiClient, fraudApiClient, analyticsApiClient } from '@/lib/api-client'
 
-export const apiClient = axios.create({
-  baseURL: BASE_URL,
-  timeout: 10000,
-})
+// api-client.ts normalizes NEXT_PUBLIC_* env vars and appends /api/v1 if needed,
+// so setting NEXT_PUBLIC_API_URL=http://localhost:8080 is enough for local stacks.
 
-export const fraudApiClient = axios.create({
-The console uses environment variables to configure API connections. Create a `.env.local` file (adjust hosts per environment):
-  timeout: 10000,
-})
-
-export const analyticsApiClient = axios.create({
-  baseURL: BASE_URL,
-  timeout: 10000,
-})
+export const fetchPublisher = () => apiClient.get('/publishers/me')
+export const fetchFraudStats = (publisherId: string) =>
+  fraudApiClient.get(`/fraud/stats/${publisherId}`)
 ```
-# Updated API URLs
-# These may point at different origins depending on where each service lives.
-NEXT_PUBLIC_API_URL=http://localhost:4000/api/v1
-NEXT_PUBLIC_FRAUD_API_URL=http://localhost:5000/api/v1
-NEXT_PUBLIC_ANALYTICS_API_URL=http://localhost:6000/api/v1
 - Handle 401 errors by redirecting to login
 - Format errors consistently
 
@@ -199,7 +182,7 @@ npm run migrate
 npm run dev
 ```
 
-Backend will run on http://localhost:4000
+Backend will run on http://localhost:8080
 
 ### 2. Start Console
 
@@ -223,7 +206,7 @@ Console will run on http://localhost:3000
 1. Open browser to http://localhost:3000
 2. Navigate to login page
 3. Enter credentials or use demo mode
-4. Check browser DevTools Network tab for API calls to http://localhost:4000
+4. Check browser DevTools Network tab for API calls to http://localhost:8080
 5. Verify responses contain real data from backend
 
 ## Switching Between Mock and Real API
@@ -264,7 +247,7 @@ Backend CORS is configured to allow requests from http://localhost:3000 by defau
 
 ### Console can't connect to backend
 
-1. Check backend is running: `curl http://localhost:4000/health`
+1. Check backend is running: `curl http://localhost:8080/health`
 2. Verify `.env.local` has correct API URL
 3. Check browser console for CORS errors
 4. Ensure backend CORS_ORIGIN includes console URL

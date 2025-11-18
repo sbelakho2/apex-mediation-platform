@@ -52,7 +52,7 @@ export default function PlacementDetailClient({ id }: { id: string }) {
     setLoading(true);
     setError(null);
     (async () => {
-      const res = await api.get(`/api/v1/placements/${encodeURIComponent(id)}`, { signal: controller?.signal });
+      const res = await api.get(`/placements/${encodeURIComponent(id)}`, { signal: controller?.signal });
       if (!alive) return;
       if (!res.success || !res.data) {
         setError(res.error || 'Placement not found');
@@ -85,7 +85,7 @@ export default function PlacementDetailClient({ id }: { id: string }) {
     if (!placement) return;
     const next = placement.status === 'active' ? 'inactive' : 'active';
     const res = await api.put(
-      `/api/v1/placements/${placement.id}`,
+      `/placements/${placement.id}`,
       { status: next },
       { headers: { ...(getCsrf() ? { 'X-CSRF-Token': getCsrf()! } : {}) } }
     );
@@ -99,7 +99,7 @@ export default function PlacementDetailClient({ id }: { id: string }) {
   async function archive() {
     if (!placement) return;
     if (!confirm('Archive this placement?')) return;
-    const res = await api.delete(`/api/v1/placements/${placement.id}`);
+    const res = await api.delete(`/placements/${placement.id}`);
     if (!res.success) {
       setError(res.error || 'Failed to archive');
       return;

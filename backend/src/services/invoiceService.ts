@@ -7,6 +7,7 @@ import { Pool } from 'pg';
 import Stripe from 'stripe';
 import PDFDocument from 'pdfkit';
 import crypto from 'crypto';
+import logger from '../utils/logger';
 
 let stripeClient: Stripe | null = null;
 
@@ -58,6 +59,47 @@ export interface Invoice {
 }
 
 export class InvoiceService {
+  /**
+   * Basic runtime validation for invoice line items to ensure values are sane
+   */
+  private validateLineItems(lineItems: Invoice['line_items']): Invoice['line_items'] {
+    if (!Array.isArray(lineItems)) {
+      throw new Error('invoice.line_items must be an array');
+    }
+    const normalized: Invoice['line_items'] = [];
+    for (const [idx, item] of lineItems.entries()) {
+      if (!item || typeof item !== 'object') {
+        throw new Error(`invoice.line_items[${idx}] must be an object`);
+      }
+      const description = String((item as any).description ?? '').trim();
+      const quantityNum = Number((item as any).quantity ?? 0);
+      const unitPriceNum = Number((item as any).unit_price_cents ?? 0);
+      const totalNum = Number((item as any).total_cents ?? quantityNum * unitPriceNum);
+
+      if (!description) {
+        throw new Error(`invoice.line_items[${idx}].description is required`);
+      }
+      if (!Number.isFinite(quantityNum) || quantityNum < 0) {
+        throw new Error(`invoice.line_items[${idx}].quantity must be a non-negative number`);
+      }
+      if (!Number.isFinite(unitPriceNum) || unitPriceNum < 0) {
+        throw new Error(
+          `invoice.line_items[${idx}].unit_price_cents must be a non-negative number`
+        );
+      }
+      if (!Number.isFinite(totalNum) || totalNum < 0) {
+        throw new Error(`invoice.line_items[${idx}].total_cents must be a non-negative number`);
+      }
+
+      normalized.push({
+        description,
+        quantity: Math.round(quantityNum),
+        unit_price_cents: Math.round(unitPriceNum),
+        total_cents: Math.round(totalNum),
+      });
+    }
+    return normalized;
+  }
   /**
    * List invoices for a customer with pagination and filtering
    */
@@ -142,6 +184,47 @@ export class InvoiceService {
    * Generate invoice PDF
    */
   async generateInvoicePDF(invoice: Invoice): Promise<Buffer> {
+    // Validate line items and normalize first
+    const safeLineItems = this.validateLineItems(invoice.line_items);
+    const subtotal = safeLineItems.reduce((acc, li) => acc + li.total_cents, 0);
+    if (invoice.amount_cents != null && invoice.amount_cents !== subtotal) {
+      logger.warn('[Invoice] amount_cents does not match line_items subtotal; adjusting for PDF', {
+        invoiceId: invoice.id,
+        amount_cents: invoice.amount_cents,
+        computed_subtotal: subtotal,
+      });
+    }
+    const totalExpected = subtotal + (invoice.tax_amount_cents || 0);
+    if (invoice.total_amount_cents != null && invoice.total_amount_cents !== totalExpected) {
+      logger.warn('[Invoice] total_amount_cents mismatch; using computed total for PDF', {
+        invoiceId: invoice.id,
+        total_amount_cents: invoice.total_amount_cents,
+        computed_total: totalExpected,
+      });
+    }
+
+    // Fetch minimal customer display info
+    let customerName = '';
+    let customerAddress = '';
+    try {
+      const customer = await db.query(
+        `SELECT coalesce(company_name, full_name) as name, coalesce(billing_address, shipping_address) as address
+         FROM users
+         WHERE id = $1`,
+        [invoice.customer_id]
+      );
+      customerName = customer.rows[0]?.name || invoice.customer_id;
+      customerAddress = customer.rows[0]?.address || '';
+    } catch (e) {
+      logger.warn('[Invoice] failed to load customer display info', {
+        invoiceId: invoice.id,
+        customerId: invoice.customer_id,
+        error: (e as Error).message,
+      });
+      customerName = invoice.customer_id;
+      customerAddress = '';
+    }
+
     return new Promise((resolve, reject) => {
       const doc = new PDFDocument({ margin: 50 });
       const buffers: Buffer[] = [];
@@ -174,13 +257,13 @@ export class InvoiceService {
         .text('VAT: [TBD]', 50, 195)
         .moveDown();
 
-      // Customer info (fetch from database)
+      // Customer info
       doc
         .fontSize(12)
         .text('Bill To:', 300, 150)
         .fontSize(10)
-        .text('[Customer Name]', 300, 165)
-        .text('[Customer Address]', 300, 180)
+        .text(customerName, 300, 165)
+        .text(customerAddress || '—', 300, 180)
         .moveDown();
 
       // Line items table
@@ -201,7 +284,7 @@ export class InvoiceService {
 
       let yPosition = tableTop + 25;
 
-      for (const item of invoice.line_items) {
+      for (const item of safeLineItems) {
         doc
           .fontSize(9)
           .text(item.description, 50, yPosition, { width: 250 })
@@ -228,7 +311,7 @@ export class InvoiceService {
       doc
         .fontSize(10)
         .text('Subtotal:', 350, yPosition)
-        .text(`$${(invoice.amount_cents / 100).toFixed(2)}`, 470, yPosition, {
+        .text(`$${(subtotal / 100).toFixed(2)}`, 470, yPosition, {
           width: 80,
           align: 'right',
         });
@@ -245,7 +328,7 @@ export class InvoiceService {
       doc
         .fontSize(12)
         .text('Total:', 350, yPosition)
-        .text(`$${(invoice.total_amount_cents / 100).toFixed(2)}`, 470, yPosition, {
+        .text(`$${(totalExpected / 100).toFixed(2)}`, 470, yPosition, {
           width: 80,
           align: 'right',
         });

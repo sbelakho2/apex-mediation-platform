@@ -65,7 +65,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Call backend registration endpoint
-    const response = await api.post('/api/v1/auth/register', {
+    const response = await api.post('/auth/register', {
       email,
       password,
       name,

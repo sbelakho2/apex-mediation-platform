@@ -18,42 +18,63 @@ interface NetworkRow {
   id: string;
   name: string;
   status: NetworkStatus;
-  revenueCents?: number;
-  impressions?: number;
-  ecpmCents?: number;
-  fillRate?: number; // 0..1 or 0..100
-  lastSyncAt?: string; // ISO
-  docsUrl?: string;
-  logsUrl?: string;
-}
-
-function normalize(row: any): Required<Pick<NetworkRow, 'id' | 'name' | 'status'>> & {
   revenue: number;
   impressions: number;
   ecpm: number;
   fillRatePct: number;
-  lastSync: string;
-  docsUrl?: string;
-  logsUrl?: string;
-} {
-  const status: NetworkStatus = (row.status === 'error' ? 'error' : row.status === 'active' ? 'active' : 'inactive');
-  const revenue = Math.max(0, Number(row.revenueCents || 0) / 100);
-  const impressions = Math.max(0, Number(row.impressions || 0));
-  const ecpm = Math.max(0, Number(row.ecpmCents || 0) / 100);
-  const fillRaw = Number(row.fillRate ?? 0);
+  ctr: number;
+  uptime?: number;
+  healthScore?: number;
+  note?: string;
+}
+
+type AdapterPerformanceRow = {
+  adapterId: string;
+  adapterName: string;
+  revenue: number;
+  impressions: number;
+  clicks: number;
+  ecpm: number;
+  ctr: number;
+  avgLatency: number;
+};
+
+type AdapterHealthRow = {
+  adapterId: string;
+  adapterName: string;
+  healthScore: number;
+  status: 'healthy' | 'degraded' | 'critical' | 'offline';
+  uptime: number;
+  errorRate: number;
+  fillRate: number;
+  revenueShare: number;
+  lastIssue?: string;
+};
+
+const statusMap: Record<AdapterHealthRow['status'], NetworkStatus> = {
+  healthy: 'active',
+  degraded: 'active',
+  critical: 'error',
+  offline: 'inactive',
+};
+
+function normalize(perf: AdapterPerformanceRow, health?: AdapterHealthRow): NetworkRow {
+  const fillRaw = health?.fillRate ?? 0;
   const fillRatePct = Math.max(0, Math.min(100, fillRaw <= 1 ? fillRaw * 100 : fillRaw));
-  const lastSync = row.lastSyncAt ? new Date(row.lastSyncAt).toLocaleString() : 'Not connected';
+  const ctrPct = Math.max(0, Math.min(100, perf.ctr ?? 0));
+  const status = health ? statusMap[health.status] : 'inactive';
   return {
-    id: String(row.id),
-    name: String(row.name || row.adapter || 'Unnamed Network'),
+    id: perf.adapterId,
+    name: perf.adapterName || 'Unnamed Network',
     status,
-    revenue,
-    impressions,
-    ecpm,
+    revenue: Math.max(0, perf.revenue || 0),
+    impressions: Math.max(0, perf.impressions || 0),
+    ecpm: Math.max(0, perf.ecpm || 0),
     fillRatePct,
-    lastSync,
-    docsUrl: row.docsUrl || undefined,
-    logsUrl: row.logsUrl || undefined,
+    ctr: ctrPct,
+    uptime: health?.uptime,
+    healthScore: health?.healthScore,
+    note: health?.lastIssue,
   };
 }
 
@@ -72,14 +93,51 @@ export default function NetworksPage() {
     setLoading(true);
     setError(null);
     (async () => {
-      const res = await api.get<{ items: NetworkRow[] }>(`/api/v1/networks`, { signal: controller?.signal });
+      const end = new Date();
+      const start = new Date(end);
+      start.setDate(end.getDate() - 7);
+      start.setHours(0, 0, 0, 0);
+      const params = new URLSearchParams({
+        startDate: start.toISOString(),
+        endDate: end.toISOString(),
+      });
+      const [performanceRes, healthRes] = await Promise.all([
+        api.get<{ adapters: AdapterPerformanceRow[] }>(`/reporting/adapters?${params.toString()}`, { signal: controller?.signal }),
+        api.get<AdapterHealthRow[]>('/reporting/adapters/health', { signal: controller?.signal }),
+      ]);
       if (!alive) return;
-      if (!res.success || !res.data) {
-        setError(res.error || 'Failed to load networks');
+      if (!performanceRes.success || !performanceRes.data) {
+        setError(performanceRes.error || 'Failed to load adapter performance');
         setLoading(false);
         return;
       }
-      const mapped = (res.data.items || []).map(normalize);
+      const adapters = performanceRes.data.adapters ?? [];
+      const healthList = healthRes.success && Array.isArray(healthRes.data) ? healthRes.data : [];
+      const healthMap = new Map<string, AdapterHealthRow>();
+      healthList.forEach((entry) => {
+        healthMap.set(entry.adapterId, entry);
+      });
+      const mapped: NetworkRow[] = adapters.map((adapter) => normalize(adapter, healthMap.get(adapter.adapterId)));
+      // Include adapters that have health signals but no revenue in window
+      healthList.forEach((health) => {
+        if (!mapped.some((row) => row.id === health.adapterId)) {
+          mapped.push(
+            normalize(
+              {
+                adapterId: health.adapterId,
+                adapterName: health.adapterName,
+                revenue: 0,
+                impressions: 0,
+                clicks: 0,
+                ecpm: 0,
+                ctr: 0,
+                avgLatency: 0,
+              },
+              health
+            )
+          );
+        }
+      });
       setRows(mapped);
       setLoading(false);
     })().catch((e) => {
@@ -247,6 +305,7 @@ function NetworkCard({ network, curFmt, numFmt }: NetworkCardProps) {
 
   const config = statusConfig[network.status];
   const StatusIcon = config.icon;
+  const note = network.note ? `Issue: ${network.note}` : 'No recent incidents';
 
   return (
     <div className={`card p-6 ${network.status === 'active' ? 'border-2 border-sunshine-yellow' : ''}`}>
@@ -283,7 +342,15 @@ function NetworkCard({ network, curFmt, numFmt }: NetworkCardProps) {
           </div>
           <div>
             <p className="text-xs text-gray-600 uppercase">Fill Rate</p>
-            <p className="text-lg font-bold text-primary-blue">{network.fillRatePct}%</p>
+            <p className="text-lg font-bold text-primary-blue">{Math.round(network.fillRatePct)}%</p>
+          </div>
+          <div>
+            <p className="text-xs text-gray-600 uppercase">CTR</p>
+            <p className="text-lg font-bold text-primary-blue">{Math.round(network.ctr * 10) / 10}%</p>
+          </div>
+          <div>
+            <p className="text-xs text-gray-600 uppercase">Health Score</p>
+            <p className="text-lg font-bold text-primary-blue">{network.healthScore !== undefined ? Math.round(network.healthScore) : '—'}</p>
           </div>
         </div>
       ) : (
@@ -297,23 +364,18 @@ function NetworkCard({ network, curFmt, numFmt }: NetworkCardProps) {
 
       {/* Footer */}
       <div className="flex items-center justify-between pt-4 border-t border-gray-200">
-        <span className="text-xs text-gray-500">Last sync: {network.lastSync}</span>
-        <div className="flex gap-2">
-          <a
-            href={network.docsUrl || '/documentation#networks'}
-            className="px-4 py-2 text-sm font-bold text-primary-blue border border-primary-blue rounded hover:bg-primary-blue hover:text-white transition-colors"
-          >
-            Configure
-          </a>
-          {network.logsUrl && (
-            <a
-              href={network.logsUrl}
-              className="px-4 py-2 text-sm font-bold text-white bg-primary-blue rounded hover:bg-primary-blue/90 transition-colors"
-            >
-              View Logs
-            </a>
+        <div className="text-xs text-gray-500 space-y-1">
+          {network.uptime !== undefined && (
+            <p>Uptime {network.uptime.toFixed(1)}%</p>
           )}
+          <p>{note}</p>
         </div>
+        <a
+          href="/docs/Adapters"
+          className="px-4 py-2 text-sm font-bold text-primary-blue border border-primary-blue rounded hover:bg-primary-blue hover:text-white transition-colors"
+        >
+          Configure
+        </a>
       </div>
     </div>
   );

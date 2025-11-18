@@ -67,7 +67,7 @@ export default function PlacementsPage() {
       params.set('page', String(page));
       params.set('pageSize', String(pageSize));
       if (selectedFormat !== 'all') params.set('format', selectedFormat);
-      const res = await api.get<{ items: any[]; total: number }>(`/api/v1/placements?${params.toString()}` , { signal: controller?.signal });
+      const res = await api.get<{ items: any[]; total: number }>(`/placements?${params.toString()}` , { signal: controller?.signal });
       if (!alive) return;
       if (!res.success || !res.data) {
         setError(res.error || 'Failed to load placements');
@@ -128,7 +128,7 @@ export default function PlacementsPage() {
 
   // API actions — Create / Update / Archive with basic CSRF header
   async function createPlacement(input: { name: string; app: string; format: Placement['format'] }) {
-    const res = await api.post('/api/v1/placements', input, {
+    const res = await api.post('/placements', input, {
       headers: {
         ...(getCsrf() ? { 'X-CSRF-Token': getCsrf()! } : {}),
       },
@@ -139,7 +139,7 @@ export default function PlacementsPage() {
   }
 
   async function updatePlacement(id: string, patch: Partial<Placement>) {
-    const res = await api.put(`/api/v1/placements/${id}`, patch, {
+    const res = await api.put(`/placements/${id}`, patch, {
       headers: {
         ...(getCsrf() ? { 'X-CSRF-Token': getCsrf()! } : {}),
       },
@@ -148,7 +148,7 @@ export default function PlacementsPage() {
   }
 
   async function archivePlacement(id: string) {
-    const res = await api.delete(`/api/v1/placements/${id}`, {
+    const res = await api.delete(`/placements/${id}`, {
       headers: {
         ...(getCsrf() ? { 'X-CSRF-Token': getCsrf()! } : {}),
       },

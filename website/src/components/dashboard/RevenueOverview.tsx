@@ -4,7 +4,69 @@ import { api } from '@/lib/api';
 
 type PeriodKey = 'today' | 'yesterday' | 'thisWeek' | 'thisMonth';
 
-type Overview = Record<PeriodKey, { revenueCents: number; impressions: number; ecpmCents: number }>
+type ReportingOverview = {
+  totalRevenue: number;
+  totalImpressions: number;
+  totalClicks: number;
+  ecpm: number;
+  ctr: number;
+  fillRate: number;
+};
+
+type OverviewEntry = {
+  revenue: number;
+  impressions: number;
+  ecpm: number;
+};
+
+type Overview = Record<PeriodKey, OverviewEntry>;
+
+const PERIOD_CONFIG: Array<{ key: PeriodKey; title: string; range: () => { start: Date; end: Date } }> = [
+  {
+    key: 'today',
+    title: 'Today',
+    range: () => {
+      const end = new Date();
+      const start = new Date(end);
+      start.setHours(0, 0, 0, 0);
+      return { start, end };
+    },
+  },
+  {
+    key: 'yesterday',
+    title: 'Yesterday',
+    range: () => {
+      const today = new Date();
+      const start = new Date(today);
+      start.setDate(today.getDate() - 1);
+      start.setHours(0, 0, 0, 0);
+      const end = new Date(start);
+      end.setDate(start.getDate() + 1);
+      return { start, end };
+    },
+  },
+  {
+    key: 'thisWeek',
+    title: 'This Week',
+    range: () => {
+      const end = new Date();
+      const start = new Date(end);
+      start.setDate(end.getDate() - 7);
+      start.setHours(0, 0, 0, 0);
+      return { start, end };
+    },
+  },
+  {
+    key: 'thisMonth',
+    title: 'This Month',
+    range: () => {
+      const end = new Date();
+      const start = new Date(end.getFullYear(), end.getMonth(), 1);
+      start.setHours(0, 0, 0, 0);
+      return { start, end };
+    },
+  },
+];
 
 function SkeletonCard() {
   return (
@@ -35,14 +97,35 @@ export default function RevenueOverview() {
     let mounted = true;
     const controller = typeof AbortController !== 'undefined' ? new AbortController() : undefined;
     (async () => {
-      const res = await api.get<Overview>('/api/v1/revenue/overview', { signal: controller?.signal });
+      const queries = await Promise.all(
+        PERIOD_CONFIG.map(async ({ key, range }) => {
+          const { start, end } = range();
+          const params = new URLSearchParams({
+            startDate: start.toISOString(),
+            endDate: end.toISOString(),
+          });
+          const res = await api.get<ReportingOverview>(`/reporting/overview?${params.toString()}`, {
+            signal: controller?.signal,
+          });
+          if (!res.success || !res.data) {
+            throw new Error(res.error || `Failed to load ${key} stats`);
+          }
+          return { key, payload: res.data };
+        })
+      );
       if (!mounted) return;
-      if (!res.success || !res.data) {
-        setError(res.error || 'Failed to load revenue overview');
-        setLoading(false);
-        return;
-      }
-      setData(res.data);
+      const next: Overview = PERIOD_CONFIG.reduce((acc, cfg) => {
+        acc[cfg.key] = { revenue: 0, impressions: 0, ecpm: 0 };
+        return acc;
+      }, {} as Overview);
+      queries.forEach(({ key, payload }) => {
+        next[key] = {
+          revenue: Math.max(0, payload.totalRevenue ?? 0),
+          impressions: Math.max(0, payload.totalImpressions ?? 0),
+          ecpm: Math.max(0, payload.ecpm ?? 0),
+        };
+      });
+      setData(next);
       setLoading(false);
     })().catch((e) => {
       if (!mounted) return;
@@ -55,20 +138,13 @@ export default function RevenueOverview() {
     };
   }, []);
 
-  const cards: { key: PeriodKey; title: string }[] = [
-    { key: 'today', title: 'Today' },
-    { key: 'yesterday', title: 'Yesterday' },
-    { key: 'thisWeek', title: 'This Week' },
-    { key: 'thisMonth', title: 'This Month' },
-  ];
-
   return (
     <div className="bg-white shadow rounded-lg p-6">
       <h2 className="text-lg font-semibold text-gray-900 mb-4">Revenue Overview</h2>
 
       {loading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6" aria-busy="true">
-          {cards.map((c) => (
+          {PERIOD_CONFIG.map((c) => (
             <SkeletonCard key={c.key} />
           ))}
         </div>
@@ -78,11 +154,11 @@ export default function RevenueOverview() {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {cards.map(({ key, title }) => {
+          {PERIOD_CONFIG.map(({ key, title }) => {
             const period = data![key];
-            const revenue = Math.max(0, (period?.revenueCents ?? 0) / 100);
+            const revenue = Math.max(0, period?.revenue ?? 0);
             const impressions = Math.max(0, period?.impressions ?? 0);
-            const ecpm = Math.max(0, (period?.ecpmCents ?? 0) / 100);
+            const ecpm = Math.max(0, period?.ecpm ?? 0);
             return (
               <TimeCard
                 key={key}

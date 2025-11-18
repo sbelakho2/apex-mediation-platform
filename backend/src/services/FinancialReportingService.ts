@@ -13,6 +13,7 @@
 import { format } from 'date-fns';
 import ExcelJS from 'exceljs';
 import { Pool } from 'pg';
+import logger from '../utils/logger';
 
 type NumericLike = number | string | null;
 type QueryRow = Record<string, unknown>;
@@ -580,13 +581,13 @@ export class FinancialReportingService {
    * Export customer revenue report
    */
   async exportCustomerRevenue(fiscalYear: number): Promise<Buffer> {
-    const query = `
+    // Paged export to avoid large memory spikes (FIX-11/630, 687)
+    const baseQuery = `
       SELECT * FROM customer_revenue_report
       WHERE year = $1
       ORDER BY total_revenue_eur DESC
+      LIMIT $2 OFFSET $3
     `;
-    const result = await this.pool.query(query, [fiscalYear]);
-  const rows = result.rows.map(row => mapCustomerRevenueRow(row as QueryRow));
 
     const workbook = new ExcelJS.Workbook();
     const worksheet = workbook.addWorksheet(`Customer Revenue ${fiscalYear}`);
@@ -604,9 +605,23 @@ export class FinancialReportingService {
 
     worksheet.getRow(1).font = { bold: true };
 
-    rows.forEach(row => {
-      worksheet.addRow(row);
-    });
+    const pageSize = 5000;
+    let offset = 0;
+    let total = 0;
+    /* eslint-disable no-constant-condition */
+    while (true) {
+      const result = await this.pool.query(baseQuery, [fiscalYear, pageSize, offset]);
+      if (result.rows.length === 0) break;
+      const rows = result.rows.map(row => mapCustomerRevenueRow(row as QueryRow));
+      for (const row of rows) {
+        // Add rows without logging any raw PII values (emails will only be in workbook)
+        worksheet.addRow(row);
+      }
+      total += rows.length;
+      offset += pageSize;
+      // Informational log with counts only; logger has redaction as an extra safety net
+      logger.info('[FinancialReporting] Added customer revenue rows', { fiscalYear, batch: rows.length, total });
+    }
 
     worksheet.getColumn('total_revenue_eur').numFmt = '#,##0.00';
     worksheet.getColumn('total_vat_eur').numFmt = '#,##0.00';
