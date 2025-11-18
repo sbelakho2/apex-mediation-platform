@@ -6,6 +6,7 @@ import HomeNav from '@/components/HomeNav';
 import NewsletterPanel from '@/components/NewsletterPanel';
 import NotificationBar from '@/components/NotificationBar';
 import ScallopedDivider from '@/components/ScallopedDivider';
+import SectionHeading from '@/components/SectionHeading';
 
 export default function HomePage() {
   return (
@@ -39,7 +40,7 @@ export default function HomePage() {
       <ScallopedDivider color="white" position="bottom" />
       <LearnSection />
       <ScallopedDivider color="cream" position="top" />
-      <SwedishWaySection />
+      <PrinciplesSection />
       <NewsletterPanel />
       <PricingSection />
       <Footer />
@@ -57,7 +58,7 @@ function HeroSection() {
     >
       <div className="container flex flex-col items-center gap-12 text-center">
         <div className="flex flex-col items-center gap-4">
-          <span className="section-eyebrow text-white/80">Swedish design for monetization teams</span>
+          <span className="section-eyebrow text-white/80">Calm systems for monetization teams</span>
           <h1
             id="hero-heading"
             className="text-hero-sm text-sunshine-yellow drop-shadow-lg md:text-hero-md lg:text-hero"
@@ -65,7 +66,7 @@ function HeroSection() {
             ApexMediation is your control center for ad revenue
           </h1>
           <p className="max-w-3xl text-body-large text-white/90">
-            Transparent mediation, ML-powered fraud detection, and delightful dashboards—crafted with the Study in Sweden aesthetic for modern ad ops teams.
+            Transparent mediation, ML-powered fraud detection, and delightful dashboards—crafted with editorial-grade clarity for modern ad ops teams.
           </p>
         </div>
 
@@ -84,15 +85,15 @@ function HeroSection() {
         <div className="flex flex-wrap justify-center gap-3">
           <HeroPill>Unity • ironSource • AppLovin</HeroPill>
           <HeroPill>NET 30 payment terms</HeroPill>
-          <HeroPill>Fraud detection &lt;5ms</HeroPill>
+          <HeroPill>Fraud detection insights</HeroPill>
           <HeroPill>SDKs for iOS, Android, Unity</HeroPill>
         </div>
 
         <div className="grid w-full gap-4 md:grid-cols-3">
           <HeroStat
             icon="📈"
-            title="+18% ARPDAU"
-            description="Average uplift after 30 days with ApexMediation orchestration."
+            title="Unified performance view"
+            description="Correlate pacing, payouts, QA, and fraud signals from a single console."
           />
           <HeroStat
             icon="⚡"
@@ -101,7 +102,7 @@ function HeroSection() {
           />
           <HeroStat
             icon="🛡️"
-            title="99.7% fraud blocked"
+            title="Adaptive fraud defense"
             description="ML models trained on 500k+ bad actors keep your monetization pristine."
           />
         </div>
@@ -125,7 +126,7 @@ function HeroSection() {
 
 function HeroPill({ children }: { children: ReactNode }) {
   return (
-    <span className="rounded-full border border-white/25 bg-white/10 px-4 py-2 text-[0.65rem] font-semibold uppercase tracking-[0.35em] text-white/80 backdrop-blur-sm">
+    <span className="rounded-full border border-white/25 bg-white/10 px-4 py-2 text-[0.7rem] font-semibold tracking-[0.22em] text-white/80 backdrop-blur-sm">
       {children}
     </span>
   );
@@ -133,10 +134,10 @@ function HeroPill({ children }: { children: ReactNode }) {
 
 function HeroStat({ icon, title, description }: { icon: string; title: string; description: string }) {
   return (
-    <div className="flex h-full flex-col gap-4 rounded-3xl border border-white/10 bg-white/10 p-6 text-left text-white shadow-lg shadow-primary-blue/10 backdrop-blur-md transition-transform duration-300 hover:-translate-y-1 hover:shadow-hero">
+    <div className="flex h-full flex-col gap-3 rounded-3xl border border-white/15 bg-white/10 p-6 text-left text-white shadow-lg shadow-primary-blue/10 backdrop-blur-md transition-transform duration-300 hover:-translate-y-1 hover:shadow-hero">
       <span className="icon-badge bg-white/90 text-primary-blue">{icon}</span>
-      <p className="text-lg font-bold uppercase tracking-[0.22em] text-white md:text-xl">{title}</p>
-      <p className="text-sm text-white/80">{description}</p>
+      <p className="text-xl font-semibold text-white">{title}</p>
+      <p className="text-sm text-white/80 leading-relaxed">{description}</p>
     </div>
   );
 }
@@ -149,27 +150,22 @@ function PopularSection() {
       aria-labelledby="popular-heading"
     >
       <div className="section-container">
-        <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-          <div>
-            <span className="section-eyebrow text-primary-blue">Popular right now</span>
-            <h2 id="popular-heading" className="section-heading">
-              Quick wins growth teams ship first
-            </h2>
-          </div>
-          <p className="max-w-md text-sm text-primary-blue/70 md:text-right">
-            Roll out these high-impact experiences before the weekend and watch the revenue trend line jump.
-          </p>
-        </div>
+        <SectionHeading
+          eyebrow="Popular right now"
+          title="Quick wins growth teams ship first"
+          description="Roll out these high-impact experiences before the weekend and keep every stakeholder confident."
+          headingId="popular-heading"
+        />
 
         <div className="grid gap-6 md:grid-cols-3">
           <PopularCard
             title="Real-time bidding orchestration"
-            description="Expose every network to a transparent, unified auction that lifts ARPDAU by double digits."
+            description="Expose every network to a transparent, unified auction with real-time accountability."
             href="/documentation#real-time-bidding"
           />
           <PopularCard
             title="ML-powered fraud firewall"
-            description="Stop bots and click farms before they touch your reports with sub-5ms verification."
+            description="Stop bots and click farms before they touch your reports with continuous verification."
             href="/dashboard/fraud"
           />
           <PopularCard
@@ -187,18 +183,18 @@ function PopularCard({ title, description, href }: { title: string; description:
   return (
     <a
       href={href}
-      className="group flex h-full flex-col justify-between rounded-3xl border-2 border-primary-blue bg-primary-blue p-6 text-white shadow-lg shadow-primary-blue/20 transition-all duration-300 hover:-translate-y-1 hover:bg-primary-blue/95 hover:shadow-hero focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-blue"
+      className="group flex h-full flex-col justify-between rounded-3xl border border-primary-blue/15 bg-white p-6 text-primary-blue shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-blue"
     >
       <div className="flex flex-col gap-4">
-        <span className="text-xs font-bold uppercase tracking-[0.32em] text-sunshine-yellow/80">Playbook</span>
-        <h3 className="text-lg font-bold uppercase tracking-[0.18em] text-sunshine-yellow">
+        <span className="text-xs font-semibold uppercase tracking-[0.24em] text-primary-blue/60">Playbook</span>
+        <h3 className="text-lg font-semibold">
           {title}
         </h3>
-        <p className="text-sm text-white/85 leading-relaxed">
+        <p className="text-sm text-primary-blue/80 leading-relaxed">
           {description}
         </p>
       </div>
-      <span className="mt-6 inline-flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.3em] text-sunshine-yellow/90">
+      <span className="mt-6 inline-flex items-center gap-2 text-sm font-semibold text-primary-blue">
         Learn more
         <span aria-hidden="true" className="transition-transform duration-300 group-hover:translate-x-1">
           →
@@ -216,21 +212,19 @@ function FeaturesSection() {
       aria-labelledby="features-heading"
     >
       <div className="section-container">
-        <div className="space-y-4 text-center">
-          <span className="section-eyebrow text-primary-blue">Platform pillars</span>
-          <h2 id="features-heading" className="section-heading text-center">
-            Why developers choose ApexMediation
-          </h2>
-          <p className="mx-auto max-w-3xl text-body text-primary-blue/80">
-            We rebuilt mediation for 2025—open, transparent, and fast. Every section is tuned to mirror Study in Sweden’s clean typography so enterprise teams feel right at home.
-          </p>
-        </div>
+        <SectionHeading
+          eyebrow="Platform pillars"
+          title="Why developers choose ApexMediation"
+          description="We rebuilt mediation for 2025—open, transparent, and fast. Every surface pairs calm typography with controls built for collaboration."
+          align="center"
+          headingId="features-heading"
+        />
 
         <div className="grid gap-6 md:grid-cols-3">
           <FeatureCard
             emoji="💰"
-            title="Higher revenue"
-            description="Expose real clearing prices and unlock 12–18% more revenue versus legacy waterfalls."
+            title="Revenue clarity"
+            description="Expose real clearing prices and steer sustainable monetization without guesswork."
           />
           <FeatureCard
             emoji="⚙️"
@@ -286,17 +280,12 @@ function LearnSection() {
       aria-labelledby="learn-heading"
     >
       <div className="section-container">
-        <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-          <div>
-            <span className="section-eyebrow text-primary-blue">Learn & engage</span>
-            <h2 id="learn-heading" className="section-heading">
-              Keep your monetization muscle sharp
-            </h2>
-          </div>
-          <p className="max-w-md text-sm text-primary-blue/70 md:text-right">
-            Weekly editorial, actionable templates, and interactive checkups inspired by Study in Sweden’s charming content blocks.
-          </p>
-        </div>
+        <SectionHeading
+          eyebrow="Learn & engage"
+          title="Keep your monetization muscle sharp"
+          description="Weekly editorial, actionable templates, and interactive checkups inspired by the best product playbooks."
+          headingId="learn-heading"
+        />
 
         <div className="grid gap-6 md:grid-cols-2">
           <article className="group flex h-full flex-col gap-4 rounded-3xl border-2 border-primary-blue bg-white p-6 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-hero">
@@ -343,23 +332,22 @@ function LearnSection() {
   );
 }
 
-function SwedishWaySection() {
+function PrinciplesSection() {
   return (
     <section
-      id="swedish-way"
+      id="principles"
       className="bg-cream py-20 md:py-24"
-      aria-labelledby="swedish-way-heading"
+      aria-labelledby="principles-heading"
     >
       <div className="section-container">
         <div className="grid items-center gap-12 md:grid-cols-2">
           <div className="order-2 space-y-5 md:order-1">
-            <span className="section-eyebrow text-primary-blue">The Swedish way</span>
-            <h2 id="swedish-way-heading" className="section-heading md:text-left">
-              Transparency. Fairness. Innovation.
-            </h2>
-            <p className="text-body text-primary-blue/85">
-              ApexMediation is built on the same values that define Swedish design. Every bidder, every payout and every anomaly is surfaced in plain language so you stay confidently in control.
-            </p>
+            <SectionHeading
+              eyebrow="Product principles"
+              title="Transparency. Fairness. Innovation."
+              description="ApexMediation is built on calm, transparent systems thinking. Every bidder, payout, and anomaly is surfaced in plain language so you stay confidently in control."
+              headingId="principles-heading"
+            />
             <ul className="space-y-3 text-sm text-primary-blue/80">
               <li className="flex items-start gap-2">
                 <span className="mt-1 h-1.5 w-1.5 rounded-full bg-primary-blue" aria-hidden="true" />
@@ -371,7 +359,7 @@ function SwedishWaySection() {
               </li>
               <li className="flex items-start gap-2">
                 <span className="mt-1 h-1.5 w-1.5 rounded-full bg-primary-blue" aria-hidden="true" />
-                Human support in Stockholm and Tallinn when you want strategic help.
+                Human support across EMEA and North America when you want strategic help.
               </li>
             </ul>
             <a
@@ -382,18 +370,17 @@ function SwedishWaySection() {
               <span aria-hidden="true">→</span>
             </a>
           </div>
-
           <div className="order-1 md:order-2">
             <div className="relative mx-auto max-w-sm">
               <div className="absolute -inset-4 rounded-[36px] border-4 border-sunshine-yellow" aria-hidden="true" />
               <div className="relative overflow-hidden rounded-[32px] bg-primary-blue p-10 text-center shadow-hero">
                 <div className="mx-auto flex h-full flex-col items-center justify-center gap-4">
-                  <span className="text-6xl">�🇪</span>
-                  <p className="text-lg font-bold uppercase tracking-[0.3em] text-sunshine-yellow">
-                    Built the Swedish way
+                  <span className="text-6xl">◇</span>
+                  <p className="text-lg font-semibold text-sunshine-yellow">
+                    Built for clarity
                   </p>
                   <p className="text-sm text-white/80">
-                    Crisp typography, generous spacing and radical honesty—exactly like Study in Sweden.
+                    Crisp typography, generous spacing, and radical honesty to keep teams aligned.
                   </p>
                 </div>
               </div>
@@ -413,25 +400,24 @@ function PricingSection() {
       aria-labelledby="pricing-heading"
     >
       <div className="section-container">
-        <div className="mx-auto flex max-w-3xl flex-col items-center gap-6 text-center">
-          <span className="section-eyebrow text-white/80">Get started</span>
-          <h2 id="pricing-heading" className="text-h2-sm uppercase text-white md:text-h2-md lg:text-h2">
-            Ready to boost your revenue?
-          </h2>
-          <p className="text-body-large text-white/85">
-            Join 1,000+ developers already earning more with ApexMediation. No credit card required to start.
-          </p>
-          <div className="flex flex-col items-center gap-3 sm:flex-row">
-            <a href="/signup" className="btn-primary-yellow text-base sm:text-lg">
-              Start free trial →
-            </a>
-            <a
-              href="/contact"
-              className="btn-outline border-white bg-transparent text-white hover:bg-white/10"
-            >
-              Talk to revenue engineering
-            </a>
-          </div>
+        <SectionHeading
+          eyebrow="Get started"
+          title="Ready to streamline monetization?"
+          description="Choose a plan with predictable billing, collaborative tooling, and automation baked in from day one."
+          align="center"
+          headingId="pricing-heading"
+          tone="light"
+        />
+        <div className="mx-auto flex max-w-3xl flex-col items-center gap-3 text-center sm:flex-row sm:justify-center">
+          <a href="/signup" className="btn-primary-yellow text-base sm:text-lg">
+            Start free trial →
+          </a>
+          <a
+            href="/contact"
+            className="btn-outline border-white bg-transparent text-white hover:bg-white/10"
+          >
+            Talk to revenue engineering
+          </a>
         </div>
       </div>
     </section>

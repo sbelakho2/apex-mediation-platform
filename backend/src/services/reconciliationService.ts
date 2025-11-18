@@ -5,7 +5,7 @@
 
 import { Pool } from 'pg';
 import Stripe from 'stripe';
-import { logger } from '../utils/logger';
+import logger from '../utils/logger';
 
 let stripeClient: Stripe | null = null;
 
@@ -134,14 +134,17 @@ export class ReconciliationService {
         for (const item of stripeSubscription.items.data) {
           if (item.price.recurring?.usage_type === 'metered') {
             try {
-              // Note: Stripe API method may vary - adjust based on actual implementation
-              const usageRecords = await (stripe.subscriptionItems as any).listUsageRecordSummaries(
-                item.id,
-                {
-                  limit: 100,
-                }
-              );
-              stripeTotal += usageRecords.data.reduce((sum: number, record: any) => sum + record.total_usage, 0);
+              // Guard: older/newer Stripe SDKs may expose different shapes; prefer typed method if available (FIX-11: 700)
+              const anyStripe = stripe as any;
+              if (anyStripe.subscriptionItems?.listUsageRecordSummaries) {
+                const usageRecords = await anyStripe.subscriptionItems.listUsageRecordSummaries(item.id, { limit: 100 });
+                stripeTotal += usageRecords.data.reduce((sum: number, record: any) => sum + (record.total_usage ?? 0), 0);
+              } else if (anyStripe.subscriptionItems?.listUsageRecordSummariesAsync) {
+                const usageRecords = await anyStripe.subscriptionItems.listUsageRecordSummariesAsync(item.id, { limit: 100 });
+                stripeTotal += usageRecords.data.reduce((sum: number, record: any) => sum + (record.total_usage ?? 0), 0);
+              } else {
+                logger.warn('Stripe SDK does not support usage summaries; skipping item', { subscriptionItemId: item.id });
+              }
             } catch (error) {
               logger.warn('Could not fetch Stripe usage records', {
                 subscriptionItemId: item.id,

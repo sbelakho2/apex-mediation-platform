@@ -9,6 +9,10 @@
   --cream: #E8E3D1;
   --accent-red: #C04437;
   --success-green: #5BAA2A;
+  --text-primary: #0f172a;
+  --text-muted: #475569;
+  --surface: #ffffff;
+  --surface-alt: #f7f8fb;
 }
 
 @layer base {
@@ -17,11 +21,11 @@
   }
 
   body {
-    @apply text-body antialiased text-primary-blue;
-    font-family: 'Sweden Sans', 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    letter-spacing: -0.02em;
+    @apply antialiased;
+    font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    color: var(--text-primary);
+    background: linear-gradient(180deg, rgba(0, 82, 147, 0.95) 0%, rgba(0, 82, 147, 0.92) 360px, var(--surface-alt) 360px, var(--surface-alt) 100%);
     min-height: 100vh;
-    background: linear-gradient(180deg, rgba(0, 82, 147, 0.97) 0%, rgba(0, 82, 147, 0.97) 440px, #E8E3D1 440px, #E8E3D1 100%);
   }
 
   h1,
@@ -30,13 +34,17 @@
   h4,
   h5,
   h6 {
-    @apply font-bold uppercase text-primary-blue;
-    letter-spacing: 0.18em;
+    @apply font-semibold text-primary-blue;
+    text-transform: none;
+    letter-spacing: -0.01em;
+    line-height: 1.2;
   }
 
   p {
-    @apply text-body text-primary-blue;
-    letter-spacing: -0.02em;
+    @apply text-base;
+    color: var(--text-muted);
+    letter-spacing: -0.01em;
+    line-height: 1.7;
   }
 
   a {
@@ -130,22 +138,19 @@
   }
 
   /* Typography Utilities */
-  .sweden-heading {
-    @apply font-bold uppercase text-primary-blue;
-    letter-spacing: 0.18em;
-  }
 
   .body-text {
     letter-spacing: -0.02em;
   }
 
   .section-container {
-    @apply container space-y-12 md:space-y-16;
+    @apply container mx-auto flex flex-col gap-12 md:gap-16;
+    max-width: 1200px;
   }
 
   .section-eyebrow {
-    @apply text-xs font-bold uppercase text-sunshine-yellow md:text-sm;
-    letter-spacing: 0.32em;
+    @apply text-xs font-semibold uppercase text-sunshine-yellow md:text-sm;
+    letter-spacing: 0.22em;
   }
 
   .section-heading {

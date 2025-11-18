@@ -1,8 +1,13 @@
 /**
  * Lightweight connectors for incumbent mediation providers used during Migration Studio imports.
- * In production these would make authenticated API calls; for now we simulate deterministic
- * responses so the import pipeline and tests can exercise the flows end-to-end.
+ *
+ * FIX-11-617: Harden connectors by adding credential validation, optional real HTTP clients
+ * with timeouts/retries, and simple in-process rate limiting. When live endpoints are not
+ * configured, fall back to deterministic sample data so the pipeline and tests can run.
  */
+
+import type { AxiosInstance } from 'axios'
+import { createHttpClient } from '../utils/httpClient'
 
 export type ConnectorCredentials = {
   api_key: string
@@ -24,8 +29,75 @@ function ensureCredentials(source: string, credentials: ConnectorCredentials) {
   }
 }
 
+// Simple per-source rate limiter (token bucket-ish)
+const RATE_LIMIT_PER_MINUTE = Number(process.env.MIGRATION_CONNECTOR_RPM ?? 60)
+const rateState: Record<string, { count: number; resetAt: number }> = {}
+
+function checkRateLimit(source: string) {
+  const now = Date.now()
+  const bucket = rateState[source] || { count: 0, resetAt: now + 60_000 }
+  if (now > bucket.resetAt) {
+    bucket.count = 0
+    bucket.resetAt = now + 60_000
+  }
+  bucket.count += 1
+  rateState[source] = bucket
+  if (bucket.count > RATE_LIMIT_PER_MINUTE) {
+    const retryIn = Math.max(0, bucket.resetAt - now)
+    const err: any = new Error(`${source} connector rate limit exceeded`)
+    err.retryAfterMs = retryIn
+    throw err
+  }
+}
+
+// Optional live mode
+const LIVE_MODE = process.env.MIGRATION_CONNECTORS_LIVE === '1'
+const ironSourceBaseUrl = process.env.MIGRATION_IRONSOURCE_BASE_URL
+const appLovinBaseUrl = process.env.MIGRATION_APPLOVIN_BASE_URL
+let http: AxiosInstance | undefined
+function getHttp(): AxiosInstance {
+  if (!http) http = createHttpClient(undefined, { timeout: 8000 })
+  return http
+}
+
+async function withRetry<T>(fn: () => Promise<T>, attempts = 3): Promise<T> {
+  let lastErr: any
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await fn()
+    } catch (e) {
+      lastErr = e
+      // backoff 100ms, 250ms, 500ms
+      const delay = [100, 250, 500][Math.min(i, 2)]
+      await new Promise((r) => setTimeout(r, delay))
+    }
+  }
+  throw lastErr
+}
+
 export async function fetchIronSourceSetup(credentials: ConnectorCredentials): Promise<NormalizedMappingRow[]> {
   ensureCredentials('ironSource', credentials)
+  checkRateLimit('ironSource')
+
+  if (LIVE_MODE && ironSourceBaseUrl) {
+    const res = await withRetry(() => getHttp().get(
+      `${ironSourceBaseUrl}/v1/placements`,
+      {
+        headers: { Authorization: `Bearer ${credentials.api_key}` },
+        params: { account_id: credentials.account_id },
+      }
+    ))
+    // Map minimal fields; unknown fields are ignored
+    const rows = Array.isArray(res.data) ? res.data : []
+    return rows.slice(0, 100).map((r: any, idx: number) => ({
+      network: 'ironSource',
+      instanceId: String(r.instance_id ?? r.id ?? `is-${idx}`),
+      instanceName: String(r.name ?? 'ironSource Instance'),
+      waterfallPosition: Number(r.position ?? idx + 1) || undefined,
+      ecpmCents: Number(r.ecpm_cents ?? r.ecpm ?? 0) || undefined,
+      confidence: 'high',
+    }))
+  }
 
   // Return deterministic sample data seeded off account id so tests can assert values
   const base = credentials.account_id.slice(-4)
@@ -51,6 +123,26 @@ export async function fetchIronSourceSetup(credentials: ConnectorCredentials): P
 
 export async function fetchAppLovinSetup(credentials: ConnectorCredentials): Promise<NormalizedMappingRow[]> {
   ensureCredentials('AppLovin', credentials)
+  checkRateLimit('AppLovin')
+
+  if (LIVE_MODE && appLovinBaseUrl) {
+    const res = await withRetry(() => getHttp().get(
+      `${appLovinBaseUrl}/v1/max/placements`,
+      {
+        headers: { 'X-Api-Key': credentials.api_key },
+        params: { account_id: credentials.account_id },
+      }
+    ))
+    const rows = Array.isArray(res.data) ? res.data : []
+    return rows.slice(0, 100).map((r: any, idx: number) => ({
+      network: 'AppLovin',
+      instanceId: String(r.unit_id ?? r.id ?? `max-${idx}`),
+      instanceName: String(r.name ?? 'MAX Unit'),
+      waterfallPosition: Number(r.position ?? idx + 1) || undefined,
+      ecpmCents: Number(r.ecpm_cents ?? r.ecpm ?? 0) || undefined,
+      confidence: 'high',
+    }))
+  }
 
   const base = credentials.account_id.slice(-3)
   return [

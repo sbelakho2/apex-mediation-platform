@@ -1,4 +1,5 @@
 import { generateSignedComparison } from '../migrationComparisonSigner'
+import crypto from 'crypto'
 import type { MigrationMapping } from '../../types/migration'
 
 describe('generateSignedComparison', () => {
@@ -32,5 +33,39 @@ describe('generateSignedComparison', () => {
 
     expect(parsed.metrics.ecpm_cents.uplift_percent).toBeCloseTo(result.metrics.ecpm.uplift_percent, 2)
     expect(parsed.sample_size.control_impressions).toBeGreaterThan(0)
+  })
+
+  it('signature verifies and tampering is detected', () => {
+    const result = generateSignedComparison(sampleMappings)
+
+    const pubDer = Buffer.from(result.signature.public_key_base64, 'base64')
+    const publicKey = crypto.createPublicKey({ key: pubDer, format: 'der', type: 'spki' })
+
+    const payload = Buffer.from(result.signature.payload_base64, 'base64')
+    const sig = Buffer.from(result.signature.signature_base64, 'base64')
+
+    // Validates
+    const ok = crypto.verify(null, payload, publicKey, sig)
+    expect(ok).toBe(true)
+
+    // Tamper payload
+    const tampered = Buffer.from(JSON.stringify({ ...JSON.parse(payload.toString('utf8')), foo: 'bar' }), 'utf8')
+    const bad = crypto.verify(null, tampered, publicKey, sig)
+    expect(bad).toBe(false)
+  })
+
+  it('throws in production without configured keys', async () => {
+    const OLD_ENV = { ...process.env }
+    jest.resetModules()
+    process.env.NODE_ENV = 'production'
+    delete process.env.MIGRATION_STUDIO_SIGNING_PRIVATE_KEY_PEM
+    delete process.env.MIGRATION_STUDIO_SIGNING_PUBLIC_KEY_PEM
+
+    await jest.isolateModulesAsync(async () => {
+      const mod = await import('../migrationComparisonSigner')
+      expect(() => mod.generateSignedComparison(sampleMappings)).toThrow()
+    })
+
+    process.env = OLD_ENV
   })
 })

@@ -12,7 +12,7 @@ import type {
   OpenRTBBidResponse,
   Bid 
 } from '../types/openrtb.types';
-import { logger } from '../utils/logger';
+import logger from '../utils/logger';
 
 interface AuctionResult {
   success: boolean;
@@ -95,18 +95,18 @@ export class BidLandscapeService {
 
       if (result.success && result.response?.seatbid?.[0]?.bid?.[0]) {
         const winningBid = result.response.seatbid[0].bid[0];
-        winningBidPrice = winningBid.price;
+        winningBidPrice = Number(winningBid.price) || 0;
 
         // In second-price auction: winner pays (second highest + $0.01)
         if (result.allBids.length > 1) {
-          const sortedBids = [...result.allBids].sort((a, b) => b.bid.price - a.bid.price);
-          secondPrice = sortedBids[1].bid.price;
-          clearingPrice = secondPrice + 0.01;
+          const sortedBids = [...result.allBids].sort((a, b) => (Number(b.bid.price) || 0) - (Number(a.bid.price) || 0));
+          secondPrice = Number(sortedBids[1].bid.price) || 0;
+          clearingPrice = Math.max(0, secondPrice + 0.01);
         } else {
           // Only one bid: clearing price = bid floor or bid price
           const bidFloor = request.imp[0]?.bidfloor || 0.01;
-          clearingPrice = Math.max(bidFloor, winningBidPrice);
-          secondPrice = clearingPrice;
+          clearingPrice = Math.max(0, Math.max(bidFloor, winningBidPrice));
+          secondPrice = Math.max(0, clearingPrice);
         }
       }
 

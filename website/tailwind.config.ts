@@ -26,7 +26,7 @@ const config: Config = {
     },
     extend: {
       colors: {
-        // Study in Sweden design system palette
+        // Brand palette
         'primary-blue': '#005293',
         'sunshine-yellow': '#FECB00',
         'pale-yellow': '#FFD481',
@@ -35,7 +35,7 @@ const config: Config = {
         'success-green': '#5BAA2A',
       },
       fontFamily: {
-        sans: ['Sweden Sans', 'Inter', 'system-ui', 'sans-serif'],
+        sans: ['Inter', 'system-ui', 'sans-serif'],
       },
       fontSize: {
         hero: ['5rem', { lineHeight: '1', letterSpacing: '-0.02em' }],

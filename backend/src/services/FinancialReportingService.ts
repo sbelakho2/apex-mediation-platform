@@ -219,7 +219,8 @@ export class FinancialReportingService {
    * Required for: 7-year retention (§ 13 Accounting Act)
    */
   async exportTransactionLog(fiscalYear: number): Promise<Buffer> {
-    const query = `
+    // Stream-ish pagination to avoid loading full year into memory (FIX-11: 630)
+    const baseQuery = `
       SELECT
         tl.transaction_id,
         tl.transaction_type,
@@ -247,10 +248,8 @@ export class FinancialReportingService {
       LEFT JOIN customers c ON tl.customer_id = c.id
       WHERE tl.fiscal_year = $1 AND tl.is_deleted = FALSE
       ORDER BY tl.transaction_date, tl.created_at
+      LIMIT $2 OFFSET $3
     `;
-
-  const result = await this.pool.query(query, [fiscalYear]);
-  const rows = result.rows.map(row => mapTransactionLogRow(row as QueryRow));
 
     const workbook = new ExcelJS.Workbook();
     const worksheet = workbook.addWorksheet(`Transactions ${fiscalYear}`);
@@ -288,32 +287,42 @@ export class FinancialReportingService {
       fgColor: { argb: 'FFD9EAD3' },
     };
 
-    // Add data
-    rows.forEach(row => {
-      worksheet.addRow({
-        transaction_id: row.transaction_id,
-        transaction_date: row.transaction_date ? format(row.transaction_date, 'yyyy-MM-dd') : '',
-        accounting_period: row.accounting_period,
-        transaction_type: row.transaction_type,
-        category: row.category,
-        description: row.description,
-        customer_email: row.customer_email,
-        customer_company: row.customer_company,
-        vendor_name: row.vendor_name,
-        amount_eur_converted: row.amount_eur_converted,
-        currency_code: row.currency_code,
-        amount_eur: row.amount_eur,
-        vat_rate: row.vat_rate,
-        vat_amount_eur: row.vat_amount_eur,
-        vat_reverse_charge: row.vat_reverse_charge ? 'Yes' : 'No',
-        net_amount_eur: row.net_amount_eur,
-        payment_method: row.payment_method,
-        payment_processor_id: row.payment_processor_id,
-        counterparty_country_code: row.counterparty_country_code,
-        counterparty_vat_number: row.counterparty_vat_number,
-        document_url: row.document_url,
-      });
-    });
+    // Add data in chunks
+    const batchSize = 5000;
+    let offset = 0;
+    /* eslint-disable no-constant-condition */
+    while (true) {
+      const result = await this.pool.query(baseQuery, [fiscalYear, batchSize, offset]);
+      if (result.rows.length === 0) break;
+      for (const raw of result.rows) {
+        const row = mapTransactionLogRow(raw as QueryRow);
+        worksheet.addRow({
+          transaction_id: row.transaction_id,
+          transaction_date: row.transaction_date ? format(row.transaction_date, 'yyyy-MM-dd') : '',
+          accounting_period: row.accounting_period,
+          transaction_type: row.transaction_type,
+          category: row.category,
+          description: row.description,
+          customer_email: row.customer_email,
+          customer_company: row.customer_company,
+          vendor_name: row.vendor_name,
+          amount_eur_converted: row.amount_eur_converted,
+          currency_code: row.currency_code,
+          amount_eur: row.amount_eur,
+          vat_rate: row.vat_rate,
+          vat_amount_eur: row.vat_amount_eur,
+          vat_reverse_charge: row.vat_reverse_charge ? 'Yes' : 'No',
+          net_amount_eur: row.net_amount_eur,
+          payment_method: row.payment_method,
+          payment_processor_id: row.payment_processor_id,
+          counterparty_country_code: row.counterparty_country_code,
+          counterparty_vat_number: row.counterparty_vat_number,
+          document_url: row.document_url,
+        });
+      }
+      offset += result.rows.length;
+      // Periodically flush styles if needed (ExcelJS buffers internally)
+    }
 
     // Format number columns
     const numberColumns = ['amount_eur_converted', 'amount_eur', 'vat_amount_eur', 'net_amount_eur'];

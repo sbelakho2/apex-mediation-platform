@@ -2,6 +2,8 @@ import { promises as fs, existsSync } from 'node:fs';
 import path from 'node:path';
 import logger from '../../utils/logger';
 import { IPRangeIndex } from './ipRangeIndex';
+import { createHash } from 'node:crypto';
+import { z } from 'zod';
 
 interface ManifestCloudProvider {
   provider: string;
@@ -31,6 +33,21 @@ interface EnrichmentManifest {
     };
   };
 }
+
+const ManifestSchema = z.object({
+  version: z.string().min(1),
+  updatedAt: z.string().min(1),
+  sources: z.object({
+    ipIntelligence: z.object({
+      abuseCsv: z.string().min(1),
+      torExitList: z.string().min(1),
+      cloudProviders: z.array(z.object({ provider: z.string().min(1), path: z.string().min(1) })),
+    }),
+    asnGeo: z.object({ csv: z.string().min(1) }),
+    vpnDc: z.array(z.object({ name: z.string().min(1), path: z.string().min(1) })),
+    userAgents: z.object({ patterns: z.string().min(1) }),
+  }),
+});
 
 interface AbuseRecord {
   category: string;
@@ -90,9 +107,25 @@ const resolveDefaultBaseDir = (): string => {
   return candidates[0]!;
 };
 
+const DEFAULT_FILE_CAP_BYTES = Math.max(1024 * 1024, Number.parseInt(process.env.ENRICH_MAX_BYTES || '10485760', 10)); // 10MB default
+
 const readTextFile = async (filePath: string): Promise<string> => {
   const content = await fs.readFile(filePath, 'utf8');
   return content;
+};
+
+const readTextFileCapped = async (filePath: string, capBytes: number = DEFAULT_FILE_CAP_BYTES): Promise<string | null> => {
+  try {
+    const stat = await fs.stat(filePath);
+    if (stat.size > capBytes) {
+      logger.warn('[Enrichment] File exceeds size cap; skipping load', { filePath, size: stat.size, capBytes });
+      return null;
+    }
+  } catch (e) {
+    // If stat fails, attempt to read anyway and let read error bubble with context
+    logger.debug?.('[Enrichment] stat() failed; attempting read', { filePath, error: e });
+  }
+  return readTextFile(filePath);
 };
 
 const ensureDirectory = async (dirPath: string): Promise<void> => {
@@ -140,6 +173,10 @@ export class EnrichmentService {
   private userAgentPatterns: UserAgentPattern[] = [];
   private readonly userAgentCache = new Map<string, UserAgentInfo>();
 
+  // Stats/observability
+  private lastSnapshotHash: string | null = null;
+  private lastManifestHash: string | null = null;
+
   constructor(baseDir?: string) {
     this.baseDir = baseDir ?? resolveDefaultBaseDir();
   }
@@ -170,7 +207,7 @@ export class EnrichmentService {
   }
 
   private async performInitialization(version: string | undefined, force: boolean): Promise<void> {
-    const { manifest, manifestDir } = await this.loadManifest(version);
+    const { manifest, manifestDir, manifestHash } = await this.loadManifest(version);
 
     if (!force && this.initialized && manifest.version === this.currentVersion) {
       return;
@@ -181,6 +218,7 @@ export class EnrichmentService {
     this.manifest = manifest;
     this.manifestDir = manifestDir;
     this.currentVersion = manifest.version;
+    this.lastManifestHash = manifestHash;
 
     await Promise.all([
       this.loadIpIntelligence(),
@@ -251,13 +289,15 @@ export class EnrichmentService {
     return path.join(this.baseDir, this.manifest!.version, 'cache', SNAPSHOT_FILENAME);
   }
 
-  private async loadManifest(version?: string): Promise<{ manifest: EnrichmentManifest; manifestDir: string }> {
+  private async loadManifest(version?: string): Promise<{ manifest: EnrichmentManifest; manifestDir: string; manifestHash: string }> {
     const manifestDir = version ? path.join(this.baseDir, version) : await this.resolveLatestVersionDir();
     const manifestPath = path.join(manifestDir, 'manifest.json');
 
     const content = await fs.readFile(manifestPath, 'utf8');
-    const manifest = JSON.parse(content) as EnrichmentManifest;
-    return { manifest, manifestDir };
+    const parsed = JSON.parse(content);
+    const manifest = ManifestSchema.parse(parsed) as EnrichmentManifest;
+    const manifestHash = createHash('sha256').update(content).digest('hex');
+    return { manifest, manifestDir, manifestHash };
   }
 
   private async resolveLatestVersionDir(): Promise<string> {
@@ -290,7 +330,11 @@ export class EnrichmentService {
   }
 
   private async loadAbuseList(filePath: string): Promise<void> {
-    const content = await readTextFile(filePath);
+    const content = await readTextFileCapped(filePath);
+    if (content === null) {
+      logger.warn('[Enrichment] Skipping abuse list due to size cap', { filePath });
+      return;
+    }
     const rows = parseCsvLines(content);
 
     for (const row of rows) {
@@ -299,36 +343,57 @@ export class EnrichmentService {
         continue;
       }
 
-      this.abuseIndex.add(ip, {
-        category,
-        score: numberFromString(score),
-        source: source || 'abuseipdb',
-      });
+      try {
+        this.abuseIndex.add(ip, {
+          category,
+          score: numberFromString(score),
+          source: source || 'abuseipdb',
+        });
+      } catch (e) {
+        // Skip invalid entries (e.g., IPv6 until supported)
+        logger.debug?.('[Enrichment] Skipped invalid abuse IP entry', { ip, error: (e as Error)?.message });
+      }
     }
   }
 
   private async loadTorExitList(filePath: string): Promise<void> {
-    const content = await readTextFile(filePath);
+    const content = await readTextFileCapped(filePath);
+    if (content === null) {
+      logger.warn('[Enrichment] Skipping Tor exit list due to size cap', { filePath });
+      return;
+    }
     const lines = content
       .split(/\r?\n/)
       .map((line) => line.trim())
       .filter((line) => line.length > 0 && !line.startsWith('#'));
 
     for (const line of lines) {
-      this.torIndex.add(line, { source: 'tor-exit' });
+      try {
+        this.torIndex.add(line, { source: 'tor-exit' });
+      } catch (e) {
+        logger.debug?.('[Enrichment] Skipped invalid Tor CIDR/IP', { line, error: (e as Error)?.message });
+      }
     }
   }
 
   private async loadCloudProvider(provider: string, filePath: string): Promise<void> {
     const index = this.cloudIndexes.get(provider) ?? new IPRangeIndex<{ provider: string }>();
-    const content = await readTextFile(filePath);
+    const content = await readTextFileCapped(filePath);
+    if (content === null) {
+      logger.warn('[Enrichment] Skipping cloud provider list due to size cap', { provider, filePath });
+      return;
+    }
     const lines = content
       .split(/\r?\n/)
       .map((line) => line.trim())
       .filter((line) => line.length > 0 && !line.startsWith('#'));
 
     for (const line of lines) {
-      index.add(line, { provider });
+      try {
+        index.add(line, { provider });
+      } catch (e) {
+        logger.debug?.('[Enrichment] Skipped invalid cloud CIDR/IP', { provider, line, error: (e as Error)?.message });
+      }
     }
 
     this.cloudIndexes.set(provider, index);
@@ -340,7 +405,11 @@ export class EnrichmentService {
     }
 
     const filePath = path.join(this.manifestDir, this.manifest.sources.asnGeo.csv);
-    const content = await readTextFile(filePath);
+    const content = await readTextFileCapped(filePath);
+    if (content === null) {
+      logger.warn('[Enrichment] Skipping ASN/Geo CSV due to size cap', { filePath });
+      return;
+    }
     const rows = parseCsvLines(content);
 
     for (const row of rows) {
@@ -349,12 +418,16 @@ export class EnrichmentService {
         continue;
       }
 
-      this.asnIndex.add(ipRange, {
-        asn: numberFromString(asn),
-        organization,
-        country,
-        region,
-      });
+      try {
+        this.asnIndex.add(ipRange, {
+          asn: numberFromString(asn),
+          organization,
+          country,
+          region,
+        });
+      } catch (e) {
+        logger.debug?.('[Enrichment] Skipped invalid ASN/Geo range', { ipRange, error: (e as Error)?.message });
+      }
     }
   }
 
@@ -367,14 +440,22 @@ export class EnrichmentService {
     await Promise.all(
       sources.map(async (source) => {
         const filePath = path.join(this.manifestDir!, source.path);
-        const content = await readTextFile(filePath);
+        const content = await readTextFileCapped(filePath);
+        if (content === null) {
+          logger.warn('[Enrichment] Skipping VPN/DC list due to size cap', { name: source.name, filePath });
+          return;
+        }
         const lines = content
           .split(/\r?\n/)
           .map((line) => line.trim())
           .filter((line) => line.length > 0 && !line.startsWith('#'));
 
         for (const line of lines) {
-          this.vpnIndex.add(line, { list: source.name });
+          try {
+            this.vpnIndex.add(line, { list: source.name });
+          } catch (e) {
+            logger.debug?.('[Enrichment] Skipped invalid VPN/DC CIDR/IP', { list: source.name, line, error: (e as Error)?.message });
+          }
         }
       })
     );
@@ -386,13 +467,24 @@ export class EnrichmentService {
     }
 
     const filePath = path.join(this.manifestDir, this.manifest.sources.userAgents.patterns);
-    const content = await readTextFile(filePath);
+    const content = await readTextFileCapped(filePath);
+    if (content === null) {
+      logger.warn('[Enrichment] Skipping user-agent patterns due to size cap', { filePath });
+      this.userAgentPatterns = [];
+      return;
+    }
     const payload = JSON.parse(content) as { patterns: Array<Omit<UserAgentPattern, 'regex'> & { regex: string }> };
 
-    this.userAgentPatterns = payload.patterns.map((pattern) => ({
-      ...pattern,
-      regex: new RegExp(pattern.regex, 'i'),
-    }));
+    const compiled: UserAgentPattern[] = [];
+    for (const pattern of payload.patterns) {
+      try {
+        const re = new RegExp(pattern.regex, 'i');
+        compiled.push({ ...pattern, regex: re });
+      } catch (e) {
+        logger.warn('[Enrichment] Invalid user-agent regex; skipping', { regex: pattern.regex, error: (e as Error)?.message });
+      }
+    }
+    this.userAgentPatterns = compiled;
   }
 
   private async writeSnapshot(): Promise<void> {
@@ -421,7 +513,9 @@ export class EnrichmentService {
     };
 
     const snapshotPath = path.join(cacheDir, SNAPSHOT_FILENAME);
-    await fs.writeFile(snapshotPath, JSON.stringify(snapshot, null, 2));
+    const json = JSON.stringify(snapshot, null, 2);
+    await fs.writeFile(snapshotPath, json);
+    this.lastSnapshotHash = createHash('sha256').update(json).digest('hex');
   }
 
   private resetState(): void {
@@ -437,12 +531,53 @@ export class EnrichmentService {
     this.cloudIndexes.clear();
     this.userAgentPatterns = [];
     this.userAgentCache.clear();
+    this.lastSnapshotHash = null;
+    this.lastManifestHash = null;
   }
 
   private assertInitialized(): void {
     if (!this.initialized) {
       throw new Error('EnrichmentService has not been initialized');
     }
+  }
+
+  /** Expose lightweight stats for diagnostics and tests */
+  stats(): {
+    initialized: boolean;
+    version: string | null;
+    counts: {
+      abuse: number;
+      tor: number;
+      vpn: number;
+      asn: number;
+      cloudProviders: Array<{ provider: string; prefixes: number }>;
+      userAgentPatterns: number;
+    };
+    snapshotHash: string | null;
+    manifestHash: string | null;
+  } {
+    return {
+      initialized: this.initialized,
+      version: this.currentVersion,
+      counts: {
+        abuse: this.abuseIndex.count(),
+        tor: this.torIndex.count(),
+        vpn: this.vpnIndex.count(),
+        asn: this.asnIndex.count(),
+        cloudProviders: Array.from(this.cloudIndexes.entries()).map(([provider, index]) => ({
+          provider,
+          prefixes: index.count(),
+        })),
+        userAgentPatterns: this.userAgentPatterns.length,
+      },
+      snapshotHash: this.lastSnapshotHash,
+      manifestHash: this.lastManifestHash,
+    };
+  }
+
+  /** Reset the service to an uninitialized state (for tests) */
+  reset(): void {
+    this.resetState();
   }
 }
 

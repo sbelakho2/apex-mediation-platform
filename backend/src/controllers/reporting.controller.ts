@@ -30,11 +30,21 @@ const countryQuerySchema = dateRangeSchema.extend({
  */
 const parseDateRange = (query: unknown): { startDate: Date; endDate: Date } => {
   const validated = dateRangeSchema.parse(query);
-  
-  const endDate = validated.endDate ? new Date(validated.endDate) : new Date();
-  const startDate = validated.startDate 
-    ? new Date(validated.startDate)
-    : new Date(endDate.getTime() - 7 * 24 * 60 * 60 * 1000); // Default: last 7 days
+
+  const now = new Date();
+  const endDateRaw = validated.endDate ? new Date(validated.endDate) : now;
+  const endDate = Number.isNaN(endDateRaw.getTime()) ? now : endDateRaw;
+
+  const startRaw = validated.startDate ? new Date(validated.startDate) : new Date(endDate.getTime() - 7 * 24 * 60 * 60 * 1000);
+  const startDate = Number.isNaN(startRaw.getTime()) ? new Date(endDate.getTime() - 7 * 24 * 60 * 60 * 1000) : startRaw;
+
+  // Enforce maximum window of 31 days to avoid heavy queries (FIX-11: 668)
+  const maxWindowMs = 31 * 24 * 60 * 60 * 1000;
+  const windowMs = endDate.getTime() - startDate.getTime();
+  if (windowMs > maxWindowMs) {
+    const cappedStart = new Date(endDate.getTime() - maxWindowMs);
+    return { startDate: cappedStart, endDate };
+  }
 
   return { startDate, endDate };
 };

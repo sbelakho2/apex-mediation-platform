@@ -187,6 +187,12 @@ export class DataExportService {
       // Upload to destination
       if (config.destination.type !== 'local') {
         await this.uploadToDestination(filePath, config.destination);
+        // After successful upload, remove local temp file to avoid disk bloat (FIX-11: 634)
+        try {
+          fs.unlinkSync(filePath);
+        } catch (e) {
+          logger.warn('Failed to delete local export file after upload', { filePath, error: e });
+        }
       }
 
       job.status = 'completed';
@@ -238,13 +244,13 @@ export class DataExportService {
               adapter_name,
               ad_format,
               country,
-              COUNT(*) as impressions,
-              SUM(revenue) as revenue,
-              AVG(latency) as avg_latency
+              count() as impressions,
+              sum(revenue) as revenue,
+              avg(latency) as avg_latency
             FROM impressions
-            WHERE publisher_id = '${job.publisherId}'
-              AND date >= '${startDate}'
-              AND date <= '${endDate}'
+            WHERE publisher_id = {publisherId:String}
+              AND toDate(timestamp) >= toDate(parseDateTimeBestEffort({start:String}))
+              AND toDate(timestamp) <= toDate(parseDateTimeBestEffort({end:String}))
             GROUP BY date, publisher_id, app_id, adapter_name, ad_format, country
             ORDER BY date, impressions DESC
           `;
@@ -259,13 +265,13 @@ export class DataExportService {
               adapter_name,
               ad_format,
               country,
-              SUM(revenue) as revenue,
-              COUNT(*) as impressions,
-              SUM(revenue) / COUNT(*) * 1000 as ecpm
+              sum(revenue_usd) as revenue,
+              countDistinct(impression_id) as impressions,
+              if(countDistinct(impression_id) > 0, sum(revenue_usd) / countDistinct(impression_id) * 1000, 0) as ecpm
             FROM revenue_events
-            WHERE publisher_id = '${job.publisherId}'
-              AND date >= '${startDate}'
-              AND date <= '${endDate}'
+            WHERE publisher_id = {publisherId:String}
+              AND toDate(timestamp) >= toDate(parseDateTimeBestEffort({start:String}))
+              AND toDate(timestamp) <= toDate(parseDateTimeBestEffort({end:String}))
             GROUP BY date, publisher_id, app_id, adapter_name, ad_format, country
             ORDER BY date, revenue DESC
           `;
@@ -278,12 +284,12 @@ export class DataExportService {
               publisher_id,
               fraud_type,
               risk_level,
-              COUNT(*) as events,
-              SUM(blocked_revenue) as blocked_revenue
+              count() as events,
+              sum(blocked_revenue) as blocked_revenue
             FROM fraud_events
-            WHERE publisher_id = '${job.publisherId}'
-              AND date >= '${startDate}'
-              AND date <= '${endDate}'
+            WHERE publisher_id = {publisherId:String}
+              AND toDate(detected_at) >= toDate(parseDateTimeBestEffort({start:String}))
+              AND toDate(detected_at) <= toDate(parseDateTimeBestEffort({end:String}))
             GROUP BY date, publisher_id, fraud_type, risk_level
             ORDER BY date, events DESC
           `;
@@ -298,26 +304,26 @@ export class DataExportService {
               sdk_version,
               os,
               device_type,
-              COUNT(*) as sessions,
-              AVG(session_duration) as avg_session_duration,
-              SUM(CASE WHEN anr_detected = true THEN 1 ELSE 0 END) as anr_count,
-              SUM(CASE WHEN crash_detected = true THEN 1 ELSE 0 END) as crash_count
+              count() as sessions,
+              avg(session_duration) as avg_session_duration,
+              sum(if(anr_detected = 1, 1, 0)) as anr_count,
+              sum(if(crash_detected = 1, 1, 0)) as crash_count
             FROM sdk_telemetry
-            WHERE publisher_id = '${job.publisherId}'
-              AND date >= '${startDate}'
-              AND date <= '${endDate}'
+            WHERE publisher_id = {publisherId:String}
+              AND toDate(timestamp) >= toDate(parseDateTimeBestEffort({start:String}))
+              AND toDate(timestamp) <= toDate(parseDateTimeBestEffort({end:String}))
             GROUP BY date, publisher_id, app_id, sdk_version, os, device_type
             ORDER BY date, sessions DESC
           `;
           break;
 
         case 'all':
-          // Export all tables - this could be very large
+          // Export all tables - caution with size
           query = `
             SELECT * FROM impressions
-            WHERE publisher_id = '${job.publisherId}'
-              AND toDate(timestamp) >= '${startDate}'
-              AND toDate(timestamp) <= '${endDate}'
+            WHERE publisher_id = {publisherId:String}
+              AND toDate(timestamp) >= toDate(parseDateTimeBestEffort({start:String}))
+              AND toDate(timestamp) <= toDate(parseDateTimeBestEffort({end:String}))
             LIMIT 1000000
           `;
           break;
@@ -326,17 +332,18 @@ export class DataExportService {
           throw new Error(`Unknown data type: ${job.dataType}`);
       }
 
+      const params = { publisherId: job.publisherId, start: startDate, end: endDate };
       switch (job.dataType) {
         case 'impressions':
-          return executeQuery<ImpressionsExportRow>(query);
+          return executeQuery<ImpressionsExportRow>(query, params);
         case 'revenue':
-          return executeQuery<RevenueExportRow>(query);
+          return executeQuery<RevenueExportRow>(query, params);
         case 'fraud_events':
-          return executeQuery<FraudEventExportRow>(query);
+          return executeQuery<FraudEventExportRow>(query, params);
         case 'telemetry':
-          return executeQuery<TelemetryExportRow>(query);
+          return executeQuery<TelemetryExportRow>(query, params);
         case 'all':
-          return executeQuery<ExportRow>(query);
+          return executeQuery<ExportRow>(query, params);
       }
 
       throw new Error(`Unhandled export data type: ${job.dataType}`);

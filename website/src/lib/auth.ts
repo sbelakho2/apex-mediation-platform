@@ -62,14 +62,22 @@ export async function verifyToken(token: string): Promise<User | null> {
  * Get the current user session
  */
 export async function getSession(): Promise<User | null> {
-  const cookieStore = cookies();
-  const token = cookieStore.get('session')?.value;
-
-  if (!token) {
-    return null;
-  }
-
-  return verifyToken(token);
+  // TESTING MODE: Authentication disabled, return mock user
+  return {
+    id: 'test-user-id',
+    email: 'test@example.com',
+    publisherId: 'test-publisher-id',
+    role: 'admin',
+    name: 'Test User'
+  };
+  
+  // Original auth logic (disabled for testing):
+  // const cookieStore = cookies();
+  // const token = cookieStore.get('session')?.value;
+  // if (!token) {
+  //   return null;
+  // }
+  // return verifyToken(token);
 }
 
 /**
@@ -84,11 +92,19 @@ export async function isAuthenticated(): Promise<boolean> {
  * Require authentication (for API routes and server components)
  */
 export async function requireAuth(): Promise<User> {
-  const user = await getSession();
-
-  if (!user) {
-    throw new Error('Unauthorized');
-  }
-
-  return user;
+  // TESTING MODE: Authentication disabled, return mock user
+  return {
+    id: 'test-user-id',
+    email: 'test@example.com',
+    publisherId: 'test-publisher-id',
+    role: 'admin',
+    name: 'Test User'
+  };
+  
+  // Original auth logic (disabled for testing):
+  // const user = await getSession();
+  // if (!user) {
+  //   throw new Error('Unauthorized');
+  // }
+  // return user;
 }

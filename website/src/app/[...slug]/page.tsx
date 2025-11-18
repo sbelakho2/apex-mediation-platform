@@ -104,7 +104,7 @@ function renderContent(slugKey: string, breadcrumbs: Breadcrumb[]): React.ReactN
       return (
         <PageLayout
           title="Developer Documentation"
-          intro="Integrate ApexMediation in record time, optimise your monetisation stack, and ship with confidence. Every guide below is production-ready and mapped to the Study in Sweden design guidelines you see throughout the product."
+          intro="Integrate ApexMediation in record time, optimise your monetisation stack, and ship with confidence. Every guide below is production-ready and aligned to the design system you see throughout the product."
           heroTag="Docs"
           breadcrumbs={breadcrumbs}
         >
@@ -411,7 +411,7 @@ Body: {
       return (
         <PageLayout
           title="About ApexMediation"
-          intro="ApexMediation is built in Stockholm by a team obsessed with transparency, fairness, and delightful developer experiences."
+          intro="ApexMediation is built by a distributed team obsessed with transparency, fairness, and delightful developer experiences."
           heroTag="Company"
           breadcrumbs={breadcrumbs}
         >
@@ -424,7 +424,7 @@ Body: {
             </div>
             <div className="grid gap-6 md:grid-cols-3">
               {[
-                { label: 'Founded', value: '2021, Stockholm' },
+                { label: 'Founded', value: '2021, Tallinn' },
                 { label: 'Team', value: '38 people across EU & US' },
                 { label: 'Payouts processed', value: '$48M in 2024' },
               ].map((stat) => (
@@ -467,7 +467,7 @@ Body: {
       return (
         <PageLayout
           title="Careers"
-          intro="Join a remote-friendly team that ships fast, cares deeply about craft, and celebrates Swedish work-life balance."
+          intro="Join a remote-friendly team that ships fast, cares deeply about craft, and keeps work-life balance healthy."
           heroTag="Hiring"
           breadcrumbs={breadcrumbs}
         >
@@ -475,7 +475,7 @@ Body: {
             {[
               {
                 title: 'Senior Frontend Engineer',
-                location: 'Stockholm or Remote (EU)',
+                location: 'Tallinn or Remote (EU)',
                 description: 'Build delightful dashboards and workflows in Next.js, Tailwind, and TypeScript.',
               },
               {
@@ -486,7 +486,7 @@ Body: {
               {
                 title: 'Customer Success Manager',
                 location: 'New York City, Hybrid',
-                description: 'Partner with top-grossing studios to improve ARPDAU and retention.',
+                description: 'Partner with top-grossing studios to improve retention and ongoing insights.',
               },
             ].map((role) => (
               <article key={role.title} className="rounded-3xl border border-primary-blue/20 bg-white p-6 text-primary-blue shadow">
@@ -526,7 +526,7 @@ Body: {
               <h2 className="text-h3 font-bold uppercase">Latest Headlines</h2>
               <ul className="mt-4 space-y-3 text-sm text-gray-700">
                 <li>ApexMediation launches ML-driven fraud firewall across 5M daily impressions.</li>
-                <li>Swedish studios increase ARPDAU by 23% using ApexMediation Growth plan.</li>
+                <li>Studios adopt ApexMediation Growth plan for unified forecasting.</li>
                 <li>ApexMediation secures SOC 2 Type II attestation for enterprise customers.</li>
               </ul>
             </section>
@@ -584,7 +584,7 @@ Body: {
             {[
               {
                 title: 'Northvolt Games',
-                stat: '+27% ARPDAU in 60 days',
+                stat: 'Full rollout in 60 days',
                 summary: 'Swapped legacy waterfall mediation for ApexMediation Growth. Weekly lab sessions reduced setup friction and surfaced creative fatigue sooner.',
               },
               {
@@ -615,7 +615,7 @@ Body: {
             {[
               {
                 date: '2025-10-24',
-                title: 'Dashboard refresh + Swedish palette',
+                title: 'Dashboard refresh + palette update',
                 items: ['Updated navigation focus states', 'Mobile sidebar with animated overlay', 'Revamped Settings page with URL-synced tabs'],
               },
               {
@@ -719,7 +719,7 @@ Body: {
             <ul className="mt-4 list-disc space-y-3 pl-6 text-sm text-gray-700">
               <li>We only collect data necessary to fulfil ad requests and process payouts.</li>
               <li>Publishers can request deletion of user data within 30 days via <a href="mailto:privacy@apexmediation.com" className="underline">privacy@apexmediation.com</a>.</li>
-              <li>Data is stored in EU-West (Stockholm) and backed up in Frankfurt.</li>
+              <li>Data is stored in EU-West (Frankfurt) and backed up in Dublin.</li>
             </ul>
           </section>
         </PageLayout>

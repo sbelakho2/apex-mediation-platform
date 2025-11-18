@@ -8,6 +8,32 @@ import { MigrationStudioService } from '../services/migrationStudioService';
 import pool from '../utils/postgres';
 import { AppError } from '../middleware/errorHandler';
 import { ExperimentMode } from '../types/migration';
+import logger from '../utils/logger';
+
+// FIX-11-628: lightweight in-process rate limiting for sensitive endpoints
+type Bucket = { count: number; resetAt: number }
+const assignmentBuckets: Record<string, Bucket> = {}
+const importBuckets: Record<string, Bucket> = {}
+const ASSIGN_RPM = Number(process.env.MIGRATION_ASSIGN_RPM ?? 600) // per IP per minute
+const IMPORT_RPM = Number(process.env.MIGRATION_IMPORT_RPM ?? 30) // per user per minute
+const IMPORT_MAX_BYTES = Number(process.env.MIGRATION_IMPORT_MAX_BYTES ?? 5 * 1024 * 1024) // 5MB default
+
+function checkBucket(map: Record<string, Bucket>, key: string, limit: number) {
+  const now = Date.now();
+  const bucket = map[key] || { count: 0, resetAt: now + 60_000 };
+  if (now > bucket.resetAt) {
+    bucket.count = 0;
+    bucket.resetAt = now + 60_000;
+  }
+  bucket.count += 1;
+  map[key] = bucket;
+  if (bucket.count > limit) {
+    const retryIn = Math.max(0, bucket.resetAt - now);
+    const err = new AppError('Too many requests', 429);
+    (err as any).retryAfterMs = retryIn;
+    throw err;
+  }
+}
 
 const migrationService = new MigrationStudioService(pool);
 
@@ -118,6 +144,10 @@ export const createImportJob = async (
   next: NextFunction
 ): Promise<void> => {
   try {
+    const ip = req.ip || req.headers['x-forwarded-for'] as string || 'unknown';
+    // Rate limit per IP to protect CSV/connector imports
+    checkBucket(importBuckets, String(req.user?.userId ?? ip), IMPORT_RPM);
+
     const publisherId = req.user?.publisherId;
     const userId = req.user?.userId;
 
@@ -160,6 +190,16 @@ export const createImportJob = async (
     }
 
     const fileBuffer = (req as any).file?.buffer as Buffer | undefined;
+    if (fileBuffer) {
+      if (fileBuffer.byteLength > IMPORT_MAX_BYTES) {
+        throw new AppError(`CSV too large (>${IMPORT_MAX_BYTES} bytes)`, 413);
+      }
+      // very lightweight CSV sniff: require at least one comma and newline within first 4KB
+      const head = fileBuffer.subarray(0, Math.min(4096, fileBuffer.byteLength)).toString('utf8');
+      if (!head.includes(',') || !head.includes('\n')) {
+        throw new AppError('Invalid CSV payload', 400);
+      }
+    }
 
     const result = await migrationService.createImport({
       publisherId,
@@ -435,6 +475,24 @@ export const getAssignment = async (
   next: NextFunction
 ): Promise<void> => {
   try {
+    // Optional shared-secret authentication for SDKs (guards unauthenticated endpoint)
+    const configuredSecret = process.env.MIGRATION_SDK_SHARED_SECRET;
+    if (configuredSecret) {
+      const provided = (req.headers['x-migration-sdk-secret'] as string | undefined)?.trim();
+      if (!provided || provided !== configuredSecret) {
+        throw new AppError('Unauthorized', 401);
+      }
+    }
+
+    // Basic per-IP rate limiting
+    const ip = req.ip || (req.headers['x-forwarded-for'] as string) || 'unknown';
+    try {
+      checkBucket(assignmentBuckets, ip, ASSIGN_RPM);
+    } catch (e) {
+      logger.warn('Assignment rate limited', { ip });
+      throw e;
+    }
+
     const { user_identifier, placement_id } = req.body;
 
     if (!user_identifier || !placement_id) {

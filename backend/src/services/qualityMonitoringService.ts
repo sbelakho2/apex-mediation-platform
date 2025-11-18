@@ -736,15 +736,15 @@ export class QualityMonitoringService {
     current: number,
     inverse: boolean = false
   ): SLOStatus {
-    const isHealthy = inverse
-      ? current <= target
-      : current >= target;
-    
+    const isHealthy = inverse ? current <= target : current >= target;
+
     // Calculate error budget (percentage of allowed failures)
-    const errorBudget = 100 - target;
-    const actualError = inverse ? current : 100 - current;
-    const errorBudgetUsed = (actualError / errorBudget) * 100;
-    const errorBudgetRemaining = Math.max(0, 100 - errorBudgetUsed);
+    const errorBudget = Math.max(0, 100 - target);
+    const actualError = inverse ? current : Math.max(0, 100 - current);
+
+    // Guard against divide-by-zero when target is 100 (no error budget)
+    const errorBudgetUsed = errorBudget > 0 ? (actualError / errorBudget) * 100 : 0;
+    const errorBudgetRemaining = errorBudget > 0 ? Math.max(0, 100 - errorBudgetUsed) : 100;
 
     let status: 'healthy' | 'at-risk' | 'breached';
     if (!isHealthy) {

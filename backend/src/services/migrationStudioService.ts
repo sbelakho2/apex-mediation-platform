@@ -1089,44 +1089,39 @@ export class MigrationStudioService {
     publisherId: string,
     triggeredBy?: string
   ): Promise<EvaluateGuardrailsResult> {
-    const client = await this.pool.connect();
+    // FIX-11-637: Avoid long-lived locks. Do read-only work outside a transaction,
+    // and open a short transaction only for state updates.
+    const expRead = await this.pool.query(
+      `SELECT * FROM migration_experiments
+       WHERE id = $1 AND publisher_id = $2`,
+      [experimentId, publisherId]
+    );
 
-    try {
-      await client.query('BEGIN');
+    if (expRead.rows.length === 0) {
+      throw new AppError('Experiment not found', 404);
+    }
 
-      const experimentResult = await client.query(
-        `SELECT * FROM migration_experiments
-         WHERE id = $1 AND publisher_id = $2
-         FOR UPDATE`,
-        [experimentId, publisherId]
-      );
+    const experimentRow = expRead.rows[0];
+    const guardrails = this.parseGuardrails(experimentRow.guardrails);
 
-      if (experimentResult.rows.length === 0) {
-        throw new AppError('Experiment not found', 404);
-      }
+    const snapshotsResult = await this.pool.query(
+      `SELECT arm, impressions, fills, revenue_micros, latency_p95_ms, error_rate_percent
+       FROM migration_guardrail_snapshots
+       WHERE experiment_id = $1 AND captured_at >= NOW() - INTERVAL '6 hours'
+       ORDER BY captured_at DESC
+       LIMIT 50`,
+      [experimentId]
+    );
 
-      const experimentRow = experimentResult.rows[0];
-      const guardrails = this.parseGuardrails(experimentRow.guardrails);
-
-      const snapshotsResult = await client.query(
-        `SELECT arm, impressions, fills, revenue_micros, latency_p95_ms, error_rate_percent
-         FROM migration_guardrail_snapshots
-         WHERE experiment_id = $1 AND captured_at >= NOW() - INTERVAL '6 hours'
-         ORDER BY captured_at DESC
-         LIMIT 50`,
+    if (snapshotsResult.rows.length === 0) {
+      await this.pool.query(
+        `UPDATE migration_experiments
+         SET last_guardrail_check = NOW(), updated_at = NOW()
+         WHERE id = $1`,
         [experimentId]
       );
-
-      if (snapshotsResult.rows.length === 0) {
-        await client.query(
-          `UPDATE migration_experiments
-           SET last_guardrail_check = NOW(), updated_at = NOW()
-           WHERE id = $1`,
-          [experimentId]
-        );
-        await client.query('COMMIT');
-        return { shouldPause: false, violations: [] };
-      }
+      return { shouldPause: false, violations: [] };
+    }
 
       type Aggregation = {
         impressions: number;
@@ -1157,13 +1152,12 @@ export class MigrationStudioService {
 
       const minImpressions = guardrails.min_impressions ?? DEFAULT_GUARDRAILS.min_impressions;
       if (aggregate.test.impressions < minImpressions) {
-        await client.query(
+        await this.pool.query(
           `UPDATE migration_experiments
            SET last_guardrail_check = NOW(), updated_at = NOW()
            WHERE id = $1`,
           [experimentId]
         );
-        await client.query('COMMIT');
         return { shouldPause: false, violations: [] };
       }
 
@@ -1219,74 +1213,79 @@ export class MigrationStudioService {
       const shouldPause = violations.length > 0;
       const shouldKill = criticalViolations.length > 0;
 
-      if (shouldPause && experimentRow.status === 'active') {
-        const eventType = shouldKill ? 'guardrail_kill' : 'guardrail_pause';
-        const newMode: ExperimentMode = 'shadow'; // Always revert to shadow mode on guardrail trigger
+      // Short transaction for updates only
+      const client = await this.pool.connect();
+      try {
+        await client.query('BEGIN');
 
-        await client.query(
-          `UPDATE migration_experiments
-           SET status = 'paused',
-               mode = $1,
-               paused_at = COALESCE(paused_at, NOW()),
-               last_guardrail_check = NOW(),
-               updated_at = NOW()
-           WHERE id = $2`,
-          [newMode, experimentId]
-        );
+        if (shouldPause && experimentRow.status === 'active') {
+          const eventType = shouldKill ? 'guardrail_kill' : 'guardrail_pause';
+          const newMode: ExperimentMode = 'shadow'; // Always revert to shadow mode on guardrail trigger
 
-        await client.query(
-          `INSERT INTO migration_events (
-             experiment_id, event_type, reason, triggered_by, event_data
-           ) VALUES ($1, $2, $3, $4, $5)`,
-          [
-            experimentId,
-            eventType,
-            violations.join('; '),
-            triggeredBy || 'system',
-            JSON.stringify({
+          await client.query(
+            `UPDATE migration_experiments
+             SET status = 'paused',
+                 mode = $1,
+                 paused_at = COALESCE(paused_at, NOW()),
+                 last_guardrail_check = NOW(),
+                 updated_at = NOW()
+             WHERE id = $2`,
+            [newMode, experimentId]
+          );
+
+          await client.query(
+            `INSERT INTO migration_events (
+               experiment_id, event_type, reason, triggered_by, event_data
+             ) VALUES ($1, $2, $3, $4, $5)`,
+            [
+              experimentId,
+              eventType,
+              violations.join('; '),
+              triggeredBy || 'system',
+              JSON.stringify({
+                violations,
+                critical_violations: criticalViolations,
+                metrics: {
+                  testLatency,
+                  testErrorRate,
+                  testEcpm,
+                  controlEcpm,
+                },
+              }),
+            ]
+          );
+
+          // Prometheus instrumentation
+          if (shouldKill) {
+            migrationKillsTotal.inc({ reason: criticalViolations[0].split(' ')[0].toLowerCase() });
+            logger.error('Migration experiment kill switch triggered', {
+              experimentId,
+              violations: criticalViolations,
+            });
+          } else {
+            migrationGuardrailPausesTotal.inc({ reason: violations[0].split(' ')[0].toLowerCase() });
+            logger.warn('Migration experiment auto-paused', {
+              experimentId,
               violations,
-              critical_violations: criticalViolations,
-              metrics: {
-                testLatency,
-                testErrorRate,
-                testEcpm,
-                controlEcpm,
-              },
-            }),
-          ]
-        );
-
-        // Prometheus instrumentation
-        if (shouldKill) {
-          migrationKillsTotal.inc({ reason: criticalViolations[0].split(' ')[0].toLowerCase() });
-          logger.error('Migration experiment kill switch triggered', {
-            experimentId,
-            violations: criticalViolations,
-          });
+            });
+          }
         } else {
-          migrationGuardrailPausesTotal.inc({ reason: violations[0].split(' ')[0].toLowerCase() });
-          logger.warn('Migration experiment auto-paused', {
-            experimentId,
-            violations,
-          });
+          await client.query(
+            `UPDATE migration_experiments
+             SET last_guardrail_check = NOW(), updated_at = NOW()
+             WHERE id = $1`,
+            [experimentId]
+          );
         }
-      } else {
-        await client.query(
-          `UPDATE migration_experiments
-           SET last_guardrail_check = NOW(), updated_at = NOW()
-           WHERE id = $1`,
-          [experimentId]
-        );
-      }
 
-      await client.query('COMMIT');
-      return { shouldPause, violations };
-    } catch (error) {
-      await client.query('ROLLBACK');
-      throw error;
-    } finally {
-      client.release();
-    }
+        await client.query('COMMIT');
+        return { shouldPause, violations };
+      } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+      } finally {
+        client.release();
+      }
   }
 
   /**

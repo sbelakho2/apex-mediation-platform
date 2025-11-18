@@ -43,12 +43,41 @@ const unitySchema = z
   })
   .passthrough();
 
+const facebookSchema = z
+  .object({
+    accessToken: safeString(8),
+    accountId: safeString(3, 128),
+    appId: safeString(3, 128).optional(),
+    appSecret: safeString(8).optional(),
+  })
+  .passthrough();
+
+const ironSourceSchema = z
+  .object({
+    appKey: safeString(8),
+    secretKey: safeString(8),
+    advertiserId: safeString(3, 128).optional(),
+  })
+  .passthrough();
+
+const mintegralSchema = z
+  .object({
+    apiKey: safeString(8),
+    appId: safeString(3, 128),
+    placementId: safeString(3, 128).optional(),
+  })
+  .passthrough();
+
 // Exported maps
 export const schemasByName: Record<string, z.ZodTypeAny> = {
   admob: admobSchema,
   applovin: applovinSchema,
   unity: unitySchema, // accept both 'unity' and 'unityads' names if used inconsistently
   unityads: unitySchema,
+  facebook: facebookSchema,
+  meta: facebookSchema,
+  ironsource: ironSourceSchema,
+  mintegral: mintegralSchema,
 };
 
 // Optional: fill with canonical UUIDs when available in your environment

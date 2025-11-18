@@ -141,10 +141,10 @@ class ReportingServiceImpl implements ReportingService {
       const query = `
         SELECT
           sum(revenue_usd) as total_revenue,
-          count(DISTINCT impression_id) as total_impressions,
+          countDistinct(impression_id) as total_impressions,
           countIf(revenue_type = 'click') as total_clicks,
-          (sum(revenue_usd) / count(DISTINCT impression_id)) * 1000 as ecpm,
-          (countIf(revenue_type = 'click') / count(DISTINCT impression_id)) * 100 as ctr
+          if(countDistinct(impression_id) > 0, (sum(revenue_usd) / countDistinct(impression_id)) * 1000, 0) as ecpm,
+          if(countDistinct(impression_id) > 0, (countIf(revenue_type = 'click') / countDistinct(impression_id)) * 100, 0) as ctr
         FROM revenue_events
         WHERE publisher_id = {publisherId:UUID}
           AND timestamp >= {startDate:DateTime}
@@ -176,13 +176,20 @@ class ReportingServiceImpl implements ReportingService {
       }
 
       const row = result[0];
+      const totalImpressions = Number.parseInt(row.total_impressions);
+      const totalClicks = Number.parseInt(row.total_clicks);
+      const totalRevenue = Number.parseFloat(row.total_revenue);
+      const ecpm = Number.isFinite(Number.parseFloat(row.ecpm)) ? Number.parseFloat(row.ecpm) : 0;
+      const ctr = Number.isFinite(Number.parseFloat(row.ctr)) ? Number.parseFloat(row.ctr) : 0;
+
       return {
-        totalRevenue: parseFloat(row.total_revenue),
-        totalImpressions: parseInt(row.total_impressions),
-        totalClicks: parseInt(row.total_clicks),
-        ecpm: parseFloat(row.ecpm),
-        ctr: parseFloat(row.ctr),
-        fillRate: 100, // TODO: Calculate from impression requests vs served
+        totalRevenue: Number.isFinite(totalRevenue) ? totalRevenue : 0,
+        totalImpressions: Number.isFinite(totalImpressions) ? totalImpressions : 0,
+        totalClicks: Number.isFinite(totalClicks) ? totalClicks : 0,
+        ecpm,
+        ctr,
+        // Leave fillRate as 0 until request-volume metric is integrated
+        fillRate: 0,
       };
     } catch (error) {
       logger.error('Failed to get revenue stats', { publisherId, error });
@@ -206,9 +213,9 @@ class ReportingServiceImpl implements ReportingService {
         SELECT
           ${timeFunction}(timestamp) as timestamp,
           sum(revenue_usd) as revenue,
-          count(DISTINCT impression_id) as impressions,
+          countDistinct(impression_id) as impressions,
           countIf(revenue_type = 'click') as clicks,
-          (sum(revenue_usd) / count(DISTINCT impression_id)) * 1000 as ecpm
+          if(countDistinct(impression_id) > 0, (sum(revenue_usd) / countDistinct(impression_id)) * 1000, 0) as ecpm
         FROM revenue_events
         WHERE publisher_id = {publisherId:UUID}
           AND timestamp >= {startDate:DateTime}

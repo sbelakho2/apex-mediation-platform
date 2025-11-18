@@ -2,6 +2,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { enrichmentService as defaultEnrichmentService, EnrichmentService as EnrichmentServiceType } from '../../enrichment/enrichmentService';
 import logger from '../../../utils/logger';
+import { z } from 'zod';
 import {
   LabelClass,
   LabelFunctionOutcome,
@@ -21,6 +22,14 @@ interface WeakSupervisionManifest {
   syntheticScenarios: string;
 }
 
+const WeakSupervisionManifestSchema = z.object({
+  supplyChain: z.object({
+    appAds: z.string().min(1),
+    sellers: z.string().min(1),
+  }),
+  syntheticScenarios: z.string().min(1),
+});
+
 const DEFAULT_BASE_DIR = path.resolve(process.cwd(), 'data', 'weak-supervision');
 
 export class WeakSupervisionService {
@@ -31,6 +40,7 @@ export class WeakSupervisionService {
   private syntheticLibrary: SyntheticScenarioLibrary | null = null;
   private initialized: boolean = false;
   private loadingPromise: Promise<void> | null = null;
+  private initTimeoutMs: number = Math.max(1000, parseInt(process.env.WS_INIT_TIMEOUT_MS || '10000', 10));
 
   constructor(options?: { baseDir?: string; enrichmentService?: EnrichmentServiceType }) {
     this.baseDir = options?.baseDir ?? DEFAULT_BASE_DIR;
@@ -46,9 +56,22 @@ export class WeakSupervisionService {
       return this.loadingPromise;
     }
 
-    this.loadingPromise = this.performInitialization();
+    const initPromise = this.performInitialization();
+    const timeoutPromise = new Promise<void>((_, reject) => {
+      const t = setTimeout(() => {
+        reject(new Error('WeakSupervisionService initialization timed out'));
+      }, this.initTimeoutMs);
+      initPromise.finally(() => clearTimeout(t)).catch(() => clearTimeout(t));
+    });
+
+    this.loadingPromise = Promise.race([initPromise, timeoutPromise]);
     try {
       await this.loadingPromise;
+    } catch (error) {
+      // Reset flags/state on failure
+      this.reset();
+      logger.error('[WeakSupervision] initialize failed', { error });
+      throw error;
     } finally {
       this.loadingPromise = null;
     }
@@ -67,8 +90,8 @@ export class WeakSupervisionService {
       path.resolve(this.baseDir, this.manifest.syntheticScenarios)
     );
 
-  await Promise.all([this.supplyChainCorpus.load(), this.syntheticLibrary.load()]);
-  logger.info('WeakSupervisionService initialized', {
+    await Promise.all([this.supplyChainCorpus.load(), this.syntheticLibrary.load()]);
+    logger.info('WeakSupervisionService initialized', {
       baseDir: this.baseDir,
       syntheticScenarioCount: this.syntheticLibrary.list().length,
     });
@@ -79,7 +102,9 @@ export class WeakSupervisionService {
   private async loadManifest(): Promise<WeakSupervisionManifest> {
     const manifestPath = path.resolve(this.baseDir, 'manifest.json');
     const content = await fs.readFile(manifestPath, 'utf8');
-    return JSON.parse(content) as WeakSupervisionManifest;
+    const parsed = JSON.parse(content);
+    const manifest = WeakSupervisionManifestSchema.parse(parsed) as WeakSupervisionManifest;
+    return manifest;
   }
 
   async evaluateEvent(context: WeakSupervisionContext): Promise<WeakSupervisionResult> {
@@ -437,6 +462,15 @@ export class WeakSupervisionService {
       return null;
     }
     return tp / (tp + fp);
+  }
+
+  /** Reset to allow clean re-initialization (used in tests) */
+  reset(): void {
+    this.initialized = false;
+    this.loadingPromise = null;
+    this.manifest = null;
+    this.supplyChainCorpus = null;
+    this.syntheticLibrary = null;
   }
 }
 

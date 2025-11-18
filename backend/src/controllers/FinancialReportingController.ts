@@ -32,6 +32,12 @@ export class FinancialReportingController {
    */
   async downloadTransactionLog(req: Request, res: Response): Promise<void> {
     try {
+      // AuthZ: require authenticated user to access exports (FIX-11: 622)
+      if (!req.user?.userId) {
+        res.status(401).json({ error: 'Unauthorized' });
+        return;
+      }
+
       const fiscalYear = parseInt(req.params.year, 10);
 
       if (isNaN(fiscalYear) || fiscalYear < 2020 || fiscalYear > 2100) {
@@ -66,6 +72,11 @@ export class FinancialReportingController {
    */
   async downloadVATReport(req: Request, res: Response): Promise<void> {
     try {
+      if (!req.user?.userId) {
+        res.status(401).json({ error: 'Unauthorized' });
+        return;
+      }
+
       const fiscalYear = parseInt(req.params.year, 10);
       const quarter = parseInt(req.params.quarter, 10);
 
@@ -102,6 +113,11 @@ export class FinancialReportingController {
    */
   async downloadAnnualPnL(req: Request, res: Response): Promise<void> {
     try {
+      if (!req.user?.userId) {
+        res.status(401).json({ error: 'Unauthorized' });
+        return;
+      }
+
       const fiscalYear = parseInt(req.params.year, 10);
 
       if (isNaN(fiscalYear) || fiscalYear < 2020 || fiscalYear > 2100) {

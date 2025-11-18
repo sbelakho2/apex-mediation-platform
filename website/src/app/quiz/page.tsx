@@ -51,7 +51,7 @@ const QUESTIONS: Question[] = [
     prompt: 'Primary goal for the next quarter?',
     options: [
       { label: 'Launch monetisation for a new title', helper: 'Need quick wins and simple setup.', score: 1 },
-      { label: 'Increase revenue per user', helper: 'Optimise placements and pricing.', score: 2 },
+      { label: 'Keep revenue per user predictable', helper: 'Optimise placements and pricing.', score: 2 },
       { label: 'Expand to new regions and formats', helper: 'More networks, more segmentation.', score: 3 },
       { label: 'Operational excellence & automation', helper: 'SLA-driven, compliance, and advanced controls.', score: 4 },
     ],

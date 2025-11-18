@@ -24,6 +24,230 @@ How to validate
 - Future doc updates should reference FIX IDs from `FIXES.md` and actual progress from `PROJECT_STATUS.md`
 
 ---
+Changelog — FIX-11 Batch 7: Billing, Payouts, Invoicing, Tests/Middleware/Utilities/Cleanup (2025-11-18)
+
+Summary
+- Implements FIX-11 Batch 7 focused on monetization surfaces (usage metering, invoicing, payouts, revenue), hardens related controllers and data‑export endpoints, and substantially improves test coverage for critical backend services and utilities. Adds targeted middleware/logging improvements and cleans up brittle behaviors called out in `FIXES.md` items 613–691 (subset listed below).
+
+What changed (highlights)
+- FIX-11-646 — Usage metering billing service
+  - Replaced `console` logging with structured logger and removed hard‑coded plan tiers in favor of configuration injection. File: `backend/src/services/billing/UsageMeteringService.ts`.
+- FIX-11-647 — Invoice service
+  - Removed placeholder customer data in PDF generation, ensured `line_items` are treated/validated as JSON type, and added basic schema checks. File: `backend/src/services/invoiceService.ts`.
+- FIX-11-638, FIX-11-660 — Payout processor and tests
+  - Hardened payout processing simulation to avoid marking payouts as finalized without a DB transaction; added predictable but non‑guessable IDs and simple rate limiting. Extended tests to cover retry and ledger failure paths. Files: `backend/src/services/payoutProcessor.ts`, `backend/src/services/__tests__/payoutProcessor.test.ts`.
+- FIX-11-655 — Revenue controller
+  - Normalized `idempotencyKey` handling (prefer header), improved input validation and error semantics, and added currency localization helpers. File: `backend/src/controllers/revenue.controller.ts`.
+- FIX-11-690 — Data export controller
+  - Added auth + schema validation wrapper, safer streaming of large exports, and clearer error messages to prevent leaking internal details. File: `backend/src/controllers/dataExport.controller.ts`.
+- FIX-11-686 — Dashboard controller
+  - Tightened query guards and paging defaults; added defensive checks to avoid divide‑by‑zero and empty series. File: `backend/src/controllers/dashboard.controller.ts`.
+- FIX-11-630, FIX-11-687 — Financial reporting service and tests
+  - Reduced memory pressure by paging workbook builds and masking PII in logs; improved tests to cover ClickHouse and error joins. Files: `backend/src/services/FinancialReportingService.ts`, `backend/src/services/__tests__/reportingService.test.ts`.
+- FIX-11-658 — Analytics pipeline tests
+  - Expanded coverage to include failure branches, backpressure, and retry paths; reduced reliance on shared singletons. File: `backend/src/services/__tests__/analyticsPipeline.test.ts`.
+- FIX-11-613 — Fraud detection tests
+  - Added repository exception cases, localization edge cases, and pagination/sorting coverage. File: `backend/src/services/__tests__/fraudDetection.test.ts`.
+- FIX-11-614, FIX-11-621 — SKAdNetwork service & tests
+  - Introduced basic signature verification scaffolding and replay prevention in service; extended tests to include crypto verification and concurrency. Files: `backend/src/services/skadnetworkService.ts`, `backend/src/services/__tests__/skadnetworkService.test.ts`.
+- FIX-11-615, FIX-11-644 — Consent management service & tests
+  - Broke down large file into focused parsers, added size/rate limits and log sanitization; tests now cover DB interactions and decoding edge cases. Files: `backend/src/services/consentManagementService.ts`, `backend/src/services/__tests__/consentManagementService.test.ts`.
+- FIX-11-643, FIX-11-633 — Adapter config service & tests
+  - Added zod schema validation and secret masking; tests now exercise real Postgres paths and concurrent writes. Files: `backend/src/services/adapterConfigService.ts`, `backend/src/services/__tests__/adapterConfigService.test.ts`.
+- FIX-11-657, FIX-11-631 — VPN/Proxy detection tests & service
+  - Tests extended to cover GeoIP retries, IPv6 inputs, and timeout behavior; service uses structured logging and short‑TTL caches. Files: `backend/src/services/__tests__/VPNProxyDetectionService.test.ts`, `backend/src/services/VPNProxyDetectionService.ts`.
+- FIX-11-662, FIX-11-611 — Thompson sampling tests & service
+  - Tests now validate RNG seeding and revenue‑aware updates; service adds input validation and safer RNG handling. Files: `backend/src/services/__tests__/thompsonSamplingService.test.ts`, `backend/src/services/thompsonSamplingService.ts`.
+- FIX-11-663 — Transparency writer tests
+  - Added ClickHouse error path checks, signature metadata fields coverage, and PEM presence guards via test doubles. File: `backend/src/services/__tests__/transparencyWriter.test.ts`.
+- FIX-11-664 — Waterfall service tests
+  - Added abort/race tests and edge handling for empty adapters and invalid configs. File: `backend/src/services/__tests__/waterfallService.test.ts`.
+- FIX-11-691 — Fraud controller
+  - Hardened endpoints with auth guards and payload limits; clarified error taxonomy for clients. File: `backend/src/controllers/fraud.controller.ts`.
+- FIX-11-632 — Payment processor tests
+  - Added HTTP payload assertions, retry logic checks, and ledger failure coverage. File: `backend/src/services/__tests__/paymentProcessor.test.ts`.
+
+Validation and QA
+- Backend: `npm run lint --workspace backend`, `npm run test --workspace backend`.
+- Controllers: Verified `idempotencyKey` via header precedence in billing/payouts paths; exercised pagination defaults on dashboard and revenue endpoints.
+- Data export: Confirmed authenticated requests required and large exports stream without memory spikes.
+- Billing & payouts: Simulated retries and transaction rollbacks; confirmed rate limiting engages under burst loads.
+- Tests: New suites fail when guards are removed or error branches are broken, providing protection against regressions.
+
+Backward compatibility
+- Changes are largely additive and hardened existing contracts. Where header precedence changed (e.g., `idempotencyKey`), body fallbacks remain for a deprecation period with warnings.
+
+Traceability to FIXES.md
+- Addresses FIX-11 items: 613, 614, 615, 632, 643, 644, 646, 647, 655, 657, 658, 660, 661, 662, 663, 664, 686, 687, 690, 691.
+
+How to validate locally
+- Run backend tests and lint per above. Exercise billing/payouts flows via local API calls:
+  - Revenue: send requests with `Idempotency-Key` header; verify currency formatting and stable responses.
+  - Payouts: trigger payout processing and assert transactions are persisted or rolled back on failure.
+  - Invoices: generate a PDF for an account with JSON `line_items` and inspect outputs.
+  - Data export: request a large export with valid auth; monitor memory and stream behavior.
+
+---
+Changelog — FIX-11 Batch 6: Migration Studio, Connectors, Signer, Controllers (2025-11-18)
+
+Summary
+- Implements Batch 6 of FIX-11 focusing on Migration Studio surfaces: cryptographic signer hardening, import connectors with optional live HTTP mode and rate limiting, controller safeguards (auth, size bounds, per‑IP limits), and reduced lock scope in guardrail evaluation. Adds stronger tests for signer and studio service.
+
+What changed (highlights)
+- FIX-11-616 — Migration Comparison Signer
+  - Refuses ephemeral keys in production; requires configured PEMs. Adds optional key rotation claims (`not_before`, `not_after`) into signed payload and signature metadata. Validates inputs and keeps deterministic canonicalization. File: `backend/src/services/migrationComparisonSigner.ts`.
+- FIX-11-617 — Migration Import Connectors
+  - Adds optional live HTTP clients (axios) with timeouts, retries with backoff, and simple in‑process rate limiting. Falls back to deterministic sample data when live endpoints aren’t configured. File: `backend/src/services/migrationImportConnectors.ts`.
+- FIX-11-628 — Migration Controller safeguards
+  - Adds optional SDK shared‑secret check for `getAssignment`, per‑IP rate limiting, CSV size/content sniff checks, and per‑user/IP rate limits for import creation. File: `backend/src/controllers/migration.controller.ts`.
+- FIX-11-637 — Migration Studio guardrails and locking
+  - Refactors `evaluateGuardrails` to perform read‑only aggregation outside transactions and only open a short transaction for state updates, reducing lock time. Preserves Prometheus counters for pauses/kills. File: `backend/src/services/migrationStudioService.ts`.
+- FIX-11-651 — Signer tests
+  - Adds signature verification and tamper detection, and a production‑mode key‑missing test case. File: `backend/src/services/__tests__/migrationComparisonSigner.test.ts`.
+- FIX-11-659 — Migration Studio tests
+  - Note: validated existing unit tests around create/update/activate/pause flows. Follow‑up planned to extend coverage for Prometheus counters and CSV/mirroring flows. File: `backend/src/services/__tests__/migrationStudioService.test.ts` (no functional changes in this batch).
+
+New environment flags and knobs (Batch 6)
+- `MIGRATION_STUDIO_SIGNING_PRIVATE_KEY_PEM` / `MIGRATION_STUDIO_SIGNING_PUBLIC_KEY_PEM` — required in production for the Migration Comparison Signer (Ed25519 PEMs). Optional in non‑prod; ephemeral keys are generated only outside production.
+- `MIGRATION_STUDIO_SIGNING_KID` — key identifier embedded in signatures (default: `migration-dev`).
+- `MIGRATION_STUDIO_SIGNING_NOT_BEFORE` / `MIGRATION_STUDIO_SIGNING_NOT_AFTER` — optional ISO timestamps recorded in payload/signature for key rotation claims.
+- `MIGRATION_CONNECTORS_LIVE` — when set to `1`, connectors use live HTTP endpoints instead of deterministic sample data.
+- `MIGRATION_IRONSOURCE_BASE_URL` / `MIGRATION_APPLOVIN_BASE_URL` — base URLs for live connector HTTP clients.
+- `MIGRATION_CONNECTOR_RPM` — per‑source in‑process rate limit for connector calls (default: 60 requests/minute).
+- `MIGRATION_ASSIGN_RPM` — per‑IP rate limit for SDK assignment endpoint (default: 600 requests/minute).
+- `MIGRATION_IMPORT_RPM` — per‑user/IP rate limit for creating imports (default: 30 requests/minute).
+- `MIGRATION_IMPORT_MAX_BYTES` — maximum allowed CSV upload size (default: 5 MiB).
+- `MIGRATION_SDK_SHARED_SECRET` — optional shared secret to require on SDK assignment requests via `x-migration-sdk-secret`.
+
+Validation and QA
+- Lint/tests: `npm run lint --workspace backend`, `npm run test --workspace backend`.
+- Signer: in non‑prod without keys, ephemeral keys are generated; in production, missing keys throw. Signature verifies; tampered payload fails verification.
+- Connectors: with `MIGRATION_CONNECTORS_LIVE=1` and base URLs set, live calls use timeouts/retries and rate limiting; otherwise deterministic samples returned.
+- Controller: `getAssignment` honors `MIGRATION_SDK_SHARED_SECRET` when set and enforces per‑IP rate limits. Import creation rejects oversized or non‑CSV uploads.
+- Guardrails: evaluation no longer holds long locks; state updates are transactional and counters increment on pauses/kills.
+
+How to validate locally
+- Signer: do not set key envs to allow ephemeral dev keys. Run `npm test --workspace backend` to exercise signer tests. To simulate production requirement, set `NODE_ENV=production` without keys and observe the expected failure in tests or a direct call.
+- Connectors (sample data): omit `MIGRATION_CONNECTORS_LIVE` and call import creation with `source=ironSource|applovin`; expect deterministic rows.
+- Connectors (live mode): set `MIGRATION_CONNECTORS_LIVE=1` and the corresponding base URLs and API credentials; verify rate limiting via repeated calls and inspect retry behavior.
+- Controller limits: attempt to upload a CSV larger than `MIGRATION_IMPORT_MAX_BYTES`; expect HTTP 413. Send an assignment request without the `x-migration-sdk-secret` when the secret is configured; expect HTTP 401.
+
+Backward compatibility
+- Changes are additive. Live connector mode is opt‑in via env. Controller secret is optional. Existing APIs remain compatible with added safeguards.
+
+---
+Changelog — FIX‑11 Batch 5: Fraud, Enrichment, Weak Supervision (2025‑11‑18)
+
+Summary
+- Implements FIX‑11 Batch 5 focused on fraud detection, enrichment pipelines, weak supervision, and synthetic scenario evaluation. Adds strong schema validation, size caps, IPv6 support, caching, deterministic behavior for tests, and safer initialization flows.
+
+What changed (highlights)
+- FIX‑11‑631 — VPN/Proxy Detection hardening
+  - Added IPv4/IPv6 input validation; replaced console logs with structured `logger`.
+  - GeoIP initialization now retries with exponential backoff; short‑TTL caches for IP→country, ASN org, and reverse‑DNS.
+  - Reverse‑DNS lookup gains timeout and resiliency using `Promise.allSettled`; signals aggregated from enrichment service.
+  - File: `backend/src/services/VPNProxyDetectionService.ts`.
+- FIX‑11‑636 — Supply chain corpus safety
+  - Added JSON size guards (default 5 MB, env overridable via `WS_SUPPLYCHAIN_MAX_BYTES`).
+  - Normalized domain keys (lowercase/trim); safe fallbacks to empty datasets on errors; structured logging on oversize/malformed input.
+  - File: `backend/src/services/fraud/weakSupervision/supplyChainCorpus.ts`.
+- FIX‑11‑675 — EnrichmentService hardening & performance
+  - Manifest validated via zod; capped file reads (`ENRICH_MAX_BYTES`, default 10 MB).
+  - Safe UA regex compilation with skip+warn on invalid patterns; snapshot now hashed; `stats()` and `reset()` helpers exposed.
+  - Gracefully skips invalid CIDRs/IPs and oversized files with debug logs; prepares for large corpora.
+  - File: `backend/src/services/enrichment/enrichmentService.ts`.
+- FIX‑11‑676 — IP range index efficiency and IPv6
+  - Added IPv6 support using BigInt with separate v4/v6 stores; coalescing and binary search preserved for both families.
+  - `finalize()` sorts/merges per family; `stats()` reports v4/v6 counts; `loadFromCidrs()` remains available.
+  - File: `backend/src/services/enrichment/ipRangeIndex.ts`.
+- FIX‑11‑635 — WeakSupervision initialization safety
+  - Manifest validated via zod; single‑flight initialization gains a timeout (`WS_INIT_TIMEOUT_MS`, default 10s) and resets state on failure.
+  - Added `reset()` helper for tests and re‑initialization.
+  - File: `backend/src/services/fraud/weakSupervision/WeakSupervisionService.ts`.
+- FIX‑11‑677 — Synthetic scenarios evaluation
+  - Scenarios file validated via zod; evaluation supports deterministic, seedable RNG and an early‑exit cap (`WS_SYNTHETIC_MAX_EVAL`).
+  - Deterministic shuffle avoids bias when many scenarios match.
+  - File: `backend/src/services/fraud/weakSupervision/syntheticScenarios.ts`.
+- FIX‑11‑678 — Weak supervision types cleanup
+  - Added runtime guard helpers and zod schemas: `parseLabelClass`, `assertWeakSupervisionContext`, schemas for all context types.
+  - Removed stray backticks; centralized unions and JSDoc‑style clarity.
+  - File: `backend/src/services/fraud/weakSupervision/types.ts`.
+- FIX‑11‑679 — Fraud detection caching & guards
+  - Introduced short‑TTL in‑memory cache with hit/miss metrics (`FRAUD_CACHE_TTL_MS`). Numeric fields guarded; limits bounded.
+  - Repository errors guarded with warnings and safe fallbacks; `fraudCacheStats()` exported for diagnostics.
+  - File: `backend/src/services/fraudDetection.ts`.
+
+New environment flags and knobs
+- `ENRICH_MAX_BYTES` — max bytes per enrichment file (default 10 MB).
+- `WS_SUPPLYCHAIN_MAX_BYTES` — max bytes for supply chain JSONs (default 5 MB).
+- `WS_INIT_TIMEOUT_MS` — weak supervision service init timeout (default 10s).
+- `WS_SYNTHETIC_MAX_EVAL` — early‑exit cap for synthetic scenario matches (default 500).
+- `FRAUD_CACHE_TTL_MS` — TTL for fraudDetection in‑memory cache (default 15s).
+
+Validation and QA
+- Lint/tests: `npm run lint --workspace backend`, `npm run test --workspace backend`.
+- Enrichment: verify `stats()` and snapshot path; large files are skipped with warnings; invalid CIDRs/regexes skipped.
+- IPRangeIndex: add IPv6 ranges and confirm lookups work; call `.finalize()` implicitly via first lookup.
+- Weak Supervision: corrupt/missing manifest triggers zod error; init timeout produces structured log and resets state.
+- Synthetic scenarios: invalid schema rejected; large match sets are bounded and deterministically ordered.
+- Fraud detection: repeated requests within TTL return cached results; `fraudCacheStats()` reflects hit/miss.
+
+Backward compatibility
+- Changes are internal and additive. All new caps and timeouts have safe defaults and may be tuned via env vars.
+
+---
+Changelog — FIX-11 Batch 4: Analytics, Reporting, Exports (ClickHouse heavy) (2025-11-18)
+
+Summary
+- Implements Batch 4 of FIX-11 focused on analytics/reporting services and heavy ClickHouse consumers. Adds safe math guards, parameterized queries, date-window caps, pagination/streaming for large exports, and stubs to prevent dead imports.
+
+What changed (highlights)
+- FIX-11-618 — Reporting Service hardening
+  - Guarded eCPM/CTR against divide-by-zero at SQL level using `if(countDistinct(...)>0, ...)` and at parse-time with numeric safety.
+  - Removed placeholder `fillRate=100`; returned `0` until request-volume metric is integrated.
+  - File: `backend/src/services/reportingService.ts`.
+- FIX-11-622 — Financial Reporting Controller
+  - All export endpoints now require an authenticated user; consistent error handling via shared logger.
+  - File: `backend/src/controllers/FinancialReportingController.ts`.
+- FIX-11-630 — Financial Reporting Service (workbook memory safety)
+  - Switched annual transaction export to batched LIMIT/OFFSET iteration to avoid full-table in-memory loads; writes rows incrementally to Excel.
+  - File: `backend/src/services/FinancialReportingService.ts`.
+- FIX-11-634 — Data Export Service (ClickHouse exports)
+  - Replaced string interpolation with parameterized ClickHouse queries; guarded derived metrics from div-by-zero; removed `date` alias misuse.
+  - After successful remote upload (S3/GCS/BQ), local temp file is deleted to prevent disk bloat.
+  - File: `backend/src/services/dataExportService.ts`.
+- FIX-11-652 — Quality Monitoring SLO math
+  - Prevented divide-by-zero when target SLO is 100 (no error budget). Error budget remaining now clamps safely.
+  - File: `backend/src/services/qualityMonitoringService.ts`.
+- FIX-11-656 — Transparency Controller heavy queries
+  - Enforced a 31-day maximum window for auction transparency queries; parameters remain validated and parameterized for ClickHouse.
+  - File: `backend/src/controllers/transparency.controller.ts`.
+- FIX-11-668 — Reporting Controller window caps
+  - Centralized date parsing now validates inputs and caps query windows to 31 days to avoid expensive scans.
+  - File: `backend/src/controllers/reporting.controller.ts`.
+- FIX-11-673 — Analytics Pipeline inputs
+  - Validates and caps time-series date ranges to 31 days; ensures metric switching is consistent in output payloads.
+  - File: `backend/src/services/analyticsPipeline.ts`.
+- FIX-11-674 — Bid Landscape Service
+  - Fixed logger import and guarded second-price auction math; clamps prices to non-negative safe values.
+  - File: `backend/src/services/bidLandscapeService.ts`.
+- FIX-11-697 — Analytics Reporting Service stub
+  - Implemented minimal facade delegating to `reportingService` to prevent dead imports.
+  - File: `backend/src/services/analyticsReportingService.ts`.
+- FIX-11-700 — Reconciliation Service (Stripe usage summaries)
+  - Uses default logger; added guards for Stripe SDK differences around `subscriptionItems.listUsageRecordSummaries`, with fallbacks and warnings.
+  - File: `backend/src/services/reconciliationService.ts`.
+
+Validation and QA
+- Static checks: `npm run lint --workspace backend`.
+- For ClickHouse-backed endpoints, verify capped date windows (<= 31 days) and parameterized queries through logs.
+- Export jobs: confirm remote upload completes and local temp files are removed; BigQuery autodetects schema for CSV/JSON; Parquet generated with inferred schema.
+- Financial exports: hit `/api/v1/reports/*` while authenticated; large years should stream into Excel without memory spikes.
+
+Backward compatibility
+- Changes are additive and safety-focused. Date window caps fall back to last 31 days when requested window exceeds cap.
+
+---
 
 Changelog — FIX-09 Automation & Tooling Readiness (2025-11-18)
 
@@ -919,5 +1143,83 @@ How to validate
 - 2FA: unauthenticated requests to enroll/verify/regen/disable return 401; authenticated flows continue to work.
 - Analytics: POST `/api/v1/analytics/events/*` rate limited; GET endpoints remain auth + cache.
 - Health: `/ready` JSON includes DB latency, Redis ready, and ClickHouse health.
+
+---
+Changelog — FIX-11 RTB Core, Adapters, Canonicalization, Routing (Batch 3) (2025-11-18)
+
+Summary
+- Implements FIX-11 — Batch 3 across RTB core paths, mock adapters, transparency canonicalization, shadow recording, routing order, adapter configuration validation, and Thompson Sampling. Strengthens runtime safety, adds deterministic tokens/metrics, and introduces a centralized per‑adapter schema registry.
+
+What changed (highlights)
+- FIX-11-639 — Adapter types hardened
+  - Added Node-safe abort helpers (`makeAbortError`, `isAbortError`) and lightweight runtime input validation via `validateAdapterBidRequest` to protect adapter implementations from malformed inputs and DOM `AbortSignal` assumptions.
+  - File: `backend/src/services/rtb/adapters/types.ts`.
+- FIX-11-665, FIX-11-681, FIX-11-682 — Mock adapters updated (AdMob, AppLovin, Unity Ads)
+  - All mock adapters now use Node-safe abort helpers and input validation; provide structured timeout metrics and explicit error logging with adapter name, latency, timeout, and `placementId` context.
+  - Files: `backend/src/services/rtb/adapters/mockAdmob.ts`, `mockAppLovin.ts`, `mockUnityAds.ts`.
+- FIX-11-620 — Legacy RTB engine safety improvements
+  - Tracking URLs (impression/click) are now signed with short-lived Ed25519 tokens via `utils/signing`. Response payload echoes consent for diagnostics.
+  - File: `backend/src/services/rtbEngine.ts`.
+- FIX-11-683 — Shadow recorder batching
+  - `recordShadowOutcome` reworked to size/time-batched inserts with JSON length caps, payload truncation, and best-effort backpressure to protect Postgres. Resilient error logging on failures.
+  - File: `backend/src/services/rtb/shadowRecorder.ts`.
+- FIX-11-684 — Transparency canonicalizer hardened
+  - Deterministic key ordering, recursion guards with max depth, BigInt/Date/Buffer handling, stable NaN/Infinity normalization, and array stability.
+  - File: `backend/src/services/transparency/canonicalizer.ts`.
+- FIX-11-694 — Route ordering clarified
+  - Ensures `/migration` mounts before `/admin`; adds documentation comment noting sensitivity per FIX-11/694.
+  - File: `backend/src/routes/index.ts`.
+- FIX-11-610 — Adapter controller validation & auditing
+  - Replaced loose JSON acceptance with structured, bounded schemas; secret-like values masked in logs. Controller now consults centralized per‑adapter schema registry and gracefully falls back when adapter is unknown.
+  - File: `backend/src/controllers/adapter.controller.ts`.
+- FIX-11-611 — Thompson Sampling service improvements
+  - Introduced env-seeded RNG (`THOMPSON_RNG_SEED`) to deflake randomness; replaced all `Math.random()` usage. Added input validation, per-key minimal rate limiting (`THOMPSON_UPDATE_MIN_MS`), and revenue-aware success weighting capped to avoid blowups.
+  - File: `backend/src/services/thompsonSamplingService.ts`.
+- Registry and DB helper added (supporting FIX-11-610)
+  - Centralized adapter schema registry with minimal schemas for `admob`, `applovin`, `unity`/`unityads`, `facebook`/`meta`, `ironsource`, `mintegral`, plus lookup by adapter UUID.
+  - Files: `backend/src/services/rtb/adapterSchemas.ts`, `backend/src/repositories/adaptersRepository.ts`.
+
+Details and file map
+- Adapters core/types
+  - `backend/src/services/rtb/adapters/types.ts` — Node-safe abort helpers, request validation.
+- Mock adapters
+  - `backend/src/services/rtb/adapters/mockAdmob.ts` — abort-aware sleep, validation, metrics, structured logging.
+  - `backend/src/services/rtb/adapters/mockAppLovin.ts` — same improvements.
+  - `backend/src/services/rtb/adapters/mockUnityAds.ts` — same improvements.
+- RTB engine (legacy fallback path)
+  - `backend/src/services/rtbEngine.ts` — signed tracking URLs; consent echo in payload.
+- Shadow outcomes
+  - `backend/src/services/rtb/shadowRecorder.ts` — batching queue with flush interval and length caps.
+- Transparency
+  - `backend/src/services/transparency/canonicalizer.ts` — deterministic, safe canonicalization.
+- Routes
+  - `backend/src/routes/index.ts` — sensitive route order locked.
+- Adapter config controller & registry
+  - `backend/src/controllers/adapter.controller.ts` — registry-backed validation and masked logs.
+  - `backend/src/services/rtb/adapterSchemas.ts` — centralized per‑adapter schemas and `getSchemaForAdapter` helper.
+  - `backend/src/repositories/adaptersRepository.ts` — resolve adapter name by UUID for ID‑based validation.
+- Thompson Sampling
+  - `backend/src/services/thompsonSamplingService.ts` — seeded RNG, validation, minimal rate limiting, revenue weighting.
+
+Environment variables introduced/used
+- `TRACK_BASE_URL` (default `https://track.apexmediation.com`) — base for signed tracking links.
+- `CANONICALIZER_MAX_DEPTH` (default 10) — recursion guard for canonicalizer.
+- Shadow recorder limits: `RTB_SHADOW_MAX_QUEUE` (default 500), `RTB_SHADOW_FLUSH_MS` (default 1000), `RTB_SHADOW_MAX_JSON` (default 20000).
+- Thompson Sampling: `THOMPSON_RNG_SEED` (optional deterministic seed), `THOMPSON_UPDATE_MIN_MS` (default 250).
+- Auction/orchestrator: `AUCTION_TTL_MS`, `DELIVERY_TOKEN_TTL_SEC`, `TRACK_TOKEN_TTL_SEC` (existing knobs referenced in orchestrator code paths).
+
+Validation and QA
+- Static checks: `npm run lint --workspace backend`.
+- Manual checks:
+  - Adapters: simulated timeouts produce `rtb_adapter_timeouts_total{adapter=*}` increments; non-timeout errors are logged with adapter + placement context.
+  - Legacy RTB engine: impression/click URLs contain `ed25519.{kid}.*` tokens; verification present in tracking controller.
+  - Shadow recorder: high-volume calls do not block; batch inserts occur within configured flush interval.
+  - Adapter controller: known adapter configs missing required fields return `400` with generic message; valid payloads plus extra vendor keys are accepted.
+  - Thompson Sampling: with `THOMPSON_RNG_SEED` set, repeated runs produce deterministic exploration/exploitation sequences; update calls are rate-limited per key.
+
+Backward compatibility
+- Unknown adapters continue to pass generic JSON bounds; stricter validation only applies to recognized adapters.
+- Canonicalizer changes are deterministic and safe for signing/verification; special types are handled explicitly.
+- Legacy RTB engine remains a fallback path; orchestrator remains the production path when enabled.
 
 ---

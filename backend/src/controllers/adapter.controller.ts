@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { AppError } from '../middleware/errorHandler';
 import logger from '../utils/logger';
 import * as adapterConfigService from '../services/adapterConfigService';
+import { getSchemaForAdapter } from '../services/rtb/adapterSchemas';
 
 // Validation schemas
 const safeJson = z.union([z.string(), z.number(), z.boolean(), z.null()]);
@@ -38,14 +39,7 @@ const updateAdapterConfigSchema = z.object({
     .transform((obj) => maskSecrets(obj)),
 });
 
-// Basic per-adapter schema hints (extensible). Enforce minimal fields when known.
-const perAdapterSchemas: Record<string, z.ZodTypeAny> = {
-  // Example: admob requires apiKey (string) and accountId (string)
-  '00000000-0000-0000-0000-000000000001': z.object({
-    apiKey: z.string().min(8).max(MAX_STRING_LEN),
-    accountId: z.string().min(3).max(128),
-  }).passthrough(),
-};
+// Per‑adapter schemas are maintained in services/rtb/adapterSchemas.ts
 
 function maskSecrets(obj: Record<string, unknown>): Record<string, unknown> {
   const masked: Record<string, unknown> = {};
@@ -139,13 +133,13 @@ export const create = async (
     const data = createAdapterConfigSchema.parse(req.body);
 
     // Optional: per-adapter schema validation if we recognize the adapterId
-    const perSchema = perAdapterSchemas[data.adapterId];
-    if (perSchema) {
-      try {
-        perSchema.parse(data.config);
-      } catch (e) {
-        throw new AppError('Invalid adapter config for specified adapter', 400);
+    try {
+      const schema = await getSchemaForAdapter({ adapterId: data.adapterId });
+      if (schema) {
+        schema.parse(data.config);
       }
+    } catch (_e) {
+      throw new AppError('Invalid adapter config for specified adapter', 400);
     }
     const config = await adapterConfigService.createAdapterConfig(publisherId, data);
 
@@ -189,9 +183,13 @@ export const update = async (
       throw new AppError('Adapter config not found', 404);
     }
 
-    const perSchema = perAdapterSchemas[existing.adapterId];
-    if (perSchema) {
-      try { perSchema.parse(data.config); } catch (e) { throw new AppError('Invalid adapter config for specified adapter', 400); }
+    try {
+      const schema = await getSchemaForAdapter({ adapterId: existing.adapterId });
+      if (schema) {
+        schema.parse(data.config);
+      }
+    } catch (_e) {
+      throw new AppError('Invalid adapter config for specified adapter', 400);
     }
     const config = await adapterConfigService.updateAdapterConfig(id, publisherId, data);
 

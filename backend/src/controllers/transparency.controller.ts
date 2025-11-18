@@ -91,6 +91,18 @@ export const getAuctions = async (req: Request, res: Response, next: NextFunctio
       throw new AppError('Invalid range: from must be less than or equal to to', 400);
     }
 
+    // Enforce maximum window of 31 days for heavy queries (FIX-11: 656)
+    if (from && to) {
+      const startMs = new Date(from).getTime();
+      const endMs = new Date(to).getTime();
+      const maxWindowMs = 31 * 24 * 60 * 60 * 1000;
+      if (endMs - startMs > maxWindowMs) {
+        const cappedStartISO = new Date(endMs - maxWindowMs).toISOString();
+        // Override from with capped start
+        req.query.from = cappedStartISO;
+      }
+    }
+
     const placementId = (req.query.placement_id as string) || undefined;
     const surface = (req.query.surface as string) || undefined;
     const geo = (req.query.geo as string) || undefined;

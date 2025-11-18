@@ -7,6 +7,8 @@ const DEFAULT_MAPPINGS_SAMPLE = 5000
 const privateKeyPem = process.env.MIGRATION_STUDIO_SIGNING_PRIVATE_KEY_PEM
 const publicKeyPem = process.env.MIGRATION_STUDIO_SIGNING_PUBLIC_KEY_PEM
 const keyId = process.env.MIGRATION_STUDIO_SIGNING_KID ?? 'migration-dev'
+const notBefore = process.env.MIGRATION_STUDIO_SIGNING_NOT_BEFORE // ISO date string
+const notAfter = process.env.MIGRATION_STUDIO_SIGNING_NOT_AFTER // ISO date string
 
 let privateKey: crypto.KeyObject
 let publicKey: crypto.KeyObject
@@ -20,7 +22,15 @@ function ensureKeys() {
     return
   }
 
-  logger.warn('Migration Studio signing keys not configured; generating ephemeral dev keypair')
+  // In production, refuse to operate without configured keys
+  if (process.env.NODE_ENV === 'production') {
+    const msg = 'Migration Studio signing keys are required in production'
+    logger.error(msg)
+    throw new Error(msg)
+  }
+
+  // For non-production environments, generate ephemeral dev keypair
+  logger.warn('Migration Studio signing keys not configured; generating ephemeral dev keypair (non-production)')
   const { privateKey: generatedPrivate, publicKey: generatedPublic } = crypto.generateKeyPairSync('ed25519')
   privateKey = generatedPrivate
   publicKey = generatedPublic
@@ -69,6 +79,10 @@ function buildMetric(options: {
 export function generateSignedComparison(mappings: MigrationMapping[]): MigrationSignedComparison {
   ensureKeys()
 
+  if (!Array.isArray(mappings)) {
+    throw new TypeError('mappings must be an array')
+  }
+
   const mappingCount = mappings.length || 1
   const controlImpressions = DEFAULT_MAPPINGS_SAMPLE * mappingCount
   const testImpressions = Math.round(controlImpressions * 0.92)
@@ -114,6 +128,11 @@ export function generateSignedComparison(mappings: MigrationMapping[]): Migratio
 
   const payload = {
     generated_at: generatedAt,
+    key_claims: {
+      key_id: keyId,
+      not_before: notBefore ?? null,
+      not_after: notAfter ?? null,
+    },
     sample_size: {
       control_impressions: controlImpressions,
       test_impressions: testImpressions,
@@ -156,6 +175,8 @@ export function generateSignedComparison(mappings: MigrationMapping[]): Migratio
       payload_base64: payloadBase64,
       signature_base64: signatureBase64,
       public_key_base64: publicKeyBase64,
+      not_before: notBefore ?? null,
+      not_after: notAfter ?? null,
     },
   }
 }
@@ -234,6 +255,11 @@ export function generateSignedReportComparison(data: ExperimentReportData): Migr
   const payload = {
     experiment_id: data.experiment_id,
     generated_at: generatedAt,
+    key_claims: {
+      key_id: keyId,
+      not_before: notBefore ?? null,
+      not_after: notAfter ?? null,
+    },
     period: {
       start: data.start_date,
       end: data.end_date,
@@ -279,6 +305,8 @@ export function generateSignedReportComparison(data: ExperimentReportData): Migr
       payload_base64: payloadBase64,
       signature_base64: signatureBase64,
       public_key_base64: publicKeyBase64,
+      not_before: notBefore ?? null,
+      not_after: notAfter ?? null,
     },
   }
 }

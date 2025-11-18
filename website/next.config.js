@@ -2,6 +2,14 @@
 const nextConfig = {
   reactStrictMode: true,
   swcMinify: true,
+  
+  // Use src directory for app and pages
+  experimental: {
+    appDir: true,
+  },
+  
+  // Specify that we're using src/ directory
+  pageExtensions: ['tsx', 'ts', 'jsx', 'js'],
 
   // Environment variables exposed to the browser (marketing site; keep minimal)
   // NOTE: For sensitive values prefer server env or middleware. Consider moving to runtime env at deploy time.
