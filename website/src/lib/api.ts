@@ -1,44 +1,3 @@
-/**
- * Backend API client configuration — with credentials, retries, and de‑duping.
- */
-
-const appendApiVersion = (value: string, defaultSuffix = '/api/v1') => {
-  const normalized = value.replace(/\/+$/, '');
-  if (/\/api\/v\d+$/i.test(normalized) || /\/v\d+$/i.test(normalized)) {
-    return normalized;
-  }
-  if (/\/api$/i.test(normalized)) {
-    return `${normalized}/v1`;
-  }
-  return `${normalized}${defaultSuffix}`;
-};
-
-const BACKEND_URL = appendApiVersion(
-  process.env.NEXT_PUBLIC_BACKEND_URL ||
-    process.env.NEXT_PUBLIC_API_URL ||
-    'http://localhost:8080'
-);
-
-export interface ApiResponse<T = any> {
-  success: boolean;
-  data?: T;
-  error?: string;
-  message?: string;
-  status?: number;
-}
-
-export class ApiError extends Error {
-  status: number;
-  body?: unknown;
-  constructor(message: string, status: number, body?: unknown) {
-    super(message);
-    this.name = 'ApiError';
-    this.status = status;
-    this.body = body;
-  }
-}
-
-type Method = 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
 
 const inflight = new Map<string, Promise<ApiResponse<any>>>();
 
@@ -145,6 +104,15 @@ export class ApiClient {
     return this.request<T>(endpoint, {
       ...(options || {}),
       method: 'PUT',
+      body: body ? JSON.stringify(body) : undefined,
+    });
+  }
+
+  /** PATCH */
+  async patch<T = any>(endpoint: string, body?: any, options?: RequestInit): Promise<ApiResponse<T>> {
+    return this.request<T>(endpoint, {
+      ...(options || {}),
+      method: 'PATCH',
       body: body ? JSON.stringify(body) : undefined,
     });
   }

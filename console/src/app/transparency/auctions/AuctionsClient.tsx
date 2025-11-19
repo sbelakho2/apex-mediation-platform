@@ -206,12 +206,12 @@ export function AuctionsClient({ initialPage, initialFilters, initialData, initi
           <table className="min-w-full text-sm" role="table" aria-label="Auctions table">
             <thead className="bg-gray-50 text-gray-600">
               <tr>
-                <th className="text-left px-3 py-2">Timestamp</th>
-                <th className="text-left px-3 py-2">Auction ID</th>
-                <th className="text-left px-3 py-2">Placement</th>
-                <th className="text-left px-3 py-2">Device</th>
-                <th className="text-left px-3 py-2">Winner</th>
-                <th className="text-left px-3 py-2">Verification</th>
+                <th scope="col" className="text-left px-3 py-2">Timestamp</th>
+                <th scope="col" className="text-left px-3 py-2">Auction ID</th>
+                <th scope="col" className="text-left px-3 py-2">Placement</th>
+                <th scope="col" className="text-left px-3 py-2">Device</th>
+                <th scope="col" className="text-left px-3 py-2">Winner</th>
+                <th scope="col" className="text-left px-3 py-2">Verification</th>
               </tr>
             </thead>
             <tbody>
@@ -321,12 +321,12 @@ function AuctionsTableSkeleton() {
       <table className="min-w-full text-sm">
         <thead className="bg-gray-50 text-gray-600">
           <tr>
-            <th className="text-left px-3 py-2">Timestamp</th>
-            <th className="text-left px-3 py-2">Auction ID</th>
-            <th className="text-left px-3 py-2">Placement</th>
-            <th className="text-left px-3 py-2">Device</th>
-            <th className="text-left px-3 py-2">Winner</th>
-            <th className="text-left px-3 py-2">Verification</th>
+            <th scope="col" className="text-left px-3 py-2">Timestamp</th>
+            <th scope="col" className="text-left px-3 py-2">Auction ID</th>
+            <th scope="col" className="text-left px-3 py-2">Placement</th>
+            <th scope="col" className="text-left px-3 py-2">Device</th>
+            <th scope="col" className="text-left px-3 py-2">Winner</th>
+            <th scope="col" className="text-left px-3 py-2">Verification</th>
           </tr>
         </thead>
         <tbody>

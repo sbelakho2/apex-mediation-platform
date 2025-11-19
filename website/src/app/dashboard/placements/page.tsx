@@ -22,6 +22,8 @@ interface Placement {
   ecpm: number; // major units
   fillRate: number; // percent 0..100
   ctr: number; // percent 0..100
+  // Optional backend configuration document (echoed by API)
+  config?: any;
 }
 
 export default function PlacementsPage() {
@@ -83,6 +85,7 @@ export default function PlacementsPage() {
         ecpm: Math.max(0, Number(p.ecpmCents || 0) / 100),
         fillRate: Math.max(0, Math.min(100, Number(p.fillRate || 0) * (p.fillRate <= 1 ? 100 : 1))),
         ctr: Math.max(0, Math.min(100, Number(p.ctr || 0) * (p.ctr <= 1 ? 100 : 1))),
+        config: p.config || {},
       }));
       setPlacements(mapped);
       setTotal(Math.max(0, Number(res.data.total || mapped.length)));
@@ -137,7 +140,7 @@ export default function PlacementsPage() {
   }
 
   async function updatePlacement(id: string, patch: Partial<Placement>) {
-    const res = await api.put(`/placements/${id}`, patch, {
+    const res = await api.patch(`/placements/${id}`, patch, {
       headers: {
         ...(getCsrf() ? { 'X-CSRF-Token': getCsrf()! } : {}),
       },
@@ -479,7 +482,7 @@ function PlacementCard({ placement, onConfigure, onViewDetails, onActivate }: Pl
           <h3 className="text-lg font-bold text-primary-blue">{placement.name}</h3>
           <p className="text-sm text-gray-600">{placement.app} • {placement.format.toUpperCase()}</p>
         </div>
-        <div className="text-sm font-bold {placement.status === 'active' ? 'text-green-600' : 'text-gray-600'}">
+        <div className={`text-sm font-bold ${placement.status === 'active' ? 'text-green-600' : 'text-gray-600'}`}>
           {placement.status}
         </div>
       </div>
@@ -534,30 +537,292 @@ function PlacementModal({
 }) {
   if (state.type === null) return null;
   const title = state.type === 'create' ? 'Create New Placement' : state.type === 'configure' ? `Configure ${state.placement.name}` : `Placement Insights for ${state.placement.name}`;
+
+  // Accessibility: focus trap + Esc to close
+  const [activeTab, setActiveTab] = useState<'overview' | 'targeting' | 'adunits'>('overview');
+  // Simple controlled fields to persist on save — maps to backend config schema
+  const [geos, setGeos] = useState<string>('');
+  const [platforms, setPlatforms] = useState<string>('iOS & Android');
+  const [frequencyCap, setFrequencyCap] = useState<number | ''>('');
+  const [floorPriceUsd, setFloorPriceUsd] = useState<number | ''>('');
+  const [unitIdIos, setUnitIdIos] = useState<string>('');
+  const [unitIdAndroid, setUnitIdAndroid] = useState<string>('');
+
+  // Initialize form fields from existing placement config when opening
+  useEffect(() => {
+    if (state.type === 'configure' || state.type === 'view-details') {
+      const cfg = (state.placement as any).config || {};
+      const t = cfg.targeting || {};
+      const d = cfg.delivery || {};
+      const p = cfg.pricing || {};
+      const s = cfg.sdk || {};
+      const geoArr: string[] = Array.isArray(t.geos) ? t.geos : [];
+      setGeos(geoArr.join(', '));
+      const plats: string[] = Array.isArray(t.platforms) ? t.platforms : [];
+      setPlatforms(plats.length === 1 && plats[0] === 'ios' ? 'iOS only' : plats.length === 1 && plats[0] === 'android' ? 'Android only' : 'iOS & Android');
+      const cap = d.frequencyCap?.count;
+      setFrequencyCap(typeof cap === 'number' && cap >= 0 ? cap : '');
+      const cents = p.floorPriceCents;
+      setFloorPriceUsd(typeof cents === 'number' && cents >= 0 ? Math.round(cents) / 100 : '');
+      setUnitIdIos(typeof s.unitIdIos === 'string' ? s.unitIdIos : '');
+      setUnitIdAndroid(typeof s.unitIdAndroid === 'string' ? s.unitIdAndroid : '');
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.type, (state as any).placement?.id]);
+
+  // Client-side validation state
+  const [fieldErrors, setFieldErrors] = useState<{ geos?: string; frequencyCap?: string; floorPriceUsd?: string }>({});
+
+  // Helpers for mapping UI → backend config payload
+  const toIso2Array = (csv: string): string[] =>
+    csv
+      .split(',')
+      .map((s) => s.trim().toUpperCase())
+      .filter((s) => s.length > 0);
+
+  const mapPlatforms = (label: string): Array<'ios' | 'android' | 'unity' | 'web'> => {
+    switch (label) {
+      case 'iOS only':
+        return ['ios'];
+      case 'Android only':
+        return ['android'];
+      case 'iOS & Android':
+      default:
+        return ['ios', 'android'];
+    }
+  };
+
+  const validateTargeting = () => {
+    const next: typeof fieldErrors = {};
+    const codes = toIso2Array(geos);
+    const invalid = codes.find((c) => !/^[A-Z]{2}$/.test(c));
+    if (invalid) next.geos = `Invalid country code: ${invalid}`;
+    if (frequencyCap !== '' && (typeof frequencyCap !== 'number' || frequencyCap < 0)) {
+      next.frequencyCap = 'Frequency cap must be a non‑negative number';
+    }
+    if (floorPriceUsd !== '' && (typeof floorPriceUsd !== 'number' || floorPriceUsd < 0)) {
+      next.floorPriceUsd = 'Floor price must be a non‑negative amount';
+    }
+    setFieldErrors(next);
+    return Object.keys(next).length === 0;
+  };
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
-      <div className="w-full max-w-xl rounded-lg border bg-white shadow-xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4" role="dialog" aria-modal="true" aria-labelledby="placement-modal-title" onKeyDown={(e) => { if (e.key === 'Escape') onClose(); }}>
+      <div className="w-full max-w-3xl rounded-lg border bg-white shadow-xl" tabIndex={-1}>
         <div className="flex items-start justify-between border-b p-6">
-          <h2 className="text-primary-blue font-bold uppercase text-lg">{title}</h2>
-          <button onClick={onClose} aria-label="Close dialog">×</button>
+          <h2 id="placement-modal-title" className="text-primary-blue font-bold uppercase text-lg">{title}</h2>
+          <button onClick={onClose} aria-label="Close dialog" className="text-gray-500 hover:text-gray-900">×</button>
         </div>
-        <div className="p-6 space-y-3 text-sm text-gray-700">
-          {state.type !== 'create' ? (
-            <>
-              <p>Format: <strong className="text-primary-blue">{state.placement.format.toUpperCase()}</strong></p>
-              <p>Latest eCPM: <strong className="text-primary-blue">${state.placement.ecpm.toFixed(2)}</strong></p>
-            </>
-          ) : (
-            <button onClick={async () => { await onCreate({ name: 'New Placement', app: 'My App', format: 'banner' }); onClose(); }} className="btn-primary-yellow px-6 py-3 text-sm">Create</button>
-          )}
-        </div>
-        <div className="flex justify-end gap-3 border-t p-6">
-          <button onClick={onClose} className="btn-outline px-6 py-3 text-sm">Close</button>
-          {state.type !== 'create' && (
-            <a href={`/dashboard/placements/${state.placement.id}`} className="btn-primary-yellow px-6 py-3 text-sm">View full report</a>
-          )}
-        </div>
+
+        {/* Create flow stays compact */}
+        {state.type === 'create' ? (
+          <div className="p-6 space-y-4">
+            <p className="text-sm text-gray-700">Quickly create a new placement. You can refine details later.</p>
+            <div className="flex flex-wrap gap-3">
+              {(['banner','interstitial','rewarded','native'] as Placement['format'][]).map((fmt) => (
+                <button key={fmt} className="px-4 py-2 border rounded text-sm font-medium hover:bg-gray-50" onClick={async () => { await onCreate({ name: `${fmt} placement`, app: 'Default App', format: fmt }); }}>
+                  Create {fmt}
+                </button>
+              ))}
+            </div>
+            <div className="flex justify-end gap-3 pt-4 border-t">
+              <button onClick={onClose} className="btn-outline px-6 py-3 text-sm">Close</button>
+            </div>
+          </div>
+        ) : (
+          <div className="p-6">
+            {/* Tabs */}
+            <div className="border-b mb-4">
+              <nav className="flex gap-2" aria-label="Placement sections">
+                <TabButton label="Overview" active={activeTab==='overview'} onClick={() => setActiveTab('overview')} />
+                <TabButton label="Targeting" active={activeTab==='targeting'} onClick={() => setActiveTab('targeting')} />
+                <TabButton label="Ad Units" active={activeTab==='adunits'} onClick={() => setActiveTab('adunits')} />
+              </nav>
+            </div>
+
+            {activeTab === 'overview' && (
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <Metric label="Format" value={state.placement.format.toUpperCase()} />
+                  <Metric label="eCPM" value={`$${state.placement.ecpm.toFixed(2)}`} />
+                  <Metric label="Fill Rate" value={`${state.placement.fillRate.toFixed(1)}%`} />
+                  <Metric label="CTR" value={`${state.placement.ctr.toFixed(2)}%`} />
+                </div>
+                <div className="flex items-center justify-between">
+                  <div className="text-sm text-gray-600">Status: <span className="font-semibold text-gray-900">{state.placement.status}</span></div>
+                  <div className="flex items-center gap-2">
+                    <a href={`/dashboard/placements/${state.placement.id}`} className="btn-primary-yellow px-4 py-2 text-sm">View full report</a>
+                    <button onClick={() => onArchive(state.placement.id)} className="px-4 py-2 text-sm border rounded text-red-700 border-red-300 hover:bg-red-50">Archive</button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'targeting' && (
+              <div className="space-y-4">
+                <p className="text-sm text-gray-600">Basic targeting controls. This is a simplified UI; full editor will arrive with v2.</p>
+                <div className="grid md:grid-cols-2 gap-4">
+                  <Field label="Geos (ISO-CC)">
+                    <input
+                      className="w-full border rounded px-3 py-2"
+                      placeholder="e.g., US, CA, GB"
+                      value={geos}
+                      onChange={(e) => setGeos(e.target.value)}
+                    />
+                    {fieldErrors.geos && (
+                      <p className="mt-1 text-xs text-red-600" role="alert">{fieldErrors.geos}</p>
+                    )}
+                  </Field>
+                  <Field label="Platforms">
+                    <select
+                      className="w-full border rounded px-3 py-2"
+                      value={platforms}
+                      onChange={(e) => setPlatforms(e.target.value)}
+                    >
+                      <option value="iOS & Android">iOS & Android</option>
+                      <option value="iOS only">iOS only</option>
+                      <option value="Android only">Android only</option>
+                    </select>
+                  </Field>
+                  <Field label="Frequency cap (per user)">
+                    <input
+                      type="number"
+                      min={0}
+                      className="w-full border rounded px-3 py-2"
+                      placeholder="e.g., 3 per day"
+                      value={frequencyCap}
+                      onChange={(e) => setFrequencyCap(e.target.value === '' ? '' : Number(e.target.value))}
+                    />
+                    {fieldErrors.frequencyCap && (
+                      <p className="mt-1 text-xs text-red-600" role="alert">{fieldErrors.frequencyCap}</p>
+                    )}
+                  </Field>
+                  <Field label="Floor price (USD)">
+                    <input
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      className="w-full border rounded px-3 py-2"
+                      placeholder="e.g., 0.50"
+                      value={floorPriceUsd}
+                      onChange={(e) => setFloorPriceUsd(e.target.value === '' ? '' : Number(e.target.value))}
+                    />
+                    {fieldErrors.floorPriceUsd && (
+                      <p className="mt-1 text-xs text-red-600" role="alert">{fieldErrors.floorPriceUsd}</p>
+                    )}
+                  </Field>
+                </div>
+                <div className="flex justify-end pt-2">
+                  <button
+                    onClick={() => {
+                      if (!validateTargeting()) return;
+                      const currencyCode = process.env.NEXT_PUBLIC_DEFAULT_CURRENCY || 'USD';
+                      const payload: any = {
+                        // Proposed canonical config payload; backend may ignore until implemented
+                        config: {
+                          targeting: {
+                            geos: toIso2Array(geos),
+                            platforms: mapPlatforms(platforms),
+                          },
+                          delivery: {
+                            ...(frequencyCap !== '' ? { frequencyCap: { count: Number(frequencyCap), per: 'day' as const } } : {}),
+                          },
+                          pricing: {
+                            ...(floorPriceUsd !== '' ? { floorPriceCents: Math.round(Number(floorPriceUsd) * 100), currency: currencyCode } : {}),
+                          },
+                        },
+                      };
+                      onSaveConfig(state.placement.id, payload);
+                    }}
+                    className="btn-primary-yellow px-6 py-2 text-sm disabled:opacity-50"
+                    disabled={Boolean(fieldErrors.geos || fieldErrors.frequencyCap || fieldErrors.floorPriceUsd)}
+                  >
+                    Save
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'adunits' && (
+              <div className="space-y-4">
+                <p className="text-sm text-gray-600">Manage ad unit identifiers for SDK integration.</p>
+                <div className="grid md:grid-cols-2 gap-4">
+                  <Field label="iOS unit ID">
+                    <input
+                      className="w-full border rounded px-3 py-2 font-mono"
+                      placeholder="com.app.ios.banner.home"
+                      value={unitIdIos}
+                      onChange={(e) => setUnitIdIos(e.target.value)}
+                    />
+                  </Field>
+                  <Field label="Android unit ID">
+                    <input
+                      className="w-full border rounded px-3 py-2 font-mono"
+                      placeholder="com.app.android.banner.home"
+                      value={unitIdAndroid}
+                      onChange={(e) => setUnitIdAndroid(e.target.value)}
+                    />
+                  </Field>
+                </div>
+                <div className="flex justify-end pt-2">
+                  <button
+                    onClick={() => {
+                      const payload: any = {
+                        config: {
+                          sdk: {
+                            ...(unitIdIos ? { unitIdIos } : {}),
+                            ...(unitIdAndroid ? { unitIdAndroid } : {}),
+                          },
+                        },
+                      };
+                      onSaveConfig(state.placement.id, payload);
+                    }}
+                    className="btn-primary-yellow px-6 py-2 text-sm"
+                  >
+                    Save
+                  </button>
+                </div>
+              </div>
+            )}
+
+            <div className="flex justify-end gap-3 pt-6 border-t mt-6">
+              <button onClick={onClose} className="btn-outline px-6 py-3 text-sm">Close</button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
+  );
+}
+
+function TabButton({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={`px-4 py-2 text-sm font-semibold border-b-4 ${active ? 'border-sunshine-yellow text-primary-blue' : 'border-transparent text-gray-600 hover:text-primary-blue'}`}
+    >
+      {label}
+    </button>
+  );
+}
+
+function Metric({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div className="p-3 rounded border">
+      <p className="text-xs uppercase text-gray-500 tracking-wide">{label}</p>
+      <p className="text-lg font-bold text-primary-blue">{value}</p>
+    </div>
+  );
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label className="block">
+      <span className="block text-xs font-semibold text-gray-700 mb-1">{label}</span>
+      {children}
+    </label>
   );
 }

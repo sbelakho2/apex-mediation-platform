@@ -21,6 +21,7 @@ import {
   PAYOUT_STATUS_META,
   PAYOUTS_PAGE_SIZE,
 } from '@/constants/payouts'
+import { Section, Container } from '@/components/ui'
 
 const PAYOUT_ALLOWED_ROLES: Role[] = ['admin', 'publisher']
 
@@ -327,10 +328,11 @@ export default function PayoutsPage() {
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
-        {/* Upcoming payout */}
-        {loadingUpcoming ? (
-          <div className="card animate-pulse">
+      <Section>
+        <Container className="space-y-6">
+          {/* Upcoming payout */}
+          {loadingUpcoming ? (
+            <div className="card animate-pulse">
             <div className="h-6 bg-gray-200 rounded w-1/3 mb-4" />
             <div className="h-20 bg-gray-200 rounded" />
           </div>
@@ -421,19 +423,19 @@ export default function PayoutsPage() {
                 <table className="w-full">
                   <thead className="bg-gray-50 border-y">
                     <tr>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
+                      <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
                         Date
                       </th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
+                      <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
                         Amount
                       </th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
+                      <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
                         Method
                       </th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
+                      <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
                         Status
                       </th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
+                      <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
                         Completed
                       </th>
                     </tr>
@@ -500,7 +502,8 @@ export default function PayoutsPage() {
             </>
           )}
         </div>
-      </main>
+        </Container>
+      </Section>
     </div>
   )
 }

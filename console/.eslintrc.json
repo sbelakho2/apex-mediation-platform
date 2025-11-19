@@ -1,12 +1,10 @@
 {
   "extends": [
     "next/core-web-vitals",
-    "plugin:@next/next/recommended",
     "plugin:jsx-a11y/recommended"
   ],
   "plugins": ["jsx-a11y", "@typescript-eslint"],
   "rules": {
-    // Accessibility Rules
     "jsx-a11y/alt-text": "error",
     "jsx-a11y/aria-props": "error",
     "jsx-a11y/aria-proptypes": "error",
@@ -19,8 +17,6 @@
     "jsx-a11y/label-has-associated-control": "error",
     "jsx-a11y/heading-has-content": "error",
     "jsx-a11y/img-redundant-alt": "error",
-    
-    // Performance Rules
     "react/no-array-index-key": "warn",
     "react/jsx-no-bind": ["warn", {
       "allowArrowFunctions": true,
@@ -29,12 +25,8 @@
     }],
     "@next/next/no-img-element": "error",
     "@next/next/no-html-link-for-pages": "error",
-    
-    // React Server Components (App Router)
-  "@next/next/no-async-client-component": "error",
-    
-  // Best Practices / Observability (see README "Client Observability & Debug Logging")
-  "no-console": ["error", { "allow": ["warn", "error"] }],
+    "@next/next/no-async-client-component": "error",
+    "no-console": ["error", { "allow": ["warn", "error"] }],
     "prefer-const": "error",
     "no-var": "error"
   },

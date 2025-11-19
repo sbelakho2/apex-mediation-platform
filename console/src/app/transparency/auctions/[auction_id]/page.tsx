@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { ArrowLeft, Download, RefreshCcw } from 'lucide-react'
 import { transparencyApi, type TransparencyAuction, type VerifyResult } from '../../../../lib/transparency'
-import { CopyButton, VerifyBadge, Skeleton } from '../../../../components/ui'
+import { CopyButton, VerifyBadge, Skeleton, Section, Container } from '../../../../components/ui'
 
 const AUCTION_DETAIL_OVERVIEW_SKELETON_KEYS = ['auction-overview-1', 'auction-overview-2', 'auction-overview-3', 'auction-overview-4']
 const CANONICAL_PARSE_LIMIT = 200_000 // ~200 KB
@@ -127,7 +127,8 @@ export default function TransparencyAuctionDetailPage({ params }: { params: { au
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <Section>
+        <Container>
         {loading && <AuctionDetailSkeleton />}
         
         {!loading && error && (
@@ -280,10 +281,10 @@ export default function TransparencyAuctionDetailPage({ params }: { params: { au
                 <table className="min-w-full text-sm">
                   <thead className="bg-gray-50">
                     <tr>
-                      <th className="text-left px-4 py-3 text-gray-600 font-medium">Source</th>
-                      <th className="text-left px-4 py-3 text-gray-600 font-medium">eCPM</th>
-                      <th className="text-left px-4 py-3 text-gray-600 font-medium">Status</th>
-                      <th className="text-left px-4 py-3 text-gray-600 font-medium">Response Time</th>
+                      <th scope="col" className="text-left px-4 py-3 text-gray-600 font-medium">Source</th>
+                      <th scope="col" className="text-left px-4 py-3 text-gray-600 font-medium">eCPM</th>
+                      <th scope="col" className="text-left px-4 py-3 text-gray-600 font-medium">Status</th>
+                      <th scope="col" className="text-left px-4 py-3 text-gray-600 font-medium">Response Time</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -318,9 +319,10 @@ export default function TransparencyAuctionDetailPage({ params }: { params: { au
             </div>
           </div>
         )}
-      </main>
-    </div>
-  )
+        </Container>
+      </Section>
+  </div>
+)
 }
 
 function AuctionDetailSkeleton() {

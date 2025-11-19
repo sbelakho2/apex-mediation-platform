@@ -19,6 +19,9 @@ router.post('/', placementController.create);
 // PUT /api/v1/placements/:id - Update placement
 router.put('/:id', placementController.update);
 
+// PATCH /api/v1/placements/:id - Partial update with deep-merge for config
+router.patch('/:id', placementController.patch);
+
 // DELETE /api/v1/placements/:id - Delete placement
 router.delete('/:id', placementController.remove);
 

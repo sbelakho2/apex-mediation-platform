@@ -43,6 +43,12 @@ android {
             '-opt-in=kotlin.RequiresOptIn'
         ]
     }
+    
+    // Use system Java for compilation
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
 
     sourceSets {
         getByName('main') {
@@ -85,11 +91,12 @@ dependencies {
     compileOnly "com.google.crypto.tink:tink-android:1.11.0"
 
     // AndroidX
-    compileOnly "androidx.annotation:annotation:1.7.1"
+    implementation "androidx.annotation:annotation:1.7.1"
     implementation "androidx.lifecycle:lifecycle-process:2.7.0"
-    testImplementation "androidx.annotation:annotation:1.7.1"
 
     // Testing
+    testImplementation "org.jetbrains.kotlin:kotlin-test:1.9.21"
+    testImplementation "org.jetbrains.kotlin:kotlin-test-junit:1.9.21"
     testImplementation "junit:junit:4.13.2"
     testImplementation "org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3"
     testImplementation "io.mockk:mockk:1.13.8"
@@ -223,8 +230,10 @@ tasks.register('validateIntegration') {
 
 publishing {
     publications {
-        release(MavenPublication) {
-            from components.release
+        register('release', MavenPublication) {
+            afterEvaluate {
+                from components.release
+            }
             groupId = 'com.rivalapex'
             artifactId = 'apexmediation-sdk'
             version = android.defaultConfig.versionName
@@ -304,11 +313,6 @@ apiValidation {
     
     // Validate only release builds
     validationDisabled = false
-    
-    // Generate human-readable API dump
-    publicApiDump {
-        enabled = true
-    }
 }
 
 // API check gate for PRs

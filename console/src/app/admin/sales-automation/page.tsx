@@ -14,6 +14,7 @@ import {
   type SalesQuickAction,
 } from '@/lib/admin'
 import { formatCurrency, formatNumber, formatPercentage } from '@/lib/utils'
+import { Section, Container } from '@/components/ui'
 
 interface SummaryCardData {
   key: string
@@ -74,7 +75,8 @@ export default function SalesAutomationDashboard() {
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+      <Section>
+        <Container className="space-y-6">
         <SummaryGrid cards={summaryCards} />
 
         <SectionCard
@@ -105,7 +107,8 @@ export default function SalesAutomationDashboard() {
         </SectionCard>
 
         {data.insights.length > 1 && <InsightPanel insights={data.insights.slice(1)} />}
-      </main>
+        </Container>
+      </Section>
     </div>
   )
 }
@@ -272,13 +275,13 @@ function JourneyTable({ touchpoints }: { touchpoints: SalesJourneyTouchpoint[] }
       <table className="min-w-full text-sm">
         <thead>
           <tr className="border-b text-left text-gray-500">
-            <th className="py-3 pr-4">Day</th>
-            <th className="py-3 pr-4">Touchpoint</th>
-            <th className="py-3 pr-4">Principle</th>
-            <th className="py-3 text-center">Sent</th>
-            <th className="py-3 text-center">Open Rate</th>
-            <th className="py-3 text-center">Click Rate</th>
-            <th className="py-3 text-center">Impact</th>
+            <th scope="col" className="py-3 pr-4">Day</th>
+            <th scope="col" className="py-3 pr-4">Touchpoint</th>
+            <th scope="col" className="py-3 pr-4">Principle</th>
+            <th scope="col" className="py-3 text-center">Sent</th>
+            <th scope="col" className="py-3 text-center">Open Rate</th>
+            <th scope="col" className="py-3 text-center">Click Rate</th>
+            <th scope="col" className="py-3 text-center">Impact</th>
           </tr>
         </thead>
         <tbody>

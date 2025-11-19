@@ -2,18 +2,70 @@ import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { AppError } from '../middleware/errorHandler';
 import logger from '../utils/logger';
+import * as placementsRepo from '../repositories/placementRepository';
 
 // Validation schemas
+const iso2 = z.string().regex(/^[A-Z]{2}$/);
+const Platform = z.enum(['ios', 'android', 'unity', 'web']);
+
+// Placement configuration schema (proposed v1; additive and optional)
+export const placementConfigSchema = z
+  .object({
+    targeting: z
+      .object({
+        geos: z.array(iso2).max(300).optional(),
+        platforms: z.array(Platform).min(1).max(4).optional(),
+        osVersions: z.record(z.string().min(1)).optional(),
+        appVersions: z.array(z.string().min(1)).max(50).optional(),
+      })
+      .partial()
+      .optional(),
+    delivery: z
+      .object({
+        frequencyCap: z
+          .object({ count: z.number().int().min(0).max(1000), per: z.enum(['minute', 'hour', 'day']) })
+          .optional(),
+        pacing: z.object({ impressionsPerMinute: z.number().int().min(0).max(1_000_000) }).optional(),
+      })
+      .partial()
+      .optional(),
+    pricing: z
+      .object({
+        floorPriceCents: z.number().int().min(0).max(10_000_00).optional(),
+        currency: z.string().regex(/^[A-Z]{3}$/).optional(),
+      })
+      .partial()
+      .optional(),
+    sdk: z
+      .object({
+        unitIdIos: z.string().max(200).optional(),
+        unitIdAndroid: z.string().max(200).optional(),
+        unitIdUnity: z.string().max(200).optional(),
+        unitIdWeb: z.string().max(200).optional(),
+      })
+      .partial()
+      .optional(),
+    metadata: z
+      .object({
+        labels: z.array(z.string().min(1).max(50)).max(50).optional(),
+        notes: z.string().max(2000).optional(),
+      })
+      .partial()
+      .optional(),
+  })
+  .strict();
 const createPlacementSchema = z.object({
   name: z.string().min(1),
   type: z.enum(['banner', 'interstitial', 'rewarded', 'native']),
   appId: z.string(),
-  platform: z.enum(['ios', 'android', 'unity', 'web']),
+  platform: Platform,
+  config: placementConfigSchema.optional(),
 });
 
 const updatePlacementSchema = z.object({
   name: z.string().min(1).optional(),
   status: z.enum(['active', 'paused']).optional(),
+  config: placementConfigSchema.optional(),
 });
 
 /**
@@ -25,24 +77,11 @@ export const list = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    // TODO: Query database
-    // Mock data for now
-    const placements = [
-      {
-        id: '1',
-        name: 'Main Menu Banner',
-        type: 'banner',
-        status: 'active',
-        revenue: 1247.32,
-        impressions: 125000,
-        ecpm: 9.98,
-      },
-    ];
-
-    res.json({
-      success: true,
-      data: placements,
-    });
+    const limit = Math.min(200, parseInt(String(req.query.pageSize || req.query.limit || 50), 10) || 50);
+    const page = Math.max(1, parseInt(String(req.query.page || 1), 10) || 1);
+    const offset = (page - 1) * limit;
+    const rows = await placementsRepo.list(limit, offset);
+    res.json({ success: true, data: { items: rows, total: rows.length, page, pageSize: limit } });
   } catch (error) {
     next(error);
   }
@@ -57,24 +96,12 @@ export const getById = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-  const { id } = req.params;
-
-    // TODO: Query database
-    // Mock data for now
-    const placement = {
-      id,
-      name: 'Main Menu Banner',
-      type: 'banner',
-      status: 'active',
-      revenue: 1247.32,
-      impressions: 125000,
-      ecpm: 9.98,
-    };
-
-    res.json({
-      success: true,
-      data: placement,
-    });
+    const { id } = req.params;
+    const row = await placementsRepo.getById(id);
+    if (!row) {
+      return next(new AppError('Placement not found', 404));
+    }
+    res.json({ success: true, data: row });
   } catch (error) {
     next(error);
   }
@@ -90,23 +117,15 @@ export const create = async (
 ): Promise<void> => {
   try {
     const data = createPlacementSchema.parse(req.body);
-
-    // TODO: Insert into database
-    const placement = {
-      id: '1',
-      ...data,
+    const created = await placementsRepo.create({
+      appId: data.appId,
+      name: data.name,
+      type: data.type,
       status: 'active',
-      revenue: 0,
-      impressions: 0,
-      ecpm: 0,
-    };
-
-    logger.info(`Placement created: ${placement.id}`);
-
-    res.status(201).json({
-      success: true,
-      data: placement,
+      config: data.config ?? {},
     });
+    logger.info(`Placement created: ${created.id}`);
+    res.status(201).json({ success: true, data: created });
   } catch (error) {
     if (error instanceof z.ZodError) {
       next(new AppError('Invalid request data', 400));
@@ -125,16 +144,56 @@ export const update = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-  const { id } = req.params;
+    const { id } = req.params;
     const data = updatePlacementSchema.parse(req.body);
-
-    // TODO: Update in database
-    logger.info(`Placement updated: ${id}`);
-
-    res.json({
-      success: true,
-      data: { id, ...data },
+    // Update basic fields if provided
+    let updated = await placementsRepo.update(id, {
+      name: data.name as any,
+      status: data.status as any,
     });
+    // If config provided on PUT, treat as full replacement for now
+    if (data.config) {
+      updated = await placementsRepo.patchConfig(id, data.config);
+    }
+    if (!updated) return next(new AppError('Placement not found', 404));
+    logger.info(`Placement updated: ${id}`);
+    res.json({ success: true, data: updated });
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      next(new AppError('Invalid request data', 400));
+    } else {
+      next(error);
+    }
+  }
+};
+
+/**
+ * Patch placement (partial), including deep-merge of config
+ */
+export const patch = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { id } = req.params;
+    // Accept either top-level fields or a nested config doc
+    const body = req.body ?? {};
+    const parsed = updatePlacementSchema.parse(body);
+
+    let updated = await placementsRepo.getById(id);
+    if (!updated) return next(new AppError('Placement not found', 404));
+
+    if (typeof parsed.name !== 'undefined' || typeof parsed.status !== 'undefined') {
+      updated = (await placementsRepo.update(id, {
+        name: parsed.name as any,
+        status: parsed.status as any,
+      })) || updated;
+    }
+    if (parsed.config) {
+      updated = (await placementsRepo.patchConfig(id, parsed.config)) || updated;
+    }
+    res.json({ success: true, data: updated });
   } catch (error) {
     if (error instanceof z.ZodError) {
       next(new AppError('Invalid request data', 400));
