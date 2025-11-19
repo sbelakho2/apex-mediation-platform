@@ -1,5 +1,7 @@
 # Development TODO Checklist (Phased, Check‑off)
 
+OBSOLETE! - see `docs/Internal/Development/FIXES.md` and `docs/Internal/Deployment/PROJECT_STATUS.md` for current tasks and status.
+
 Last updated: 2025-11-18 16:10 UTC
 Owner: Platform Engineering
 

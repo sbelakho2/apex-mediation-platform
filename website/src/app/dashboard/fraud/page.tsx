@@ -11,6 +11,8 @@ import {
 } from '@heroicons/react/24/outline';
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '@/lib/api';
+import Section from '@/components/ui/Section';
+import Container from '@/components/ui/Container';
 
 type Severity = 'high' | 'medium' | 'low'
 type FraudType = 'click_fraud' | 'install_fraud' | 'bot_traffic' | 'vpn_abuse'
@@ -104,7 +106,8 @@ export default function FraudPage() {
   const fraudEvents = events;
 
   return (
-    <div className="p-6 space-y-6">
+    <Section>
+      <Container className="space-y-6">
       {/* Page Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -282,7 +285,8 @@ export default function FraudPage() {
       </div>
 
       {/* Model Features placeholder removed until backed by live telemetry */}
-    </div>
+      </Container>
+    </Section>
   );
 }
 
@@ -435,8 +439,8 @@ function Pagination({ page, hasNext, onPageChange }: { page: number; hasNext: bo
       >
         Next
       </button>
-          // Country-level breakdown pending backend support
-  return Math.round((count / total) * 1000) / 10; // one decimal
+    </div>
+  );
 }
 
 function formatTs(iso: string) {

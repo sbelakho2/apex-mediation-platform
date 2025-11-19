@@ -4,6 +4,8 @@ import React, { useEffect, useMemo, useState } from 'react';
 import Breadcrumbs, { buildBreadcrumbsFromPath } from '@/components/ui/Breadcrumbs';
 import { api } from '@/lib/api';
 import { usePathname, useRouter } from 'next/navigation';
+import Section from '@/components/ui/Section';
+import Container from '@/components/ui/Container';
 
 type AppConfig = {
   id: string;
@@ -113,9 +115,10 @@ export default function AppDetailClient({ id }: { id: string }) {
   }
 
   return (
-    <div className="p-6 space-y-6">
-      <Breadcrumbs items={crumbs} />
-      <h1 className="text-h2-sm font-bold uppercase text-primary-blue tracking-tight">App Details</h1>
+    <Section>
+      <Container className="space-y-6">
+        <Breadcrumbs items={crumbs} />
+        <h1 className="text-h2-sm font-bold uppercase text-primary-blue tracking-tight">App Details</h1>
 
       {loading ? (
         <div className="space-y-3" aria-busy="true">
@@ -198,6 +201,7 @@ export default function AppDetailClient({ id }: { id: string }) {
           </div>
         </div>
       )}
-    </div>
+      </Container>
+    </Section>
   );
 }

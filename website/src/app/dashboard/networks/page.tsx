@@ -11,6 +11,8 @@ import {
 } from '@heroicons/react/24/outline';
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '@/lib/api';
+import Section from '@/components/ui/Section';
+import Container from '@/components/ui/Container';
 
 type NetworkStatus = 'active' | 'inactive' | 'error';
 
@@ -153,7 +155,8 @@ export default function NetworksPage() {
   const totalImpressions = rows.reduce((sum, n) => sum + n.impressions, 0);
 
   return (
-    <div className="p-6 space-y-6">
+    <Section>
+      <Container className="space-y-6">
       {/* Page Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -271,7 +274,8 @@ export default function NetworksPage() {
           </li>
         </ol>
       </div>
-    </div>
+      </Container>
+    </Section>
   );
 }
 

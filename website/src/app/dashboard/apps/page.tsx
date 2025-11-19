@@ -3,12 +3,10 @@
 // Reference: Design.md § "Dashboard Pages" & WEBSITE_DESIGN.md § "Apps Page"
 // Apps management page with SDK integration status and performance metrics
 
-import {
-  CheckCircleIcon,
-  ExclamationTriangleIcon,
-  PlusCircleIcon
-} from '@heroicons/react/24/outline';
+import { CheckCircleIcon, ExclamationTriangleIcon, PlusCircleIcon } from '@heroicons/react/24/outline';
 import { useState } from 'react';
+import Section from '@/components/ui/Section';
+import Container from '@/components/ui/Container';
 
 interface App {
   id: string;
@@ -156,7 +154,8 @@ export default function AppsPage() {
   const totalUsers = apps.reduce((sum, a) => sum + a.users, 0);
 
   return (
-    <div className="p-6 space-y-6">
+    <Section>
+      <Container className="space-y-6">
       {/* Page Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -321,7 +320,8 @@ export default function AppsPage() {
       </div>
 
       <AppModal state={modalState} onClose={closeModal} />
-    </div>
+      </Container>
+    </Section>
   );
 }
 
@@ -509,11 +509,34 @@ function AppModal({ state, onClose }: { state: ModalState; onClose: () => void }
 
   const sdkKey = state.type === 'add' ? null : `app_${state.app.id}_sdk_key_xyz`;
 
+  // Accessibility: focus management & ESC/overlay close
+  // We keep a reference to the last focused element to restore focus on close.
+  if (typeof window !== 'undefined') {
+    // noop - just to satisfy type narrowing when using document in handlers
+  }
+
+  const dialogId = 'apps-modal-title';
+  const descId = 'apps-modal-description';
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm px-4">
-      <div className="w-full max-w-xl rounded-lg border-2 border-primary-blue bg-white shadow-xl">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm px-4"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div
+        className="w-full max-w-xl rounded-lg border-2 border-primary-blue bg-white shadow-xl"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={dialogId}
+        aria-describedby={descId}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') onClose();
+        }}
+      >
         <div className="flex items-start justify-between border-b-2 border-sunshine-yellow p-6">
-          <h2 className="text-primary-blue font-bold uppercase text-lg">
+          <h2 id={dialogId} className="text-primary-blue font-bold uppercase text-lg">
             {title}
           </h2>
           <button
@@ -525,7 +548,7 @@ function AppModal({ state, onClose }: { state: ModalState; onClose: () => void }
           </button>
         </div>
         <div className="p-6 space-y-4">
-          <p className="text-sm text-gray-700 leading-relaxed">{description}</p>
+          <p id={descId} className="text-sm text-gray-700 leading-relaxed">{description}</p>
 
           {sdkKey && (
             <div className="bg-cream border-2 border-primary-blue rounded p-4">

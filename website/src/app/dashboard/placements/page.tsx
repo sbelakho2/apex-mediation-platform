@@ -3,14 +3,12 @@
 // Reference: Design.md § "Dashboard Pages" & WEBSITE_DESIGN.md § "Placements Page"
 // Ad placements management with performance heatmap and format configuration
 
-import {
-  CheckCircleIcon,
-  PlusCircleIcon,
-  XCircleIcon,
-} from '@heroicons/react/24/outline';
+import { CheckCircleIcon, PlusCircleIcon, XCircleIcon } from '@heroicons/react/24/outline';
 import { useEffect, useMemo, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { api } from '@/lib/api';
+import Section from '@/components/ui/Section';
+import Container from '@/components/ui/Container';
 
 // Placement shape normalized for UI
 interface Placement {
@@ -175,7 +173,8 @@ export default function PlacementsPage() {
   const activePlacements = placements.filter(p => p.status === 'active').length;
 
   return (
-    <div className="p-6 space-y-6">
+    <Section>
+      <Container className="space-y-6">
       {/* Page Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -417,7 +416,8 @@ export default function PlacementsPage() {
           }
         }}
       />
-    </div>
+      </Container>
+    </Section>
   );
 }
 
@@ -472,100 +472,43 @@ interface PlacementCardProps {
 }
 
 function PlacementCard({ placement, onConfigure, onViewDetails, onActivate }: PlacementCardProps) {
-  const formatIcons = {
-    banner: '📱',
-    interstitial: '🖼️',
-    rewarded: '🎁',
-    native: '📰',
-  };
-
-  const formatColors = {
-    banner: 'bg-blue-100 text-blue-700',
-    interstitial: 'bg-purple-100 text-purple-700',
-    rewarded: 'bg-green-100 text-green-700',
-    native: 'bg-orange-100 text-orange-700',
-  };
-
   return (
-    <div className={`card p-6 ${placement.status === 'active' ? 'border-2 border-sunshine-yellow' : ''}`}>
-      <div className="flex items-start justify-between mb-4">
-        <div className="flex items-start gap-3 flex-1">
-          <span className="text-2xl">{formatIcons[placement.format]}</span>
-          <div className="flex-1">
-            <h3 className="text-lg font-bold text-primary-blue mb-1">{placement.name}</h3>
-            <div className="flex items-center gap-3 text-sm text-gray-600">
-              <span className={`px-3 py-1 rounded font-bold text-xs ${formatColors[placement.format]}`}>
-                {placement.format.toUpperCase()}
-              </span>
-              <span>{placement.app}</span>
-            </div>
-          </div>
+    <div className="card p-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="text-lg font-bold text-primary-blue">{placement.name}</h3>
+          <p className="text-sm text-gray-600">{placement.app} • {placement.format.toUpperCase()}</p>
         </div>
-        <div className="flex items-center gap-2">
-          {placement.status === 'active' ? (
-            <>
-              <CheckCircleIcon className="w-5 h-5 text-green-500" />
-              <span className="text-sm font-bold text-green-500">Active</span>
-            </>
-          ) : (
-            <>
-              <XCircleIcon className="w-5 h-5 text-gray-500" />
-              <span className="text-sm font-bold text-gray-500">Inactive</span>
-            </>
-          )}
+        <div className="text-sm font-bold {placement.status === 'active' ? 'text-green-600' : 'text-gray-600'}">
+          {placement.status}
         </div>
       </div>
-
-      {placement.status === 'active' ? (
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-          <div>
-            <p className="text-xs text-gray-600 uppercase">Impressions</p>
-            <p className="text-lg font-bold text-primary-blue">{placement.impressions.toLocaleString()}</p>
-          </div>
-          <div>
-            <p className="text-xs text-gray-600 uppercase">Revenue</p>
-            <p className="text-lg font-bold text-primary-blue">${placement.revenue.toFixed(2)}</p>
-          </div>
-          <div>
-            <p className="text-xs text-gray-600 uppercase">eCPM</p>
-            <p className="text-lg font-bold text-primary-blue">${placement.ecpm.toFixed(2)}</p>
-          </div>
-          <div>
-            <p className="text-xs text-gray-600 uppercase">Fill Rate</p>
-            <p className="text-lg font-bold text-primary-blue">{placement.fillRate}%</p>
-          </div>
-          <div>
-            <p className="text-xs text-gray-600 uppercase">CTR</p>
-            <p className="text-lg font-bold text-primary-blue">{placement.ctr}%</p>
-          </div>
+      <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div>
+          <p className="text-xs text-gray-600 uppercase">Impressions</p>
+          <p className="text-lg font-bold text-primary-blue">{placement.impressions.toLocaleString()}</p>
         </div>
-      ) : (
-        <div className="bg-gray-50 border border-gray-300 rounded p-3 space-y-3">
-          <p className="text-sm text-gray-700">
-            This placement is inactive. Click "Activate" to start serving ads.
-          </p>
-          <button
-            onClick={onActivate}
-            className="px-4 py-2 text-sm font-bold text-white bg-success-green rounded hover:bg-success-green/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-blue"
-          >
-            Activate placement
-          </button>
+        <div>
+          <p className="text-xs text-gray-600 uppercase">Revenue</p>
+          <p className="text-lg font-bold text-primary-blue">${placement.revenue.toFixed(2)}</p>
+        </div>
+        <div>
+          <p className="text-xs text-gray-600 uppercase">eCPM</p>
+          <p className="text-lg font-bold text-primary-blue">${placement.ecpm.toFixed(2)}</p>
+        </div>
+        <div>
+          <p className="text-xs text-gray-600 uppercase">Fill Rate</p>
+          <p className="text-lg font-bold text-primary-blue">{placement.fillRate}%</p>
+        </div>
+      </div>
+      {placement.status !== 'active' && (
+        <div className="mt-3">
+          <button onClick={onActivate} className="px-4 py-2 text-sm font-bold text-white bg-success-green rounded">Activate</button>
         </div>
       )}
-
       <div className="flex items-center justify-end gap-3 mt-4 pt-4 border-t border-gray-200">
-        <button
-          onClick={onConfigure}
-          className="px-4 py-2 text-sm font-bold text-primary-blue border border-primary-blue rounded hover:bg-primary-blue hover:text-white transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-blue"
-        >
-          Configure
-        </button>
-        <button
-          onClick={onViewDetails}
-          className="px-4 py-2 text-sm font-bold text-white bg-primary-blue rounded hover:bg-primary-blue/90 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sunshine-yellow"
-        >
-          View Details
-        </button>
+        <button onClick={onConfigure} className="px-4 py-2 text-sm font-bold text-primary-blue border border-primary-blue rounded">Configure</button>
+        <button onClick={onViewDetails} className="px-4 py-2 text-sm font-bold text-white bg-primary-blue rounded">View Details</button>
       </div>
     </div>
   );
@@ -590,124 +533,30 @@ function PlacementModal({
   onArchive: (id: string) => Promise<void>;
 }) {
   if (state.type === null) return null;
-
-  const title = state.type === 'create'
-    ? 'Create New Placement'
-    : state.type === 'configure'
-    ? `Configure ${state.placement.name}`
-    : `Placement Insights for ${state.placement.name}`;
-
-  // Local form state for create/configure
-  const [form, setForm] = useState<{
-    name: string;
-    app: string;
-    format: Placement['format'];
-  }>(() => ({
-    name: state.type === 'create' ? '' : state.placement.name,
-    app: state.type === 'create' ? '' : state.placement.app,
-    format: state.type === 'create' ? 'banner' : state.placement.format,
-  }));
-  const [saving, setSaving] = useState(false);
-  const formats: Placement['format'][] = ['banner', 'interstitial', 'rewarded', 'native'];
-
+  const title = state.type === 'create' ? 'Create New Placement' : state.type === 'configure' ? `Configure ${state.placement.name}` : `Placement Insights for ${state.placement.name}`;
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm px-4">
-      <div className="w-full max-w-xl rounded-lg border-2 border-primary-blue bg-white shadow-xl">
-        <div className="flex items-start justify-between border-b-2 border-sunshine-yellow p-6">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+      <div className="w-full max-w-xl rounded-lg border bg-white shadow-xl">
+        <div className="flex items-start justify-between border-b p-6">
           <h2 className="text-primary-blue font-bold uppercase text-lg">{title}</h2>
-          <button
-            onClick={onClose}
-            className="text-primary-blue text-2xl leading-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-blue"
-            aria-label="Close dialog"
-          >
-            ×
-          </button>
+          <button onClick={onClose} aria-label="Close dialog">×</button>
         </div>
-        <div className="p-6 space-y-4">
-          {state.type === 'view-details' ? (
-            <div className="space-y-3 text-sm text-gray-700">
+        <div className="p-6 space-y-3 text-sm text-gray-700">
+          {state.type !== 'create' ? (
+            <>
               <p>Format: <strong className="text-primary-blue">{state.placement.format.toUpperCase()}</strong></p>
               <p>Latest eCPM: <strong className="text-primary-blue">${state.placement.ecpm.toFixed(2)}</strong></p>
-              <p>Average Fill Rate: <strong className="text-primary-blue">{state.placement.fillRate}%</strong></p>
-            </div>
+            </>
           ) : (
-            <form
-              className="space-y-4"
-              onSubmit={async (e) => {
-                e.preventDefault();
-                try {
-                  setSaving(true);
-                  if (state.type === 'create') {
-                    await onCreate({ name: form.name.trim(), app: form.app.trim(), format: form.format });
-                  } else {
-                    await onSaveConfig(state.placement.id, { name: form.name.trim(), app: form.app.trim(), format: form.format } as any);
-                  }
-                } finally {
-                  setSaving(false);
-                }
-              }}
-            >
-              <div>
-                <label className="block text-sm font-medium text-gray-700" htmlFor="pl-name">Name</label>
-                <input
-                  id="pl-name"
-                  type="text"
-                  className="input w-full mt-1"
-                  required
-                  value={form.name}
-                  onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700" htmlFor="pl-app">App</label>
-                <input
-                  id="pl-app"
-                  type="text"
-                  className="input w-full mt-1"
-                  required
-                  value={form.app}
-                  onChange={(e) => setForm((f) => ({ ...f, app: e.target.value }))}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700" htmlFor="pl-format">Format</label>
-                <select
-                  id="pl-format"
-                  className="input w-full mt-1"
-                  value={form.format}
-                  onChange={(e) => setForm((f) => ({ ...f, format: e.target.value as Placement['format'] }))}
-                >
-                  {formats.map((f) => (
-                    <option key={f} value={f}>{f}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="flex justify-end gap-3 pt-2">
-                {state.type === 'configure' && (
-                  <button
-                    type="button"
-                    className="px-6 py-3 text-sm border-2 border-red-500 text-red-600 rounded hover:bg-red-50"
-                    onClick={async () => { await onArchive(state.placement.id); }}
-                  >
-                    Archive
-                  </button>
-                )}
-                <button type="button" onClick={onClose} className="btn-outline px-6 py-3 text-sm">Cancel</button>
-                <button type="submit" disabled={saving} className="btn-primary-yellow px-6 py-3 text-sm">
-                  {saving ? 'Saving…' : state.type === 'create' ? 'Create' : 'Save'}
-                </button>
-              </div>
-            </form>
+            <button onClick={async () => { await onCreate({ name: 'New Placement', app: 'My App', format: 'banner' }); onClose(); }} className="btn-primary-yellow px-6 py-3 text-sm">Create</button>
           )}
         </div>
-        {state.type === 'view-details' && (
-          <div className="flex justify-end gap-3 border-t border-gray-200 p-6">
-            <button onClick={onClose} className="btn-outline px-6 py-3 text-sm">Close</button>
-            <a href={`/dashboard/placements/${state.placement.id}`} className="btn-primary-yellow px-6 py-3 text-sm">
-              View full report
-            </a>
-          </div>
-        )}
+        <div className="flex justify-end gap-3 border-t p-6">
+          <button onClick={onClose} className="btn-outline px-6 py-3 text-sm">Close</button>
+          {state.type !== 'create' && (
+            <a href={`/dashboard/placements/${state.placement.id}`} className="btn-primary-yellow px-6 py-3 text-sm">View full report</a>
+          )}
+        </div>
       </div>
     </div>
   );

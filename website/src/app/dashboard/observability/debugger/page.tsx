@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { auctionApi } from '@/lib/auctionApi';
+import Section from '@/components/ui/Section';
+import Container from '@/components/ui/Container';
 
 interface DebugEvent {
   placement_id: string;
@@ -123,7 +125,8 @@ export default function MediationDebuggerPage() {
   }, [events]);
 
   return (
-    <div className="p-6 space-y-6">
+    <Section>
+      <Container className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-h2-sm font-bold uppercase text-primary-blue tracking-tight">Mediation Debugger</h1>
         <div className="flex items-center gap-2">
@@ -200,7 +203,8 @@ export default function MediationDebuggerPage() {
       <div className="sr-only" aria-live="polite">
         {lastUpdated && `Debugger events updated ${new Date(lastUpdated).toLocaleTimeString()}.`}
       </div>
-    </div>
+      </Container>
+    </Section>
   );
 }
 

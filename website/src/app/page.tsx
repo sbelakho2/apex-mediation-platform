@@ -7,6 +7,8 @@ import NewsletterPanel from '@/components/NewsletterPanel';
 import NotificationBar from '@/components/NotificationBar';
 import ScallopedDivider from '@/components/ScallopedDivider';
 import SectionHeading from '@/components/SectionHeading';
+import Section from '@/components/ui/Section';
+import Container from '@/components/ui/Container';
 
 export default function HomePage() {
   return (
@@ -35,14 +37,46 @@ export default function HomePage() {
       </main>
 
       <ScallopedDivider color="white" position="top" />
-      <PopularSection />
-      <FeaturesSection />
+
+      <Section>
+        <Container className="space-y-6">
+          <PopularSection />
+        </Container>
+      </Section>
+
+      <Section>
+        <Container className="space-y-6">
+          <FeaturesSection />
+        </Container>
+      </Section>
+
       <ScallopedDivider color="white" position="bottom" />
-      <LearnSection />
+
+      <Section>
+        <Container className="space-y-6">
+          <LearnSection />
+        </Container>
+      </Section>
+
       <ScallopedDivider color="cream" position="top" />
-      <PrinciplesSection />
-      <NewsletterPanel />
-      <PricingSection />
+
+      <Section>
+        <Container className="space-y-6">
+          <PrinciplesSection />
+        </Container>
+      </Section>
+
+      <Section inset>
+        <Container>
+          <NewsletterPanel />
+        </Container>
+      </Section>
+
+      <Section>
+        <Container className="space-y-6">
+          <PricingSection />
+        </Container>
+      </Section>
       <Footer />
       <CookieBanner />
     </>

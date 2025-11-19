@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { auctionApi } from '@/lib/auctionApi';
+import Section from '@/components/ui/Section';
+import Container from '@/components/ui/Container';
 
 interface AdapterMetricsSnapshot {
   adapter: string;
@@ -91,7 +93,8 @@ export default function AdapterMetricsPage() {
   }, []);
 
   return (
-    <div className="p-6 space-y-6">
+    <Section>
+      <Container className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-h2-sm font-bold uppercase text-primary-blue tracking-tight">Adapter Metrics</h1>
         <button
@@ -177,7 +180,8 @@ export default function AdapterMetricsPage() {
       {!loading && !error && (!data || data.length === 0) && (
         <div className="text-gray-600">No metrics available yet. Trigger some adapter requests and try again.</div>
       )}
-    </div>
+      </Container>
+    </Section>
   );
 }
 

@@ -27,10 +27,10 @@ interface WaterfallConfig {
 }
 
 const DEFAULT_WATERFALL_CONFIG: WaterfallConfig = {
-  maxAttempts: 3,
-  initialRetryDelay: 50,
-  maxRetryDelay: 500,
-  backoffMultiplier: 2,
+  maxAttempts: 15,
+  initialRetryDelay: 20,
+  maxRetryDelay: 100,
+  backoffMultiplier: 1.5,
   enabled: true,
 };
 

@@ -3,16 +3,12 @@
 // Reference: Design.md § "Dashboard Pages" & WEBSITE_DESIGN.md § "Settings Page"
 // Settings page for account, payment, and notification preferences
 
-import {
-    BanknotesIcon,
-    BellIcon,
-    CreditCardIcon,
-    ShieldCheckIcon,
-    UserCircleIcon,
-} from '@heroicons/react/24/outline';
+import { BanknotesIcon, BellIcon, CreditCardIcon, ShieldCheckIcon, UserCircleIcon } from '@heroicons/react/24/outline';
 import { useSearchParams } from 'next/navigation';
 import { FormEvent, useEffect, useMemo, useState } from 'react';
-import { api } from '../../../lib/api';
+import { api } from '@/lib/api';
+import Section from '@/components/ui/Section';
+import Container from '@/components/ui/Container';
 
 export default function SettingsPage() {
   const searchParams = useSearchParams();
@@ -33,7 +29,8 @@ export default function SettingsPage() {
   }, [initialTab]);
 
   return (
-    <div className="p-6 space-y-6">
+    <Section>
+      <Container className="space-y-6">
       {/* Page Header */}
       <div>
         <h1 className="text-h2-sm font-bold uppercase text-primary-blue tracking-tight">
@@ -79,7 +76,8 @@ export default function SettingsPage() {
       {activeTab === 'payment' && <PaymentTab />}
       {activeTab === 'notifications' && <NotificationsTab />}
       {activeTab === 'security' && <SecurityTab />}
-    </div>
+      </Container>
+    </Section>
   );
 }
 

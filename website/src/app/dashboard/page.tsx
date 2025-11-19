@@ -1,47 +1,41 @@
 import RevenueOverview from '@/components/dashboard/RevenueOverview';
 import { getSession } from '@/lib/auth';
 import DashboardStats from '@/components/dashboard/DashboardStats';
+import Section from '@/components/ui/Section';
+import Container from '@/components/ui/Container';
 
 export default async function DashboardPage() {
   const user = await getSession();
 
   return (
-    <div>
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">
-          Welcome back, {user?.name || user?.email}!
-        </h1>
-        <p className="mt-2 text-gray-600">
-          Here's what's happening with your ad monetization today.
-        </p>
-      </div>
-
-      <RevenueOverview />
-
-      {/* Quick Stats */}
-      <DashboardStats />
-
-      {/* Getting Started */}
-      <div className="mt-8 bg-blue-50 border border-blue-200 rounded-lg p-6">
-        <h2 className="text-lg font-semibold text-blue-900 mb-4">
-          🚀 Get Started
-        </h2>
-        <div className="space-y-3">
-          <ChecklistItem completed={false}>
-            Add your first app
-          </ChecklistItem>
-          <ChecklistItem completed={false}>
-            Create an ad placement
-          </ChecklistItem>
-          <ChecklistItem completed={false}>
-            Integrate the SDK
-          </ChecklistItem>
-          <ChecklistItem completed={false}>
-            Configure ad networks
-          </ChecklistItem>
+    <Section>
+      <Container className="space-y-6">
+        <div className="mb-2">
+          <h1 className="text-h2-sm font-bold uppercase text-primary-blue tracking-tight">
+            Welcome back, {user?.name || user?.email}!
+          </h1>
+          <p className="text-sm text-gray-600 mt-1">
+            Here's what's happening with your ad monetization today.
+          </p>
         </div>
-      </div>
-    </div>
+
+        <RevenueOverview />
+
+        {/* Quick Stats */}
+        <DashboardStats />
+
+        {/* Getting Started */}
+        <div className="card p-6">
+          <h2 className="text-primary-blue font-bold uppercase text-lg mb-4">🚀 Get Started</h2>
+          <div className="space-y-3">
+            <ChecklistItem completed={false}>Add your first app</ChecklistItem>
+            <ChecklistItem completed={false}>Create an ad placement</ChecklistItem>
+            <ChecklistItem completed={false}>Integrate the SDK</ChecklistItem>
+            <ChecklistItem completed={false}>Configure ad networks</ChecklistItem>
+          </div>
+        </div>
+      </Container>
+    </Section>
   );
 }
 
