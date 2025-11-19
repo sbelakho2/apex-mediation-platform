@@ -424,3 +424,28 @@ export interface MigrationExperimentShareLink {
   created_by?: string
   last_accessed_at?: string
 }
+
+// BYO (Bring Your Own) Network Credentials types
+export interface NetworkCredential {
+  id: string
+  network: 'admob' | 'unity' | 'applovin' | 'ironsource' | 'mintegral' | 'facebook'
+  version: number
+  createdAt: string
+  updatedAt: string
+  hasCredentials: boolean
+}
+
+export interface NetworkCredentialInput {
+  network: string
+  credentials: Record<string, unknown>
+}
+
+export interface NetworkCredentialToken {
+  token: string
+  expiresAt: string
+  expiresIn: number
+}
+
+export interface NetworkCredentialsList {
+  credentials: NetworkCredential[]
+}

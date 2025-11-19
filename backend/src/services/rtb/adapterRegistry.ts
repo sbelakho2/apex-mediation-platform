@@ -2,7 +2,7 @@ import { AdapterDefinition, AdFormat } from './adapters/types';
 import { mockAdmob } from './adapters/mockAdmob';
 import { mockAppLovin } from './adapters/mockAppLovin';
 import { mockUnityAds } from './adapters/mockUnityAds';
-import adapterConfigService from '../../adapterConfigService';
+import adapterConfigService from '../adapterConfigService';
 
 const registry: AdapterDefinition[] = [];
 

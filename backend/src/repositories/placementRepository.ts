@@ -80,3 +80,12 @@ export async function patchConfig(id: string, incoming: any): Promise<PlacementR
   const res = await query<PlacementRow>(sql, [id, JSON.stringify(merged)]);
   return res.rows[0] || null;
 }
+
+export async function deleteById(id: string): Promise<boolean> {
+  const sql = `
+    DELETE FROM placements
+    WHERE id = $1
+  `;
+  const res = await query(sql, [id]);
+  return (res.rowCount ?? 0) > 0;
+}

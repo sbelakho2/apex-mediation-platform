@@ -8,6 +8,7 @@ import {
   Globe,
   BellRing,
   ArrowRight,
+  Key,
 } from 'lucide-react'
 import { authOptions } from '@/lib/auth/options'
 import { hasRole, type Role } from '@/lib/rbac'
@@ -24,6 +25,12 @@ const sections = [
     description: 'Manage payment methods, currencies, and payout triggers.',
     href: '/settings/payouts',
     icon: CreditCard,
+  },
+  {
+    title: 'Network Credentials',
+    description: 'Store ad network credentials for automatic revenue tracking.',
+    href: '/settings/credentials',
+    icon: Key,
   },
   {
     title: 'Team Access',

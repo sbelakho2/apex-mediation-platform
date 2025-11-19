@@ -798,8 +798,21 @@ export class InfluenceBasedSalesService {
       touchpoint.personalization_tokens
     ]);
 
-    // TODO: Integrate with actual email/notification service
-    console.log(`[Sales] Delivered touchpoint ${touchpoint.id} to customer ${touchpoint.customer_id}`);
+    // Queue notification for async delivery via email service
+    try {
+      const redis = await import('../../utils/redis');
+      await redis.default.lpush('email:notifications', JSON.stringify({
+        type: 'sales_touchpoint',
+        touchpointId: touchpoint.id,
+        customerId: touchpoint.customer_id,
+        channel: touchpoint.channel,
+        subject: touchpoint.subject_line,
+        tokens: touchpoint.personalization_tokens
+      }));
+      console.log(`[Sales] Queued touchpoint ${touchpoint.id} for customer ${touchpoint.customer_id}`);
+    } catch (error) {
+      console.error(`[Sales] Failed to queue touchpoint:`, error);
+    }
   }
 
   /**
@@ -1106,10 +1119,52 @@ Return JSON: {recommendations: [{principle, action, expected_impact, priority}]}
       // Log recommendations for human review
       console.log('[Sales] AI Optimization Recommendations:', recommendations);
 
-      // TODO: Auto-apply high-confidence recommendations
+      // Auto-apply high-confidence recommendations (>90% confidence)
+      if (recommendations.confidence && recommendations.confidence > 0.90) {
+        try {
+          for (const rec of (recommendations.actions || [])) {
+            if (rec.auto_apply && rec.confidence > 0.90) {
+              await this.applyAIRecommendation(rec);
+              console.log(`[Sales] Auto-applied AI recommendation: ${rec.action}`);
+            }
+          }
+        } catch (applyError) {
+          console.error('[Sales] Failed to auto-apply recommendation:', applyError);
+        }
+      }
       
     } catch (error) {
       console.error('[Sales] AI optimization failed:', error);
+    }
+  }
+
+  /**
+   * Apply AI recommendation automatically
+   */
+  private async applyAIRecommendation(recommendation: any): Promise<void> {
+    const { action, params } = recommendation;
+    
+    switch (action) {
+      case 'adjust_send_time':
+        await this.pool.query(
+          `UPDATE sales_campaigns SET optimal_send_time = $1 WHERE id = $2`,
+          [params.time, params.campaignId]
+        );
+        break;
+      case 'update_subject_line':
+        await this.pool.query(
+          `UPDATE sales_campaigns SET subject_line = $1 WHERE id = $2`,
+          [params.subject, params.campaignId]
+        );
+        break;
+      case 'adjust_frequency':
+        await this.pool.query(
+          `UPDATE sales_campaigns SET send_frequency_days = $1 WHERE id = $2`,
+          [params.frequency, params.campaignId]
+        );
+        break;
+      default:
+        console.warn(`[Sales] Unknown AI recommendation action: ${action}`);
     }
   }
 

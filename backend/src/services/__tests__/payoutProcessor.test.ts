@@ -86,7 +86,7 @@ describe('payoutProcessor service', () => {
       threshold: 200,
       method: 'wire',
       currency: 'EUR',
-      schedule: 'biweekly',
+      schedule: 'monthly',
     };
     upsertMock.mockResolvedValue({
       threshold: input.threshold,

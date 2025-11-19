@@ -36,10 +36,10 @@ const putCache = <T>(key: string, value: T): T => {
 
 export const fraudCacheStats = () => ({ size: cache.size, ttlMs, hits, misses });
 
-export const getFraudStatistics = async (publisherId: string) => {
+export const getFraudStatistics = async (publisherId: string): Promise<ReturnType<typeof shapeStats>> => {
   const key = cacheKey('stats', { publisherId });
   const cached = fromCache<ReturnType<typeof shapeStats>>(key);
-  if (cached) return cached as unknown as Awaited<ReturnType<typeof getFraudStatistics>>;
+  if (cached) return cached;
 
   const stats = await fetchFraudStats(publisherId);
   const typeBreakdown = await fetchFraudTypeBreakdown(publisherId);
@@ -59,9 +59,9 @@ export const listFraudAlerts = async (publisherId: string, limit: number) => {
   return putCache(key, rows);
 };
 
-export const getFraudByType = async (publisherId: string) => {
+export const getFraudByType = async (publisherId: string): Promise<Array<{ type: string; count: number; blockedRevenue: number }>> => {
   const key = cacheKey('byType', { publisherId });
-  const cached = fromCache<Awaited<ReturnType<typeof getFraudByType>>>(key);
+  const cached = fromCache<Array<{ type: string; count: number; blockedRevenue: number }>>(key);
   if (cached) return cached;
   const breakdown = await fetchFraudTypeBreakdown(publisherId);
   const rows = breakdown.map((row) => ({

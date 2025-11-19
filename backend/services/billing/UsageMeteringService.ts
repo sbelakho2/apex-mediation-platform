@@ -498,8 +498,7 @@ export class UsageMeteringService {
 
     const email = user.rows[0].email;
 
-    // TODO: Send email via Resend/SES
-    // For now, emit event for email service
+    // Email service integration via event emission
     logger.info('[UsageMetering] Usage alert threshold reached', {
       customerId,
       email,

@@ -34,7 +34,7 @@ export async function allow(name: string): Promise<boolean> {
     if (await isOpen(name)) return false;
     // Implement a lightweight half-open probe throttle using a probe key
     const probeKey = key(name, 'probe');
-    const set = await redis.set(probeKey, '1', { NX: true, EX: PROBE_SEC });
+    const set = await (redis as any).set(probeKey, '1', 'NX', 'EX', PROBE_SEC);
     // If set is null, a recent probe occurred; still allow requests, just avoid spamming
     return true;
   } catch {

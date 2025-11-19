@@ -333,23 +333,25 @@ export class FinancialReportingService {
       col.alignment = { horizontal: 'right' };
     });
 
-    // Add summary row
+    // Add summary row with aggregate query
+    const summaryQuery = `
+      SELECT
+        SUM(CASE WHEN transaction_type IN ('revenue', 'subscription_charge', 'usage_charge') 
+            THEN amount_eur_cents ELSE 0 END) / 100.0 AS total_revenue,
+        SUM(CASE WHEN transaction_type IN ('expense', 'payment_sent') 
+            THEN amount_eur_cents ELSE 0 END) / 100.0 AS total_expenses
+      FROM transaction_log
+      WHERE fiscal_year = $1 AND is_deleted = FALSE
+    `;
+    const summaryResult = await this.pool.query(summaryQuery, [fiscalYear]);
+    const { total_revenue, total_expenses } = summaryResult.rows[0];
+    
     const lastRow = worksheet.rowCount + 2;
     worksheet.getCell(`A${lastRow}`).value = 'TOTALS:';
     worksheet.getCell(`A${lastRow}`).font = { bold: true };
-
-    const revenueTypes = new Set(['revenue', 'subscription_charge', 'usage_charge']);
-    const expenseTypes = new Set(['expense', 'payment_sent']);
-
-    const totalRevenue = rows
-      .filter(r => revenueTypes.has(r.transaction_type))
-      .reduce((sum, r) => sum + r.amount_eur_converted, 0);
-
-    const totalExpenses = rows
-      .filter(r => expenseTypes.has(r.transaction_type))
-      .reduce((sum, r) => sum + r.amount_eur_converted, 0);
-
-    worksheet.getCell(`J${lastRow}`).value = totalRevenue - totalExpenses;
+    
+    const netTotal = (parseFloat(total_revenue) || 0) - (parseFloat(total_expenses) || 0);
+    worksheet.getCell(`J${lastRow}`).value = netTotal;
     worksheet.getCell(`J${lastRow}`).font = { bold: true };
     worksheet.getCell(`J${lastRow}`).numFmt = '#,##0.00';
 

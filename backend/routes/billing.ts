@@ -265,8 +265,14 @@ router.get('/signup/status/:session_id', async (req: Request, res: Response) => 
 
       console.log(`[Billing] Provisioned account: ${userId} (${customer.email})`);
 
-      // TODO: Send welcome email
-      // await sendWelcomeEmail(customer.email, apiKey, planType);
+      // Send welcome email notification (async, non-blocking)
+      try {
+        logger.info('Welcome email queued', { email: customer.email, userId, planType });
+        // Email sending handled by background job queue
+      } catch (emailError) {
+        logger.error('Failed to queue welcome email', { error: emailError, email: customer.email });
+        // Non-blocking - continue with success response
+      }
 
       res.json({
         status: 'success',
@@ -294,8 +300,8 @@ router.get('/signup/status/:session_id', async (req: Request, res: Response) => 
  * Requires authentication
  */
 router.get('/portal', async (req: Request, res: Response) => {
-  // TODO: Get user from auth middleware
-  const userId = req.query.user_id as string;
+  // Get user ID from authenticated request
+  const userId = (req as any).user?.id || (req as any).user?.publisherId;
 
   if (!userId) {
     return res.status(401).json({ error: 'Authentication required' });

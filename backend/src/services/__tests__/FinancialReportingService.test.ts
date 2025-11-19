@@ -30,7 +30,7 @@ describe('FinancialReportingService — paging & PII masking', () => {
     expect(Buffer.isBuffer(buf)).toBe(true);
     expect(buf.byteLength).toBeGreaterThan(0);
 
-    const calls = spy.mock.calls.map(args => JSON.stringify(args[1] || {}));
+    const calls = spy.mock.calls.map(args => JSON.stringify(args[0] || {}));
     // Ensure we never log raw emails in info logs
     for (const c of calls) {
       expect(c.includes('alice@example.com')).toBe(false);

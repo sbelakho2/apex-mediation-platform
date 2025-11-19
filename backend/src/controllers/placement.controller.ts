@@ -212,10 +212,26 @@ export const remove = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-  const { id } = req.params;
+    const { id } = req.params;
 
-    // TODO: Delete from database
-    logger.info(`Placement deleted: ${id}`);
+    if (!id || typeof id !== 'string') {
+      throw new AppError('Invalid placement ID', 400);
+    }
+
+    // Check if placement exists
+    const existing = await placementsRepo.getById(id);
+    if (!existing) {
+      throw new AppError('Placement not found', 404);
+    }
+
+    // Delete from database
+    const deleted = await placementsRepo.deleteById(id);
+    
+    if (!deleted) {
+      throw new AppError('Failed to delete placement', 500);
+    }
+
+    logger.info(`Placement deleted`, { placementId: id, appId: existing.app_id });
 
     res.json({
       success: true,
@@ -225,3 +241,6 @@ export const remove = async (
     next(error);
   }
 };
+
+// Alias for backward compatibility
+export const deletePlacement = remove;

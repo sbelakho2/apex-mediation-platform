@@ -27,10 +27,29 @@ export async function getOverview(req: Request, res: Response, next: NextFunctio
       return;
     }
 
-    // TODO: Replace with real DB-backed aggregations
-    const totalRevenue = 0; // guarded against divide-by-zero below
-    const totalImpressions = 0;
-    const totalClicks = 0;
+    // Fetch real aggregations from revenue_events table
+    const publisherId = req.user?.publisherId;
+    if (!publisherId) {
+      res.status(401).json({ success: false, error: 'Unauthorized' });
+      return;
+    }
+
+    const pool = (await import('../utils/postgres')).default;
+    const { rows } = await pool.query(
+      `SELECT 
+        COALESCE(SUM(revenue), 0) as total_revenue,
+        COALESCE(SUM(impressions), 0) as total_impressions,
+        COALESCE(SUM(clicks), 0) as total_clicks
+       FROM revenue_events
+       WHERE publisher_id = $1
+         AND ($2::timestamptz IS NULL OR event_date >= $2::date)
+         AND ($3::timestamptz IS NULL OR event_date <= $3::date)`,
+      [publisherId, startDate || null, endDate || null]
+    );
+
+    const totalRevenue = Number(rows[0]?.total_revenue || 0);
+    const totalImpressions = Number(rows[0]?.total_impressions || 0);
+    const totalClicks = Number(rows[0]?.total_clicks || 0);
 
     const ctr = totalImpressions > 0 ? totalClicks / totalImpressions : 0;
     const rpm = totalImpressions > 0 ? (totalRevenue / totalImpressions) * 1000 : 0;
@@ -74,9 +93,42 @@ export async function getKpis(req: Request, res: Response, next: NextFunction): 
       return;
     }
 
-    // TODO: Replace with ClickHouse-backed aggregation
-    const series: Array<{ ts: string; revenue: number; impressions: number; clicks: number; ctr: number; rpm: number }>
-      = [];
+    // Fetch time-series from revenue_events table
+    const publisherId = req.user?.publisherId;
+    if (!publisherId) {
+      res.status(401).json({ success: false, error: 'Unauthorized' });
+      return;
+    }
+
+    const pool = (await import('../utils/postgres')).default;
+    const dateFunc = granularity === 'hour' 
+      ? `date_trunc('hour', event_date)` 
+      : granularity === 'week'
+      ? `date_trunc('week', event_date)`
+      : `event_date`;
+
+    const { rows } = await pool.query(
+      `SELECT 
+        ${dateFunc} as ts,
+        COALESCE(SUM(revenue), 0) as revenue,
+        COALESCE(SUM(impressions), 0) as impressions,
+        COALESCE(SUM(clicks), 0) as clicks
+       FROM revenue_events
+       WHERE publisher_id = $1
+         AND event_date >= CURRENT_DATE - $2::integer * INTERVAL '1 day'
+       GROUP BY ts
+       ORDER BY ts DESC`,
+      [publisherId, days]
+    );
+
+    const series = rows.map((row: any) => ({
+      ts: row.ts.toISOString(),
+      revenue: Number(row.revenue),
+      impressions: Number(row.impressions),
+      clicks: Number(row.clicks),
+      ctr: Number(row.impressions) > 0 ? Number(row.clicks) / Number(row.impressions) : 0,
+      rpm: Number(row.impressions) > 0 ? (Number(row.revenue) / Number(row.impressions)) * 1000 : 0,
+    }));
 
     // Example empty-series guard: always return array (possibly empty), never null
     res.json({

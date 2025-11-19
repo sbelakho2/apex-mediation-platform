@@ -8,7 +8,7 @@
  */
 
 import { Router } from 'express';
-import { requireAuth } from '../middleware/auth';
+import { authenticate } from '../middleware/auth';
 import {
   storeCredentials,
   getCredentials,
@@ -21,7 +21,7 @@ import {
 const router = Router();
 
 // All BYO routes require authentication
-router.use(requireAuth);
+router.use(authenticate);
 
 // Network Credential Vault endpoints
 router.get('/credentials', listCredentials);

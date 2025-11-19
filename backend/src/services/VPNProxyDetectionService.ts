@@ -135,7 +135,7 @@ export class VPNProxyDetectionService {
     let confidence_score = 0;
 
     // Validate IP upfront (IPv4 or IPv6)
-    if (!this.isValidIp(request.ip_address)) {
+    if (!isValidIp(request.ip_address)) {
       return {
         is_valid: false,
         detected_country: null,
@@ -498,6 +498,48 @@ export class VPNProxyDetectionService {
       created_at: row.created_at,
     }));
   }
+
+  // Reverse DNS with cache + timeout
+  private async reverseLookupWithCache(
+    ip: string,
+    timeoutMs: number = Math.max(200, parseInt(process.env.VPN_RDNS_TIMEOUT_MS || '500', 10))
+  ): Promise<string[]> {
+    const now = Date.now();
+    const cached = this.reverseDnsCache.get(ip);
+    if (cached && cached.expiresAt > now) return cached.value;
+
+    const p = this.dnsReverse(ip);
+    const timed = new Promise<string[]>((resolve, reject) => {
+      const t = setTimeout(() => reject(new Error('rdns timeout')), timeoutMs);
+      p.then((v) => { clearTimeout(t); resolve(v); }).catch((e) => { clearTimeout(t); reject(e); });
+    });
+
+    try {
+      const value = await timed;
+      this.reverseDnsCache.set(ip, { value, expiresAt: now + this.cacheTtlMs });
+      return value;
+    } catch (err) {
+      // cache negative result briefly to avoid hammering DNS
+      this.reverseDnsCache.set(ip, { value: [], expiresAt: now + Math.min(2000, this.cacheTtlMs) });
+      throw err;
+    }
+  }
+
+  // ASN org lookup with cache
+  private async asnOrgLookupWithCache(ip: string): Promise<string | null> {
+    const now = Date.now();
+    const cached = this.asnOrgCache.get(ip);
+    if (cached && cached.expiresAt > now) return cached.value;
+    if (!this.geoipReader) return null;
+    try {
+      const res = await this.geoipReader.asn(ip);
+      const value = res.autonomousSystemOrganization || null;
+      this.asnOrgCache.set(ip, { value, expiresAt: now + this.cacheTtlMs });
+      return value;
+    } catch (e) {
+      return null;
+    }
+  }
 }
 
 // ----- Helpers -----
@@ -508,48 +550,4 @@ export function isValidIp(ip: string): boolean {
   return isIP(ip) !== 0;
 }
 
-// Reverse DNS with cache + timeout
-VPNProxyDetectionService.prototype['reverseLookupWithCache'] = async function (
-  this: VPNProxyDetectionService,
-  ip: string,
-  timeoutMs: number = Math.max(200, parseInt(process.env.VPN_RDNS_TIMEOUT_MS || '500', 10))
-): Promise<string[]> {
-  const now = Date.now();
-  const cached = this.reverseDnsCache.get(ip);
-  if (cached && cached.expiresAt > now) return cached.value;
 
-  const p = this.dnsReverse(ip);
-  const timed = new Promise<string[]>((resolve, reject) => {
-    const t = setTimeout(() => reject(new Error('rdns timeout')), timeoutMs);
-    p.then((v) => { clearTimeout(t); resolve(v); }).catch((e) => { clearTimeout(t); reject(e); });
-  });
-
-  try {
-    const value = await timed;
-    this.reverseDnsCache.set(ip, { value, expiresAt: now + this.cacheTtlMs });
-    return value;
-  } catch (err) {
-    // cache negative result briefly to avoid hammering DNS
-    this.reverseDnsCache.set(ip, { value: [], expiresAt: now + Math.min(2000, this.cacheTtlMs) });
-    throw err;
-  }
-};
-
-// ASN org lookup with cache
-VPNProxyDetectionService.prototype['asnOrgLookupWithCache'] = async function (
-  this: VPNProxyDetectionService,
-  ip: string
-): Promise<string | null> {
-  const now = Date.now();
-  const cached = this.asnOrgCache.get(ip);
-  if (cached && cached.expiresAt > now) return cached.value;
-  if (!this.geoipReader) return null;
-  try {
-    const res = await this.geoipReader.asn(ip);
-    const value = res.autonomousSystemOrganization || null;
-    this.asnOrgCache.set(ip, { value, expiresAt: now + this.cacheTtlMs });
-    return value;
-  } catch (e) {
-    return null;
-  }
-};

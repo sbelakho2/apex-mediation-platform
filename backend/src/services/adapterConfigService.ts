@@ -94,3 +94,122 @@ class AdapterConfigServiceImpl {
 
 export const adapterConfigService = new AdapterConfigServiceImpl();
 export default adapterConfigService;
+
+// ============================================================================
+// Public API Functions (used by adapter.controller)
+// These wrap the repository layer with formatting
+// ============================================================================
+
+import * as adapterConfigRepository from '../repositories/adapterConfigRepository';
+
+export interface FormattedAdapterConfig {
+  id: string;
+  adapterId: string;
+  adapterName: string;
+  enabled: boolean;
+  config: Record<string, unknown>;
+  updatedAt: string;
+}
+
+/**
+ * Format repository record into API response format
+ */
+function formatConfig(record: adapterConfigRepository.AdapterConfigWithDetails): FormattedAdapterConfig {
+  return {
+    id: record.id,
+    adapterId: record.adapter_id,
+    adapterName: record.adapter_name,
+    enabled: record.adapter_enabled,
+    config: record.config,
+    updatedAt: record.updated_at.toISOString(),
+  };
+}
+
+/**
+ * Get all adapter configs for a publisher
+ */
+export async function getAdapterConfigs(publisherId: string): Promise<FormattedAdapterConfig[]> {
+  const records = await adapterConfigRepository.findByPublisherId(publisherId);
+  return records.map(formatConfig);
+}
+
+/**
+ * Get a single adapter config by ID
+ */
+export async function getAdapterConfigById(
+  id: string,
+  publisherId: string
+): Promise<FormattedAdapterConfig | null> {
+  const record = await adapterConfigRepository.findById(id, publisherId);
+  return record ? formatConfig(record) : null;
+}
+
+/**
+ * Create a new adapter config
+ */
+export async function createAdapterConfig(
+  publisherId: string,
+  data: {
+    adapterId: string;
+    config: Record<string, unknown>;
+  }
+): Promise<FormattedAdapterConfig> {
+  // Check if already exists
+  const existing = await adapterConfigRepository.findByPublisherAndAdapter(
+    publisherId,
+    data.adapterId
+  );
+
+  if (existing) {
+    throw new Error('Adapter config already exists for this publisher');
+  }
+
+  // Create new config
+  const created = await adapterConfigRepository.create({
+    publisher_id: publisherId,
+    adapter_id: data.adapterId,
+    config: data.config,
+  });
+
+  // Fetch full details
+  const full = await adapterConfigRepository.findById(created.id, publisherId);
+
+  if (!full) {
+    throw new Error('Failed to retrieve created adapter config');
+  }
+
+  return formatConfig(full);
+}
+
+/**
+ * Update an existing adapter config
+ */
+export async function updateAdapterConfig(
+  id: string,
+  publisherId: string,
+  data: {
+    config: Record<string, unknown>;
+  }
+): Promise<FormattedAdapterConfig | null> {
+  const updated = await adapterConfigRepository.update(id, publisherId, {
+    config: data.config,
+  });
+
+  if (!updated) {
+    return null;
+  }
+
+  // Fetch full details
+  const full = await adapterConfigRepository.findById(id, publisherId);
+  return full ? formatConfig(full) : null;
+}
+
+/**
+ * Delete an adapter config
+ */
+export async function deleteAdapterConfig(
+  id: string,
+  publisherId: string
+): Promise<boolean> {
+  return adapterConfigRepository.deleteById(id, publisherId);
+}

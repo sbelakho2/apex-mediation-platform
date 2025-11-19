@@ -142,98 +142,6 @@ async function enqueueIfEnabled(kind: 'impressions' | 'clicks' | 'revenue', even
     return false;
   }
 }
-
-/**
- * POST /api/v1/analytics/events/impressions
- */
-export const recordImpressions = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-  try {
-    const publisherId = req.user?.publisherId; // may be undefined for SDK calls
-    const events = Array.isArray(req.body) ? req.body : (req.body?.events ?? []);
-    if (!Array.isArray(events) || events.length === 0) {
-      throw new AppError('No events provided', 400);
-    }
-    const enqueued = await enqueueIfEnabled('impressions', events, publisherId);
-    if (enqueued) { res.status(202).json({ success: true, queued: events.length }); return; }
-    await analyticsService.recordImpressions(events);
-    res.status(201).json({ success: true, inserted: events.length });
-  } catch (error) {
-    logger.error('Failed to record impressions', { error });
-    next(error);
-  }
-};
-
-/**
- * POST /api/v1/analytics/events/clicks
- */
-export const recordClicks = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-  try {
-    const publisherId = req.user?.publisherId;
-    const events = Array.isArray(req.body) ? req.body : (req.body?.events ?? []);
-    if (!Array.isArray(events) || events.length === 0) {
-      throw new AppError('No events provided', 400);
-    }
-    const enqueued = await enqueueIfEnabled('clicks', events, publisherId);
-    if (enqueued) { res.status(202).json({ success: true, queued: events.length }); return; }
-    await analyticsService.recordClicks(events);
-    res.status(201).json({ success: true, inserted: events.length });
-  } catch (error) {
-    logger.error('Failed to record clicks', { error });
-    next(error);
-  }
-};
-
-/**
- * POST /api/v1/analytics/events/revenue
- */
-export const recordRevenue = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-  try {
-    const publisherId = req.user?.publisherId;
-    const events = Array.isArray(req.body) ? req.body : (req.body?.events ?? []);
-    if (!Array.isArray(events) || events.length === 0) {
-      throw new AppError('No events provided', 400);
-    }
-    const enqueued = await enqueueIfEnabled('revenue', events, publisherId);
-    if (enqueued) { res.status(202).json({ success: true, queued: events.length }); return; }
-    await analyticsService.recordRevenue(events);
-    res.status(201).json({ success: true, inserted: events.length });
-  } catch (error) {
-    logger.error('Failed to record revenue', { error });
-    next(error);
-  }
-};
-
-/**
- * GET /api/v1/analytics/buffer-stats
- * Include queue metrics when available
- */
-export const getBufferStats = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-  try {
-    const base = await analyticsService.getBufferStats?.();
-    const stats: any = { ...(base || {}) };
-    try {
-      if (queueManager && queueManager.isReady()) {
-        const q = (queueManager as any).getQueue ? (queueManager as any).getQueue(QueueName.ANALYTICS_INGEST) : null;
-        if (q && typeof q.getWaitingCount === 'function') {
-          const [waiting, active, delayed, failed] = await Promise.all([
-            q.getWaitingCount?.() ?? 0,
-            q.getActiveCount?.() ?? 0,
-            q.getDelayedCount?.() ?? 0,
-            q.getFailedCount?.() ?? 0,
-          ]);
-          stats.queue = { waiting, active, delayed, failed };
-        }
-      }
-    } catch (e) {
-      // Non-fatal
-      stats.queue = { error: (e as Error).message };
-    }
-    res.json({ success: true, data: stats });
-  } catch (error) {
-    next(error);
-  }
-};
-
 // ========================================
 // Event Ingestion Endpoints
 // ========================================
@@ -313,7 +221,8 @@ const revenueEventSchema = z.object({
  */
 export const recordImpressions = async (
   req: Request,
-  res: Response
+  res: Response,
+  _next?: NextFunction
 ): Promise<void> => {
   try {
     const { events } = req.body as { events?: unknown };
@@ -363,7 +272,8 @@ export const recordImpressions = async (
  */
 export const recordClicks = async (
   req: Request,
-  res: Response
+  res: Response,
+  _next?: NextFunction
 ): Promise<void> => {
   try {
     const { events } = req.body as { events?: unknown };
@@ -411,7 +321,8 @@ export const recordClicks = async (
  */
 export const recordRevenue = async (
   req: Request,
-  res: Response
+  res: Response,
+  _next?: NextFunction
 ): Promise<void> => {
   try {
     const { events } = req.body as { events?: unknown };

@@ -424,9 +424,48 @@ cron.schedule('0 10 * * 1', async () => {
  */
 cron.schedule('0 10 1 * *', async () => {
   try {
-    console.log('[Cron] Sending monthly summaries...');
-    // TODO: Implement monthly summary generation
-    console.log('[Cron] Monthly summaries sent');
+    console.log('[Cron] Generating monthly summaries...');
+    
+    // Generate summary for previous month
+    const lastMonth = new Date();
+    lastMonth.setMonth(lastMonth.getMonth() - 1);
+    const startDate = new Date(lastMonth.getFullYear(), lastMonth.getMonth(), 1);
+    const endDate = new Date(lastMonth.getFullYear(), lastMonth.getMonth() + 1, 0);
+    
+    // Get all active publishers
+    const { rows: publishers } = await pool.query(
+      `SELECT id, email FROM users WHERE role = 'publisher' AND is_active = true`
+    );
+    
+    for (const publisher of publishers) {
+      try {
+        // Aggregate monthly metrics
+        const summary = await pool.query(`
+          SELECT 
+            COALESCE(SUM(revenue_usd), 0) as total_revenue,
+            COALESCE(SUM(impressions), 0) as total_impressions,
+            COALESCE(SUM(clicks), 0) as total_clicks,
+            COALESCE(AVG(ecpm_usd), 0) as avg_ecpm
+          FROM daily_aggregates
+          WHERE publisher_id = $1 
+            AND date >= $2 AND date <= $3
+        `, [publisher.id, startDate, endDate]);
+        
+        // Queue summary email
+        const redis = await import('../utils/redis');
+        await redis.default.lpush('email:notifications', JSON.stringify({
+          type: 'monthly_summary',
+          to: publisher.email,
+          publisherId: publisher.id,
+          period: lastMonth.toISOString().slice(0, 7),
+          metrics: summary.rows[0]
+        }));
+      } catch (publisherError) {
+        console.error(`[Cron] Failed to generate summary for ${publisher.id}:`, publisherError);
+      }
+    }
+    
+    console.log(`[Cron] Monthly summaries queued for ${publishers.length} publishers`);
   } catch (error) {
     console.error('[Cron] Error sending monthly summaries:', error);
   }

@@ -26,6 +26,10 @@ import type {
   EvaluateGuardrailsResponse,
   MigrationExperimentReport,
   MigrationExperimentShareLink,
+  NetworkCredential,
+  NetworkCredentialInput,
+  NetworkCredentialToken,
+  NetworkCredentialsList,
 } from '@/types'
 
 const USE_MOCK_API = process.env.NEXT_PUBLIC_USE_MOCK_API === 'true' && process.env.NODE_ENV !== 'production'
@@ -610,4 +614,50 @@ export const teamApi = {
   removeMember: (id: string) => apiClient.delete(`/team/members/${id}`),
   resendInvite: (id: string) => apiClient.post(`/team/members/${id}/resend`),
   listRoles: () => apiClient.get<TeamRoleDefinition[]>('/team/roles'),
+}
+
+// BYO (Bring Your Own) Network Credentials API
+export const byoApi = {
+  /**
+   * List all stored network credentials for the publisher
+   */
+  listCredentials: () =>
+    apiClient.get<NetworkCredentialsList>('/byo/credentials'),
+
+  /**
+   * Store or update network credentials
+   */
+  storeCredentials: (data: NetworkCredentialInput) =>
+    apiClient.post<{ credentialId: string }>('/byo/credentials', data),
+
+  /**
+   * Get metadata for a specific network's credentials
+   * Note: Does not return the actual credentials for security
+   */
+  getCredentials: (network: string) =>
+    apiClient.get<NetworkCredential>(`/byo/credentials/${network}`),
+
+  /**
+   * Generate a short-lived token for SDK authentication
+   * @param network - Network name (admob, unity, etc.)
+   * @param ttlMinutes - Token lifetime in minutes (default 15)
+   */
+  generateToken: (network: string, ttlMinutes?: number) =>
+    apiClient.post<NetworkCredentialToken>(`/byo/credentials/${network}/token`, {
+      ttlMinutes: ttlMinutes || 15,
+    }),
+
+  /**
+   * Rotate credentials for a network (create new version)
+   */
+  rotateCredentials: (network: string, newCredentials: Record<string, unknown>) =>
+    apiClient.post<{ version: number }>(`/byo/credentials/${network}/rotate`, {
+      newCredentials,
+    }),
+
+  /**
+   * Delete credentials for a network
+   */
+  deleteCredentials: (network: string) =>
+    apiClient.delete(`/byo/credentials/${network}`),
 }

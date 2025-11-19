@@ -10,11 +10,11 @@
         "prefixes": 2
       },
       {
-        "provider": "gcp",
+        "provider": "azure",
         "prefixes": 1
       },
       {
-        "provider": "azure",
+        "provider": "gcp",
         "prefixes": 1
       }
     ],
@@ -22,5 +22,5 @@
     "asn": 2,
     "userAgentPatterns": 3
   },
-  "generatedAt": "2025-11-19T17:11:38.348Z"
+  "generatedAt": "2025-11-19T22:12:26.702Z"
 }

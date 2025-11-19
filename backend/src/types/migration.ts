@@ -116,6 +116,8 @@ export interface MigrationSignedComparison {
     payload_base64: string;
     signature_base64: string;
     public_key_base64: string;
+    not_before?: string | null;
+    not_after?: string | null;
   };
 }
 

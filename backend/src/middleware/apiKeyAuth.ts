@@ -47,9 +47,9 @@ export async function apiKeyAuth(req: Request, res: Response, next: NextFunction
     // Attach minimal user context
     req.user = {
       userId: found.user.id,
+      publisherId: (found.user as any).publisherId || '',
       email: (found.user as any).email,
       role: (found.user as any).role,
-      organizationId: (found.user as any).organizationId,
     };
 
     // Record usage asynchronously
