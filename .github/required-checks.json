@@ -1,0 +1,10 @@
+{
+  "branch": "main",
+  "required": [
+    "ci-all",
+    "security-trivy",
+    "ml-pr",
+    "synthetic-probes"
+  ],
+  "notes": "Configure via GitHub → Settings → Branches → Branch protection → Require status checks to pass before merging."
+}

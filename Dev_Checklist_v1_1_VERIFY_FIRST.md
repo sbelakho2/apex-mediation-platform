@@ -19,16 +19,16 @@ BYO-credentials mediation platform with Cryptographic Transparency and Migration
 
 | Checklist item | Verify Present ☐ | Meets Acceptance ☐ | If Missing: Action | Owner | Status | Evidence / Link |
 | --- | --- | --- | --- | --- | --- | --- |
-| RACI defined for SDKs, Adapters, Auction, Observability, Reporting, Billing, Privacy, Security, SRE | ☐ | ☐ | Implement/refactor to spec; open PR with tests & runbook; link evidence |  |  |  |
-| Repository structure + CODEOWNERS; branch protection + required checks | ☐ | ☐ | Implement/refactor to spec; open PR with tests & runbook; link evidence |  |  |  |
-| Semantic versioning per surface (SDKs, APIs, Dashboard) | ☐ | ☐ | Implement/refactor to spec; open PR with tests & runbook; link evidence |  |  |  |
-| Issue templates for Features, Bugs, Runbooks, RCAs | ☐ | ☐ | Implement/refactor to spec; open PR with tests & runbook; link evidence |  |  |  |
-| Architecture Decision Records (ADR) for crypto log, BYO scope, billing model | ☐ | ☐ | Implement/refactor to spec; open PR with tests & runbook; link evidence |  |  |  |
-| Public status page and incident taxonomy (SEV1–SEV4) | ☐ | ☐ | Implement/refactor to spec; open PR with tests & runbook; link evidence |  |  |  |
-| Escalation/on-call rotation and paging runbook | ☐ | ☐ | Implement/refactor to spec; open PR with tests & runbook; link evidence |  |  |  |
-| Acceptance gates (alpha, beta, GA) per surface | ☐ | ☐ | Implement/refactor to spec; open PR with tests & runbook; link evidence |  |  |  |
-| Data retention & deletion SLAs by dataset type | ☐ | ☐ | Implement/refactor to spec; open PR with tests & runbook; link evidence |  |  |  |
-| Security reviews for cryptographic keys, billing, PII handling | ☐ | ☐ | Implement/refactor to spec; open PR with tests & runbook; link evidence |  |  |  |
+| RACI defined for SDKs, Adapters, Auction, Observability, Reporting, Billing, Privacy, Security, SRE | ☑ | ☑ | Implement/refactor to spec; open PR with tests & runbook; link evidence | Governance Council | Verified | `docs/Internal/Governance/RACI_MATRIX.md` |
+| Repository structure + CODEOWNERS; branch protection + required checks | ☑ | ☑ | Implement/refactor to spec; open PR with tests & runbook; link evidence | Platform Infra | Verified | `.github/CODEOWNERS`, `.github/required-checks.json`, `docs/CI/ENVIRONMENTS_AND_BRANCH_POLICY.md`, `docs/INDEX.md` |
+| Semantic versioning per surface (SDKs, APIs, Dashboard) | ☑ | ☑ | Implement/refactor to spec; open PR with tests & runbook; link evidence | Release Eng | Verified | `docs/Internal/Governance/SEMVER_POLICY.md`, `docs/Release/CI_RELEASE_GUIDE.md`, `docs/Internal/Development/DEVELOPMENT.md` |
+| Issue templates for Features, Bugs, Runbooks, RCAs | ☑ | ☑ | Implement/refactor to spec; open PR with tests & runbook; link evidence | DevRel | Verified | `.github/ISSUE_TEMPLATE/feature_request.md`, `.github/ISSUE_TEMPLATE/bug_report.md`, `.github/ISSUE_TEMPLATE/runbook.md`, `.github/ISSUE_TEMPLATE/rca.md` |
+| Architecture Decision Records (ADR) for crypto log, BYO scope, billing model | ☑ | ☑ | Implement/refactor to spec; open PR with tests & runbook; link evidence | Architecture | Verified | `docs/Internal/Architecture/ADRs/ADR-SB-04-Crypto-Transparency-Log.md`, `docs/Internal/Architecture/ADRs/ADR-SB-05-BYO-Scope.md`, `docs/Internal/Architecture/ADRs/ADR-SB-06-Billing-Model.md` |
+| Public status page and incident taxonomy (SEV1–SEV4) | ☑ | ☑ | Implement/refactor to spec; open PR with tests & runbook; link evidence | SRE | Verified | `monitoring/upptime.yml`, `docs/Monitoring/STATUS_PAGE_AND_INCIDENT_TAXONOMY.md` |
+| Escalation/on-call rotation and paging runbook | ☑ | ☑ | Implement/refactor to spec; open PR with tests & runbook; link evidence | SRE | Verified | `docs/Internal/Operations/ON_CALL_RUNBOOK.md` |
+| Acceptance gates (alpha, beta, GA) per surface | ☑ | ☑ | Implement/refactor to spec; open PR with tests & runbook; link evidence | Governance Council | Verified | `docs/Internal/Governance/ACCEPTANCE_GATES.md` |
+| Data retention & deletion SLAs by dataset type | ☑ | ☑ | Implement/refactor to spec; open PR with tests & runbook; link evidence | Privacy/Security | Verified | `docs/Internal/Security/DATA_RETENTION_MATRIX.md`, `docs/Internal/Security/DATA_MAP.md` |
+| Security reviews for cryptographic keys, billing, PII handling | ☑ | ☑ | Implement/refactor to spec; open PR with tests & runbook; link evidence | Security Eng | Verified | `docs/Internal/Security/SECURITY_REVIEW_REGISTER.md` |
 
 ## 1. Business Model & Billing (BYO)
 

@@ -165,6 +165,14 @@ Docs/
 - **SALES_AUTOMATION_QUICK_REF.md** - Quick reference
 - **SALES_AUTOMATION_OPERATIONS.md** - Operations guide
 
+### Governance & Operations
+- `docs/Internal/Governance/RACI_MATRIX.md` — Ownership map for SDKs, adapters, auction, observability, reporting, billing, privacy, security, SRE.
+- `docs/Internal/Governance/ACCEPTANCE_GATES.md` — Alpha/Beta/GA criteria per surface with evidence requirements.
+- `docs/Internal/Governance/SEMVER_POLICY.md` — Semantic versioning rules per surface plus release prerequisites.
+- `docs/Internal/Security/DATA_RETENTION_MATRIX.md` — Dataset-specific retention/deletion SLAs (usage, transparency, telemetry, billing docs).
+- `docs/Internal/Security/SECURITY_REVIEW_REGISTER.md` — Schedule + findings for cryptographic keys, billing, and PII reviews.
+- `docs/Internal/Operations/ON_CALL_RUNBOOK.md` — PagerDuty rotation, escalation steps, communication duties.
+
 ---
 
 ## 🏗️ Architecture Documentation
@@ -194,10 +202,10 @@ Docs/
 ## 📚 Runbooks
 
 Operational procedures for production systems:
-- Incident response procedures
-- Disaster recovery
-- Scaling procedures
-- Database maintenance
+- `docs/Monitoring/STATUS_PAGE_AND_INCIDENT_TAXONOMY.md` — status page updates + SEV policy.
+- `docs/Internal/Operations/ON_CALL_RUNBOOK.md` — PagerDuty rotation & escalation.
+- `docs/Runbooks/AI_COST_CONTROLS.md` — automation guardrails.
+- Disaster recovery, scaling, and database maintenance checklists (see folder for full list).
 - Security incident handling
 
 ---

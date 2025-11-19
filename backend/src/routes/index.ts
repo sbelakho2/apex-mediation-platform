@@ -24,6 +24,7 @@ import keysRoutes from './keys.routes';
 import integrationsRoutes from './integrations.routes';
 import flagsRoutes from './flags.routes';
 import dashboardRoutes from './dashboard.routes';
+import byoRoutes from './byo.routes';
 import { killSwitchGuard } from '../middleware/featureFlags';
 
 const router = Router();
@@ -60,5 +61,6 @@ router.use('/billing', billingRoutes);
 router.use('/migration', migrationRoutes);
 router.use('/admin', adminRoutes);
 router.use('/privacy', privacyRoutes);
+router.use('/byo', byoRoutes); // BYO model credential vault & transparency
 
 export default router;

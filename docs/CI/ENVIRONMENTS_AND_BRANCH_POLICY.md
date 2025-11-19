@@ -27,6 +27,15 @@ Require the following status checks to pass before merging:
 
 See .github/required-checks.json for exact job names.
 
+### How to configure branch protection
+1. Navigate to **GitHub → Settings → Branches**.
+2. Edit the `main` (and `master` if applicable) protection rule.
+3. Enable **"Require status checks to pass before merging"** and paste the list from `.github/required-checks.json`.
+4. Enable **"Require review from Code Owners"** to enforce `.github/CODEOWNERS` coverage.
+5. Lock force-pushes and deletions.
+
+` .github/required-checks.json` is the canonical manifest consumed by tooling and referenced from the VERIFY-FIRST checklist.
+
 ## Secrets
 Store environment‑specific secrets using GitHub Environments (dev/staging/prod):
 - GITHUB_TOKEN (default)

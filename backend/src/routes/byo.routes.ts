@@ -1,0 +1,43 @@
+/**
+ * BYO (Bring Your Own) Routes
+ * 
+ * API routes for BYO model services:
+ * - Network credential vault (credential management)
+ * - Transparency receipts (cryptographic audit trail)
+ * - Network report ingestion (AdMob, Unity)
+ */
+
+import { Router } from 'express';
+import { requireAuth } from '../middleware/auth';
+import {
+  storeCredentials,
+  getCredentials,
+  generateToken,
+  rotateCredentials,
+  deleteCredentials,
+  listCredentials,
+} from '../controllers/credentials.controller';
+
+const router = Router();
+
+// All BYO routes require authentication
+router.use(requireAuth);
+
+// Network Credential Vault endpoints
+router.get('/credentials', listCredentials);
+router.post('/credentials', storeCredentials);
+router.get('/credentials/:network', getCredentials);
+router.post('/credentials/:network/token', generateToken);
+router.post('/credentials/:network/rotate', rotateCredentials);
+router.delete('/credentials/:network', deleteCredentials);
+
+// Transparency Receipts endpoints (reuse existing transparency routes)
+// GET /api/v1/transparency/receipts/:placementId - already exists
+// POST /api/v1/transparency/receipts/verify - already exists
+
+// Network Report Ingestion endpoints
+// POST /api/v1/byo/ingestion/admob - AdMob CSV upload
+// POST /api/v1/byo/ingestion/unity - Unity API fetch
+// Note: Implementation deferred to next phase for proper controller/validation setup
+
+export default router;
