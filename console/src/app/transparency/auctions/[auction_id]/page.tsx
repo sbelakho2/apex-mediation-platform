@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { ArrowLeft, Download, RefreshCcw } from 'lucide-react'
 import { transparencyApi, type TransparencyAuction, type VerifyResult } from '../../../../lib/transparency'
-import { CopyButton, VerifyBadge, Skeleton, Section, Container } from '../../../../components/ui'
+import { CopyButton, VerifyBadge, Skeleton, Section, Container, PageHeader } from '../../../../components/ui'
 
 const AUCTION_DETAIL_OVERVIEW_SKELETON_KEYS = ['auction-overview-1', 'auction-overview-2', 'auction-overview-3', 'auction-overview-4']
 const CANONICAL_PARSE_LIMIT = 200_000 // ~200 KB
@@ -104,28 +104,20 @@ export default function TransparencyAuctionDetailPage({ params }: { params: { au
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <header className="bg-white border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <div className="flex items-center gap-4 mb-2">
-            <Link 
-              href="/transparency/auctions"
-              className="inline-flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900 transition-colors"
-            >
-              <ArrowLeft className="h-4 w-4" />
-              Back to Auctions
-            </Link>
-          </div>
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-primary-600">Transparency System</p>
-              <h1 className="text-3xl font-semibold text-gray-900 tracking-tight">Auction Detail</h1>
-              <p className="text-sm text-gray-600 mt-1">
-                Cryptographic verification and complete auction record
-              </p>
-            </div>
-          </div>
-        </div>
-      </header>
+      <PageHeader
+        kicker="Transparency System"
+        title="Auction Detail"
+        subtitle="Cryptographic verification and complete auction record"
+        actions={
+          <Link
+            href="/transparency/auctions"
+            className="inline-flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900 transition-colors"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back to Auctions
+          </Link>
+        }
+      />
 
       <Section>
         <Container>

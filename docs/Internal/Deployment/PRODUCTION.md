@@ -16,7 +16,7 @@ This document outlines the final granular steps required to move the Ad-Project 
     - [ ] Mintegral (`mintegral`)
     - [ ] AdColony (`adcolony`)
     - [ ] Tapjoy (`tapjoy`)
-    - [ ] InMobi (`inmobi`)
+    - [ ] Moloco (`moloco`)
     - [ ] Fyber (`fyber`)
     - [ ] Smaato (`smaato`)
     - [ ] Amazon Publisher Services (`amazon`)
@@ -31,7 +31,7 @@ This document outlines the final granular steps required to move the Ad-Project 
     - [ ] Implement `MintegralAdapter.kt`
     - [ ] Implement `AdColonyAdapter.kt`
     - [ ] Implement `TapjoyAdapter.kt`
-    - [ ] Implement `InMobiAdapter.kt`
+    - [ ] Implement `MolocoAdapter.kt`
     - [ ] Implement `FyberAdapter.kt`
     - [ ] Implement `SmaatoAdapter.kt`
     - [ ] Implement `AmazonAdapter.kt`
@@ -42,7 +42,7 @@ This document outlines the final granular steps required to move the Ad-Project 
     - [ ] Implement `MintegralAdapter.swift`
     - [ ] Implement `AdColonyAdapter.swift`
     - [ ] Implement `TapjoyAdapter.swift`
-    - [ ] Implement `InMobiAdapter.swift`
+    - [ ] Implement `MolocoAdapter.swift`
     - [ ] Implement `FyberAdapter.swift`
     - [ ] Implement `SmaatoAdapter.swift`
     - [ ] Implement `AmazonAdapter.swift`

@@ -959,21 +959,21 @@ Notes:
 - Do not paste secrets into code or docs. Use environment variables.
 - Sandbox/official endpoints to be configured during FT phase.
 
-### InMobi — Development placeholders
-Purpose: Enable S2S bidding via placeholder adapter for offline conformance and dev.
+### Moloco — Development placeholders
+Purpose: Enable Moloco Cloud demand via placeholder adapter for offline conformance and dev.
 
 Required fields (dev/local):
-- INMOBI_ACCOUNT_ID — account identifier
-- INMOBI_API_KEY — API key (mask in logs; do not commit)
+- MOLOCO_SEAT_ID — Moloco seat identifier
+- MOLOCO_API_KEY — API key (mask in logs; do not commit)
 
-Adapter wiring (Go backend): backend/auction/internal/bidders/inmobi.go
+Adapter wiring (Go backend): backend/auction/internal/bidders/moloco.go
 - Supports test_endpoint override for offline tests
 - Standardized resiliency and taxonomy; circuit breaker enabled; metrics/tracing/debugger hooks
 
 Configuration example (dev):
 ```
-INMOBI_ACCOUNT_ID=your_account_id
-INMOBI_API_KEY=your_api_key
+MOLOCO_SEAT_ID=your_seat
+MOLOCO_API_KEY=your_api_key
 ```
 
 ---
@@ -996,7 +996,7 @@ INMOBI_API_KEY=your_api_key
 | Pangle (Bytedance)     | S2S          | interstitial, rewarded, banner    | iOS, Android          | App ID, API Key                     | 5s              |
 | Meta Audience Network  | S2S          | interstitial, rewarded, banner    | iOS, Android          | App ID, App Secret                  | 5s              |
 | Mintegral              | S2S          | interstitial, rewarded, banner    | iOS, Android          | App ID, API Key                     | 5s              |
-| InMobi                 | S2S          | interstitial, rewarded, banner    | iOS, Android          | Account ID, API Key                 | 5s              |
+| Moloco                 | S2S          | interstitial, rewarded            | iOS, Android          | Seat ID, API Key                    | 5s              |
 
 Notes:
 - All adapters adhere to the normalized NoBid taxonomy: timeout, network_error, status_XXX, no_fill, circuit_open, error.

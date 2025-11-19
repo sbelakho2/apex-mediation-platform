@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { listBillingAudit, type AuditEntry } from '@/lib/admin'
 import Pagination from '@/components/ui/Pagination'
-import { Section, Container } from '@/components/ui'
+import { Section, Container, PageHeader } from '@/components/ui'
 
 function escapeCsvField(value: unknown): string {
   const s = String(value ?? '')
@@ -56,8 +56,10 @@ export default function AdminAuditPage() {
   }, [page])
 
   return (
-    <Section>
-      <Container>
+    <>
+      <PageHeader kicker="Admin" title="Billing Audit" subtitle="Recent entries from the billing_audit table." />
+      <Section>
+        <Container>
       <div className="bg-white border rounded-lg">
         <div className="p-6">
           <h2 className="text-xl font-semibold text-gray-900">Billing Audit Log</h2>
@@ -135,8 +137,9 @@ export default function AdminAuditPage() {
           <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />
         </div>
       </div>
-      </Container>
-    </Section>
+        </Container>
+      </Section>
+    </>
   )
 }
 

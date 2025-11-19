@@ -747,7 +747,7 @@ P2 — Scale out, Reconciliation, Analytics (12–20 weeks)
   - [x] Pangle (Bytedance) — STATUS: exists (pangle.go); conformance in pangle_conformance_test.go
   - [x] Meta Audience Network — STATUS: exists (meta.go); conformance in adapter_conformance_test.go
   - [x] Mintegral — STATUS: exists (mintegral.go); conformance in mintegral_conformance_test.go
-  - [x] InMobi — STATUS: exists (inmobi.go); conformance in inmobi_conformance_test.go
+  - [x] Moloco — STATUS: exists (moloco.go); conformance in moloco_conformance_test.go
   
   Deprecated/waived (documented):
   - [x] MoPub — legacy/sunset (waived)

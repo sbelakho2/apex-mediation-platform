@@ -108,7 +108,7 @@ class AdapterRegistry(
             "com.rivalapexmediation.adapter.mintegral",
             "com.rivalapexmediation.adapter.adcolony",
             "com.rivalapexmediation.adapter.tapjoy",
-            "com.rivalapexmediation.adapter.inmobi",
+            "com.rivalapexmediation.adapter.moloco",
             "com.rivalapexmediation.adapter.fyber",
             "com.rivalapexmediation.adapter.smaato",
             "com.rivalapexmediation.adapter.amazon"

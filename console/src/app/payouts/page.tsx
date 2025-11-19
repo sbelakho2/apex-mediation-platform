@@ -21,7 +21,7 @@ import {
   PAYOUT_STATUS_META,
   PAYOUTS_PAGE_SIZE,
 } from '@/constants/payouts'
-import { Section, Container } from '@/components/ui'
+import { Section, Container, PageHeader } from '@/components/ui'
 
 const PAYOUT_ALLOWED_ROLES: Role[] = ['admin', 'publisher']
 
@@ -294,39 +294,24 @@ export default function PayoutsPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <header className="bg-white border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="h-12 w-12 rounded-lg bg-primary-50 text-primary-600 flex items-center justify-center">
-                <DollarSign className="h-6 w-6" aria-hidden={true} />
-              </div>
-              <div>
-                <p className="text-sm font-medium text-primary-600">Finance</p>
-                <h1 className="text-3xl font-semibold text-gray-900 tracking-tight">Payouts</h1>
-                <p className="text-sm text-gray-600 mt-1">
-                  Track payment history and upcoming scheduled payouts.
-                </p>
-              </div>
-            </div>
-            <div className="flex flex-col items-end">
-              <button
-                type="button"
-                onClick={handleExportCSV}
-                className="btn btn-outline flex items-center gap-2"
-              >
-                <Download className="h-4 w-4" aria-hidden={true} />
-                Export CSV
-              </button>
-              {exportError && (
-                <p className="text-sm text-red-600 mt-2" role="alert">
-                  {exportError}
-                </p>
-              )}
-            </div>
+      <PageHeader
+        kicker="Finance"
+        title="Payouts"
+        subtitle="Track payment history and upcoming scheduled payouts."
+        actions={
+          <div className="flex flex-col items-end">
+            <button type="button" onClick={handleExportCSV} className="btn btn-outline flex items-center gap-2">
+              <Download className="h-4 w-4" aria-hidden={true} />
+              Export CSV
+            </button>
+            {exportError && (
+              <p className="text-sm text-red-600 mt-2" role="alert">
+                {exportError}
+              </p>
+            )}
           </div>
-        </div>
-      </header>
+        }
+      />
 
       <Section>
         <Container className="space-y-6">

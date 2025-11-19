@@ -21,7 +21,7 @@ namespace RivalApex.Mediation.Adapters
             "mintegral",
             "adcolony",
             "tapjoy",
-            "inmobi",
+            "moloco",
             "fyber",
             "smaato",
             "amazon"

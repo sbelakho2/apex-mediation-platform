@@ -75,7 +75,7 @@ public final class AdapterRegistry {
             "mintegral": MintegralAdapter.self,
             "adcolony": AdColonyAdapter.self,
             "tapjoy": TapjoyAdapter.self,
-            "inmobi": InMobiAdapter.self,
+            "moloco": MolocoAdapter.self,
             "fyber": FyberAdapter.self,
             "smaato": SmaatoAdapter.self,
             "amazon": AmazonAdapter.self

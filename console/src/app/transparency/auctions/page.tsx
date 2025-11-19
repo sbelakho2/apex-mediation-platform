@@ -7,7 +7,7 @@ import {
   sanitizeFilters,
   type AuctionsResponse,
 } from './filterUtils'
-import { Section, Container } from '@/components/ui'
+import { Section, Container, PageHeader } from '@/components/ui'
 
 type PageProps = {
   searchParams?: Record<string, string | string[] | undefined>
@@ -46,15 +46,22 @@ export default async function TransparencyAuctionsPage({ searchParams = {} }: Pa
   }
 
   return (
-    <Section>
-      <Container>
-        <AuctionsClient
-          initialPage={safePage}
-          initialFilters={sanitizedFilters}
-          initialData={initialData}
-          initialError={initialError}
-        />
-      </Container>
-    </Section>
+    <>
+      <PageHeader
+        kicker="Transparency System"
+        title="Auctions"
+        subtitle="Live auction samples with verification hooks"
+      />
+      <Section>
+        <Container>
+          <AuctionsClient
+            initialPage={safePage}
+            initialFilters={sanitizedFilters}
+            initialData={initialData}
+            initialError={initialError}
+          />
+        </Container>
+      </Section>
+    </>
   )
 }

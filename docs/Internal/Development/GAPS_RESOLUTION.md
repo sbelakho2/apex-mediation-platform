@@ -221,7 +221,7 @@ func (ae *AuctionEngine) runHeaderBidding(ctx context.Context, req BidRequest) (
 - [ ] Implement adapter health checks
 - [ ] Add retry logic for transient failures
 - [ ] Create adapter performance dashboard
-- [ ] Add more networks (Vungle, AdColony, Chartboost, InMobi)
+- [ ] Add more networks (Vungle, AdColony, Chartboost, Moloco)
 - [ ] Implement S2S (server-to-server) callbacks
 - [ ] Add creative caching
 - [ ] Implement bid response validation

@@ -5,7 +5,7 @@ Overview
 - All 15 networks are “accessible” for web via the server‑side mediation layer, while the Web SDK focuses on consent propagation, request/response validation, and rendering.
 
 Supported Networks (15)
-- AdMob, AppLovin, Unity Ads, ironSource, Facebook (Meta Audience Network), Vungle, Chartboost, Pangle, Mintegral, AdColony, Tapjoy, InMobi, Fyber, Smaato, Amazon Publisher Services.
+- AdMob, AppLovin, Unity Ads, ironSource, Facebook (Meta Audience Network), Vungle, Chartboost, Pangle, Mintegral, AdColony, Tapjoy, Moloco, Fyber, Smaato, Amazon Publisher Services.
 
 How it works
 1. Your page initializes the Web SDK and sets consent if applicable.

@@ -10,7 +10,7 @@ export const SUPPORTED_NETWORKS = [
   'mintegral',
   'adcolony',
   'tapjoy',
-  'inmobi',
+  'moloco',
   'fyber',
   'smaato',
   'amazon',

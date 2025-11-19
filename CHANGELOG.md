@@ -1223,3 +1223,38 @@ Backward compatibility
 - Legacy RTB engine remains a fallback path; orchestrator remains the production path when enabled.
 
 ---
+
+---
+Changelog — Placements OpenAPI, PATCH route, Console headers, deepMerge tests (2025-11-19)
+
+Summary
+- Adds finalized OpenAPI documentation for Placements, introduces `PATCH /api/v1/placements/{id}` with deep‑merge semantics, unifies Console page headers, and adds unit tests for the JSON deep‑merge utility. Includes deployment note for migration `022_placement_config.sql`.
+
+What changed (highlights)
+- OpenAPI (backend/openapi.yaml)
+  - Consolidated to a single `components` block; added `Placement`, `PlacementConfig`, `PlacementListResponse`, `PlacementCreateRequest`, and `PlacementUpdateRequest` schemas.
+  - Documented endpoints: `/placements` (GET list with pagination, POST create) and `/placements/{id}` (GET, PUT, PATCH, DELETE).
+  - PATCH semantics are explicit: objects deep‑merge, arrays replace, primitives replace; examples added for pricing and SDK IDs.
+- Backend API & repository
+  - `PATCH /api/v1/placements/:id` handler implemented with Zod validation and deep‑merge of `config`.
+  - Repository reads/writes `placements.config` JSONB with safe fallback; list returns `{ items, total, page, pageSize }`.
+- Tests
+  - Added Jest unit tests for `backend/src/utils/deepMerge.ts` covering object merge, array replacement, primitive replacement, and omission of `undefined` in PATCH semantics.
+- Console UI
+  - Adopted unified `PageHeader` on:
+    - `/transparency/auctions` (list)
+    - `/transparency/auctions/[auction_id]` (detail)
+    - `/payouts`
+    - `/admin/audit`
+  - Continued usage of `Section` + `Container` for consistent spacing.
+
+Deployment notes
+- Apply migration `backend/migrations/022_placement_config.sql` before rolling out the new PATCH behavior in production. The change is backward‑compatible; the `config` field is optional in responses.
+
+Validation and QA
+- OpenAPI renders without unresolved `$ref` warnings; Swagger UI shows all placement endpoints and schemas.
+- Backend: `npm run test --workspace backend` executes deep‑merge tests; repository/controller smoke tested locally.
+- Console: `npm run lint --workspace console` passes with updated ESLint config; headers render consistently across pages.
+
+Backward compatibility
+- All changes are additive. Existing consumers remain compatible; `config` is optional and PATCH is a new partial‑update path.

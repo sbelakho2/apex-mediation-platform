@@ -29,7 +29,7 @@ object CtvAdapterRegistry {
         "mintegral",
         "adcolony",
         "tapjoy",
-        "inmobi",
+        "moloco",
         "fyber",
         "smaato",
         "amazon"

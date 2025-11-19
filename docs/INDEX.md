@@ -4,6 +4,8 @@
 
 > **FIX-10 Governance:** Status claims must reference both `docs/Internal/Development/AD_PROJECT_FILE_ANALYSIS.md` (inventory) and `docs/Internal/Development/FIXES.md` (ordered backlog). Deployment readiness is centralized in `docs/Internal/Deployment/PROJECT_STATUS.md`.
 
+> **VERIFY-FIRST:** Any documentation update must first confirm scope against `Dev_Checklist_v1_1_VERIFY_FIRST.md`. Mark the checklist rows as verified _before_ asserting completion inside the docs below.
+
 ---
 
 ## 📁 Documentation Structure

@@ -31,5 +31,5 @@ Supported networks
 - The Web SDK surfaces the list of parity networks with mobile/CTV via SUPPORTED_NETWORKS export.
 - Programmatic API:
   - import { SUPPORTED_NETWORKS, getSupportedAdapters } from '@rivalapex/web-sdk'
-  - getSupportedAdapters() returns an array of 15 network identifiers: admob, applovin, unity, ironsource, facebook, vungle, chartboost, pangle, mintegral, adcolony, tapjoy, inmobi, fyber, smaato, amazon.
+  - getSupportedAdapters() returns an array of 15 network identifiers: admob, applovin, unity, ironsource, facebook, vungle, chartboost, pangle, mintegral, adcolony, tapjoy, moloco, fyber, smaato, amazon.
 - See also: docs/Adapters/SUPPORTED_NETWORKS.md in the repository for cross-platform details and code locations.

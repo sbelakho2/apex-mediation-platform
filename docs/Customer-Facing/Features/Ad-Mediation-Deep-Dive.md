@@ -40,7 +40,7 @@ ApexMediation's mediation platform acts as an intelligent intermediary between y
 - Chartboost
 
 **Tier 2 Networks:**
-- InMobi
+- Moloco
 - Tapjoy
 - Fyber
 - Smaato
@@ -451,7 +451,7 @@ Different networks perform better in different regions:
 US/Canada: AdMob, Meta (high CPM)
 Europe: Unity, AppLovin
 Asia: Vungle, Pangle
-Emerging: InMobi, Fyber
+Emerging: Moloco, Fyber
 ```
 
 ApexMediation automatically optimizes network priority by geo.

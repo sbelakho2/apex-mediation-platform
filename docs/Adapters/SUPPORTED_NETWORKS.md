@@ -17,7 +17,7 @@ Overview
   9. Mintegral
   10. AdColony
   11. Tapjoy
-  12. InMobi
+  12. Moloco
   13. Fyber
   14. Smaato
   15. Amazon Publisher Services
@@ -26,7 +26,7 @@ Android (core)
 - Discovery via reflection in: sdk/core/android/src/main/kotlin/adapter/AdapterRegistry.kt
 - Adapter implementations (one per network):
   - sdk/core/android/src/main/kotlin/com/rivalapexmediation/adapter/<network>/Adapter.kt
-  - Present for: admob, applovin, unity, ironsource, facebook, vungle, chartboost, pangle, mintegral, adcolony, tapjoy, inmobi, fyber, smaato, amazon
+  - Present for: admob, applovin, unity, ironsource, facebook, vungle, chartboost, pangle, mintegral, adcolony, tapjoy, moloco, fyber, smaato, amazon
 
 iOS / tvOS
 - Registry: sdk/core/ios/Sources/Adapter/AdapterRegistry.swift (registerBuiltInAdapters)

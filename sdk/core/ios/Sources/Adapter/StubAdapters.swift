@@ -68,7 +68,7 @@ public final class PangleAdapter: BaseStubAdapter { public required init() { sup
 public final class MintegralAdapter: BaseStubAdapter { public required init() { super.init(networkName: "mintegral", requiredConfigKey: "app_id") } }
 public final class AdColonyAdapter: BaseStubAdapter { public required init() { super.init(networkName: "adcolony", requiredConfigKey: "app_id") } }
 public final class TapjoyAdapter: BaseStubAdapter { public required init() { super.init(networkName: "tapjoy", requiredConfigKey: "sdk_key") } }
-public final class InMobiAdapter: BaseStubAdapter { public required init() { super.init(networkName: "inmobi", requiredConfigKey: "account_id") } }
+public final class MolocoAdapter: BaseStubAdapter { public required init() { super.init(networkName: "moloco", requiredConfigKey: "seat_id") } }
 public final class FyberAdapter: BaseStubAdapter { public required init() { super.init(networkName: "fyber", requiredConfigKey: "app_id") } }
 public final class SmaatoAdapter: BaseStubAdapter { public required init() { super.init(networkName: "smaato", requiredConfigKey: "publisher_id") } }
 public final class AmazonAdapter: BaseStubAdapter { public required init() { super.init(networkName: "amazon", requiredConfigKey: "app_key") } }

@@ -1,6 +1,6 @@
 0) Scope (what “done” means)
 
-Adapters for: InMobi, ironSource (LevelPlay as demand), Vungle/Liftoff Monetize, Tapjoy, Smaato, Pangle, Mintegral, Fyber/FairBid, Meta Audience Network, Chartboost, AppLovin/MAX (as demand), Amazon Ads/APS/DTB, AdMob, AdColony.
+Adapters for: Moloco, ironSource (LevelPlay as demand), Vungle/Liftoff Monetize, Tapjoy, Smaato, Pangle, Mintegral, Fyber/FairBid, Meta Audience Network, Chartboost, AppLovin/MAX (as demand), Amazon Ads/APS/DTB, AdMob, AdColony.
 
 Formats GA: Interstitial, Rewarded.
 Formats Beta/Optional: Banner/MREC, App-Open.
@@ -27,7 +27,7 @@ interface AdNetworkAdapter {
 
 Data contracts
 AdapterConfig {
-  partner: "inmobi" | "ironsource" | ... ,
+  partner: "moloco" | "ironsource" | ... ,
   credentials: { key: string, secret?: string, appId?: string, accountIds?: object },
   placements: { [placementAlias: string]: partnerPlacementId },
   privacy: ConsentStateDefaults,
@@ -206,13 +206,13 @@ Map quartile beacons and completion to standard events; pass device-appropriate 
 
 For each partner below: credentials/config fields the adapter must accept, privacy flags to forward, format expectations, and notable behaviors to implement. (Names are illustrative; match vendor keys exactly in your mapping layer.)
 
-InMobi
+Moloco
 
-Credentials: accountId, siteId/appId, placementIds{}.
+Credentials: seatId, apiKey, placementIds{}.
 
-Privacy: set GDPR/US strings; apply COPPA flag.
+Privacy: forward GDPR/US privacy flags; respect COPPA toggles.
 
-Notes: where token-based bidding is offered, support getBidToken() via RequestMeta.
+Notes: REST S2S bidder; include request fingerprint (device, ua, ip) per Moloco spec and honor bid token expirations.
 
 ironSource (LevelPlay as demand)
 

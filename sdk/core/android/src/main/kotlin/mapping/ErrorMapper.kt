@@ -11,15 +11,15 @@ import com.rivalapexmediation.sdk.contract.ErrorCode
 object ErrorMapper {
     
     /**
-     * InMobi error mapping
+     * Moloco error mapping
      */
-    fun mapInMobiError(code: Int, message: String): AdapterError {
+    fun mapMolocoError(code: Int, message: String): AdapterError {
         return when (code) {
-            1001 -> AdapterError.Recoverable(ErrorCode.NETWORK_ERROR, "InMobi network error", code.toString())
-            1002 -> AdapterError.Fatal(ErrorCode.NO_FILL, "InMobi no fill", code.toString())
-            1003 -> AdapterError.Fatal(ErrorCode.CONFIG, "InMobi invalid request", code.toString())
-            1004 -> AdapterError.Recoverable(ErrorCode.TIMEOUT, "InMobi request timeout", code.toString())
-            else -> AdapterError.Recoverable(ErrorCode.ERROR, "InMobi error: $message", code.toString())
+            3001 -> AdapterError.Recoverable(ErrorCode.NETWORK_ERROR, "Moloco network error", code.toString())
+            3002 -> AdapterError.Fatal(ErrorCode.NO_FILL, "Moloco no fill", code.toString())
+            3003 -> AdapterError.Fatal(ErrorCode.CONFIG, "Moloco invalid request", code.toString())
+            3004 -> AdapterError.Recoverable(ErrorCode.TIMEOUT, "Moloco timeout", code.toString())
+            else -> AdapterError.Recoverable(ErrorCode.ERROR, "Moloco error: $message", code.toString())
         }
     }
     

@@ -5,6 +5,192 @@ info:
 servers:
   - url: http://localhost:4000/api/v1
 paths:
+  /placements:
+    get:
+      summary: List placements
+      description: Returns a paginated list of placements for the authenticated publisher. Includes the `config` document when present.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: integer
+            minimum: 1
+          description: Page number (1-based)
+        - in: query
+          name: pageSize
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+          description: Page size (default 50, max 200)
+        - in: query
+          name: format
+          schema:
+            type: string
+            enum: [banner, interstitial, rewarded, native]
+          description: Optional filter by placement type/format
+      responses:
+        '200':
+          description: Paginated placement list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/PlacementListResponse'
+    post:
+      summary: Create a placement
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlacementCreateRequest'
+      responses:
+        '201':
+          description: Placement created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/Placement'
+        '400':
+          description: Invalid input
+  /placements/{id}:
+    get:
+      summary: Get placement
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Placement details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/Placement'
+        '404':
+          description: Not found
+    put:
+      summary: Update placement
+      description: Updates top-level fields and optionally replaces the full `config` document.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlacementUpdateRequest'
+      responses:
+        '200':
+          description: Updated placement
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/Placement'
+        '400':
+          description: Invalid input
+        '404':
+          description: Not found
+    patch:
+      summary: Patch placement (deep-merge config)
+      description: |
+        Partially updates a placement. Top-level fields like `name`/`status` are updated directly. When a `config` object is provided, it is deep-merged with the existing config using non-destructive semantics: nested objects are merged; arrays replace existing arrays; primitives replace existing values.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlacementUpdateRequest'
+            examples:
+              updatePricing:
+                summary: Update floor price
+                value:
+                  config:
+                    pricing:
+                      floorPriceCents: 75
+                      currency: "USD"
+              addSdkIds:
+                summary: Add SDK unit IDs
+                value:
+                  config:
+                    sdk:
+                      unitIdIos: "com.app.ios.banner.home"
+                      unitIdAndroid: "com.app.android.banner.home"
+      responses:
+        '200':
+          description: Patched placement
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/Placement'
+        '400':
+          description: Invalid input
+        '404':
+          description: Not found
+    delete:
+      summary: Delete placement
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Deletion acknowledgement
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
   /auth/login:
     post:
       summary: Authenticate user and return JWT token
@@ -496,6 +682,7 @@ components:
                   type: string
                   description: Scope where the migration feature flag was enabled.
                   enum: [placement, app, publisher, default]
+
     BidResponse:
       type: object
       properties:
@@ -962,3 +1149,142 @@ components:
               type: array
               items:
                 type: string
+
+    # Placements schemas (added)
+    Placement:
+      type: object
+      properties:
+        id:
+          type: string
+        app_id:
+          type: string
+        name:
+          type: string
+        type:
+          type: string
+          enum: [banner, interstitial, rewarded, native]
+        status:
+          type: string
+          enum: [active, paused]
+        created_at:
+          type: string
+          format: date-time
+        config:
+          $ref: '#/components/schemas/PlacementConfig'
+      required: [id, app_id, name, type, status, created_at]
+
+    PlacementConfig:
+      type: object
+      description: Placement configuration for targeting, delivery, pricing, SDK unit IDs, and metadata.
+      properties:
+        targeting:
+          type: object
+          properties:
+            geos:
+              type: array
+              items:
+                type: string
+                pattern: '^[A-Z]{2}$'
+            platforms:
+              type: array
+              items:
+                type: string
+                enum: [ios, android, unity, web]
+            osVersions:
+              type: object
+              additionalProperties:
+                type: string
+            appVersions:
+              type: array
+              items:
+                type: string
+        delivery:
+          type: object
+          properties:
+            frequencyCap:
+              type: object
+              properties:
+                count:
+                  type: integer
+                  minimum: 0
+                per:
+                  type: string
+                  enum: [minute, hour, day]
+            pacing:
+              type: object
+              properties:
+                impressionsPerMinute:
+                  type: integer
+                  minimum: 0
+        pricing:
+          type: object
+          properties:
+            floorPriceCents:
+              type: integer
+              minimum: 0
+            currency:
+              type: string
+              pattern: '^[A-Z]{3}$'
+        sdk:
+          type: object
+          properties:
+            unitIdIos:
+              type: string
+            unitIdAndroid:
+              type: string
+            unitIdUnity:
+              type: string
+            unitIdWeb:
+              type: string
+        metadata:
+          type: object
+          properties:
+            labels:
+              type: array
+              items:
+                type: string
+            notes:
+              type: string
+
+    PlacementListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Placement'
+        total:
+          type: integer
+        page:
+          type: integer
+        pageSize:
+          type: integer
+      required: [items, total, page, pageSize]
+
+    PlacementCreateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+          enum: [banner, interstitial, rewarded, native]
+        appId:
+          type: string
+        platform:
+          type: string
+          enum: [ios, android, unity, web]
+        config:
+          $ref: '#/components/schemas/PlacementConfig'
+      required: [name, type, appId, platform]
+
+    PlacementUpdateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        status:
+          type: string
+          enum: [active, paused]
+        config:
+          $ref: '#/components/schemas/PlacementConfig'

@@ -150,7 +150,7 @@ Purpose
   - Three adapters green; registry status accurate; sample shows mock load.
   - Status
     - Done — All SDKs now include adapters/registries for the full set of 15 networks, and documentation is updated to reflect network access (without claiming production readiness):
-      - Networks covered (15): AdMob, AppLovin, Unity Ads, IronSource, Facebook (Meta Audience Network), Vungle, Chartboost, Pangle, Mintegral, AdColony, Tapjoy, InMobi, Fyber, Smaato, Amazon Publisher Services.
+      - Networks covered (15): AdMob, AppLovin, Unity Ads, IronSource, Facebook (Meta Audience Network), Vungle, Chartboost, Pangle, Mintegral, AdColony, Tapjoy, Moloco, Fyber, Smaato, Amazon Publisher Services.
       - Android (core): Adapters present for all 15 under sdk/core/android/src/main/kotlin/com/rivalapexmediation/adapter/<network>/Adapter.kt; AdapterRegistry reflection list extended; diagnostics available. Existing tests validate flows for a subset and discovery for the rest.
       - iOS/tvOS: Built-in adapters registered for all 15 in AdapterRegistry (Swift types per network); diagnostics extended; unit tests remain green (Unity happy path) with discovery reflecting all.
       - Android TV (CTV): Lightweight adapter interface and registry covering all 15 within sdk/ctv/android-tv to surface parity and graceful handling on TV.
