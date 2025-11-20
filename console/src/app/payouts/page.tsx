@@ -138,8 +138,7 @@ export default function PayoutsPage() {
     queryKey: ['payout-history', page, publisherId],
     enabled: canFetchPayouts,
     queryFn: async ({ signal }) => {
-      const { data } = await payoutApi.getHistory({ page, pageSize, publisherId, signal })
-      return data
+      return payoutApi.getHistory({ page, pageSize, publisherId, signal })
     },
   })
 
@@ -150,8 +149,7 @@ export default function PayoutsPage() {
     queryKey: ['payout-upcoming', publisherId],
     enabled: canFetchPayouts,
     queryFn: async ({ signal }) => {
-      const { data } = await payoutApi.getUpcoming({ publisherId, signal })
-      return data
+      return payoutApi.getUpcoming({ publisherId, signal })
     },
   })
 
@@ -207,8 +205,8 @@ export default function PayoutsPage() {
         const methodLabel = PAYOUT_METHOD_LABELS[payout.method] ?? payout.method
         rows.push([
           payout.id,
-          formatCsvDate(payout.scheduledDate),
-          formatCsvDate(payout.completedDate),
+          formatCsvDate(payout.scheduledFor),
+          formatCsvDate(payout.processedAt),
           formatCsvCurrency(payout.amount, payout.currency),
           statusMeta.label,
           methodLabel,
@@ -222,7 +220,7 @@ export default function PayoutsPage() {
         rows.push(['Upcoming Payout'])
         rows.push([
           upcoming.id,
-          formatCsvDate(upcoming.scheduledDate),
+          formatCsvDate(upcoming.scheduledFor),
           '—',
           formatCsvCurrency(upcoming.amount, upcoming.currency),
           upcomingStatus.label,
@@ -330,7 +328,7 @@ export default function PayoutsPage() {
                   Next Scheduled Payout
                 </h2>
                 <p className="text-sm text-gray-600 mt-1">
-                  Funds will be sent on {formatDate(upcoming.scheduledDate)}
+                  Funds will be sent on {formatDate(upcoming.scheduledFor)}
                 </p>
               </div>
               {(() => {
@@ -365,7 +363,7 @@ export default function PayoutsPage() {
               <div>
                 <p className="text-sm text-gray-600">Expected Date</p>
                 <p className="text-lg font-semibold text-gray-900 mt-1">
-                  {formatDate(upcoming.scheduledDate)}
+                  {formatDate(upcoming.scheduledFor)}
                 </p>
               </div>
             </div>
@@ -432,7 +430,7 @@ export default function PayoutsPage() {
                       return (
                         <tr key={payout.id} className="hover:bg-gray-50">
                           <td className="px-4 py-4 text-sm text-gray-900">
-                            {formatDate(payout.scheduledDate)}
+                            {formatDate(payout.scheduledFor)}
                           </td>
                           <td className="px-4 py-4 text-sm font-semibold text-gray-900">
                             {formatCurrency(payout.amount, payout.currency)}
@@ -452,7 +450,7 @@ export default function PayoutsPage() {
                             </span>
                           </td>
                           <td className="px-4 py-4 text-sm text-gray-600">
-                            {payout.completedDate ? formatDate(payout.completedDate) : '—'}
+                            {payout.processedAt ? formatDate(payout.processedAt) : '—'}
                           </td>
                         </tr>
                       )

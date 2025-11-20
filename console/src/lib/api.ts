@@ -30,6 +30,7 @@ import type {
   NetworkCredentialInput,
   NetworkCredentialToken,
   NetworkCredentialsList,
+  NetworkIngestionResult,
 } from '@/types'
 
 const USE_MOCK_API = process.env.NEXT_PUBLIC_USE_MOCK_API === 'true' && process.env.NODE_ENV !== 'production'
@@ -79,6 +80,24 @@ const mockApiCall = async <T>(endpoint: string): Promise<{ data: T }> => {
   return { data }
 }
 
+type SuccessEnvelope<T> = {
+  success: boolean
+  data: T
+}
+
+const unwrapSuccessEnvelope = <T>(payload: T | SuccessEnvelope<T>): T => {
+  if (
+    payload &&
+    typeof payload === 'object' &&
+    'success' in payload &&
+    typeof (payload as SuccessEnvelope<T>).success === 'boolean' &&
+    'data' in payload
+  ) {
+    return (payload as SuccessEnvelope<T>).data
+  }
+  return payload as T
+}
+
 // Publisher API
 export const publisherApi = {
   getCurrent: () => apiClient.get<Publisher>('/publishers/me'),
@@ -88,6 +107,9 @@ export const publisherApi = {
 // Placement API
 export const placementApi = {
   list: async (params?: { page?: number; pageSize?: number }) => {
+    if (process.env.NODE_ENV !== 'production') {
+      console.info('[placementApi] list called with params', params)
+    }
     if (USE_MOCK_API) return mockApiCall<PaginatedResponse<Placement>>('placements')
     const pagination = withPaginationDefaults(params)
     return apiClient.get<PaginatedResponse<Placement>>('/placements', { params: pagination })
@@ -567,23 +589,46 @@ type UpcomingPayoutRequest = {
   signal?: AbortSignal
 }
 
+type UpdatePayoutSettingsPayload = {
+  threshold: number
+  method: 'stripe' | 'paypal' | 'wire'
+  currency: string
+  schedule?: 'monthly'
+  accountName: string
+  accountReference: string
+  autoPayout: boolean
+  backupMethod?: 'stripe' | 'paypal' | 'wire'
+}
+
 export const payoutApi = {
   getHistory: async (params: PayoutHistoryRequest = {}) => {
-    if (USE_MOCK_API) return mockApiCall<PaginatedResponse<PayoutHistory>>('payout-history')
+    if (USE_MOCK_API) {
+      const response = await mockApiCall<PaginatedResponse<PayoutHistory>>('payout-history')
+      return response.data
+    }
     const { signal, ...query } = params
     const pagination = withPaginationDefaults({ page: query.page, pageSize: query.pageSize })
-    return apiClient.get<PaginatedResponse<PayoutHistory>>('/payouts/history', {
+    const response = await apiClient.get<
+      PaginatedResponse<PayoutHistory> | SuccessEnvelope<PaginatedResponse<PayoutHistory>>
+    >('/payouts/history', {
       params: { ...query, ...pagination },
       signal,
     })
+    return unwrapSuccessEnvelope(response.data)
   },
   getUpcoming: async (params: UpcomingPayoutRequest = {}) => {
-    if (USE_MOCK_API) return mockApiCall<PayoutHistory>('payout-upcoming')
+    if (USE_MOCK_API) {
+      const response = await mockApiCall<PayoutHistory | null>('payout-upcoming')
+      return response.data
+    }
     const { signal, ...query } = params
-    return apiClient.get<PayoutHistory>('/payouts/upcoming', {
+    const response = await apiClient.get<
+      PayoutHistory | null | SuccessEnvelope<PayoutHistory | null>
+    >('/payouts/upcoming', {
       params: query,
       signal,
     })
+    return unwrapSuccessEnvelope(response.data)
   },
   updateMethod: (method: 'stripe' | 'paypal' | 'wire', details: Record<string, any>) =>
     apiClient.put('/payouts/method', { method, details }),
@@ -593,9 +638,19 @@ export const payoutApi = {
 export const settingsApi = {
   getFraudSettings: () => apiClient.get<FraudSettings>('/settings/fraud'),
   updateFraudSettings: (data: FraudSettings) => apiClient.put('/settings/fraud', data),
-  getPayoutSettings: () => apiClient.get<PayoutSettings>('/settings/payout'),
-  updatePayoutSettings: (data: Partial<PayoutSettings>) =>
-    apiClient.put<PayoutSettings>('/settings/payout', data),
+  getPayoutSettings: async () => {
+    const response = await apiClient.get<
+      PayoutSettings | null | SuccessEnvelope<PayoutSettings | null>
+    >('/settings/payout')
+    return unwrapSuccessEnvelope(response.data)
+  },
+  updatePayoutSettings: async (data: Partial<UpdatePayoutSettingsPayload>) => {
+    const response = await apiClient.put<PayoutSettings | SuccessEnvelope<PayoutSettings>>(
+      '/settings/payout',
+      data
+    )
+    return unwrapSuccessEnvelope(response.data)
+  },
   getNotificationSettings: () => apiClient.get<NotificationSettings>('/settings/notifications'),
   updateNotificationSettings: (data: Partial<NotificationSettings>) =>
     apiClient.put<NotificationSettings>('/settings/notifications', data),
@@ -660,4 +715,40 @@ export const byoApi = {
    */
   deleteCredentials: (network: string) =>
     apiClient.delete(`/byo/credentials/${network}`),
+
+  /**
+   * Upload an AdMob CSV export and ingest it for revenue reconciliation
+   */
+  ingestAdmobCsv: async (file: File) => {
+    validateCsvFile(file)
+    const formData = new FormData()
+    formData.append('report', file)
+    const response = await apiClient.post<SuccessEnvelope<NetworkIngestionResult>>(
+      '/byo/ingestion/admob/csv',
+      formData
+    )
+    return unwrapSuccessEnvelope(response.data)
+  },
+
+  /**
+   * Trigger AdMob ingestion via Reporting API using stored credentials
+   */
+  ingestAdmobApi: async (params: { startDate: string; endDate: string }) => {
+    const response = await apiClient.post<SuccessEnvelope<NetworkIngestionResult>>(
+      '/byo/ingestion/admob/api',
+      params
+    )
+    return unwrapSuccessEnvelope(response.data)
+  },
+
+  /**
+   * Trigger Unity Ads ingestion via Monetization API using stored credentials
+   */
+  ingestUnityApi: async (params: { startDate: string; endDate: string }) => {
+    const response = await apiClient.post<SuccessEnvelope<NetworkIngestionResult>>(
+      '/byo/ingestion/unity',
+      params
+    )
+    return unwrapSuccessEnvelope(response.data)
+  },
 }

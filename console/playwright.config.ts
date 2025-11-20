@@ -1,11 +1,14 @@
 import { defineConfig, devices } from '@playwright/test';
 
+const PLAYWRIGHT_PORT = Number(process.env.PLAYWRIGHT_PORT || 4310)
+const PLAYWRIGHT_BASE_URL = process.env.CONSOLE_BASE_URL || `http://localhost:${PLAYWRIGHT_PORT}`
+
 export default defineConfig({
   testDir: './tests',
   timeout: 30 * 1000,
   expect: { timeout: 5000 },
   use: {
-    baseURL: process.env.CONSOLE_BASE_URL || 'http://localhost:3000',
+    baseURL: PLAYWRIGHT_BASE_URL,
     trace: 'on-first-retry',
   },
   projects: [
@@ -15,9 +18,17 @@ export default defineConfig({
   ],
   // Auto-start the Console app during tests to avoid connection errors
   webServer: {
-    command: 'npm run dev --workspace console',
-    url: process.env.CONSOLE_BASE_URL || 'http://localhost:3000',
-    reuseExistingServer: true,
+    command: `npm run dev -- -p ${PLAYWRIGHT_PORT}`,
+    url: PLAYWRIGHT_BASE_URL,
+    reuseExistingServer: false,
     timeout: 120_000,
+    env: {
+      NEXT_PUBLIC_E2E_SESSION: JSON.stringify({
+        userId: 'usr-playwright',
+        publisherId: 'pub-test-123',
+        email: 'playwright@example.com',
+        role: 'publisher',
+      }),
+    },
   },
 });

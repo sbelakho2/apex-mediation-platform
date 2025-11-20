@@ -1,3 +1,33 @@
+Changelog — Placement Ownership & BYO Ingestion Wiring (2025-11-20)
+
+Summary
+- Scopes placement CRUD APIs to the authenticated publisher, prevents cross-org data leakage, and hardens creation flows by requiring app ownership checks.
+- Wires AdMob (CSV/API) and Unity ingestion endpoints end-to-end: new controller, multer-backed routes, credential lookups, and structured responses that reuse the existing ingestion services.
+- Enhances the credential vault list endpoint to return per-network metadata for the console, and adds console API helpers plus typed ingestion responses so publishers can trigger manual reconciliations.
+- Adds focused Jest coverage for the placement repository and BYO ingestion controller paths to lock in the new behavior.
+
+What changed (highlights)
+- Placement ownership enforcement
+  - `backend/src/repositories/placementRepository.ts` now joins `apps` to constrain every list/get/update/delete/query by `publisher_id`, only inserts rows when the source app belongs to the caller, and deep-merges configs via guarded helpers.
+  - `backend/src/controllers/placement.controller.ts` introduces `requirePublisherId`, passes scope parameters to the repository, and returns 404/403 when apps or placements fall outside the tenant.
+
+- BYO ingestion endpoints
+  - Added `backend/src/controllers/byoIngestion.controller.ts` with handlers for AdMob CSV uploads, AdMob API pulls, and Unity API pulls; each validates ISO date ranges, ensures stored credentials exist, and logs ingestion stats.
+  - `backend/src/routes/byo.routes.ts` now mounts `/ingestion/admob/csv`, `/ingestion/admob/api`, and `/ingestion/unity` with a memory-backed multer upload for CSV payloads.
+
+- Credential vault + console wiring
+  - `backend/src/services/networkCredentialVault.ts` exposes `listCredentialSummaries`, and `backend/src/controllers/credentials.controller.ts` now returns structured `credentials[]` objects (id/network/version/timestamps/hasCredentials).
+  - Console gains `NetworkIngestionResult` in `console/src/types/index.ts` plus new helpers in `console/src/lib/api.ts`: `ingestAdmobCsv`, `ingestAdmobApi`, and `ingestUnityApi`, which wrap FormData uploads and JSON payloads for the new endpoints.
+
+- Tests
+  - Added `backend/src/repositories/__tests__/placementRepository.test.ts` to assert publisher scoping, guarded inserts, config merging, and deletions.
+  - Added `backend/src/controllers/__tests__/byoIngestion.controller.test.ts` to cover CSV ingestion, AdMob credential gating, Unity happy-path ingestion, and invalid date ordering.
+
+Validation and QA
+- Backend: `cd backend && npm run test -- placementRepository byoIngestion`
+
+---
+
 Changelog — BYO Production Readiness Implementation (2025-11-19 to 2025-11-20)
 
 Summary

@@ -1,9 +1,9 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { Plus, Key, Trash2, RotateCw, Check, AlertCircle } from 'lucide-react'
+import { useState, useEffect, useMemo } from 'react'
+import { Plus, Key, Trash2, RotateCw, Check, AlertCircle, Upload, Play } from 'lucide-react'
 import { byoApi } from '@/lib/api'
-import type { NetworkCredential } from '@/types'
+import type { NetworkCredential, NetworkIngestionResult } from '@/types'
 
 const SUPPORTED_NETWORKS = [
   { id: 'admob', name: 'AdMob', fields: ['accountId', 'apiKey'] },
@@ -14,6 +14,38 @@ const SUPPORTED_NETWORKS = [
   { id: 'facebook', name: 'Facebook Audience Network', fields: ['appId', 'appSecret'] },
 ]
 
+const API_NETWORKS = ['admob', 'unity'] as const
+type ApiNetwork = (typeof API_NETWORKS)[number]
+const CSV_NETWORKS = ['admob'] as const
+type CsvNetwork = (typeof CSV_NETWORKS)[number]
+
+type IngestionStatus = {
+  loading: boolean
+  result: NetworkIngestionResult | null
+  error: string | null
+}
+
+const MANUAL_INGESTION_CONFIG: Record<string, { csv?: boolean; api?: boolean; helperLabel: string }> = {
+  admob: {
+    csv: true,
+    api: true,
+    helperLabel: 'Trigger AdMob reporting imports when automated jobs are paused.',
+  },
+  unity: {
+    api: true,
+    helperLabel: 'Kick off Unity monetization syncs with stored credentials.',
+  },
+}
+
+const formatDate = (date: Date) => date.toISOString().slice(0, 10)
+
+const buildDefaultRange = () => {
+  const end = new Date()
+  const start = new Date()
+  start.setDate(end.getDate() - 6)
+  return { startDate: formatDate(start), endDate: formatDate(end) }
+}
+
 export default function CredentialsPage() {
   const [credentials, setCredentials] = useState<NetworkCredential[]>([])
   const [loading, setLoading] = useState(true)
@@ -22,9 +54,25 @@ export default function CredentialsPage() {
   const [formData, setFormData] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
+  const [ingestionStatus, setIngestionStatus] = useState<Record<string, IngestionStatus>>(() => {
+    return Object.keys(MANUAL_INGESTION_CONFIG).reduce<Record<string, IngestionStatus>>((acc, key) => {
+      acc[key] = { loading: false, result: null, error: null }
+      return acc
+    }, {})
+  })
+  const [manualRanges, setManualRanges] = useState<Record<string, { startDate: string; endDate: string }>>(() => {
+    return API_NETWORKS.reduce<Record<string, { startDate: string; endDate: string }>>((acc, key) => {
+      acc[key] = buildDefaultRange()
+      return acc
+    }, {})
+  })
 
   useEffect(() => {
     loadCredentials()
+  }, [])
+
+  const hasManualSupport = useMemo(() => {
+    return new Set(Object.keys(MANUAL_INGESTION_CONFIG))
   }, [])
 
   const loadCredentials = async () => {
@@ -107,6 +155,78 @@ export default function CredentialsPage() {
     } catch (err: any) {
       setError(err.message || 'Failed to rotate credentials')
     }
+  }
+
+  const updateIngestionStatus = (network: string, patch: Partial<IngestionStatus>) => {
+    setIngestionStatus((prev) => {
+      const current = prev[network] ?? { loading: false, result: null, error: null }
+      return {
+        ...prev,
+        [network]: {
+          ...current,
+          ...patch,
+        },
+      }
+    })
+  }
+
+  const handleCsvIngestion = async (network: CsvNetwork, file: File | null) => {
+    if (!file) return
+    updateIngestionStatus(network, { loading: true, error: null, result: null })
+    try {
+      const result = await byoApi.ingestAdmobCsv(file)
+      updateIngestionStatus(network, { loading: false, result })
+    } catch (err: any) {
+      updateIngestionStatus(network, {
+        loading: false,
+        error: err.message || 'Failed to process CSV report',
+      })
+    }
+  }
+
+  const API_HANDLERS: Record<ApiNetwork, (range: { startDate: string; endDate: string }) => Promise<NetworkIngestionResult>> = {
+    admob: (range) => byoApi.ingestAdmobApi(range),
+    unity: (range) => byoApi.ingestUnityApi(range),
+  }
+
+  const triggerApiIngestion = async (network: ApiNetwork) => {
+    const range = manualRanges[network]
+    if (!range?.startDate || !range?.endDate) {
+      updateIngestionStatus(network, {
+        loading: false,
+        error: 'Please provide both start and end dates.',
+      })
+      return
+    }
+
+    if (new Date(range.startDate) > new Date(range.endDate)) {
+      updateIngestionStatus(network, {
+        loading: false,
+        error: 'Start date must be before end date.',
+      })
+      return
+    }
+
+    updateIngestionStatus(network, { loading: true, error: null, result: null })
+    try {
+      const result = await API_HANDLERS[network](range)
+      updateIngestionStatus(network, { loading: false, result })
+    } catch (err: any) {
+      updateIngestionStatus(network, {
+        loading: false,
+        error: err.message || 'Failed to trigger ingestion run',
+      })
+    }
+  }
+
+  const updateRange = (network: ApiNetwork, field: 'startDate' | 'endDate', value: string) => {
+    setManualRanges((prev) => ({
+      ...prev,
+      [network]: {
+        ...prev[network],
+        [field]: value,
+      },
+    }))
   }
 
   const handleDeleteCredentials = async (network: string) => {
@@ -221,6 +341,108 @@ export default function CredentialsPage() {
                   )}
                 </div>
               </div>
+
+              {hasCredentials && hasManualSupport.has(network.id) && (
+                <div className="mt-4 border-t border-gray-100 pt-4 space-y-4">
+                  <div>
+                    <p className="text-sm font-semibold text-gray-900">Manual ingestion helpers</p>
+                    <p className="text-xs text-gray-500">
+                      {MANUAL_INGESTION_CONFIG[network.id]?.helperLabel}
+                    </p>
+                  </div>
+
+                  {MANUAL_INGESTION_CONFIG[network.id]?.csv && (
+                    <div className="flex flex-col gap-2">
+                      <p className="text-sm font-medium text-gray-700">Upload AdMob CSV Export</p>
+                      <div className="flex items-center gap-3">
+                        <label className="btn btn-outline btn-sm inline-flex items-center gap-2 cursor-pointer">
+                          <Upload className="w-4 h-4" />
+                          Select CSV
+                          <input
+                            type="file"
+                            accept=".csv"
+                            className="sr-only"
+                            onChange={(event) => {
+                              void handleCsvIngestion('admob', event.target.files?.[0] ?? null)
+                              event.target.value = ''
+                            }}
+                            disabled={ingestionStatus[network.id]?.loading}
+                          />
+                        </label>
+                        {ingestionStatus[network.id]?.loading && (
+                          <span className="text-xs text-gray-500">Processing CSV…</span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {MANUAL_INGESTION_CONFIG[network.id]?.api && (
+                    <div className="space-y-2">
+                      <p className="text-sm font-medium text-gray-700">Trigger API ingestion window</p>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                        <div>
+                          <label className="text-xs text-gray-500" htmlFor={`${network.id}-start-date`}>
+                            Start Date
+                          </label>
+                          <input
+                            type="date"
+                            id={`${network.id}-start-date`}
+                            className="input mt-1"
+                            value={manualRanges[network.id as ApiNetwork]?.startDate || ''}
+                            max={manualRanges[network.id as ApiNetwork]?.endDate}
+                            onChange={(e) => updateRange(network.id as ApiNetwork, 'startDate', e.target.value)}
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs text-gray-500" htmlFor={`${network.id}-end-date`}>
+                            End Date
+                          </label>
+                          <input
+                            type="date"
+                            id={`${network.id}-end-date`}
+                            className="input mt-1"
+                            value={manualRanges[network.id as ApiNetwork]?.endDate || ''}
+                            min={manualRanges[network.id as ApiNetwork]?.startDate}
+                            onChange={(e) => updateRange(network.id as ApiNetwork, 'endDate', e.target.value)}
+                          />
+                        </div>
+                        <div className="flex items-end">
+                          <button
+                            type="button"
+                            className="btn btn-primary w-full flex items-center justify-center gap-2"
+                            disabled={ingestionStatus[network.id]?.loading}
+                            onClick={() => void triggerApiIngestion(network.id as ApiNetwork)}
+                          >
+                            <Play className="w-4 h-4" />
+                            Run Ingestion
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {ingestionStatus[network.id]?.result && (
+                    <div className="p-3 bg-green-50 border border-green-200 rounded text-xs text-green-800">
+                      Processed {ingestionStatus[network.id]?.result?.rowsProcessed ?? 0} rows between
+                      {' '}
+                      {ingestionStatus[network.id]?.result?.startDate} – {ingestionStatus[network.id]?.result?.endDate}.{' '}
+                      Inserted {ingestionStatus[network.id]?.result?.rowsInserted ?? 0} rows.
+                      {ingestionStatus[network.id]?.result?.rowsSkipped
+                        ? ` Skipped ${ingestionStatus[network.id]?.result?.rowsSkipped} rows.`
+                        : ''}
+                      {ingestionStatus[network.id]?.result?.errors.length
+                        ? ` Errors: ${ingestionStatus[network.id]?.result?.errors.join(', ')}`
+                        : ''}
+                    </div>
+                  )}
+
+                  {ingestionStatus[network.id]?.error && (
+                    <div className="p-3 bg-red-50 border border-red-200 rounded text-xs text-red-700">
+                      {ingestionStatus[network.id]?.error}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )
         })}

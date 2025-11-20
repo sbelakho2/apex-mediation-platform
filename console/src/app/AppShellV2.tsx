@@ -4,6 +4,13 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import type { ReactNode } from 'react'
+import { ToastProvider } from '@/ui-v2/hooks/useToast'
+import { Toaster } from '@/ui-v2/components/Toaster'
+import { Breadcrumbs } from '@/ui-v2/components/Breadcrumbs'
+import { CommandPalette } from '@/ui-v2/components/CommandPalette'
+import { useMemo } from 'react'
+import { useSession as useCookieSession } from '@/lib/useSession'
+import { useFeatures } from '@/lib/useFeatures'
 
 function isActive(pathname: string | null, href: string) {
   if (!pathname) return false
@@ -25,42 +32,82 @@ function NavLink({ href, children }: { href: string; children: ReactNode }) {
 }
 
 export function AppShellV2({ children }: { children: ReactNode }) {
+  // Runtime feature flags and role-aware navigation (lightweight)
+  const { user } = useCookieSession()
+  const featureFallbacks = useMemo(
+    () => ({
+      transparency: process.env.NEXT_PUBLIC_TRANSPARENCY_ENABLED === 'true',
+      billing: process.env.NEXT_PUBLIC_BILLING_ENABLED === 'true',
+      migrationStudio: process.env.NEXT_PUBLIC_MIGRATION_STUDIO_ENABLED === 'true',
+    }),
+    []
+  )
+  const { features } = useFeatures({ fallback: featureFallbacks })
+  const resolved = {
+    transparency: featureFallbacks.transparency,
+    billing: featureFallbacks.billing,
+    migrationStudio: featureFallbacks.migrationStudio,
+    ...(features || {}),
+  } as Record<string, boolean>
+
+  const isAdmin = (user?.role as string | undefined) === 'admin'
+
+  const navLinks = useMemo(() => {
+    const items: { href: string; label: string; feature?: keyof typeof resolved; roles?: ('admin')[] }[] = [
+      { href: '/dashboard', label: 'Dashboard' },
+      { href: '/billing/usage', label: 'Billing', feature: 'billing' as any },
+      { href: '/transparency/auctions', label: 'Transparency', feature: 'transparency' as any },
+      { href: '/settings', label: 'Settings' },
+      { href: '/admin/health', label: 'Admin', roles: ['admin'] },
+    ]
+    return items.filter((it) => {
+      if (it.roles && !isAdmin) return false
+      if (it.feature && !resolved[it.feature]) return false
+      return true
+    })
+  }, [isAdmin, resolved])
+
   return (
-    <div className="min-h-screen bg-white text-zinc-900 dark:bg-zinc-950 dark:text-zinc-50">
-      <header className="sticky top-0 z-40 w-full border-b border-zinc-200 bg-white/80 backdrop-blur dark:border-zinc-800 dark:bg-zinc-950/80">
-        <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center gap-2">
-            <Link href="/" className="inline-flex items-center gap-2" aria-label="ApexMediation Home">
-              {/*
-                Branding: uses /logo.jpg from Next.js public directory.
-                Place a copy of the repo root logo.jpg into console/public/logo.jpg for this to render.
-                Text fallback remains visible for a11y and when image fails to load.
-              */}
-              <Image
-                src="/api/brand/logo"
-                alt="ApexMediation"
-                width={28}
-                height={28}
-                className="h-7 w-7 rounded-sm shadow-sm"
-                priority
-              />
-              <span className="text-sm font-semibold tracking-tight text-zinc-700 dark:text-zinc-200">ApexMediation</span>
-            </Link>
-            <span className="rounded bg-emerald-600/10 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:text-emerald-400">Console v2</span>
+    <ToastProvider>
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[100] focus:rounded-md focus:bg-zinc-900 focus:px-3 focus:py-2 focus:text-white dark:focus:bg-zinc-100 dark:focus:text-zinc-900"
+      >
+        Skip to content
+      </a>
+      <div className="min-h-screen bg-white text-zinc-900 dark:bg-zinc-950 dark:text-zinc-50">
+        <header className="sticky top-0 z-40 w-full border-b border-zinc-200 bg-white/80 backdrop-blur dark:border-zinc-800 dark:bg-zinc-950/80">
+          <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
+            <div className="flex items-center gap-2">
+              <Link href="/" className="inline-flex items-center gap-2" aria-label="ApexMediation Home">
+                {/* Branding via repository root logo served from /api/brand/logo */}
+                <Image
+                  src="/api/brand/logo"
+                  alt="ApexMediation"
+                  width={28}
+                  height={28}
+                  className="h-7 w-7 rounded-sm shadow-sm"
+                  priority
+                />
+                <span className="text-sm font-semibold tracking-tight text-zinc-700 dark:text-zinc-200">ApexMediation</span>
+              </Link>
+              <span className="rounded bg-emerald-600/10 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:text-emerald-400">Console v2</span>
+            </div>
+            <nav className="hidden items-center gap-1 md:flex">
+              {navLinks.map((l) => (
+                <NavLink key={l.href} href={l.href}>{l.label}</NavLink>
+              ))}
+            </nav>
           </div>
-          <nav className="hidden items-center gap-1 md:flex">
-            <NavLink href="/dashboard">Dashboard</NavLink>
-            <NavLink href="/billing/usage">Billing</NavLink>
-            <NavLink href="/transparency/auctions">Transparency</NavLink>
-            <NavLink href="/settings">Settings</NavLink>
-            <NavLink href="/admin/health">Admin</NavLink>
-          </nav>
-        </div>
-      </header>
-      <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-        {children}
-      </main>
-    </div>
+        </header>
+        <main id="main-content" className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+          <Breadcrumbs />
+          {children}
+        </main>
+        <Toaster />
+        <CommandPalette />
+      </div>
+    </ToastProvider>
   )
 }
 

@@ -214,12 +214,19 @@ export async function listCredentials(req: Request, res: Response, next: NextFun
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    const networks = await vaultService.listNetworks(publisherId);
+    const summaries = await vaultService.listCredentialSummaries(publisherId);
 
     return res.json({
       success: true,
       data: {
-        networks,
+        credentials: summaries.map((summary) => ({
+          id: summary.id,
+          network: summary.network,
+          version: summary.version,
+          createdAt: summary.createdAt instanceof Date ? summary.createdAt.toISOString() : summary.createdAt,
+          updatedAt: summary.updatedAt instanceof Date ? summary.updatedAt.toISOString() : summary.updatedAt,
+          hasCredentials: true,
+        })),
       },
     });
   } catch (error: any) {

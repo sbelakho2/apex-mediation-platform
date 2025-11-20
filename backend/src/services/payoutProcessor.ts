@@ -3,6 +3,7 @@ import {
   fetchUpcomingPayouts,
   fetchPayoutSettings,
   upsertPayoutSettings,
+  countPayoutHistory,
   PayoutSettingsInput,
 } from '../repositories/payoutRepository';
 import { query, getClient } from '../utils/postgres';
@@ -596,8 +597,27 @@ export const paymentProcessor = new PaymentProcessor();
 // Existing API Functions
 // ========================================
 
-export const listPayoutHistory = async (publisherId: string, limit = 10) => {
-  return fetchPayoutHistory(publisherId, limit);
+export const listPayoutHistory = async (
+  publisherId: string,
+  page = 1,
+  pageSize = 10
+) => {
+  const safePage = Math.max(1, page);
+  const safeSize = Math.min(Math.max(1, pageSize), 200);
+  const offset = (safePage - 1) * safeSize;
+
+  const [rows, total] = await Promise.all([
+    fetchPayoutHistory(publisherId, safeSize, offset),
+    countPayoutHistory(publisherId),
+  ]);
+
+  return {
+    items: rows,
+    total,
+    page: safePage,
+    pageSize: safeSize,
+    hasMore: safePage * safeSize < total,
+  };
 };
 
 export const getUpcomingPayouts = async (publisherId: string) => {

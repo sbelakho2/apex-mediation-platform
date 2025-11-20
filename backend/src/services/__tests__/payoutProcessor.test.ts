@@ -9,6 +9,7 @@ jest.mock('../../repositories/payoutRepository', () => ({
   fetchUpcomingPayouts: jest.fn(),
   fetchPayoutSettings: jest.fn(),
   upsertPayoutSettings: jest.fn(),
+  countPayoutHistory: jest.fn(),
 }));
 
 import {
@@ -16,6 +17,7 @@ import {
   fetchUpcomingPayouts,
   fetchPayoutSettings,
   upsertPayoutSettings,
+  countPayoutHistory,
 } from '../../repositories/payoutRepository';
 import {
   listPayoutHistory,
@@ -29,13 +31,14 @@ const historyMock = jest.mocked(fetchPayoutHistory);
 const upcomingMock = jest.mocked(fetchUpcomingPayouts);
 const settingsMock = jest.mocked(fetchPayoutSettings);
 const upsertMock = jest.mocked(upsertPayoutSettings);
+const countMock = jest.mocked(countPayoutHistory);
 
 describe('payoutProcessor service', () => {
   beforeEach(() => {
     jest.clearAllMocks();
   });
 
-  it('retrieves payout history with provided limit', async () => {
+  it('retrieves payout history with pagination', async () => {
     const rows: PayoutHistoryRow[] = [
       {
         id: '1',
@@ -49,15 +52,30 @@ describe('payoutProcessor service', () => {
     ];
 
     historyMock.mockResolvedValue(rows);
+    countMock.mockResolvedValue(12);
 
-    const result = await listPayoutHistory(publisherId, 5);
+    const result = await listPayoutHistory(publisherId, 2, 5);
 
-    expect(historyMock).toHaveBeenCalledWith(publisherId, 5);
-    expect(result).toBe(rows);
+    expect(historyMock).toHaveBeenCalledWith(publisherId, 5, 5);
+    expect(countMock).toHaveBeenCalledWith(publisherId);
+    expect(result).toEqual({
+      items: rows,
+      total: 12,
+      page: 2,
+      pageSize: 5,
+      hasMore: true,
+    });
   });
 
   it('returns upcoming payouts for publisher', async () => {
-    const upcoming: PayoutHistoryRow[] = [];
+    const upcoming: PayoutHistoryRow = {
+      id: 'next',
+      amount: 1000,
+      currency: 'USD',
+      status: 'pending',
+      method: 'wire',
+      scheduledFor: '2024-05-10T00:00:00.000Z',
+    };
     upcomingMock.mockResolvedValue(upcoming);
 
     const result = await getUpcomingPayouts(publisherId);
@@ -72,6 +90,10 @@ describe('payoutProcessor service', () => {
       method: 'paypal',
       currency: 'USD',
       schedule: 'monthly',
+      accountName: 'Main Account',
+      accountReference: '****1234',
+      autoPayout: false,
+      backupMethod: undefined,
       updatedAt: '2024-04-30T00:00:00.000Z',
     };
 
@@ -87,12 +109,20 @@ describe('payoutProcessor service', () => {
       method: 'wire',
       currency: 'EUR',
       schedule: 'monthly',
+      accountName: 'Wire Account',
+      accountReference: '****9876',
+      autoPayout: true,
+      backupMethod: 'stripe',
     };
     upsertMock.mockResolvedValue({
       threshold: input.threshold,
       method: input.method,
       currency: input.currency,
       schedule: input.schedule,
+      accountName: input.accountName,
+      accountReference: input.accountReference,
+      autoPayout: input.autoPayout,
+      backupMethod: input.backupMethod,
       updatedAt: '2024-05-01T00:00:00.000Z',
     });
 
@@ -104,6 +134,10 @@ describe('payoutProcessor service', () => {
       method: input.method,
       currency: input.currency,
       schedule: input.schedule,
+      accountName: input.accountName,
+      accountReference: input.accountReference,
+      autoPayout: input.autoPayout,
+      backupMethod: input.backupMethod,
       updatedAt: '2024-05-01T00:00:00.000Z',
     });
   });

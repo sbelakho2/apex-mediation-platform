@@ -47,13 +47,18 @@ test.describe('Payouts Settings — confirmation modal flow', () => {
           status: 200,
           contentType: 'application/json',
           body: JSON.stringify({
-            method: 'wire',
-            accountName: 'Acme Corp',
-            accountNumberMasked: '**** 1234',
-            currency: 'USD',
-            minimumPayout: 100,
-            autoPayout: false,
-            backupMethod: '',
+            success: true,
+            data: {
+              method: 'wire',
+              accountName: 'Acme Corp',
+              accountReference: '**** 1234',
+              currency: 'USD',
+              threshold: 100,
+              schedule: 'monthly',
+              autoPayout: false,
+              backupMethod: null,
+              updatedAt: new Date().toISOString(),
+            },
           }),
         })
       }
@@ -62,7 +67,11 @@ test.describe('Payouts Settings — confirmation modal flow', () => {
       if (isPath(url, '/settings/payout') && method === 'PUT') {
         putCalled = true
         const payload = JSON.parse(req.postData() || '{}')
-        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(payload) })
+        return route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ success: true, data: payload }),
+        })
       }
 
       return route.continue()

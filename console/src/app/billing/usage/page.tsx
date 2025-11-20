@@ -1,16 +1,70 @@
-'use client'
+ 'use client'
 
 import { useQuery } from '@tanstack/react-query'
 import { getCurrentUsage, type UsageData } from '@/lib/billing'
 import { AlertCircle, TrendingUp, Database, Zap, HardDrive } from 'lucide-react'
 import { formatNumber, formatCurrency, formatDate } from '@/lib/utils'
+import { Button } from '@/ui-v2/components/Button'
+import { Select } from '@/ui-v2/components/Select'
+import { useMemo, useState } from 'react'
 
 export default function BillingUsagePage() {
+  const [range, setRange] = useState<'7d' | '30d' | '90d' | 'all'>('30d')
+  const [product, setProduct] = useState<string>('all')
+  const [page, setPage] = useState<number>(1)
+  const PAGE_SIZE = 25
   const { data: usage, isLoading: loading, error, refetch } = useQuery<UsageData>({
-    queryKey: ['billing', 'usage', 'current'],
+    queryKey: ['billing', 'usage', 'current', range],
     queryFn: ({ signal }) => getCurrentUsage({ signal }),
     staleTime: 60 * 1000,
   })
+
+  // Derive products and filtered/paginated rows client-side for now
+  const productOptions = useMemo(() => {
+    const set = new Set<string>()
+    ;(usage?.items || []).forEach((it) => {
+      if (it.product) set.add(it.product)
+    })
+    return Array.from(set).sort()
+  }, [usage?.items])
+
+  const filteredItems = useMemo(() => {
+    const all = usage?.items || []
+    const byProduct = product === 'all' ? all : all.filter((it) => (it.product ?? '—') === product)
+    // Reset page when filter changes (handled below in effect-like memo by referencing deps)
+    return byProduct
+  }, [usage?.items, product])
+
+  const totalPages = Math.max(1, Math.ceil(filteredItems.length / PAGE_SIZE))
+  const currentPage = Math.min(page, totalPages)
+  const pagedItems = useMemo(() => {
+    const start = (currentPage - 1) * PAGE_SIZE
+    return filteredItems.slice(start, start + PAGE_SIZE)
+  }, [filteredItems, currentPage])
+
+  const csvRows = useMemo(() => {
+    if (!usage) return [] as string[]
+    const header = ['Date', 'Product', 'Quantity', 'Unit Price', 'Subtotal']
+    const rows = (filteredItems || []).map((it) => [
+      formatDate(it.date),
+      it.product ?? '—',
+      String(it.quantity ?? 0),
+      formatCurrency(it.unit_price ?? 0),
+      formatCurrency((it.quantity ?? 0) * (it.unit_price ?? 0)),
+    ])
+    return [header, ...rows].map((cols) => cols.map(escapeCsv).join(','))
+  }, [usage, filteredItems])
+
+  function onExportCsv() {
+    if (!csvRows.length) return
+    const blob = new Blob([csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `usage-${range}-${new Date().toISOString().slice(0, 10)}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
 
   if (loading) {
     return (
@@ -57,6 +111,15 @@ export default function BillingUsagePage() {
         <div className="max-w-6xl mx-auto">
           <div className="text-center py-12">
             <p className="text-gray-600">No usage data available</p>
+            <div className="mt-4 inline-flex items-center gap-3">
+              <Select aria-label="Date range" value={range} onChange={(e) => setRange(e.target.value as any)}>
+                <option value="7d">Last 7 days</option>
+                <option value="30d">Last 30 days</option>
+                <option value="90d">Last 90 days</option>
+                <option value="all">All time</option>
+              </Select>
+              <Button variant="secondary" onClick={() => void refetch()}>Refresh</Button>
+            </div>
           </div>
         </div>
       </div>
@@ -92,6 +155,29 @@ export default function BillingUsagePage() {
           <p className="text-sm text-gray-500 mt-1">
             Plan: <span className="font-semibold">{usage.subscription.plan_type}</span>
           </p>
+          {/* Toolbar */}
+          <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="text-sm text-gray-600" htmlFor="usage-range">Date range</label>
+              <Select id="usage-range" aria-label="Date range" value={range} onChange={(e) => { setRange(e.target.value as any); setPage(1) }}>
+                <option value="7d">Last 7 days</option>
+                <option value="30d">Last 30 days</option>
+                <option value="90d">Last 90 days</option>
+                <option value="all">All time</option>
+              </Select>
+              <label className="ml-2 text-sm text-gray-600" htmlFor="usage-product">Product</label>
+              <Select id="usage-product" aria-label="Product filter" value={product} onChange={(e) => { setProduct(e.target.value); setPage(1) }}>
+                <option value="all">All products</option>
+                {productOptions.map((p) => (
+                  <option key={p} value={p}>{p}</option>
+                ))}
+              </Select>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button variant="secondary" onClick={() => void refetch()}>Refresh</Button>
+              <Button onClick={onExportCsv}>Export CSV</Button>
+            </div>
+          </div>
         </div>
 
         {/* Usage Metrics */}
@@ -374,6 +460,73 @@ export default function BillingUsagePage() {
               </p>
             </div>
           </div>
+          </div>
+        </section>
+
+        {/* Usage Table (paged) — lightweight client pagination until server paging is wired) */}
+        <section className="mt-8" aria-labelledby="usage-table-heading">
+          <h2 id="usage-table-heading" className="sr-only">Usage details</h2>
+          <div className="overflow-x-auto rounded-lg border border-gray-200">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th scope="col" className="px-4 py-2 text-left text-xs font-medium text-gray-500">Date</th>
+                  <th scope="col" className="px-4 py-2 text-left text-xs font-medium text-gray-500">Product</th>
+                  <th scope="col" className="px-4 py-2 text-right text-xs font-medium text-gray-500">Quantity</th>
+                  <th scope="col" className="px-4 py-2 text-right text-xs font-medium text-gray-500">Unit Price</th>
+                  <th scope="col" className="px-4 py-2 text-right text-xs font-medium text-gray-500">Subtotal</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100 bg-white">
+                {pagedItems.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="px-4 py-8 text-center text-sm text-gray-500">
+                      No usage rows match the current filters
+                    </td>
+                  </tr>
+                ) : (
+                  pagedItems.map((it, idx) => (
+                    <tr key={`${it.date}-${it.product}-${idx}`}>
+                      <td className="px-4 py-2 text-sm text-gray-700">{formatDate(it.date)}</td>
+                      <td className="px-4 py-2 text-sm text-gray-700">{it.product ?? '—'}</td>
+                      <td className="px-4 py-2 text-right text-sm text-gray-700">{formatNumber(it.quantity ?? 0)}</td>
+                      <td className="px-4 py-2 text-right text-sm text-gray-700">{formatCurrency(it.unit_price ?? 0)}</td>
+                      <td className="px-4 py-2 text-right text-sm text-gray-700">{formatCurrency((it.quantity ?? 0) * (it.unit_price ?? 0))}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+          {/* Pagination controls */}
+          <div className="mt-3 flex items-center justify-between">
+            <p className="text-sm text-gray-600">
+              Showing {pagedItems.length === 0 ? 0 : (currentPage - 1) * PAGE_SIZE + 1}–
+              {Math.min(currentPage * PAGE_SIZE, filteredItems.length)} of {filteredItems.length}
+            </p>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={currentPage <= 1}
+                aria-label="Previous page"
+              >
+                Prev
+              </Button>
+              <span className="text-sm text-gray-700">
+                Page {currentPage} / {totalPages}
+              </span>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                disabled={currentPage >= totalPages}
+                aria-label="Next page"
+              >
+                Next
+              </Button>
+            </div>
           </div>
         </section>
       </div>

@@ -103,9 +103,8 @@ export interface PayoutHistory {
   currency: string
   status: 'pending' | 'processing' | 'completed' | 'failed'
   method: 'stripe' | 'paypal' | 'wire'
-  scheduledDate: string
-  completedDate?: string
-  publisherId: string
+  scheduledFor: string
+  processedAt?: string
 }
 
 export interface FraudSettings {
@@ -117,13 +116,15 @@ export interface FraudSettings {
 }
 
 export interface PayoutSettings {
+  threshold: number
   method: 'stripe' | 'paypal' | 'wire'
-  accountName: string
-  accountNumberMasked: string
   currency: string
-  minimumPayout: number
+  schedule: 'monthly'
+  accountName: string
+  accountReference: string
   autoPayout: boolean
   backupMethod?: 'stripe' | 'paypal' | 'wire'
+  updatedAt: string
 }
 
 // Team types
@@ -448,4 +449,14 @@ export interface NetworkCredentialToken {
 
 export interface NetworkCredentialsList {
   credentials: NetworkCredential[]
+}
+
+export interface NetworkIngestionResult {
+  success: boolean
+  rowsProcessed: number
+  rowsInserted: number
+  rowsSkipped: number
+  errors: string[]
+  startDate: string
+  endDate: string
 }

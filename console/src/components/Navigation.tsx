@@ -54,6 +54,7 @@ const NAV_SKELETON_KEYS = ['nav-skeleton-1', 'nav-skeleton-2', 'nav-skeleton-3',
 export default function Navigation({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const { user, isLoading: sessionLoading } = useCookieSession()
+  const bypassLoadingGuards = Boolean(process.env.NEXT_PUBLIC_E2E_SESSION)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [signingOut, setSigningOut] = useState(false)
 
@@ -113,7 +114,7 @@ export default function Navigation({ children }: { children: React.ReactNode }) 
   // Don't show navigation on login page
   if (!pathname || pathname === '/login' || pathname === '/') return <>{children}</>
 
-  if (sessionLoading || featuresLoading) {
+  if (!bypassLoadingGuards && (sessionLoading || featuresLoading)) {
     return <NavigationSkeleton />
   }
 

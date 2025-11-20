@@ -270,6 +270,30 @@ export class NetworkCredentialVaultService {
     }
   }
 
+  async listCredentialSummaries(
+    publisherId: string
+  ): Promise<Array<{ id: string; network: string; version: number; createdAt: Date; updatedAt: Date }>> {
+    const client = await this.pool.connect();
+    try {
+      const result = await client.query(
+        `SELECT id, network, version, created_at, updated_at
+         FROM encrypted_network_credentials
+         WHERE publisher_id = $1 AND deleted_at IS NULL
+         ORDER BY network`,
+        [publisherId]
+      );
+      return result.rows.map((row) => ({
+        id: row.id,
+        network: row.network,
+        version: row.version,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+      }));
+    } finally {
+      client.release();
+    }
+  }
+
   /**
    * Get credential metadata (without decrypting)
    */

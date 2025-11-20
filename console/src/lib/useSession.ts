@@ -25,6 +25,21 @@ type UseSessionOptions = {
 
 const DEFAULT_LOGIN_PATH = '/login'
 
+let MOCK_SESSION: SessionUser | null = null
+
+if (process.env.NEXT_PUBLIC_E2E_SESSION) {
+  try {
+    MOCK_SESSION = JSON.parse(process.env.NEXT_PUBLIC_E2E_SESSION) as SessionUser
+  } catch (error) {
+    console.warn('[useSession] Failed to parse NEXT_PUBLIC_E2E_SESSION', error)
+    MOCK_SESSION = null
+  }
+
+  if (process.env.NODE_ENV !== 'production') {
+    console.info('[useSession] Using mocked session for E2E flows')
+  }
+}
+
 function resolveSessionScope(): string {
   if (typeof window === 'undefined') return 'ssr'
   const cookie = readXsrfCookie()
@@ -44,6 +59,8 @@ export function useSession(options?: UseSessionOptions) {
   const sessionScope = useMemo(() => resolveSessionScope(), [])
   const sessionQueryKey = useMemo(() => ['session', 'me', sessionScope] as const, [sessionScope])
 
+  const isMockedSession = Boolean(MOCK_SESSION)
+
   const query = useQuery({
     queryKey: sessionQueryKey,
     queryFn: async (): Promise<SessionUser | null> => {
@@ -60,10 +77,11 @@ export function useSession(options?: UseSessionOptions) {
     },
     retry: false,
     staleTime: 5 * 60 * 1000,
+    enabled: !isMockedSession,
   })
 
   useEffect(() => {
-    if (typeof window === 'undefined') return
+    if (isMockedSession || typeof window === 'undefined') return
 
     const handleUnauthorized = () => {
       queryClient.setQueryData(sessionQueryKey, null)
@@ -81,22 +99,25 @@ export function useSession(options?: UseSessionOptions) {
   const logout = useMutation({
     mutationKey: ['session', 'logout', sessionScope],
     mutationFn: async () => {
+      if (isMockedSession) return
       await apiClient.post('/auth/logout')
     },
     onSuccess: async () => {
-      queryClient.setQueryData(sessionQueryKey, null)
-      clearInvoicePdfCache()
-      await queryClient.invalidateQueries({ queryKey: sessionQueryKey })
-      if (redirectOnLogout && typeof window !== 'undefined') {
-        const nextPath = window.location.pathname + window.location.search + window.location.hash
-        router.push(`${loginPath}?next=${encodeURIComponent(nextPath)}`)
+      if (!isMockedSession) {
+        queryClient.setQueryData(sessionQueryKey, null)
+        clearInvoicePdfCache()
+        await queryClient.invalidateQueries({ queryKey: sessionQueryKey })
+        if (redirectOnLogout && typeof window !== 'undefined') {
+          const nextPath = window.location.pathname + window.location.search + window.location.hash
+          router.push(`${loginPath}?next=${encodeURIComponent(nextPath)}`)
+        }
       }
     },
   })
 
   return {
-    user: query.data ?? null,
-    isLoading: query.isLoading,
+    user: (MOCK_SESSION as SessionUser | null) ?? query.data ?? null,
+    isLoading: isMockedSession ? false : query.isLoading,
     error: query.error,
     refetch: query.refetch,
     logout,

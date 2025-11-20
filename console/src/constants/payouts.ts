@@ -50,8 +50,8 @@ export const PAYOUTS_PAGE_SIZE = 20
 
 export const PAYOUT_CSV_HEADERS = [
   { key: 'id', label: 'Payout ID' },
-  { key: 'scheduledDate', label: 'Scheduled Date' },
-  { key: 'completedDate', label: 'Completed Date' },
+  { key: 'scheduledFor', label: 'Scheduled Date' },
+  { key: 'processedAt', label: 'Processed Date' },
   { key: 'amount', label: 'Amount' },
   { key: 'status', label: 'Status' },
   { key: 'method', label: 'Method' },

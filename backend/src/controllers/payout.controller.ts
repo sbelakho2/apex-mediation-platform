@@ -10,12 +10,34 @@ import {
 } from '../services/payoutProcessor';
 
 // Validation schema
-const updateSettingsSchema = z.object({
-  threshold: z.number().min(0),
-  method: z.enum(['stripe', 'paypal', 'wire']),
-  currency: z.string().length(3),
-  schedule: z.enum(['monthly']), // NET 30 payment terms only
-});
+const payoutMethodEnum = z.enum(['stripe', 'paypal', 'wire']);
+
+const updateSettingsSchema = z
+  .object({
+    method: payoutMethodEnum,
+    currency: z.string().length(3),
+    schedule: z.enum(['monthly']).default('monthly'),
+    minimumPayout: z.number().min(0),
+    accountName: z.string().trim().min(1).max(100),
+    accountReference: z
+      .string()
+      .trim()
+      .min(4)
+      .max(64)
+      .regex(/^[A-Za-z0-9*\-\s]+$/),
+    autoPayout: z.boolean().optional().default(false),
+    backupMethod: payoutMethodEnum.nullable().optional(),
+  })
+  .refine(
+    (value) => {
+      if (!value.backupMethod) return true;
+      return value.backupMethod !== value.method;
+    },
+    {
+      path: ['backupMethod'],
+      message: 'Backup method must differ from primary method',
+    }
+  );
 
 const parseQueryParam = (value: unknown): string | undefined => {
   if (typeof value === 'string') {
@@ -45,21 +67,30 @@ export const getHistory = async (
       throw new AppError('Missing publisher context', 401);
     }
 
-    const limitParam = parseQueryParam(req.query.limit);
-    const limit = limitParam ? Number(limitParam) : 10;
+    const pageParam = parseQueryParam(req.query.page);
+    const sizeParam = parseQueryParam(req.query.pageSize);
+    const page = pageParam ? Number(pageParam) : 1;
+    const pageSize = sizeParam ? Number(sizeParam) : 25;
 
-    if (!Number.isFinite(limit) || limit <= 0) {
-      throw new AppError('Invalid limit parameter', 400);
+    if (!Number.isFinite(page) || page <= 0) {
+      throw new AppError('Invalid page parameter', 400);
     }
 
-    // Cap maximum to prevent abuse (FIX-11: 667)
-    const bounded = Math.min(Math.floor(limit), 100);
+    if (!Number.isFinite(pageSize) || pageSize <= 0) {
+      throw new AppError('Invalid pageSize parameter', 400);
+    }
 
-    const history = await listPayoutHistory(publisherId, bounded);
+    const result = await listPayoutHistory(publisherId, page, pageSize);
 
     res.json({
       success: true,
-      data: history,
+      data: {
+        data: result.items,
+        total: result.total,
+        page: result.page,
+        pageSize: result.pageSize,
+        hasMore: result.hasMore,
+      },
     });
   } catch (error) {
     next(error);
@@ -134,7 +165,16 @@ export const updateSettings = async (
     }
 
     const data = updateSettingsSchema.parse(req.body);
-    const updated = await updatePayoutSettings(publisherId, data);
+    const updated = await updatePayoutSettings(publisherId, {
+      threshold: data.minimumPayout,
+      method: data.method,
+      currency: data.currency,
+      schedule: data.schedule,
+      accountName: data.accountName,
+      accountReference: data.accountReference,
+      autoPayout: data.autoPayout ?? false,
+      backupMethod: data.backupMethod ?? undefined,
+    });
 
     // Emit simple audit log (FIX-11: 667)
     logger.info('[Payouts] Settings updated', {

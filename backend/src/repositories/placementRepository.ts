@@ -11,81 +11,107 @@ export type PlacementRow = {
   config?: any;
 };
 
-export async function list(limit = 50, offset = 0): Promise<PlacementRow[]> {
-  // Use COALESCE to be safe in non-migrated envs
+const BASE_SELECT = `
+  SELECT p.id, p.app_id, p.name, p.type, p.status, p.created_at,
+         COALESCE(p.config, '{}'::jsonb) as config
+  FROM placements p
+  JOIN apps a ON a.id = p.app_id
+`;
+
+export async function list(publisherId: string, limit = 50, offset = 0): Promise<PlacementRow[]> {
   const sql = `
-    SELECT id, app_id, name, type, status, created_at,
-           COALESCE(config, '{}'::jsonb) as config
-    FROM placements
-    ORDER BY created_at DESC
+    ${BASE_SELECT}
+    WHERE a.publisher_id = $3
+    ORDER BY p.created_at DESC
     LIMIT $1 OFFSET $2
   `;
-  const res = await query<PlacementRow>(sql, [limit, offset]);
+  const res = await query<PlacementRow>(sql, [limit, offset, publisherId]);
   return res.rows;
 }
 
-export async function getById(id: string): Promise<PlacementRow | null> {
+export async function getById(publisherId: string, id: string): Promise<PlacementRow | null> {
   const sql = `
-    SELECT id, app_id, name, type, status, created_at,
-           COALESCE(config, '{}'::jsonb) as config
-    FROM placements
-    WHERE id = $1
+    ${BASE_SELECT}
+    WHERE p.id = $1 AND a.publisher_id = $2
   `;
-  const res = await query<PlacementRow>(sql, [id]);
+  const res = await query<PlacementRow>(sql, [id, publisherId]);
   return res.rows[0] || null;
 }
 
-export async function create(input: { appId: string; name: string; type: string; status?: string; config?: any }): Promise<PlacementRow> {
+export async function create(
+  publisherId: string,
+  input: { appId: string; name: string; type: string; status?: string; config?: any }
+): Promise<PlacementRow | null> {
   const sql = `
     INSERT INTO placements (app_id, name, type, status, config)
-    VALUES ($1, $2, $3, COALESCE($4, 'active'), COALESCE($5, '{}'::jsonb))
+    SELECT $1, $2, $3, COALESCE($4, 'active'), COALESCE($5, '{}'::jsonb)
+    WHERE EXISTS (
+      SELECT 1 FROM apps WHERE id = $1 AND publisher_id = $6
+    )
     RETURNING id, app_id, name, type, status, created_at, COALESCE(config, '{}'::jsonb) as config
   `;
-  const res = await query<PlacementRow>(sql, [input.appId, input.name, input.type, input.status ?? null, input.config ?? null]);
-  return res.rows[0];
+  const res = await query<PlacementRow>(sql, [
+    input.appId,
+    input.name,
+    input.type,
+    input.status ?? null,
+    input.config ?? null,
+    publisherId,
+  ]);
+  return res.rows[0] || null;
 }
 
-export async function update(id: string, patch: Partial<PlacementRow>): Promise<PlacementRow | null> {
-  // Only allow updating name/status/type in this helper; use patchConfig for config.
+export async function update(
+  publisherId: string,
+  id: string,
+  patch: Partial<PlacementRow>
+): Promise<PlacementRow | null> {
   const fields: string[] = [];
   const values: any[] = [];
   let i = 1;
   if (typeof patch.name === 'string') { fields.push(`name = $${i++}`); values.push(patch.name); }
   if (typeof patch.status === 'string') { fields.push(`status = $${i++}`); values.push(patch.status); }
   if (typeof patch.type === 'string') { fields.push(`type = $${i++}`); values.push(patch.type); }
-  if (fields.length === 0) return await getById(id);
+  if (fields.length === 0) return await getById(publisherId, id);
+
   const sql = `
-    UPDATE placements
+    UPDATE placements p
     SET ${fields.join(', ')}
-    WHERE id = $${i}
-    RETURNING id, app_id, name, type, status, created_at, COALESCE(config, '{}'::jsonb) as config
+    FROM apps a
+    WHERE p.id = $${i} AND a.id = p.app_id AND a.publisher_id = $${i + 1}
+    RETURNING p.id, p.app_id, p.name, p.type, p.status, p.created_at, COALESCE(p.config, '{}'::jsonb) as config
   `;
-  values.push(id);
+  values.push(id, publisherId);
   const res = await query<PlacementRow>(sql, values);
   return res.rows[0] || null;
 }
 
-export async function patchConfig(id: string, incoming: any): Promise<PlacementRow | null> {
-  // Read existing, deep-merge, and write back
-  const existing = await getById(id);
+export async function patchConfig(
+  publisherId: string,
+  id: string,
+  incoming: any
+): Promise<PlacementRow | null> {
+  const existing = await getById(publisherId, id);
   if (!existing) return null;
   const currentConfig = existing.config ?? {};
   const merged = deepMerge(currentConfig, incoming ?? {});
   const sql = `
-    UPDATE placements
-    SET config = $2
-    WHERE id = $1
-    RETURNING id, app_id, name, type, status, created_at, COALESCE(config, '{}'::jsonb) as config
+    UPDATE placements p
+    SET config = $3
+    FROM apps a
+    WHERE p.id = $1 AND a.id = p.app_id AND a.publisher_id = $2
+    RETURNING p.id, p.app_id, p.name, p.type, p.status, p.created_at, COALESCE(p.config, '{}'::jsonb) as config
   `;
-  const res = await query<PlacementRow>(sql, [id, JSON.stringify(merged)]);
+  const res = await query<PlacementRow>(sql, [id, publisherId, JSON.stringify(merged)]);
   return res.rows[0] || null;
 }
 
-export async function deleteById(id: string): Promise<boolean> {
+export async function deleteById(publisherId: string, id: string): Promise<boolean> {
   const sql = `
-    DELETE FROM placements
-    WHERE id = $1
+    DELETE FROM placements p
+    USING apps a
+    WHERE p.id = $1 AND a.id = p.app_id AND a.publisher_id = $2
   `;
-  const res = await query(sql, [id]);
+  const res = await query(sql, [id, publisherId]);
   return (res.rowCount ?? 0) > 0;
 }

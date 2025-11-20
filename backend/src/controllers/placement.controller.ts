@@ -68,6 +68,14 @@ const updatePlacementSchema = z.object({
   config: placementConfigSchema.optional(),
 });
 
+const requirePublisherId = (req: Request): string => {
+  const publisherId = req.user?.publisherId;
+  if (!publisherId) {
+    throw new AppError('Missing publisher context', 403);
+  }
+  return publisherId;
+};
+
 /**
  * List all placements
  */
@@ -77,10 +85,11 @@ export const list = async (
   next: NextFunction
 ): Promise<void> => {
   try {
+    const publisherId = requirePublisherId(req);
     const limit = Math.min(200, parseInt(String(req.query.pageSize || req.query.limit || 50), 10) || 50);
     const page = Math.max(1, parseInt(String(req.query.page || 1), 10) || 1);
     const offset = (page - 1) * limit;
-    const rows = await placementsRepo.list(limit, offset);
+    const rows = await placementsRepo.list(publisherId, limit, offset);
     res.json({ success: true, data: { items: rows, total: rows.length, page, pageSize: limit } });
   } catch (error) {
     next(error);
@@ -97,7 +106,8 @@ export const getById = async (
 ): Promise<void> => {
   try {
     const { id } = req.params;
-    const row = await placementsRepo.getById(id);
+    const publisherId = requirePublisherId(req);
+    const row = await placementsRepo.getById(publisherId, id);
     if (!row) {
       return next(new AppError('Placement not found', 404));
     }
@@ -117,13 +127,17 @@ export const create = async (
 ): Promise<void> => {
   try {
     const data = createPlacementSchema.parse(req.body);
-    const created = await placementsRepo.create({
+    const publisherId = requirePublisherId(req);
+    const created = await placementsRepo.create(publisherId, {
       appId: data.appId,
       name: data.name,
       type: data.type,
       status: 'active',
       config: data.config ?? {},
     });
+    if (!created) {
+      return next(new AppError('App not found for publisher', 404));
+    }
     logger.info(`Placement created: ${created.id}`);
     res.status(201).json({ success: true, data: created });
   } catch (error) {
@@ -146,14 +160,15 @@ export const update = async (
   try {
     const { id } = req.params;
     const data = updatePlacementSchema.parse(req.body);
+    const publisherId = requirePublisherId(req);
     // Update basic fields if provided
-    let updated = await placementsRepo.update(id, {
+    let updated = await placementsRepo.update(publisherId, id, {
       name: data.name as any,
       status: data.status as any,
     });
     // If config provided on PUT, treat as full replacement for now
     if (data.config) {
-      updated = await placementsRepo.patchConfig(id, data.config);
+      updated = await placementsRepo.patchConfig(publisherId, id, data.config);
     }
     if (!updated) return next(new AppError('Placement not found', 404));
     logger.info(`Placement updated: ${id}`);
@@ -180,18 +195,19 @@ export const patch = async (
     // Accept either top-level fields or a nested config doc
     const body = req.body ?? {};
     const parsed = updatePlacementSchema.parse(body);
+    const publisherId = requirePublisherId(req);
 
-    let updated = await placementsRepo.getById(id);
+    let updated = await placementsRepo.getById(publisherId, id);
     if (!updated) return next(new AppError('Placement not found', 404));
 
     if (typeof parsed.name !== 'undefined' || typeof parsed.status !== 'undefined') {
-      updated = (await placementsRepo.update(id, {
+      updated = (await placementsRepo.update(publisherId, id, {
         name: parsed.name as any,
         status: parsed.status as any,
       })) || updated;
     }
     if (parsed.config) {
-      updated = (await placementsRepo.patchConfig(id, parsed.config)) || updated;
+      updated = (await placementsRepo.patchConfig(publisherId, id, parsed.config)) || updated;
     }
     res.json({ success: true, data: updated });
   } catch (error) {
@@ -218,14 +234,15 @@ export const remove = async (
       throw new AppError('Invalid placement ID', 400);
     }
 
+    const publisherId = requirePublisherId(req);
     // Check if placement exists
-    const existing = await placementsRepo.getById(id);
+    const existing = await placementsRepo.getById(publisherId, id);
     if (!existing) {
       throw new AppError('Placement not found', 404);
     }
 
     // Delete from database
-    const deleted = await placementsRepo.deleteById(id);
+    const deleted = await placementsRepo.deleteById(publisherId, id);
     
     if (!deleted) {
       throw new AppError('Failed to delete placement', 500);

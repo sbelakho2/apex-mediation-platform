@@ -19,10 +19,7 @@ export function PayoutWidget() {
   } = useQuery<PayoutHistory | null>({
     queryKey: ['upcoming-payout', publisherId ?? 'all'],
     enabled: !!user,
-    queryFn: ({ signal }) =>
-      payoutApi
-        .getUpcoming({ publisherId, signal })
-        .then((res) => res.data ?? null),
+      queryFn: ({ signal }) => payoutApi.getUpcoming({ publisherId, signal }).then((res) => res ?? null),
   })
 
   if (sessionLoading || !user) {
@@ -50,7 +47,7 @@ export function PayoutWidget() {
   const methodLabel = PAYOUT_METHOD_LABELS[upcomingPayout.method] ?? upcomingPayout.method
 
   const now = new Date()
-  const target = new Date(upcomingPayout.scheduledDate)
+  const target = new Date(upcomingPayout.scheduledFor)
   // Normalize to local midnight to reduce timezone drift; clamp to [0, ∞)
   const msPerDay = 1000 * 60 * 60 * 24
   const daysRaw = Math.ceil((target.getTime() - now.getTime()) / msPerDay)
@@ -81,7 +78,7 @@ export function PayoutWidget() {
               <span className="text-sm">Scheduled Date</span>
             </div>
             <div className="text-right">
-              <div className="font-semibold text-gray-900">{formatDate(upcomingPayout.scheduledDate)}</div>
+              <div className="font-semibold text-gray-900">{formatDate(upcomingPayout.scheduledFor)}</div>
               <div className="text-xs text-gray-500">
                 {daysUntilPayout > 0 ? `in ${daysUntilPayout} days` : 'today'}
               </div>

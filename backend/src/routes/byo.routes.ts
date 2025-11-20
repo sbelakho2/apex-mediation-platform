@@ -8,6 +8,7 @@
  */
 
 import { Router } from 'express';
+import multer from 'multer';
 import { authenticate } from '../middleware/auth';
 import {
   storeCredentials,
@@ -17,8 +18,13 @@ import {
   deleteCredentials,
   listCredentials,
 } from '../controllers/credentials.controller';
+import { ingestAdmobCsv, ingestAdmobApi, ingestUnityApi } from '../controllers/byoIngestion.controller';
 
 const router = Router();
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+});
 
 // All BYO routes require authentication
 router.use(authenticate);
@@ -36,8 +42,8 @@ router.delete('/credentials/:network', deleteCredentials);
 // POST /api/v1/transparency/receipts/verify - already exists
 
 // Network Report Ingestion endpoints
-// POST /api/v1/byo/ingestion/admob - AdMob CSV upload
-// POST /api/v1/byo/ingestion/unity - Unity API fetch
-// Note: Implementation deferred to next phase for proper controller/validation setup
+router.post('/ingestion/admob/csv', upload.single('report'), ingestAdmobCsv);
+router.post('/ingestion/admob/api', ingestAdmobApi);
+router.post('/ingestion/unity', ingestUnityApi);
 
 export default router;

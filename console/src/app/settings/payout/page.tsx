@@ -53,10 +53,7 @@ export default function PayoutSettingsPage() {
 
   const { data, isLoading } = useQuery({
     queryKey: ['settings', 'payout'],
-    queryFn: async () => {
-      const { data } = await settingsApi.getPayoutSettings()
-      return data
-    },
+    queryFn: () => settingsApi.getPayoutSettings(),
   })
 
   const form = useForm<PayoutFormValues>({
@@ -78,9 +75,9 @@ export default function PayoutSettingsPage() {
       form.reset({
         method: data.method,
         accountName: data.accountName,
-        accountNumberMasked: data.accountNumberMasked,
+        accountNumberMasked: data.accountReference,
         currency: data.currency,
-        minimumPayout: data.minimumPayout,
+        minimumPayout: data.threshold,
         autoPayout: data.autoPayout,
         backupMethod: data.backupMethod ?? '',
       })
@@ -92,9 +89,10 @@ export default function PayoutSettingsPage() {
       await settingsApi.updatePayoutSettings({
         method: values.method,
         accountName: values.accountName,
-        accountNumberMasked: values.accountNumberMasked,
+        accountReference: values.accountNumberMasked,
         currency: values.currency,
-        minimumPayout: values.minimumPayout,
+        threshold: values.minimumPayout,
+        schedule: 'monthly',
         autoPayout: values.autoPayout,
         backupMethod: values.backupMethod || undefined,
       })
