@@ -1,0 +1,75 @@
+{
+  "format": 1,
+  "restore": {
+    "/home/aaron/IdeaProjects/Ad-Project/sdk/core/unity/Tests/ApexMediation.Tests.csproj": {}
+  },
+  "projects": {
+    "/home/aaron/IdeaProjects/Ad-Project/sdk/core/unity/Tests/ApexMediation.Tests.csproj": {
+      "version": "1.0.0",
+      "restore": {
+        "projectUniqueName": "/home/aaron/IdeaProjects/Ad-Project/sdk/core/unity/Tests/ApexMediation.Tests.csproj",
+        "projectName": "ApexMediation.Tests",
+        "projectPath": "/home/aaron/IdeaProjects/Ad-Project/sdk/core/unity/Tests/ApexMediation.Tests.csproj",
+        "packagesPath": "/home/aaron/.nuget/packages/",
+        "outputPath": "/home/aaron/IdeaProjects/Ad-Project/sdk/core/unity/Tests/obj/",
+        "projectStyle": "PackageReference",
+        "configFilePaths": [
+          "/home/aaron/.nuget/NuGet/NuGet.Config"
+        ],
+        "originalTargetFrameworks": [
+          "net8.0"
+        ],
+        "sources": {
+          "https://api.nuget.org/v3/index.json": {}
+        },
+        "frameworks": {
+          "net8.0": {
+            "targetAlias": "net8.0",
+            "projectReferences": {}
+          }
+        },
+        "warningProperties": {
+          "warnAsError": [
+            "NU1605"
+          ]
+        }
+      },
+      "frameworks": {
+        "net8.0": {
+          "targetAlias": "net8.0",
+          "dependencies": {
+            "Microsoft.NET.Test.Sdk": {
+              "target": "Package",
+              "version": "[17.9.0, )"
+            },
+            "xunit": {
+              "target": "Package",
+              "version": "[2.7.0, )"
+            },
+            "xunit.runner.visualstudio": {
+              "target": "Package",
+              "version": "[2.5.8, )"
+            }
+          },
+          "imports": [
+            "net461",
+            "net462",
+            "net47",
+            "net471",
+            "net472",
+            "net48",
+            "net481"
+          ],
+          "assetTargetFallback": true,
+          "warn": true,
+          "frameworkReferences": {
+            "Microsoft.NETCore.App": {
+              "privateAssets": "all"
+            }
+          },
+          "runtimeIdentifierGraphPath": "/usr/lib/dotnet/sdk/8.0.121/PortableRuntimeIdentifierGraph.json"
+        }
+      }
+    }
+  }
+}

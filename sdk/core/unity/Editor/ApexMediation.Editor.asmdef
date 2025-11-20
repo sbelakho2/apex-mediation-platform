@@ -1,0 +1,17 @@
+{
+  "name": "ApexMediation.Editor",
+  "rootNamespace": "Apex.Mediation.Editor",
+  "references": [
+    "ApexMediation"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": false
+}

@@ -9,5 +9,12 @@
     "email": "dev@platform.com"
   },
   "keywords": ["mediation","ads","platform","editor"],
-  "dependencies": {}
+  "dependencies": {},
+  "samples": [
+    {
+      "displayName": "Mediation Demo",
+      "description": "Sample scenes demonstrating BYO initialization, consent, and ad lifecycle",
+      "path": "Samples~/MediationDemo"
+    }
+  ]
 }

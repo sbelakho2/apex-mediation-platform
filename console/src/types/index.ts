@@ -39,6 +39,22 @@ export interface Adapter {
   updatedAt: string
 }
 
+// Tools: app-ads.txt inspector
+export interface AppAdsInspectorVendorResult {
+  vendor: string
+  pass: boolean
+  missing: string[]
+  suggested: string[]
+}
+
+export interface AppAdsInspectorResult {
+  domain: string
+  fetched: boolean
+  httpStatus?: number
+  vendors: AppAdsInspectorVendorResult[]
+  rawSample?: string
+}
+
 // Revenue types
 export interface RevenueData {
   date: string

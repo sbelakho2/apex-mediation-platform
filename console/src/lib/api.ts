@@ -31,6 +31,7 @@ import type {
   NetworkCredentialToken,
   NetworkCredentialsList,
   NetworkIngestionResult,
+  AppAdsInspectorResult,
 } from '@/types'
 
 const USE_MOCK_API = process.env.NEXT_PUBLIC_USE_MOCK_API === 'true' && process.env.NODE_ENV !== 'production'
@@ -119,6 +120,17 @@ export const placementApi = {
   getFormatCatalog: () => {
     if (USE_MOCK_API) return mockApiCall<Record<string, string[]>>('placement-formats')
     return apiClient.get<Record<string, string[]>>('/placements/formats')
+  },
+}
+
+// Tools API
+export const toolsApi = {
+  inspectAppAds: async (domain: string): Promise<AppAdsInspectorResult> => {
+    if (!domain || !domain.trim()) throw new Error('Domain is required')
+    const resp = await apiClient.get<AppAdsInspectorResult>(`/tools/app-ads-inspector`, {
+      params: { domain: domain.trim() },
+    })
+    return unwrapSuccessEnvelope(resp.data as any)
   },
 }
 

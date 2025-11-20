@@ -39,6 +39,7 @@ class MediationSDK private constructor(
     companion object {
         @Volatile
         private var instance: MediationSDK? = null
+        private val devBannerShown = java.util.concurrent.atomic.AtomicBoolean(false)
         
         // Thread pools for different operations
         private val backgroundExecutor = Executors.newFixedThreadPool(4) { r ->
@@ -192,6 +193,109 @@ class MediationSDK private constructor(
         adapterConfigProvider = provider
     }
 
+    /**
+     * Validate credentials/config for the specified networks without requesting ads.
+      * - Executes on background threads; callback is invoked on the main thread.
+      * - Never logs or transmits secrets; only sanitized telemetry is emitted.
+      */
+    fun validateCredentials(networkIds: List<String>? = null, callback: ValidationCallback) {
+        val task = Runnable {
+            val results = mutableMapOf<String, ValidationResult>()
+
+            // If disabled, short-circuit with a uniform error per requested network (or all registered)
+            if (!config.validationModeEnabled) {
+                val targets = networkIds?.ifEmpty { null }
+                    ?.toSet()
+                    ?: adapterRegistry.getRegisteredNetworks().toSet()
+                targets.forEach { net ->
+                    results[net] = ValidationResult.error(
+                        code = "validation_disabled",
+                        message = "ValidationMode is disabled in SDKConfig"
+                    )
+                }
+                postToMainThread { callback.onComplete(results) }
+                return@Runnable
+            }
+
+            val registered = adapterRegistry.getRegisteredNetworks()
+            val targets = (networkIds?.ifEmpty { null }?.toSet() ?: registered.toSet())
+                .filter { it in registered }
+
+            if (targets.isEmpty()) {
+                postToMainThread { callback.onComplete(emptyMap()) }
+                return@Runnable
+            }
+
+            val futures = targets.mapNotNull { net ->
+                val adapter = adapterRegistry.getAdapter(net)
+                if (adapter == null || !adapter.isAvailable()) {
+                    results[net] = ValidationResult.error("adapter_unavailable", "Adapter not registered or unavailable")
+                    null
+                } else {
+                    networkExecutor.submit(Callable {
+                        val creds = adapterConfigProvider?.getCredentials(net) ?: emptyMap()
+                        if (creds.isEmpty()) {
+                            net to ValidationResult.error("missing_credentials", "No credentials provided for $net")
+                        } else {
+                            try {
+                                val start = System.currentTimeMillis()
+                                val vr = adapter.validateConfig(creds)
+                                val latency = System.currentTimeMillis() - start
+                                val meta: Map<String, Any> = mapOf(
+                                    "network" to net,
+                                    "hasCreds" to true,
+                                    "credKeys" to creds.keys.take(5), // only key names, no values
+                                    "latencyMs" to latency
+                                )
+                                if (vr.success) {
+                                    telemetry.recordCredentialValidationSuccess(net, meta)
+                                } else {
+                                    telemetry.recordCredentialValidationFailure(net, vr.code, vr.message, meta)
+                                }
+                                net to vr
+                            } catch (t: Throwable) {
+                                telemetry.recordCredentialValidationFailure(
+                                    network = net,
+                                    code = "exception",
+                                    message = t.message ?: t.javaClass.simpleName,
+                                    metadata = mapOf(
+                                        "network" to net,
+                                        "hasCreds" to creds.isNotEmpty(),
+                                        "credKeys" to creds.keys.take(5)
+                                    )
+                                )
+                                net to ValidationResult.error("exception", t.message)
+                            }
+                        }
+                    })
+                }
+            }
+
+            // Collect with per-task timeout (short; we never make ad requests here)
+            futures.forEach { f ->
+                try {
+                    val (net, res) = f.get(1500, TimeUnit.MILLISECONDS)
+                    results[net] = res
+                } catch (_: TimeoutException) {
+                    // best-effort: we don't cancel the adapter, just mark timeout
+                    // We cannot know the network key from the future; run a slow path by skipping
+                } catch (_: Exception) {
+                    // swallowed; individual task handled its own telemetry
+                }
+            }
+
+            // Fill any missing due to timeout with a generic code
+            targets.forEach { net ->
+                if (!results.containsKey(net)) {
+                    results[net] = ValidationResult.error("timeout", "Validation timed out")
+                }
+            }
+
+            postToMainThread { callback.onComplete(results) }
+        }
+        if (isTestRuntime()) task.run() else backgroundExecutor.execute(task)
+    }
+
     private fun shouldUseS2SForPlacement(@Suppress("UNUSED_PARAMETER") placement: String): Boolean {
         // BYO mode: disable S2S entirely.
         if (config.sdkMode == SdkMode.BYO) return false
@@ -224,15 +328,35 @@ class MediationSDK private constructor(
             try {
                 // Load configuration
                 configManager.loadConfig()
-                
+
                 // Initialize adapters
                 adapterRegistry.initialize(context)
-                
+
                 // Setup telemetry
                 telemetry.start()
-                
+
                 // Record initialization time
                 telemetry.recordInitialization()
+
+                // Developer-only banner warning for app-ads.txt issues (flag propagated via remote config).
+                // SDK never calls the inspector; this is purely a UI hint controlled by console.
+                try {
+                    if (BuildConfig.DEBUG && !devBannerShown.get()) {
+                        val features = configManager.getFeatureFlags()
+                        if (features.devAppAdsInspectorWarn) {
+                            devBannerShown.set(true)
+                            postToMainThread {
+                                try {
+                                    android.widget.Toast.makeText(
+                                        context,
+                                        "app-ads.txt: one or more enabled vendors look misconfigured. See Console → Developer Tools.",
+                                        android.widget.Toast.LENGTH_LONG
+                                    ).show()
+                                } catch (_: Throwable) { /* ignore UI errors */ }
+                            }
+                        }
+                    }
+                } catch (_: Throwable) { /* ignore */ }
             } catch (e: Exception) {
                 telemetry.recordError("initialization_failed", e)
             }
@@ -548,6 +672,8 @@ data class SDKConfig @JvmOverloads constructor(
     val enableS2SWhenCapable: Boolean = false,
     // Auto-read consent strings from SharedPreferences (optional)
     val autoConsentReadEnabled: Boolean = false,
+    // Enable developer credential validation flows (no ad requests)
+    val validationModeEnabled: Boolean = false,
 ) {
     class Builder {
         private var appId: String = ""
@@ -564,6 +690,7 @@ data class SDKConfig @JvmOverloads constructor(
         private var sdkMode: SdkMode = SdkMode.BYO
         private var enableS2SWhenCapable: Boolean = false
         private var autoConsentReadEnabled: Boolean = false
+        private var validationModeEnabled: Boolean = false
         
         fun appId(id: String) = apply { this.appId = id }
         fun testMode(enabled: Boolean) = apply { this.testMode = enabled }
@@ -580,6 +707,7 @@ data class SDKConfig @JvmOverloads constructor(
         fun sdkMode(mode: SdkMode) = apply { this.sdkMode = mode }
         fun enableS2SWhenCapable(enabled: Boolean) = apply { this.enableS2SWhenCapable = enabled }
         fun autoConsentReadEnabled(enabled: Boolean) = apply { this.autoConsentReadEnabled = enabled }
+        fun validationModeEnabled(enabled: Boolean) = apply { this.validationModeEnabled = enabled }
 
         fun build() = SDKConfig(
             appId = appId,
@@ -596,6 +724,7 @@ data class SDKConfig @JvmOverloads constructor(
             sdkMode = sdkMode,
             enableS2SWhenCapable = enableS2SWhenCapable,
             autoConsentReadEnabled = autoConsentReadEnabled,
+            validationModeEnabled = validationModeEnabled,
         )
     }
 }

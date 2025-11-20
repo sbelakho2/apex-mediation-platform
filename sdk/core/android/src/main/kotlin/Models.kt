@@ -119,6 +119,13 @@ interface AdAdapter {
     fun isAvailable(): Boolean
     fun loadAd(placement: String, config: PlacementConfig): AdResponse?
     fun destroy()
+    /**
+     * Optional: Validate adapter configuration/credentials without requesting an ad.
+     * Default implementation returns [ValidationResult.unsupported()].
+     */
+    fun validateConfig(config: Map<String, String>): ValidationResult {
+        return ValidationResult.unsupported()
+    }
 }
 
 /**
@@ -148,7 +155,9 @@ enum class EventType {
     CONFIG_FAILED,
     TIMEOUT,
     CIRCUIT_OPEN,
-    ANR_DETECTED
+    ANR_DETECTED,
+    CREDENTIAL_VALIDATION_SUCCESS,
+    CREDENTIAL_VALIDATION_FAILED
 }
 
 /**
@@ -176,5 +185,33 @@ data class FeatureFlags(
     val crashReportingEnabled: Boolean = true,
     val debugLoggingEnabled: Boolean = false,
     val experimentalFeaturesEnabled: Boolean = false,
-    val killSwitch: Boolean = false
+    val killSwitch: Boolean = false,
+    // Developer-only banner to warn about app-ads.txt issues (propagated via remote config).
+    // SDK never calls inspector; console/back-end compute and set this flag. Default false.
+    val devAppAdsInspectorWarn: Boolean = false,
 )
+
+/**
+ * Result of credential/config validation for an adapter.
+ */
+data class ValidationResult(
+    val success: Boolean,
+    val code: String = if (success) "ok" else "error",
+    val message: String? = null,
+    val details: Map<String, Any?> = emptyMap()
+) {
+    companion object {
+        fun ok(message: String? = null, details: Map<String, Any?> = emptyMap()) =
+            ValidationResult(true, "ok", message, details)
+        fun error(code: String, message: String? = null, details: Map<String, Any?> = emptyMap()) =
+            ValidationResult(false, code, message, details)
+        fun unsupported() = ValidationResult(false, "unsupported", "Adapter does not support validation")
+    }
+}
+
+/**
+ * Callback for batch credential validation results.
+ */
+interface ValidationCallback {
+    fun onComplete(results: Map<String, ValidationResult>)
+}

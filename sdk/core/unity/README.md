@@ -4,23 +4,28 @@ _Last updated: 2025-11-18_
 
 > **FIX-10 governance:** This README documents Unity SDK scaffolding. For SDK backlog and production readiness, see `docs/Internal/Deployment/PROJECT_STATUS.md` and `docs/Internal/Development/FIXES.md` (FIX-05).
 
-This folder contains a minimal Unity Package scaffolding for the Platform mediation SDK.
+This folder now contains the Unity BYO Mediation SDK surface that mirrors the Android/iOS runtime:
 
-What I added:
-- `package.json` — UPM manifest
-- `Editor/MediationManagerWindow.cs` — EditorWindow scaffold (placements, adapters, payouts placeholders)
+### Highlights
+- Runtime asmdef (`Runtime/ApexMediation.asmdef`) with public facade (`Runtime/ApexMediation.cs`).
+- Consent manager with explicit setters and optional auto-read from PlayerPrefs/NSUserDefaults.
+- BYO credential provider, zero-trust logging, and per-network config injection.
+- Platform bridges for Android (JNI) and iOS (P/Invoke) plus editor-safe mock bridge.
+- OMSDK-friendly banner host component and IL2CPP-safe callback pump.
+- Editor tooling: credential wizard with validation, Mediation Manager (search, diagnostics), Migration Studio, and app-ads.txt inspector.
+- Samples (`Samples~/MediationDemo`) showing initialization and ad flow.
+- Config-as-Code utilities (HMAC signed export/import) and cryptographic transparency proofs for selection logs.
 
-Next steps (suggested):
-- Add runtime assembly definitions and the runtime API (C# wrapper) under `Runtime/`
-- Implement build-time checks (CI step) to enforce adapter size and threading rules
-- Implement Editor HUD components (Auction Inspector, Health panel)
-- Add UPM publishing pipeline (scoped registry or Git-based package)
+### Trying the SDK
+1. Open Unity 2020.3+.
+2. In Package Manager choose “Add package from disk” and select this folder.
+3. Import the “Mediation Demo” sample from Package Manager UI.
+4. Open the sample scene, hit Play, and use the buttons to load/show mock ads.
 
-How to try locally (in Unity):
-1. Open your Unity project (recommended 2020.3+)
-2. In Project window, choose Packages -> Add package from disk and point to this package folder
-3. Open Platform -> Mediation Manager from the Window menu
+### Development
+- Runtime logic lives in `Runtime/` with platform-specific bridges under `Runtime/Platforms`.
+- Editor utilities (credential wizard, manager + inspectors, migration studio, diagnostics) live in `Editor/`.
+- Tests reside under `Tests/` and can be executed with `dotnet test Tests/ApexMediation.Tests.csproj`.
+- Automated constraints: run `scripts/check_package_constraints.sh` to enforce runtime size (<100KB) and execute the unit suite.
 
-Notes:
-- This is a minimal scaffold to start Editor tooling and reduce switching friction for Unity studios.
-- Do NOT include heavy native libs in the runtime; keep adapters separate and modular.
+Please keep vendor adapters outside this core package—publishers bring their own SDKs in BYO mode.

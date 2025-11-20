@@ -150,6 +150,36 @@ class TelemetryCollector(
             )
         )
     }
+
+    /**
+     * Record a credential validation success for a given network (BYO ValidationMode).
+     * Metadata must not contain secrets; only include key names or booleans.
+     */
+    fun recordCredentialValidationSuccess(network: String, metadata: Map<String, Any> = emptyMap()) {
+        recordEvent(
+            TelemetryEvent(
+                eventType = EventType.CREDENTIAL_VALIDATION_SUCCESS,
+                networkName = network,
+                metadata = metadata
+            )
+        )
+    }
+
+    /**
+     * Record a credential validation failure for a given network (BYO ValidationMode).
+     * Provide a normalized error code and optional message. No secrets allowed in metadata.
+     */
+    fun recordCredentialValidationFailure(network: String, code: String, message: String?, metadata: Map<String, Any> = emptyMap()) {
+        recordEvent(
+            TelemetryEvent(
+                eventType = EventType.CREDENTIAL_VALIDATION_FAILED,
+                networkName = network,
+                errorCode = code,
+                errorMessage = message,
+                metadata = metadata
+            )
+        )
+    }
     
     /**
      * Add event to queue

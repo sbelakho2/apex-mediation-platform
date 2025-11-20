@@ -28,6 +28,58 @@ Validation and QA
 
 ---
 
+Changelog — Android SDK P1.7: Credential ValidationMode (2025-11-20)
+
+Summary
+- Adds developer-only ValidationMode to pre-flight network credentials without issuing ad requests.
+- Extends `AdAdapter` with an optional `validateConfig(...)` hook; default is a safe no-op returning `unsupported`.
+- Introduces `SDKConfig.validationModeEnabled` and a public API `MediationSDK.validateCredentials(...)` that runs validations with strict timeouts and sanitized telemetry.
+
+What changed (highlights)
+- Models
+  - New `ValidationResult` data class and `ValidationCallback` interface in `sdk/core/android/src/main/kotlin/Models.kt`.
+  - `EventType` gains `CREDENTIAL_VALIDATION_SUCCESS` and `CREDENTIAL_VALIDATION_FAILED`.
+  - `AdAdapter` adds a default `validateConfig(config: Map<String,String>): ValidationResult` method.
+
+- MediationSDK
+  - New `validateCredentials(networkIds?: List<String>, callback: ValidationCallback)` method to orchestrate validations in parallel with per-task timeout (1.5s), never requesting ads and never logging secrets.
+  - Uses the existing `AdapterConfigProvider` to obtain per-network credentials at runtime.
+  - New `SDKConfig` flag: `validationModeEnabled` with builder setter.
+
+- Telemetry
+  - `TelemetryCollector` gains `recordCredentialValidationSuccess(...)` and `recordCredentialValidationFailure(...)` helpers; events redact secrets and only include non-sensitive metadata (e.g., key names).
+
+Usage
+```kotlin
+val sdk = MediationSDK.initialize(appContext, appId, SDKConfig.Builder()
+    .validationModeEnabled(true)
+    .build())
+
+sdk.setAdapterConfigProvider(object: AdapterConfigProvider {
+    override fun getCredentials(networkId: String): Map<String, String>? = /* load from app storage */
+        when (networkId) {
+            "admob" -> mapOf("app_id" to ADMOB_APP_ID, "ad_unit" to ADMOB_UNIT)
+            else -> null
+        }
+})
+
+sdk.validateCredentials(listOf("admob"), object: ValidationCallback {
+    override fun onComplete(results: Map<String, ValidationResult>) {
+        // Inspect results["admob"]
+    }
+})
+```
+
+Notes
+- If `validationModeEnabled` is false, validations short-circuit with `validation_disabled` results.
+- Adapters that don’t override `validateConfig(...)` will return `unsupported`.
+- This feature is developer-only and intended for integration checks; it never transmits secrets or triggers ad requests.
+
+Validation
+- Android module builds successfully; new APIs compile alongside BYO mode work.
+
+---
+
 Changelog — BYO Production Readiness Implementation (2025-11-19 to 2025-11-20)
 
 Summary
