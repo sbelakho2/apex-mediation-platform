@@ -7,7 +7,8 @@ import android.os.Looper
 import android.os.StrictMode
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
-import java.util.concurrent.CompletableFuture
+import java.util.concurrent.Callable
+import java.util.concurrent.Future
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeoutException
 import kotlinx.coroutines.*
@@ -113,6 +114,7 @@ class MediationSDK private constructor(
     @Volatile private var auctionApiKey: String = ""
     @Volatile private var testModeOverride: Boolean? = null
     @Volatile private var testDeviceId: String? = null
+    @Volatile private var adapterConfigProvider: AdapterConfigProvider? = null
 
     // Debug/diagnostic getters used by DebugPanel (safe, read-only)
     fun getAppId(): String = config.appId
@@ -180,6 +182,25 @@ class MediationSDK private constructor(
             coppa = coppa,
             limitAdTracking = limitAdTracking,
         )
+    }
+
+    /**
+     * Inject per-network credentials at runtime (BYO zero-trust handling).
+     * Never logged, never sent to S2S when in BYO mode.
+     */
+    fun setAdapterConfigProvider(provider: AdapterConfigProvider?) {
+        adapterConfigProvider = provider
+    }
+
+    private fun shouldUseS2SForPlacement(@Suppress("UNUSED_PARAMETER") placement: String): Boolean {
+        // BYO mode: disable S2S entirely.
+        if (config.sdkMode == SdkMode.BYO) return false
+        // In HYBRID/MANAGED, only if explicitly enabled and we have API key.
+        if (!config.enableS2SWhenCapable) return false
+        if (auctionApiKey.isBlank()) return false
+        // Optionally, require that all enabled adapters are S2S-capable and that credentials exist.
+        // TODO: consult registry/capabilities when available.
+        return true
     }
 
     private fun ensureAuctionClient(): AuctionClient {
@@ -250,54 +271,56 @@ class MediationSDK private constructor(
                     return@Runnable
                 }
 
-                // 1) Try S2S auction first (competitive path). Falls back to adapters on no_fill.
-                try {
-                    val client = ensureAuctionClient()
-                    val meta = mutableMapOf<String, String>()
-                    val effectiveTest = testModeOverride ?: config.testMode
-                    if (effectiveTest) meta["test_mode"] = "1" else meta["test_mode"] = "0"
-                    testDeviceId?.let { if (it.isNotBlank()) meta["test_device"] = it }
-                    val opts = AuctionClient.InterstitialOptions(
-                        publisherId = config.appId,
-                        placementId = placement,
-                        floorCpm = placementConfig.floorPrice,
-                        adapters = placementConfig.enabledNetworks,
-                        metadata = meta,
-                        timeoutMs = placementConfig.timeoutMs.toInt().coerceAtLeast(100),
-                        auctionType = "header_bidding",
-                    )
-                    val result = client.requestInterstitial(opts, consentOptions)
-                    // Map to Ad model and callback success
-                    val ttlMs = computeDefaultExpiryMs(placementConfig)
-                    val ad = Ad(
-                        id = result.creativeId ?: ("ad-" + System.currentTimeMillis()),
-                        placementId = placement,
-                        networkName = result.adapter,
-                        adType = AdType.INTERSTITIAL,
-                        ecpm = result.ecpm,
-                        creative = Creative.Banner(width = 0, height = 0, markupHtml = result.adMarkup ?: ""),
-                        expiryTimeMs = System.currentTimeMillis() + ttlMs
-                    )
-                    cacheAd(placement, ad)
-                    val latency = System.currentTimeMillis() - startTime
-                    telemetry.recordAdLoad(placement, latency, true)
-                    postToMainThread { callback.onAdLoaded(ad) }
-                    return@Runnable
-                } catch (ae: AuctionClient.AuctionException) {
-                    // Map taxonomy to AdError; if no_fill, proceed to adapter fallback; else report error
-                    val reason = ae.reason
-                    if (reason == "no_fill") {
-                        // proceed to adapters
-                    } else {
-                        val err = when {
-                            reason == "timeout" -> AdError.TIMEOUT
-                            reason == "network_error" -> AdError.NETWORK_ERROR
-                            reason.startsWith("status_") -> AdError.INTERNAL_ERROR
-                            else -> AdError.INTERNAL_ERROR
-                        }
-                        telemetry.recordAdLoad(placement, System.currentTimeMillis() - startTime, false)
-                        postToMainThread { callback.onError(err, reason) }
+                // 1) Try S2S auction first if enabled for this mode; fallback to adapters on no_fill.
+                if (shouldUseS2SForPlacement(placement)) {
+                    try {
+                        val client = ensureAuctionClient()
+                        val meta = mutableMapOf<String, String>()
+                        val effectiveTest = testModeOverride ?: config.testMode
+                        if (effectiveTest) meta["test_mode"] = "1" else meta["test_mode"] = "0"
+                        testDeviceId?.let { if (it.isNotBlank()) meta["test_device"] = it }
+                        val opts = AuctionClient.InterstitialOptions(
+                            publisherId = config.appId,
+                            placementId = placement,
+                            floorCpm = placementConfig.floorPrice,
+                            adapters = placementConfig.enabledNetworks,
+                            metadata = meta,
+                            timeoutMs = placementConfig.timeoutMs.toInt().coerceAtLeast(100),
+                            auctionType = "header_bidding",
+                        )
+                        val result = client.requestInterstitial(opts, consentOptions)
+                        // Map to Ad model and callback success
+                        val ttlMs = computeDefaultExpiryMs(placementConfig)
+                        val ad = Ad(
+                            id = result.creativeId ?: ("ad-" + System.currentTimeMillis()),
+                            placementId = placement,
+                            networkName = result.adapter,
+                            adType = AdType.INTERSTITIAL,
+                            ecpm = result.ecpm,
+                            creative = Creative.Banner(width = 0, height = 0, markupHtml = result.adMarkup ?: ""),
+                            expiryTimeMs = System.currentTimeMillis() + ttlMs
+                        )
+                        cacheAd(placement, ad)
+                        val latency = System.currentTimeMillis() - startTime
+                        telemetry.recordAdLoad(placement, latency, true)
+                        postToMainThread { callback.onAdLoaded(ad) }
                         return@Runnable
+                    } catch (ae: AuctionClient.AuctionException) {
+                        // Map taxonomy to AdError; if no_fill, proceed to adapter fallback; else report error
+                        val reason = ae.reason
+                        if (reason == "no_fill") {
+                            // proceed to adapters
+                        } else {
+                            val err = when {
+                                reason == "timeout" -> AdError.TIMEOUT
+                                reason == "network_error" -> AdError.NETWORK_ERROR
+                                reason.startsWith("status_") -> AdError.INTERNAL_ERROR
+                                else -> AdError.INTERNAL_ERROR
+                            }
+                            telemetry.recordAdLoad(placement, System.currentTimeMillis() - startTime, false)
+                            postToMainThread { callback.onError(err, reason) }
+                            return@Runnable
+                        }
                     }
                 }
 
@@ -311,10 +334,10 @@ class MediationSDK private constructor(
                     return@Runnable
                 }
 
-                val futures = adapters.map { adapter ->
-                    CompletableFuture.supplyAsync({
+                val futures: List<Future<AdResponse?>> = adapters.map { adapter ->
+                    networkExecutor.submit(Callable {
                         loadWithCircuitBreaker(adapter, placement, placementConfig)
-                    }, networkExecutor)
+                    })
                 }
 
                 // Collect results with timeout
@@ -519,6 +542,12 @@ data class SDKConfig @JvmOverloads constructor(
     val circuitBreakerFailureThreshold: Int = 5,
     val circuitBreakerResetTimeoutMs: Long = 60_000L,
     val circuitBreakerHalfOpenMaxAttempts: Int = 3,
+    // SDK operating mode; default BYO per SDK_FIXES.md
+    val sdkMode: SdkMode = SdkMode.BYO,
+    // When true (and not BYO), permit S2S auctions when capable and properly credentialed
+    val enableS2SWhenCapable: Boolean = false,
+    // Auto-read consent strings from SharedPreferences (optional)
+    val autoConsentReadEnabled: Boolean = false,
 ) {
     class Builder {
         private var appId: String = ""
@@ -532,6 +561,9 @@ data class SDKConfig @JvmOverloads constructor(
         private var circuitBreakerFailureThreshold: Int = 5
         private var circuitBreakerResetTimeoutMs: Long = 60_000L
         private var circuitBreakerHalfOpenMaxAttempts: Int = 3
+        private var sdkMode: SdkMode = SdkMode.BYO
+        private var enableS2SWhenCapable: Boolean = false
+        private var autoConsentReadEnabled: Boolean = false
         
         fun appId(id: String) = apply { this.appId = id }
         fun testMode(enabled: Boolean) = apply { this.testMode = enabled }
@@ -545,6 +577,10 @@ data class SDKConfig @JvmOverloads constructor(
         fun circuitBreakerResetTimeoutMs(timeoutMs: Long) = apply { this.circuitBreakerResetTimeoutMs = timeoutMs }
         fun circuitBreakerHalfOpenAttempts(attempts: Int) = apply { this.circuitBreakerHalfOpenMaxAttempts = attempts }
         
+        fun sdkMode(mode: SdkMode) = apply { this.sdkMode = mode }
+        fun enableS2SWhenCapable(enabled: Boolean) = apply { this.enableS2SWhenCapable = enabled }
+        fun autoConsentReadEnabled(enabled: Boolean) = apply { this.autoConsentReadEnabled = enabled }
+
         fun build() = SDKConfig(
             appId = appId,
             testMode = testMode,
@@ -557,6 +593,9 @@ data class SDKConfig @JvmOverloads constructor(
             circuitBreakerFailureThreshold = circuitBreakerFailureThreshold,
             circuitBreakerResetTimeoutMs = circuitBreakerResetTimeoutMs,
             circuitBreakerHalfOpenMaxAttempts = circuitBreakerHalfOpenMaxAttempts,
+            sdkMode = sdkMode,
+            enableS2SWhenCapable = enableS2SWhenCapable,
+            autoConsentReadEnabled = autoConsentReadEnabled,
         )
     }
 }
@@ -564,6 +603,11 @@ data class SDKConfig @JvmOverloads constructor(
 enum class LogLevel {
     VERBOSE, DEBUG, INFO, WARN, ERROR
 }
+
+/**
+ * SDK operating modes per SDK_FIXES.md
+ */
+enum class SdkMode { BYO, HYBRID, MANAGED }
 
 /**
  * Ad load callback interface
@@ -582,19 +626,28 @@ enum class AdError {
 }
 
 
-// Base64 decoder usable from SDK core without relying on specific Android/JVM versions.
+// Base64 decoder usable from SDK core across API 21+.
 private fun decodeBase64Compat(input: String): ByteArray {
+    if (input.isEmpty()) return ByteArray(0)
+    // Try URL_SAFE first (common for JWT/public keys), then DEFAULT, then NO_WRAP variants.
     return try {
-        java.util.Base64.getDecoder().decode(input)
+        android.util.Base64.decode(input, android.util.Base64.URL_SAFE or android.util.Base64.NO_WRAP)
     } catch (_: Throwable) {
         try {
             android.util.Base64.decode(input, android.util.Base64.DEFAULT)
         } catch (_: Throwable) {
             try {
-                java.util.Base64.getUrlDecoder().decode(input)
+                android.util.Base64.decode(input, android.util.Base64.NO_WRAP)
             } catch (_: Throwable) {
                 ByteArray(0)
             }
         }
     }
+}
+
+/**
+ * Provider interface for runtime adapter credentials (BYO zero-trust).
+ */
+interface AdapterConfigProvider {
+    fun getCredentials(networkId: String): Map<String, String>?
 }

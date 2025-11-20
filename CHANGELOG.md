@@ -1512,3 +1512,34 @@ Validation and QA
 
 Backward compatibility
 - All changes are additive. Existing consumers remain compatible; `config` is optional and PATCH is a new partial‑update path.
+
+Changelog — Android SDK BYO Mode Fixes & Enhancements (2025-11-20)
+
+Summary
+- Introduces BYO/HYBRID/MANAGED operating modes to the Android SDK with BYO as the default, gating S2S auctions per SDK_FIXES.md.
+- Adds zero‑trust credential injection hook for vendor adapters (no secrets stored in SDK; never logged; not sent to S2S in BYO).
+- Replaces Java 8+ only APIs (CompletableFuture, java.util.Base64) with Android‑compatible implementations (ExecutorService Futures, android.util.Base64) to support minSdk 21.
+- Preserves existing behavior for MANAGED/HYBRID when enabled via config flags.
+
+What changed (highlights)
+- SDK operating modes
+  - New `SdkMode { BYO, HYBRID, MANAGED }` in `sdk/core/android/src/main/kotlin/MediationSDK.kt` within `SDKConfig`.
+  - Builder setters: `sdkMode(...)`, `enableS2SWhenCapable(...)`, `autoConsentReadEnabled(...)`.
+  - S2S auctions are disabled in BYO; can be enabled in HYBRID/MANAGED when `enableS2SWhenCapable=true` and API key present.
+
+- Zero‑trust credentials
+  - New `AdapterConfigProvider` interface and `setAdapterConfigProvider(...)` on `MediationSDK` for runtime credential injection per network.
+  - Secrets are not logged and are not transmitted to S2S while in BYO mode.
+
+- Compatibility fixes (minSdk 21)
+  - Replaced `CompletableFuture` usage with `ExecutorService.submit(Callable)` + `Future.get(timeout)` in adapter parallel loads.
+  - Implemented `decodeBase64Compat` using `android.util.Base64` variants to avoid API 26+ dependency.
+
+- S2S gating
+  - New internal `shouldUseS2SForPlacement(...)` that returns false in BYO and checks flags/keys in other modes.
+
+Validation
+- Project builds successfully after changes: `sdk/core/android` compiles with minSdk 21 compatibility.
+- Functional behavior remains unchanged for adapter loads; S2S path is gated by mode/flags.
+
+---

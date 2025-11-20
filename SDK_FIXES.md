@@ -230,7 +230,10 @@ They get clean, privacy-safe metrics, cryptographically provable selection logs,
 
 When you add Managed Demand next year, you flip a config and new demand joins the auction—no SDK churn.
 
-Unity SDK parity with Android (all above features):
+
+
+
+### Unity SDK parity with Android (all above features):
 
 P0 — Must-add for a BYO Unity SDK
 1) Package structure & asmdefs
@@ -414,7 +417,7 @@ Footprint: Runtime package small (<100KB); vendor SDK inclusion controlled by pu
 Privacy: Telemetry sanitized; BYO secrets never leave device; no S2S by default.
 
 
-iOS BYO Mediation SDK Fixes & Enhancements:
+### iOS BYO Mediation SDK Fixes & Enhancements:
 
 P0 fixes & additions (ship these first)
 1) Concurrency & main-thread discipline

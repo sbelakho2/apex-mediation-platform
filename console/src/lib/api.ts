@@ -107,9 +107,6 @@ export const publisherApi = {
 // Placement API
 export const placementApi = {
   list: async (params?: { page?: number; pageSize?: number }) => {
-    if (process.env.NODE_ENV !== 'production') {
-      console.info('[placementApi] list called with params', params)
-    }
     if (USE_MOCK_API) return mockApiCall<PaginatedResponse<Placement>>('placements')
     const pagination = withPaginationDefaults(params)
     return apiClient.get<PaginatedResponse<Placement>>('/placements', { params: pagination })

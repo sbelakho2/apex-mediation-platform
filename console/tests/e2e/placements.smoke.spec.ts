@@ -172,9 +172,6 @@ async function primePlacementRoutes(
     const resourceType = request.resourceType()
     const pathname = getPathname(request.url())
 
-    if (pathname.includes('placement') && resourceType !== 'document') {
-      console.log('[route intercept]', method, pathname, 'type:', resourceType)
-    }
     const matchesPath = (suffix: string) => pathname === suffix || pathname.endsWith(suffix)
 
     if (resourceType === 'document') {
