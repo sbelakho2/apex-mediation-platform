@@ -66,6 +66,8 @@ def build_client(rate_limit: int = 2):
     os.environ["REQUIRED_MODELS"] = ""
     os.environ["RATE_LIMIT_MAX_REQUESTS"] = str(rate_limit)
     os.environ["RATE_LIMIT_WINDOW_SECONDS"] = "60"
+    os.environ["TRANSPARENCY_SECRET"] = "super-secret"
+    os.environ["ALLOWED_MODELS"] = "fraud_detection"
 
     module = _load_module()
     module.RATE_LIMITER.reset()
@@ -88,8 +90,20 @@ def fraud_request_payload():
 
 def test_predict_requires_auth(fraud_request_payload):
     module, client, _ = build_client()
-    response = client.post("/predict/fraud", json=fraud_request_payload)
+    response = client.post(
+        "/predict/fraud",
+        json=fraud_request_payload,
+        headers={"X-Publisher-Id": "pub-xyz"},
+    )
     assert response.status_code == 401
+
+
+def test_predict_requires_tenant_header(fraud_request_payload):
+    module, client, secret = build_client()
+    token = _issue_token(secret)
+    headers = {"Authorization": f"Bearer {token}"}
+    response = client.post("/predict/fraud", json=fraud_request_payload, headers=headers)
+    assert response.status_code == 400
 
 
 def test_predict_rejects_tenant_mismatch(fraud_request_payload):
@@ -103,7 +117,7 @@ def test_predict_rejects_tenant_mismatch(fraud_request_payload):
 def test_rate_limit_blocks_excess_requests(fraud_request_payload):
     module, client, secret = build_client(rate_limit=2)
     token = _issue_token(secret)
-    headers = {"Authorization": f"Bearer {token}"}
+    headers = {"Authorization": f"Bearer {token}", "X-Publisher-Id": "pub-xyz"}
 
     first = client.post("/predict/fraud", json=fraud_request_payload, headers=headers)
     second = client.post("/predict/fraud", json=fraud_request_payload, headers=headers)
@@ -112,3 +126,31 @@ def test_rate_limit_blocks_excess_requests(fraud_request_payload):
     assert first.status_code == 200
     assert second.status_code == 200
     assert third.status_code == 429
+
+
+def test_transparency_receipt_present(fraud_request_payload):
+    module, client, secret = build_client()
+    token = _issue_token(secret)
+    headers = {"Authorization": f"Bearer {token}", "X-Publisher-Id": "pub-xyz"}
+    response = client.post("/predict/fraud", json=fraud_request_payload, headers=headers)
+    assert response.status_code == 200
+    receipt = response.json().get("transparency_receipt")
+    assert receipt and {"hash", "sig", "algo"}.issubset(receipt.keys())
+
+
+def test_replay_endpoint_returns_deterministic_winner():
+    module, client, secret = build_client()
+    token = _issue_token(secret)
+    headers = {"Authorization": f"Bearer {token}", "X-Publisher-Id": "pub-xyz"}
+    payload = {
+        "auction_id": "auc-1",
+        "snapshots": [
+            {"adapter": "NetworkB", "bid_cpm": 1.2, "latency_ms": 55},
+            {"adapter": "NetworkA", "bid_cpm": 1.2, "latency_ms": 40},
+        ],
+    }
+    response = client.post("/v1/replay/auction", json=payload, headers=headers)
+    body = response.json()
+    assert response.status_code == 200
+    assert body["winner"]["adapter"] == "NetworkA"  # lower latency tie-breaker
+    assert body["transparency_receipt"]["algo"] == "HMAC-SHA256"

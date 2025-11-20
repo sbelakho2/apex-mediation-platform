@@ -13,17 +13,20 @@ export default function DashboardLayoutFrame({ children }: DashboardLayoutFrameP
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
   return (
-    <div className="min-h-screen bg-cream text-primary-blue">
+    <div className="min-h-screen bg-gray-50 text-gray-900">
       <DashboardSidebar
         mobileOpen={mobileSidebarOpen}
         onClose={() => setMobileSidebarOpen(false)}
       />
-      <div className="lg:pl-64">
+      {/* Left rail: 280px on lg+ per WEBSITE_FIX */}
+      <div className="lg:pl-[280px]">
         <DashboardTopBar onToggleSidebar={() => setMobileSidebarOpen(true)} />
-        <main className="py-6">
-          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-            <div className="rounded-3xl bg-white/95 p-6 shadow-xl ring-1 ring-primary-blue/10 sm:p-8">
-              {children}
+        <main className="py-6 md:py-8">
+          <div className="container">
+            <div className="card-v2">
+              <div className="card-v2-body">
+                {children}
+              </div>
             </div>
           </div>
         </main>

@@ -25,20 +25,20 @@ logger = structlog.get_logger()
 INFERENCE_REQUESTS = Counter(
     "ml_inference_requests_total",
     "Total number of inference requests",
-    ["model_name", "status"],
+    ["model_name", "status", "tenant"],
 )
 
 INFERENCE_LATENCY = Histogram(
     "ml_inference_duration_seconds",
     "Inference request duration in seconds",
-    ["model_name"],
+    ["model_name", "tenant"],
     buckets=[0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0],
 )
 
 INFERENCE_ERRORS = Counter(
     "ml_inference_errors_total",
     "Total number of inference errors",
-    ["model_name", "error_type"],
+    ["model_name", "error_type", "tenant"],
 )
 
 MODEL_LOAD_TIME = Gauge(
@@ -77,12 +77,27 @@ class BidOptimizationRequest(BaseModel):
     budget_remaining: float = Field(ge=0)
 
 
+class AdapterSnapshot(BaseModel):
+    adapter: str
+    bid_cpm: float = Field(ge=0)
+    latency_ms: float = Field(ge=0)
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+
+
+class AuctionReplayRequest(BaseModel):
+    auction_id: str
+    snapshots: List[AdapterSnapshot]
+    request_payload: Dict[str, Any] = Field(default_factory=dict)
+    response_payload: Dict[str, Any] = Field(default_factory=dict)
+
+
 class InferenceResponse(BaseModel):
     model_name: str
     model_version: str
     prediction: Any
     confidence: Optional[float] = None
     latency_ms: float
+    transparency_receipt: Optional[Dict[str, Any]] = None
 
 
 class HealthResponse(BaseModel):
@@ -101,16 +116,11 @@ class ModelHandle:
     mock_only: bool = False
 
 
-MODEL_NAMES = ("fraud_detection", "ctr_prediction", "bid_optimization")
+MODEL_CATALOG = ("fraud_detection", "ctr_prediction", "bid_optimization")
 START_TIME = time.time()
 MODEL_REGISTRY: Dict[str, ModelHandle] = {}
 MODEL_ROOT = Path(os.getenv("MODEL_DIR", "/app/models")).expanduser()
 ALLOW_MODEL_MOCKS = os.getenv("ALLOW_MODEL_MOCKS", "false").lower() in {"1", "true", "yes"}
-REQUIRED_MODELS = {
-    model.strip()
-    for model in os.getenv("REQUIRED_MODELS", "fraud_detection").split(",")
-    if model.strip()
-}
 JWT_SECRET = os.getenv("JWT_SECRET")
 JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
 JWT_AUDIENCE = os.getenv("JWT_AUDIENCE")
@@ -122,6 +132,37 @@ ALLOWED_ROLES = {
 }
 RATE_LIMIT_MAX_REQUESTS = int(os.getenv("RATE_LIMIT_MAX_REQUESTS", "600"))
 RATE_LIMIT_WINDOW_SECONDS = int(os.getenv("RATE_LIMIT_WINDOW_SECONDS", "60"))
+TRANSPARENCY_SECRET = os.getenv("TRANSPARENCY_SECRET")
+
+MODEL_ALIAS_MAP = {
+    "fraud": "fraud_detection",
+    "fraud_detection": "fraud_detection",
+    "ctr": "ctr_prediction",
+    "ctr_prediction": "ctr_prediction",
+    "bid": "bid_optimization",
+    "bid_optimization": "bid_optimization",
+}
+
+def _resolve_allowed_models() -> Tuple[str, ...]:
+    tokens = [token.strip().lower() for token in os.getenv("ALLOWED_MODELS", "fraud,ctr").split(",") if token.strip()]
+    resolved = []
+    for token in tokens:
+        canonical = MODEL_ALIAS_MAP.get(token)
+        if canonical and canonical not in resolved:
+            resolved.append(canonical)
+    if not resolved:
+        resolved = ["fraud_detection", "ctr_prediction"]
+    return tuple(name for name in MODEL_CATALOG if name in set(resolved))
+
+
+MODEL_NAMES = _resolve_allowed_models()
+
+RAW_REQUIRED_MODELS = {
+    MODEL_ALIAS_MAP.get(model.strip().lower(), model.strip())
+    for model in os.getenv("REQUIRED_MODELS", "fraud_detection").split(",")
+    if model.strip()
+}
+REQUIRED_MODELS = {model for model in RAW_REQUIRED_MODELS if model in set(MODEL_NAMES)}
 
 
 class RateLimiter:
@@ -165,6 +206,34 @@ class AuthContext(BaseModel):
     publisher_id: str
     email: str
     role: Optional[str] = None
+
+
+def _require_tenant(request: Request) -> str:
+    tenant = request.headers.get(TENANT_HEADER)
+    if not tenant:
+        raise HTTPException(status_code=400, detail=f"Missing {TENANT_HEADER}")
+    request.state.tenant_id = tenant
+    return tenant
+
+
+def require_transparency_secret() -> str:
+    if not TRANSPARENCY_SECRET:
+        raise RuntimeError("TRANSPARENCY_SECRET environment variable must be set")
+    return TRANSPARENCY_SECRET
+
+
+def make_transparency_receipt(tenant: str, req_payload: Dict[str, Any], rsp_payload: Dict[str, Any], secret: str) -> Dict[str, Any]:
+    blob = json.dumps(
+        {"tenant": tenant, "request": req_payload, "response": rsp_payload},
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+    signature = hmac.new(secret.encode("utf-8"), blob.encode("utf-8"), hashlib.sha256).hexdigest()
+    return {
+        "hash": hashlib.sha256(blob.encode("utf-8")).hexdigest(),
+        "sig": signature,
+        "algo": "HMAC-SHA256",
+    }
 
 
 def _base64url_decode(value: str) -> bytes:
@@ -225,6 +294,7 @@ def decode_jwt_token(token: str) -> Dict[str, Any]:
 
 
 def authorize_request(request: Request) -> AuthContext:
+    tenant_header = _require_tenant(request)
     auth_header = request.headers.get("authorization")
     if not auth_header or not auth_header.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Missing bearer token")
@@ -243,12 +313,12 @@ def authorize_request(request: Request) -> AuthContext:
     if ALLOWED_ROLES and role not in ALLOWED_ROLES:
         raise HTTPException(status_code=403, detail="Role not permitted")
 
-    tenant_hint = request.headers.get(TENANT_HEADER)
-    if tenant_hint and tenant_hint != publisher_id:
+    if tenant_header != publisher_id:
         raise HTTPException(status_code=403, detail="Tenant mismatch")
 
     context = AuthContext(user_id=user_id, publisher_id=publisher_id, email=email, role=role)
     request.state.auth_context = context
+    request.state.tenant_id = tenant_header
 
     key = f"{publisher_id}:{request.url.path}"
     RATE_LIMITER.hit(key)
@@ -341,10 +411,10 @@ def require_model(name: str) -> ModelHandle:
     return handle
 
 
-def record_request(model_name: str, status: str, start_time: float) -> None:
+def record_request(model_name: str, status: str, tenant: str, start_time: float) -> None:
     duration = time.time() - start_time
-    INFERENCE_LATENCY.labels(model_name=model_name).observe(duration)
-    INFERENCE_REQUESTS.labels(model_name=model_name, status=status).inc()
+    INFERENCE_LATENCY.labels(model_name=model_name, tenant=tenant).observe(duration)
+    INFERENCE_REQUESTS.labels(model_name=model_name, status=status, tenant=tenant).inc()
 
 
 def run_session(handle: ModelHandle, features: np.ndarray) -> Optional[float]:
@@ -396,6 +466,8 @@ app = FastAPI(
 
 @app.on_event("startup")
 async def startup_event() -> None:
+    if not TRANSPARENCY_SECRET:
+        raise RuntimeError("TRANSPARENCY_SECRET must be configured")
     logger.info("Starting ML inference service", model_root=str(MODEL_ROOT))
     refresh_model_registry()
     logger.info("Model registry ready", models=list(MODEL_REGISTRY.keys()))
@@ -444,32 +516,38 @@ async def metrics():
     return PlainTextResponse(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 
-def inference_wrapper(model_name: str, handler):
+def inference_wrapper(model_name: str, tenant: str, handler):
     start = time.time()
     try:
         response, status = handler()
         response.latency_ms = (time.time() - start) * 1000
-        record_request(model_name, status, start)
+        record_request(model_name, status, tenant, start)
         return response
     except HTTPException:
-        record_request(model_name, "error", start)
+        record_request(model_name, "error", tenant, start)
         raise
     except Exception as exc:
-        INFERENCE_ERRORS.labels(model_name=model_name, error_type="runtime").inc()
-        record_request(model_name, "error", start)
+        INFERENCE_ERRORS.labels(model_name=model_name, error_type="runtime", tenant=tenant).inc()
+        record_request(model_name, "error", tenant, start)
         logger.error("Inference failed", model=model_name, error=str(exc))
         raise HTTPException(status_code=500, detail="Inference failed") from exc
 
 
 @app.post("/predict/fraud", response_model=InferenceResponse)
-async def predict_fraud(request: FraudDetectionRequest, auth: AuthContext = Depends(authorize_request)):
+async def predict_fraud(
+    payload: FraudDetectionRequest,
+    http_request: Request,
+    auth: AuthContext = Depends(authorize_request),
+):
     _ = auth
+    tenant = getattr(http_request.state, "tenant_id", None) or _require_tenant(http_request)
+
     def handler():
         handle = require_model("fraud_detection")
-        features = np.array([[request.impressions_24h, request.clicks_24h]], dtype=np.float32)
+        features = np.array([[payload.impressions_24h, payload.clicks_24h]], dtype=np.float32)
         score = run_session(handle, features)
         source = "onnx" if score is not None else "heuristic"
-        fraud_score = score if score is not None else fraud_heuristic_score(request)
+        fraud_score = score if score is not None else fraud_heuristic_score(payload)
         confidence = round(1 - min(0.9, fraud_score / 2), 3)
         response = InferenceResponse(
             model_name="fraud_detection",
@@ -478,20 +556,32 @@ async def predict_fraud(request: FraudDetectionRequest, auth: AuthContext = Depe
             confidence=confidence,
             latency_ms=0.0,
         )
+        response.transparency_receipt = make_transparency_receipt(
+            tenant,
+            payload.dict(),
+            response.prediction,
+            require_transparency_secret(),
+        )
         status = "mock" if handle.mock_only or source == "heuristic" else "success"
         return response, status
 
-    return inference_wrapper("fraud_detection", handler)
+    return inference_wrapper("fraud_detection", tenant, handler)
 
 
 @app.post("/predict/ctr", response_model=InferenceResponse)
-async def predict_ctr(request: CTRPredictionRequest, auth: AuthContext = Depends(authorize_request)):
+async def predict_ctr(
+    payload: CTRPredictionRequest,
+    http_request: Request,
+    auth: AuthContext = Depends(authorize_request),
+):
     _ = auth
+    tenant = getattr(http_request.state, "tenant_id", None) or _require_tenant(http_request)
+
     def handler():
         handle = require_model("ctr_prediction")
-        ctr_value = run_session(handle, np.array([[request.time_of_day, request.day_of_week]], dtype=np.float32))
+        ctr_value = run_session(handle, np.array([[payload.time_of_day, payload.day_of_week]], dtype=np.float32))
         source = "onnx" if ctr_value is not None else "heuristic"
-        predicted_ctr = ctr_value if ctr_value is not None else ctr_heuristic(request)
+        predicted_ctr = ctr_value if ctr_value is not None else ctr_heuristic(payload)
         response = InferenceResponse(
             model_name="ctr_prediction",
             model_version=handle.version,
@@ -499,21 +589,33 @@ async def predict_ctr(request: CTRPredictionRequest, auth: AuthContext = Depends
             confidence=min(0.99, predicted_ctr * 10),
             latency_ms=0.0,
         )
+        response.transparency_receipt = make_transparency_receipt(
+            tenant,
+            payload.dict(),
+            response.prediction,
+            require_transparency_secret(),
+        )
         status = "mock" if handle.mock_only or source == "heuristic" else "success"
         return response, status
 
-    return inference_wrapper("ctr_prediction", handler)
+    return inference_wrapper("ctr_prediction", tenant, handler)
 
 
 @app.post("/predict/bid", response_model=InferenceResponse)
-async def optimize_bid(request: BidOptimizationRequest, auth: AuthContext = Depends(authorize_request)):
+async def optimize_bid(
+    payload: BidOptimizationRequest,
+    http_request: Request,
+    auth: AuthContext = Depends(authorize_request),
+):
     _ = auth
+    tenant = getattr(http_request.state, "tenant_id", None) or _require_tenant(http_request)
+
     def handler():
         handle = require_model("bid_optimization")
-        features = np.array([[request.floor_cpm, request.predicted_ctr]], dtype=np.float32)
+        features = np.array([[payload.floor_cpm, payload.predicted_ctr]], dtype=np.float32)
         optimized = run_session(handle, features)
         source = "onnx" if optimized is not None else "heuristic"
-        optimized_bid = optimized if optimized is not None else bid_heuristic(request)
+        optimized_bid = optimized if optimized is not None else bid_heuristic(payload)
         response = InferenceResponse(
             model_name="bid_optimization",
             model_version=handle.version,
@@ -525,10 +627,63 @@ async def optimize_bid(request: BidOptimizationRequest, auth: AuthContext = Depe
             confidence=0.8,
             latency_ms=0.0,
         )
+        response.transparency_receipt = make_transparency_receipt(
+            tenant,
+            payload.dict(),
+            response.prediction,
+            require_transparency_secret(),
+        )
         status = "mock" if handle.mock_only or source == "heuristic" else "success"
         return response, status
 
-    return inference_wrapper("bid_optimization", handler)
+    return inference_wrapper("bid_optimization", tenant, handler)
+
+
+@app.post("/v1/replay/auction")
+async def replay_auction(
+    payload: AuctionReplayRequest,
+    http_request: Request,
+    auth: AuthContext = Depends(authorize_request),
+):
+    _ = auth
+    tenant = getattr(http_request.state, "tenant_id", None) or _require_tenant(http_request)
+    if not payload.snapshots:
+        raise HTTPException(status_code=400, detail="At least one snapshot is required")
+
+    sorted_snaps = sorted(
+        payload.snapshots,
+        key=lambda snap: (-snap.bid_cpm, snap.latency_ms, snap.adapter.lower()),
+    )
+    landscape = [
+        {
+            "adapter": snap.adapter,
+            "bid_cpm": snap.bid_cpm,
+            "latency_ms": snap.latency_ms,
+            "metadata": snap.metadata,
+        }
+        for snap in sorted_snaps
+    ]
+    winner = landscape[0]
+
+    response_payload = {"winner": winner, "landscape": landscape}
+    receipt = make_transparency_receipt(
+        tenant,
+        {
+            "auction_id": payload.auction_id,
+            "request_payload": payload.request_payload,
+            "snapshots": [snap.dict() for snap in payload.snapshots],
+        },
+        response_payload,
+        require_transparency_secret(),
+    )
+
+    return {
+        "tenant": tenant,
+        "auction_id": payload.auction_id,
+        "winner": winner,
+        "landscape": landscape,
+        "transparency_receipt": receipt,
+    }
 
 
 @app.get("/models")
@@ -542,7 +697,8 @@ async def list_models():
                 "mock_only": handle.mock_only,
             }
             for handle in MODEL_REGISTRY.values()
-        ]
+        ],
+        "allowed_models": list(MODEL_NAMES),
     }
 
 

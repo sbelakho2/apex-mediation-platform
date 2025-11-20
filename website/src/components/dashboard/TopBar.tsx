@@ -18,10 +18,10 @@ export default function DashboardTopBar({ onToggleSidebar }: DashboardTopBarProp
   };
 
   return (
-    <div className="sticky top-0 z-20 flex h-16 flex-shrink-0 items-center bg-primary-blue/95 text-white shadow-lg backdrop-blur">
+    <div className="sticky top-0 z-20 flex h-16 flex-shrink-0 items-center bg-brand-500 text-white shadow-md backdrop-blur">
       <button
         type="button"
-        className="border-r border-sunshine-yellow/30 px-4 text-sunshine-yellow transition hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sunshine-yellow lg:hidden"
+        className="border-r border-white/10 px-4 text-white/90 transition hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white lg:hidden"
         aria-label="Open sidebar"
   onClick={() => onToggleSidebar?.()}
       >
@@ -29,14 +29,14 @@ export default function DashboardTopBar({ onToggleSidebar }: DashboardTopBarProp
       </button>
       <div className="flex flex-1 items-center justify-between px-4">
         <div className="flex flex-1 items-center gap-3">
-          <span className="hidden text-xs font-semibold uppercase tracking-[0.2em] text-sunshine-yellow/90 sm:inline-flex">
+          <span className="hidden text-xs font-semibold uppercase tracking-[0.2em] text-white/90 sm:inline-flex">
             ApexMediation Control Center
           </span>
         </div>
         <div className="ml-4 flex items-center gap-3 md:ml-6">
           <button
             type="button"
-            className="rounded-full bg-sunshine-yellow p-2 text-primary-blue transition hover:bg-pale-yellow focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sunshine-yellow"
+            className="btn-secondary h-10 !rounded-full !bg-white/10 !text-white hover:!bg-white/20"
             aria-label="View notifications"
             onClick={() => router.push('/dashboard/settings?tab=notifications')}
           >
@@ -48,38 +48,38 @@ export default function DashboardTopBar({ onToggleSidebar }: DashboardTopBarProp
             <div>
               <button
                 type="button"
-                className="flex max-w-xs items-center rounded-full border border-sunshine-yellow/50 bg-primary-blue/60 p-1 text-sm transition hover:bg-primary-blue focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sunshine-yellow"
+                className="flex max-w-xs items-center rounded-full border border-white/20 bg-white/10 p-1 text-sm transition hover:bg-white/20"
                 onClick={() => setShowUserMenu(!showUserMenu)}
                 aria-haspopup="menu"
                 aria-expanded={showUserMenu}
               >
                 <span className="sr-only">Open user menu</span>
-                <UserCircleIcon className="h-8 w-8 text-sunshine-yellow" />
+                <UserCircleIcon className="h-8 w-8 text-white" />
               </button>
             </div>
 
             {showUserMenu && (
               <div
-                className="absolute right-0 z-40 mt-2 w-56 origin-top-right rounded-xl bg-white py-2 text-primary-blue shadow-xl ring-1 ring-primary-blue/10 focus:outline-none"
+                className="absolute right-0 z-40 mt-2 w-56 origin-top-right rounded-xl bg-white py-2 text-gray-900 shadow-xl ring-1 ring-gray-200 focus:outline-none"
                 role="menu"
               >
                 <a
                   href="/dashboard/settings"
-                  className="block px-4 py-2 text-sm font-semibold transition hover:bg-cream"
+                  className="block px-4 py-2 text-sm font-semibold transition hover:bg-gray-50"
                   role="menuitem"
                 >
                   Your Profile
                 </a>
                 <a
                   href="/dashboard/settings"
-                  className="block px-4 py-2 text-sm font-semibold transition hover:bg-cream"
+                  className="block px-4 py-2 text-sm font-semibold transition hover:bg-gray-50"
                   role="menuitem"
                 >
                   Settings
                 </a>
                 <button
                   onClick={handleLogout}
-                  className="block w-full px-4 py-2 text-left text-sm font-semibold text-accent-red transition hover:bg-cream"
+                  className="block w-full px-4 py-2 text-left text-sm font-semibold text-danger transition hover:bg-gray-50"
                   type="button"
                   role="menuitem"
                 >
