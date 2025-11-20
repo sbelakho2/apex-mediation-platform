@@ -2,15 +2,64 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+  Global design tokens per WEBSITE_FIX.md
+  - Brand scale, neutrals, semantic colors, focus ring, dark mode overrides
+  - Keep legacy tokens temporarily to avoid breaking existing components during migration
+*/
 :root {
+  /* WEBSITE_FIX brand scale */
+  --brand-50: #e8f0ff;
+  --brand-100: #d2e0ff;
+  --brand-200: #a8c2ff;
+  --brand-300: #7ea4ff;
+  --brand-400: #598bff;
+  --brand-500: #356eff; /* Primary */
+  --brand-600: #1f55e6;
+  --brand-700: #1742b4;
+  --brand-800: #12358d;
+  --brand-900: #0c235d;
+
+  /* WEBSITE_FIX neutrals */
+  --gray-50: #f8fafc; /* surfaces */
+  --gray-100: #f1f5f9;
+  --gray-200: #e2e8f0;
+  --gray-300: #cbd5e1;
+  --gray-400: #94a3b8;
+  --gray-500: #64748b;
+  --gray-600: #475569;
+  --gray-700: #334155;
+  --gray-800: #1f2937;
+  --gray-900: #0f172a; /* titles on light */
+
+  /* WEBSITE_FIX semantic */
+  --success: #16a34a;
+  --warning: #d97706;
+  --danger: #dc2626;
+  --info: #0891b2;
+
+  /* WEBSITE_FIX text */
+  --text-strong: #0f172a;
+  --text-muted: #475569;
+
+  /* Focus ring */
+  --focus: #356eff;
+
+  /* Dark mode overrides per WEBSITE_FIX */
+  --bg-dark: #0b1220;
+  --surface-dark: #0f172a;
+  --card-dark: #121a2a;
+  --divider-dark: #1f2937;
+  --text-strong-dark: #e5e7eb;
+
+  /* Legacy tokens kept for backward compatibility (to be deprecated) */
   --primary-blue: #005293;
   --sunshine-yellow: #FECB00;
   --pale-yellow: #FFD481;
   --cream: #E8E3D1;
   --accent-red: #C04437;
   --success-green: #5BAA2A;
-  --text-primary: #0f172a;
-  --text-muted: #475569;
+  --text-primary: var(--text-strong);
   --surface: #ffffff;
   --surface-alt: #f7f8fb;
 }
@@ -23,8 +72,8 @@
   body {
     @apply antialiased;
     font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    color: var(--text-primary);
-    background: linear-gradient(180deg, rgba(0, 82, 147, 0.95) 0%, rgba(0, 82, 147, 0.92) 360px, var(--surface-alt) 360px, var(--surface-alt) 100%);
+    color: var(--text-strong);
+    background-color: var(--gray-50);
     min-height: 100vh;
   }
 
@@ -34,7 +83,8 @@
   h4,
   h5,
   h6 {
-    @apply font-semibold text-primary-blue;
+    @apply font-semibold;
+    color: var(--gray-900);
     text-transform: none;
     letter-spacing: -0.01em;
     line-height: 1.2;
@@ -48,11 +98,90 @@
   }
 
   a {
-    @apply transition-colors duration-200;
+    color: var(--brand-600);
+    @apply transition-colors duration-200 underline-offset-2;
+  }
+  a:hover {
+    color: var(--brand-700);
+    text-decoration: underline;
+  }
+
+  /* Global focus ring per WEBSITE_FIX */
+  :focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
   }
 }
 
+/* Dark theme variables */
+.dark {
+  --text-strong: var(--text-strong-dark);
+  --text-muted: #94a3b8;
+  --gray-50: #0b1220;
+  --gray-900: #e5e7eb;
+  --surface: var(--surface-dark);
+  --surface-alt: var(--bg-dark);
+}
+
 @layer components {
+  /* Generic card per WEBSITE_FIX */
+  .card-v2 {
+    @apply rounded-[12px] bg-white shadow-md;
+    box-shadow: 0 4px 16px rgba(15, 23, 42, 0.08);
+  }
+  .card-v2-header {
+    @apply flex items-center justify-between px-4 md:px-6 h-14 border-b;
+    border-color: var(--gray-200);
+  }
+  .card-v2-body {
+    @apply p-4 md:p-6;
+  }
+
+  /* Button styles per WEBSITE_FIX */
+  .btn-primary {
+    @apply inline-flex items-center justify-center text-white;
+    height: 40px;
+    padding: 0 20px;
+    border-radius: 10px;
+    background: var(--brand-500);
+  }
+  .btn-primary:hover { background: var(--brand-600); }
+  .btn-primary:active { background: var(--brand-700); }
+  .btn-primary:disabled { opacity: .5; }
+
+  .btn-secondary {
+    @apply inline-flex items-center justify-center;
+    height: 40px;
+    padding: 0 16px;
+    border-radius: 10px;
+    background: var(--gray-100);
+    color: var(--gray-800);
+  }
+  .btn-secondary:hover { background: var(--gray-200); }
+
+  .btn-ghost {
+    @apply inline-flex items-center justify-center;
+    height: 40px;
+    padding: 0 12px;
+    border-radius: 10px;
+    background: transparent;
+    color: var(--brand-600);
+  }
+  .btn-ghost:hover { background: var(--brand-50); }
+
+  /* Input styles */
+  .input-v2 {
+    height: 40px;
+    border-radius: 10px;
+    border: 1px solid var(--gray-300);
+    padding: 0 12px;
+  }
+  .input-v2:focus { box-shadow: 0 0 0 2px var(--focus); outline: none; }
+
+  /* Utility: min-heights to prevent CLS */
+  .minh-chart { min-height: 320px; }
+  .minh-table { min-height: 280px; }
+
   /* Buttons */
   .btn-primary-yellow {
     @apply inline-flex items-center justify-center rounded-full border border-transparent bg-sunshine-yellow px-8 py-3 font-bold uppercase text-primary-blue shadow-hero transition-transform duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-blue hover:-translate-y-0.5 hover:shadow-lg;
@@ -170,6 +299,9 @@
     @apply translate-y-0 opacity-100;
   }
 }
+
+/* Reduce sticky jitter safeguard */
+.no-transform-ancestor * { transform: none !important; }
 
 @layer utilities {
   .text-shadow-sm {

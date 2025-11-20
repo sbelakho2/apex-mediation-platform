@@ -9,6 +9,9 @@ Platforms
 - iOS SDK Quickstart
   - Path: docs/Customer-Facing/SDKs/IOS_QUICKSTART.md
   - Highlights: Swift Package, initialize(), load/show, normalized taxonomy, consent propagation, in‑app Debug Panel, troubleshooting.
+- Unity SDK Quickstart
+  - Path: docs/Customer-Facing/SDKs/UNITY_QUICKSTART.md
+  - Highlights: UPM package, BYO adapters, consent propagation, in-editor debugger overlay, Config-as-Code, telemetry receipts.
 
 Debugging and Tools
 - In‑App Debug Panel

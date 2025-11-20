@@ -26,13 +26,42 @@ const config: Config = {
     },
     extend: {
       colors: {
-        // Brand palette
-        'primary-blue': '#005293',
-        'sunshine-yellow': '#FECB00',
-        'pale-yellow': '#FFD481',
-        cream: '#E8E3D1',
-        'accent-red': '#C04437',
-        'success-green': '#5BAA2A',
+        // WEBSITE_FIX token mapping via CSS variables
+        brand: {
+          50: 'var(--brand-50)',
+          100: 'var(--brand-100)',
+          200: 'var(--brand-200)',
+          300: 'var(--brand-300)',
+          400: 'var(--brand-400)',
+          500: 'var(--brand-500)',
+          600: 'var(--brand-600)',
+          700: 'var(--brand-700)',
+          800: 'var(--brand-800)',
+          900: 'var(--brand-900)',
+        },
+        gray: {
+          50: 'var(--gray-50)',
+          100: 'var(--gray-100)',
+          200: 'var(--gray-200)',
+          300: 'var(--gray-300)',
+          400: 'var(--gray-400)',
+          500: 'var(--gray-500)',
+          600: 'var(--gray-600)',
+          700: 'var(--gray-700)',
+          800: 'var(--gray-800)',
+          900: 'var(--gray-900)',
+        },
+        success: 'var(--success)',
+        warning: 'var(--warning)',
+        danger: 'var(--danger)',
+        info: 'var(--info)',
+        // Legacy names (kept for compatibility, to be removed after migration)
+        'primary-blue': 'var(--primary-blue)',
+        'sunshine-yellow': 'var(--sunshine-yellow)',
+        'pale-yellow': 'var(--pale-yellow)',
+        cream: 'var(--cream)',
+        'accent-red': 'var(--accent-red)',
+        'success-green': 'var(--success-green)',
       },
       fontFamily: {
         sans: ['Inter', 'system-ui', 'sans-serif'],
@@ -77,8 +106,17 @@ const config: Config = {
         },
       },
       boxShadow: {
+        // WEBSITE_FIX elevation tokens
+        sm: '0 1px 2px rgba(15,23,42,.06)',
+        md: '0 4px 16px rgba(15,23,42,.08)',
+        lg: '0 10px 30px rgba(15,23,42,.12)',
         hero: '0 40px 80px rgba(0, 23, 51, 0.28)',
         inset: 'inset 0 1px 0 rgba(255, 255, 255, 0.2)',
+      },
+      borderRadius: {
+        DEFAULT: '10px',
+        xl: '12px',
+        '2xl': '16px',
       },
     },
   },
