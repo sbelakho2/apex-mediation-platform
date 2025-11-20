@@ -1,4 +1,6 @@
 import XCTest
+
+#if canImport(CryptoKit)
 import CryptoKit
 
 @testable import RivalApexMediationSDK
@@ -193,3 +195,13 @@ private extension Data {
         map { String(format: "%02x", $0) }.joined()
     }
 }
+
+#else
+
+final class SignatureVerifierTests: XCTestCase {
+    func testCryptoKitUnavailableOnLinux() throws {
+        throw XCTSkip("CryptoKit not available on this platform")
+    }
+}
+
+#endif

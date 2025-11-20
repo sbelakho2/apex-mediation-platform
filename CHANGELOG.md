@@ -1,3 +1,31 @@
+Changelog — Unity SDK Config-as-Code + Footprint Gate (2025-11-20)
+
+Summary
+- Adds a drop-in `ApexMediationEntryPoint` MonoBehaviour so Unity developers initialize the SDK, supply signed configs, and attach the debugger overlay from a single component.
+- Wires the compressed runtime size gate + .NET tests into `.github/workflows/unity-sdk.yml`, making the `sdk/core/unity/scripts/check_package_constraints.sh` script a first-class CI job.
+- Updates customer-facing Unity docs, quick start guides, and CI references to reflect the new Config-as-Code workflow, transparency ledger surfacing, and the single-entry integration model.
+- Removes the unused `OnPaidEvent` stub from the Unity runtime (BYO-only mode) while documenting that revenue callbacks will reappear alongside managed demand.
+
+What changed (highlights)
+- Single-entry Unity bootstrap
+  - Added `sdk/core/unity/Runtime/ApexMediationEntryPoint.cs`, a serialized MonoBehaviour that consumes a signed config `TextAsset`, optional adapter credentials, and (in Editor) auto-mounts the `MediationDebuggerOverlay`. It enforces `ApexMediation.Initialize(...)` as the sole entry point and logs sanitized ad events when desired.
+  - Unity docs (`docs/Customer-Facing/SDK-Integration/unity-sdk.md`, `docs/Customer-Facing/Getting-Started/quickstart.md`) now instruct developers to export configs via the Config-as-Code window, drop the entry point into a scene, and interact only through the `ApexMediation` facade.
+
+- Config-as-Code + documentation refresh
+  - `SDK_FIXES.md` now captures the Unity P2 implementation snapshot, highlights the entry point, and clarifies that paid events are deferred until the Managed Demand seam activates.
+  - Customer documentation now calls out telemetry snapshots, transparency proofs, runtime credential injection, and debugger overlay controls so BYO adopters can self-diagnose.
+
+- CI enforcement
+  - `.github/workflows/unity-sdk.yml` introduces a new `Unity Footprint Gate` job that runs `sdk/core/unity/scripts/check_package_constraints.sh` (compressed runtime measurement + `dotnet test`) ahead of the existing Unity matrix.
+  - `docs/CI/REQUIRED_CHECKS.md` and `docs/CI/CI_RELEASE_GUIDE.md` now list the gate as a required check/artifactless blocker, keeping footprint and tests in lock-step with Unity builds.
+
+- Runtime cleanup
+  - Removed the unused `OnPaidEvent` surface and its args type from `sdk/core/unity/Runtime`, eliminating compiler warnings until managed line items reintroduce deterministic revenue callbacks.
+
+Validation and QA
+- Unity footprint + tests: `cd sdk/core/unity && ./scripts/check_package_constraints.sh`
+
+---
 Changelog — Placement Ownership & BYO Ingestion Wiring (2025-11-20)
 
 Summary

@@ -20,7 +20,7 @@ public protocol AdNetworkAdapter {
         placement: String,
         adType: AdType,
         config: [String: Any],
-        completion: @escaping (Result<Ad, AdapterError>) -> Void
+        completion: @escaping (Result<Ad, AdapterRegistryError>) -> Void
     )
     
     /// Check if adapter supports specific ad type
@@ -265,7 +265,7 @@ public final class AdapterRegistry {
 // MARK: - Adapter Error
 
 /// Adapter errors
-public enum AdapterError: Error, LocalizedError {
+public enum AdapterRegistryError: Error, LocalizedError {
     case notInitialized
     case loadFailed(String)
     case unsupportedAdType
@@ -302,7 +302,7 @@ public class AdMobAdapter: AdNetworkAdapter {
     
     public func initialize(config: [String: Any]) throws {
         guard config["app_id"] as? String != nil else {
-            throw AdapterError.loadFailed("app_id required")
+            throw AdapterRegistryError.loadFailed("app_id required")
         }
         
         // Initialize AdMob SDK
@@ -315,7 +315,7 @@ public class AdMobAdapter: AdNetworkAdapter {
         placement: String,
         adType: AdType,
         config: [String: Any],
-        completion: @escaping (Result<Ad, AdapterError>) -> Void
+        completion: @escaping (Result<Ad, AdapterRegistryError>) -> Void
     ) {
         guard isInitialized else {
             completion(.failure(.notInitialized))
@@ -362,7 +362,7 @@ public class AppLovinAdapter: AdNetworkAdapter {
     
     public func initialize(config: [String: Any]) throws {
         guard config["sdk_key"] as? String != nil else {
-            throw AdapterError.loadFailed("sdk_key required")
+            throw AdapterRegistryError.loadFailed("sdk_key required")
         }
         
         // Initialize AppLovin SDK
@@ -375,7 +375,7 @@ public class AppLovinAdapter: AdNetworkAdapter {
         placement: String,
         adType: AdType,
         config: [String: Any],
-        completion: @escaping (Result<Ad, AdapterError>) -> Void
+        completion: @escaping (Result<Ad, AdapterRegistryError>) -> Void
     ) {
         guard isInitialized else {
             completion(.failure(.notInitialized))
@@ -419,7 +419,7 @@ public class UnityAdsAdapter: AdNetworkAdapter {
     
     public func initialize(config: [String : Any]) throws {
         guard let gameId = config["game_id"] as? String, !gameId.isEmpty else {
-            throw AdapterError.loadFailed("game_id required")
+            throw AdapterRegistryError.loadFailed("game_id required")
         }
         // UnityAds.initialize(gameId)
         isInitialized = true
@@ -429,7 +429,7 @@ public class UnityAdsAdapter: AdNetworkAdapter {
         placement: String,
         adType: AdType,
         config: [String : Any],
-        completion: @escaping (Result<Ad, AdapterError>) -> Void
+        completion: @escaping (Result<Ad, AdapterRegistryError>) -> Void
     ) {
         guard isInitialized else {
             completion(.failure(.notInitialized))

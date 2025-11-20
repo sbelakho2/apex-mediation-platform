@@ -11,7 +11,7 @@ final class UISmoke Tests: XCTestCase {
         // Register MockURLProtocol for deterministic responses
         URLProtocol.registerClass(MockURLProtocolFixture.self)
         
-        sdk = await MediationSDK.shared
+        sdk = MediationSDK.shared
     }
     
     override func tearDown() {

@@ -13,8 +13,21 @@ on:
       - '.github/workflows/unity-sdk.yml'
 
 jobs:
+  unity-gate:
+    name: Unity Footprint Gate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Enforce runtime size + .NET tests
+        run: |
+          cd sdk/core/unity
+          ./scripts/check_package_constraints.sh
+
   test:
     name: Test Unity SDK (${{ matrix.unityVersion }})
+    needs: unity-gate
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false

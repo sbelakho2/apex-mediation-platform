@@ -1,6 +1,6 @@
 # Required PR Checks and CI Artifacts
 
-_Last updated: 2025-11-18_  
+_Last updated: 2025-11-20_  
 _Owner: Platform Engineering / DevOps_  
 _Review Cycle: When CI workflows change (next review: when new workflows added)_
 
@@ -17,8 +17,8 @@ Workflows and required artifacts
   - Required checks: iOS/tvOS Tests, iOS Docs
   - Artifacts: ios-xcodebuild-logs-ios, ios-xcodebuild-logs-tvos, ios-xcresult-ios, ios-xcresult-tvos, ios-sdk-docs
 - Unity SDK: .github/workflows/unity-sdk.yml
-  - Required checks: Test Unity SDK (matrix), Build Unity SDK (matrix), Package Unity SDK
-  - Artifacts: test-results-<unityVersion>, build-<platform>, unity-package
+  - Required checks: Unity Footprint Gate, Test Unity SDK (matrix), Build Unity SDK (matrix), Package Unity SDK
+  - Artifacts: test-results-<unityVersion>, build-<platform>, unity-package (gate is artifactless; relies on `sdk/core/unity/scripts/check_package_constraints.sh`)
 - Web SDK: .github/workflows/web-sdk.yml
   - Required checks: Web SDK CI
   - Artifacts: web-sdk-dist, web-sdk-coverage, web-sdk-mock-trace

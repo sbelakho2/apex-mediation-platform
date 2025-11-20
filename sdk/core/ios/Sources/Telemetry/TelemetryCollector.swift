@@ -1,5 +1,10 @@
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
+#if canImport(Compression)
 import Compression
+#endif
 
 /// Telemetry collector with batching and compression
 ///
@@ -182,15 +187,17 @@ public class TelemetryCollector {
             do {
                 try await sendEvents(eventsToSend)
             } catch {
-                // Re-queue events on failure
-                queueLock.lock()
-                eventQueue.insert(contentsOf: eventsToSend, at: 0)
-                
-                // Limit queue size to prevent memory issues
-                if eventQueue.count > 1000 {
-                    eventQueue.removeFirst(eventQueue.count - 1000)
+                backgroundQueue.async { [weak self] in
+                    guard let self else { return }
+                    self.queueLock.lock()
+                    self.eventQueue.insert(contentsOf: eventsToSend, at: 0)
+                    
+                    // Limit queue size to prevent memory issues
+                    if self.eventQueue.count > 1000 {
+                        self.eventQueue.removeFirst(self.eventQueue.count - 1000)
+                    }
+                    self.queueLock.unlock()
                 }
-                queueLock.unlock()
             }
         }
     }
@@ -227,7 +234,9 @@ public class TelemetryCollector {
         request.httpMethod = "POST"
         request.httpBody = compressed
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        #if canImport(Compression)
         request.addValue("gzip", forHTTPHeaderField: "Content-Encoding")
+        #endif
         request.addValue("RivalApexMediation-iOS/1.0.0", forHTTPHeaderField: "User-Agent")
         
         let (_, response) = try await urlSession.data(for: request)
@@ -240,6 +249,7 @@ public class TelemetryCollector {
     
     /// Compress data with GZIP
     private func compress(_ data: Data) throws -> Data {
+        #if canImport(Compression)
         var compressedData = Data()
         
         try data.withUnsafeBytes { (sourceBuffer: UnsafeRawBufferPointer) in
@@ -268,6 +278,9 @@ public class TelemetryCollector {
         }
         
         return compressedData
+        #else
+        return data
+        #endif
     }
 }
 

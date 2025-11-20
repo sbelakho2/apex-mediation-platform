@@ -282,7 +282,7 @@ IsAdReady(placement)
 
 Shutdown()
 
-Events: OnAdLoaded, OnAdFailed, OnAdShown, OnAdClicked, OnAdClosed, OnPaidEvent (standardized payload)
+Events: OnAdLoaded, OnAdFailed, OnAdShown, OnAdClicked, OnAdClosed (paid event exposure deferred until Managed Demand ships)
 
 Acceptance: Sample scene uses only the C# facade; no platform-specific code in game scripts.
 
@@ -389,6 +389,12 @@ Config-as-Code for Unity: export/import placements as JSON; sign/verify locally.
 Cryptographic transparency: show proof IDs returned from native (Merkle root per day); deep-link to your status page when you add it.
 
 Automated size/test gates: CI job that builds a test Unity project (Android+iOS) and enforces size/time budgets.
+
+#### Unity P2 implementation snapshot (Nov 2025)
+- **Config-as-Code** — Implemented via `Runtime/Core/ConfigCodec.cs` with System.Text.Json + Unity `JsonUtility` support, Editor tooling in `Editor/ConfigAsCodeWindow.cs`, and coverage in `Tests/ConfigCodecTests.cs`. Exported configs are HMAC signed using `ConfigSignature`, and imports are signature-verified before constructing `ApexConfig`.
+- **Single-entry bootstrap** — `Runtime/ApexMediationEntryPoint.cs` lets developers drop a single MonoBehaviour into a scene, point it at a signed config TextAsset, optionally provide adapter credentials, and (in Editor) automatically spawn the Mediation Debugger overlay for sanitized traces/proofs.
+- **Cryptographic transparency** — `TransparencyLedger`, `TransparencyProof`, and the updates in `MediationSDK` maintain a rolling hash chain for selection events. `MediationDebuggerOverlay` surfaces the latest proof hash in-editor so developers can trace decisions against the ledger.
+- **Automated size/test gates** — `sdk/core/unity/scripts/check_package_constraints.sh` now packages `Runtime/` as a compressed tar (mirrors Unity package distribution), enforces the 100KB compressed budget, and runs the .NET test suite so CI can guard both footprint and functionality with a single job.
 
 What to avoid now (until Managed Demand)
 
@@ -542,7 +548,7 @@ Hedged auctions vs S2S: your AuctionClient is good; default client API key empty
 
 Ad cache with TTL: add a small in-memory cache per placement with expiry to support isAdReady.
 
-Paid event normalization: surface standardized OnPaidEvent(currency, precision, micros).
+Paid event normalization: surface standardized OnPaidEvent(currency, precision, micros). **Unity Note:** Deferred until Managed Demand toggle; Unity runtime currently logs impressions via `OnAdEvent` only.
 
 Debug Panel: show last N sanitized traces (placement, adapter, outcome, latency).
 
@@ -587,3 +593,308 @@ Credentials never leave device; telemetry redacted; logs sanitized.
 Offline test suite green; size/perf budgets held.
 
 No OMID needed unless you render your own creatives.
+
+
+
+### Android TV and TVOS BYO Mediation SDK Fixes & Enhancements:
+
+What’s already strong
+Android TV (/android-tv/android-tv/...)
+
+S2S only: AuctionClient.kt builds request → posts JSON to /rtb/bid; no embedded network credentials in SDK (✅ BYO-friendly).
+
+Video pipeline: VideoRenderer.kt + PlayerView (Media3/ExoPlayer) is the right call for CTV.
+
+Beacon plumbing: render/Beacon.kt fires tracking URLs async with OkHttp (good).
+
+Config scaffolding: config/ConfigManager.kt with local cache and optional Ed25519 comment shows the right intent.
+
+tvOS (/tvos/Sources/CTVSDK/...)
+
+S2S only: AuctionClient.swift builds a BYO-safe request and returns AuctionWin.
+
+Video pipeline: AVPlayer + AVPlayerViewController in InterstitialAd.swift (simple & solid).
+
+Consent holder: Consent.swift + ConsentManager persist basic GDPR/US privacy flags.
+
+Beacon: simple async GET in Beacon.swift (works fine for tracking endpoints).
+
+BYO-only gaps to close (pre-GA)
+Common (Android TV + tvOS)
+
+OTA safety & kill-switch
+
+Signed remote config (Ed25519) + staged rollout (%1 → 5 → 25 → 100) with auto-rollback on SLO breach.
+
+Global kill-switch (per SDK, per placement).
+
+Unified error taxonomy & timeouts
+
+Normalize no_fill, timeout, network_error, status_XXX, error across platforms.
+
+VAST/Tracking completeness
+
+Fire impression + start + firstQuartile + midpoint + thirdQuartile + complete, plus mute/unmute, pause/resume, fullscreen, close as provided by auction response.
+
+Ad caching + TTL + readiness
+
+Cache by placementId, enforce TTL from win.ttlSeconds, surface isReady(), consume on show.
+
+Observability
+
+Emit counters/timers: request → response latency (p50/p95/p99), timeout count, error counts, success/fill, play start/complete, tracker send failures.
+
+Privacy
+
+Carry IAB TCF v2.2 / US GPP (string passthrough from host) + COPPA flag; never infer on device.
+
+Device & context hints (CTV)
+
+Include tv make/model if available, screen size, connection type (ethernet/wifi), OS version; make this a stable schema in the request.
+
+Pinpoint edits (Android TV)
+
+Paths relative to: /android-tv/android-tv/src/main/kotlin/com/rivalapexmediation/ctv
+
+1) OTA config & kill-switch
+
+File: config/ConfigManager.kt
+
+Add: features.killSwitch: Boolean, features.disableShow: Boolean, placements[placementId].enabledNetworks, placements[placementId].ttlSeconds, placements[placementId].refreshSec.
+
+Verify signatures: implement Ed25519 verification:
+
+Accept x-config-sig: base64(ed25519(sig over SHA256(body))).
+
+Verify with SDKConfig.configPublicKeyPem.
+
+Staged rollout: persist last-good config; apply new version only to a random % of sessions until SLOs pass (store rollout state in SharedPreferences).
+
+File: ApexMediation.kt
+
+On init, if features.killSwitch, short-circuit load/show with deterministic error ("kill_switch_active").
+
+2) Strict threading guarantees (ANR-safe)
+
+File: ApexMediation.kt
+
+Add (debug only):
+
+if (BuildConfig.DEBUG) StrictMode.setThreadPolicy(
+  StrictMode.ThreadPolicy.Builder().detectNetwork().detectDiskReads()
+    .detectDiskWrites().penaltyLog().build()
+)
+
+
+Ensure all network calls are via OkHttp .enqueue (non-blocking) — already the case in AuctionClient.kt.
+
+3) Error taxonomy & mapping
+
+File: network/AuctionClient.kt
+
+Map HTTP codes: 204 → no_fill, 408/504 → timeout, 5xx → status_5xx, >=400 & <500 → status_4xx (non-retry).
+
+Expose a sealed error enum (mirrors mobile): NoFill, Timeout, Network, Status(code), Error(message).
+
+File: ads/InterstitialAd.kt
+
+On S2S no_fill return, bubble up onError("no_fill") (keep taxonomy identical to mobile).
+
+4) VAST quartiles & lifecycle tracking
+
+Files: render/VideoRenderer.kt, render/Beacon.kt, ads/InterstitialAd.kt
+
+VideoRenderer: listen to Player.Events and media position to trigger:
+
+start (≥2 seconds of play or ≥x% watched),
+
+firstQuartile, midpoint, thirdQuartile, complete,
+
+pause, resume, mute, unmute, close.
+
+AuctionWin model (client or response DTO) must carry these tracker URLs (tracking.start, tracking.firstQuartile, …). If not present, no-op safely.
+
+Beacon: keep non-blocking, add bounded timeouts and ignore errors (best-effort).
+
+5) Ad cache & isReady()
+
+File: ads/InterstitialAd.kt
+
+Add: in-memory cache of AuctionWin keyed by placementId with expiryAt = now + ttlSeconds*1000.
+
+Implement: isReady() checks expiry; show() consumes and clears entry.
+
+Ensure: if expired at show time, emit onError("expired").
+
+6) Observability metrics
+
+Files: util/Logger.kt (or create metrics/Metrics.kt), plus touch points in ApexMediation.kt, AuctionClient.kt, InterstitialAd.kt, VideoRenderer.kt
+
+Counters: requests_total, no_fill_total, timeouts_total, errors_total, trackers_sent_total, trackers_fail_total.
+
+Timers: ad_load_latency_ms, video_start_latency_ms, play_time_ms.
+
+Gate upload behind a config flag; buffer locally and flush periodically to your analytics endpoint.
+
+7) Consent propagation
+
+File: consent/ConsentManager.kt
+
+Keep as the single source of truth. Ensure AuctionClient.buildConsentMap() includes gdpr_applies, tcf, us_privacy, coppa.
+
+Do not auto-read any app storage (BYO host must set).
+
+8) Device/context
+
+File: network/AuctionClient.kt
+
+Enrich buildDevice() with:
+
+screen (width/height), connection (wifi/ethernet unknown), and tv=true.
+
+Keep it non-PII.
+
+Pinpoint edits (tvOS)
+
+Paths relative to: /tvos/Sources/CTVSDK
+
+1) ATT & attribution (privacy-first)
+
+New file: ATT.swift
+
+Provide an optional helper to request tracking authorization (developers call this themselves to stay BYO-compliant).
+
+New file: Attribution.swift
+
+Provide SKAdNetwork postback parsing & forwarding hooks (today).
+
+Add AdAttributionKit bridge when you adopt iOS/tvOS 18+ attribution (keep behind feature flag).
+
+2) OTA config & kill-switch
+
+Files: ApexMediation.swift, SDKConfig.swift
+
+Mirror Android TV: accept a signed config, stage rollout, and auto-rollback by SLO signals (local cache of last-good).
+
+If features.killSwitch==true, refuse load() with "kill_switch_active".
+
+3) Error taxonomy
+
+Files: AuctionClient.swift, InterstitialAd.swift
+
+Map the same taxonomy as Android TV (no_fill, timeout, status_4xx/5xx, network_error, error).
+
+Ensure completion("no_fill") vs. generic error is distinct.
+
+4) VAST quartiles & lifecycle tracking
+
+Files: InterstitialAd.swift, New: PlayerObserver.swift
+
+Add a KVO-backed observer on AVPlayer (timeControlStatus, item duration/position) to fire start/25/50/75/complete and UI actions (mute/unmute/pause/resume/close) via Beacon.fire(...).
+
+Ensure all trackers are best-effort, not blocking playback.
+
+5) Ad cache & isReady()
+
+File: InterstitialAd.swift
+
+Cache AuctionWin with TTL via win.ttlSeconds.
+
+Implement isReady by TTL; clear on show.
+
+6) Observability
+
+Files: ApexMediation.swift, AuctionClient.swift, InterstitialAd.swift, Beacon.swift
+
+Counters/timers equivalent to Android TV; batch to your analytics endpoint.
+
+Gate behind config (opt-in).
+
+7) Consent propagation
+
+Files: Consent.swift, ApexMediation.swift, AuctionClient.swift
+
+Ensure consent strings from host are passed verbatim (BYO-friendly); do not attempt to read system defaults automatically.
+
+Request schema (shared BYO S2S)
+
+Make sure the CTV request aligns with mobile (so your auction can be generic). At a minimum:
+
+{
+  "requestId": "uuid",
+  "publisherId": "appId-from-SDKConfig",
+  "placementId": "string",
+  "adFormat": "interstitial|rewarded|preroll|midroll|postroll",
+  "floorCpm": 0.0,
+  "device": {
+    "platform": "android_tv|tvos",
+    "osVersion": "string",
+    "screen": {"w": 1920, "h": 1080},
+    "connection": "wifi|ethernet|unknown",
+    "ifa": null
+  },
+  "user": {"coppa": false},
+  "consent": {"gdpr_applies":null, "tcf":null, "us_privacy":null, "coppa":null},
+  "features": {"tv": true}
+}
+
+
+Response should include:
+
+win: creativeUrl (mp4/m3u8) and tracking map:
+
+impression, start, firstQuartile, midpoint, thirdQuartile, complete, mute, unmute, pause, resume, close, click.
+
+Acceptance criteria (BYO GA)
+
+Reliability: crash-free ≥ 99.9%; no main-thread network/disk (Android TV debug guard on).
+
+Performance: p95 ad load ≤ 800 ms (network path); video start within 1–2 s of show().
+
+Consent: strings propagated 100% as provided; no auto-collection.
+
+Tracking: ≥ 99.5% beacon send success (best-effort, retries capped).
+
+Cache/readiness: isReady() true/false correctness covered in unit tests; TTL respected.
+
+Error taxonomy: consistent strings across Android TV / tvOS and with mobile SDKs.
+
+Kill-switch: remote flip halts serving within one cold start; hot-apply gated.
+
+Observability: adapter-agnostic metrics posted; no PII in logs.
+
+BYO vs. Managed-demand notes
+
+Your current CTV SDKs are already BYO-pure (no embedded network credentials). Keep it that way.
+
+All the additions above are additive and won’t block a later managed demand mode:
+
+You’ll simply enrich the S2S response with exchange DSP results and preserve the same playback/trackers path.
+
+Keep adapter-free on device for TV to minimize footprint/risk.
+
+Quick checklist (to drive PRs)
+
+ Android TV: StrictMode in ApexMediation.kt (debug).
+
+ Android TV: Signed remote config + kill-switch in ConfigManager.kt; staged rollout cache.
+
+ Android TV: Error taxonomy mapping in AuctionClient.kt; propagate to InterstitialAd.kt.
+
+ Android TV: VAST quartiles in VideoRenderer.kt; tracker URLs on AuctionWin.
+
+ Android TV: Cache + TTL + isReady() + consume on show in InterstitialAd.kt.
+
+ Android TV: Metrics counters/timers (new metrics/), emit from AuctionClient.kt, InterstitialAd.kt, VideoRenderer.kt.
+
+ tvOS: ATT helper (new), SKAN/AAK bridge (new).
+
+ tvOS: Signed config + kill-switch in ApexMediation.swift; staged rollout.
+
+ tvOS: Error taxonomy in AuctionClient.swift + InterstitialAd.swift.
+
+ tvOS: VAST quartiles via PlayerObserver.swift; fire trackers via Beacon.swift.
+
+ tvOS: Cache + TTL + isReady() + consume on show in InterstitialAd.swift.
+
+ tvOS: Metrics counters/timers emitted from ApexMediation.swift, AuctionClient.swift, InterstitialAd.swift.

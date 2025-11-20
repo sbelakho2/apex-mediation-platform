@@ -123,6 +123,18 @@ export const placementApi = {
   },
 }
 
+// BYO Observability (Adapter Spans)
+export const analyticsByo = {
+  getAdapterMetrics: async (params: { appId: string; placement?: string; adapter?: string; from?: number; to?: number }) => {
+    const resp = await analyticsApiClient.get('/analytics/byo/adapter-metrics', { params })
+    return resp.data as { summary: { p50: number; p95: number; p99: number; fills: number; noFills: number; timeouts: number; errors: number; total: number } }
+  },
+  getTraces: async (params: { appId: string; placement?: string; adapter?: string; from?: number; to?: number; limit?: number }) => {
+    const resp = await analyticsApiClient.get('/analytics/byo/traces', { params })
+    return resp.data as { traces: Array<{ trace_id: string; placement: string; startedAt?: number; spans: Array<{ adapter: string; t0?: number; t1?: number; outcome?: string; latency_ms?: number; error_code?: string }> }> }
+  },
+}
+
 // Tools API
 export const toolsApi = {
   inspectAppAds: async (domain: string): Promise<AppAdsInspectorResult> => {

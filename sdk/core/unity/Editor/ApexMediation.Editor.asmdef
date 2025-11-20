@@ -2,7 +2,8 @@
   "name": "ApexMediation.Editor",
   "rootNamespace": "Apex.Mediation.Editor",
   "references": [
-    "ApexMediation"
+    "ApexMediation",
+    "Unity.Newtonsoft.Json"
   ],
   "includePlatforms": [
     "Editor"

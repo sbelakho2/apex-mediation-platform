@@ -1,5 +1,12 @@
 import Foundation
+
+#if canImport(CryptoKit)
 import CryptoKit
+#elseif canImport(Crypto)
+import Crypto
+#else
+#error("CryptoKit or SwiftCrypto is required for signature verification")
+#endif
 
 /// Errors thrown during signature verification operations.
 public enum SignatureError: Error, Equatable, LocalizedError {

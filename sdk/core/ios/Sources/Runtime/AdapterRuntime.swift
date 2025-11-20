@@ -3,7 +3,7 @@ import Dispatch
 
 // MARK: - Circuit Breaker
 
-public final class CircuitBreaker {
+public final class AdapterCircuitBreaker {
     private let failureThreshold: Int
     private let timeWindowMs: Int64
     private let recoveryTimeMs: Int64
@@ -139,10 +139,10 @@ public final class HedgeManager {
 
 // MARK: - Timeout Enforcer
 
-public final class TimeoutEnforcer {
+public final class AdapterTimeoutEnforcer {
     public init() {}
     
-    public func withTimeout<T>(timeoutMs: Int, operation: @escaping () async throws -> T) async throws -> T {
+    public func withTimeout<T: Sendable>(timeoutMs: Int, operation: @escaping @Sendable () async throws -> T) async throws -> T {
         return try await withThrowingTaskGroup(of: T.self) { group in
             group.addTask {
                 return try await operation()
@@ -168,9 +168,9 @@ public final class TimeoutEnforcer {
 public final class AdapterRuntimeWrapper {
     private let adapter: AdNetworkAdapterV2
     private let partnerId: String
-    private var circuitBreakers: [String: CircuitBreaker] = [:]
+    private var circuitBreakers: [String: AdapterCircuitBreaker] = [:]
     private let hedgeManager = HedgeManager()
-    private let timeoutEnforcer = TimeoutEnforcer()
+    private let timeoutEnforcer = AdapterTimeoutEnforcer()
     private let lock = NSLock()
     
     public init(adapter: AdNetworkAdapterV2, partnerId: String) {
@@ -178,13 +178,13 @@ public final class AdapterRuntimeWrapper {
         self.partnerId = partnerId
     }
     
-    private func getCircuitBreaker(placement: String) -> CircuitBreaker {
+    private func getCircuitBreaker(placement: String) -> AdapterCircuitBreaker {
         lock.lock()
         defer { lock.unlock() }
         
         let key = "\(partnerId):\(placement)"
         if circuitBreakers[key] == nil {
-            circuitBreakers[key] = CircuitBreaker()
+            circuitBreakers[key] = AdapterCircuitBreaker()
         }
         return circuitBreakers[key]!
     }
@@ -210,7 +210,7 @@ public final class AdapterRuntimeWrapper {
             
             do {
                 let result = try await timeoutEnforcer.withTimeout(timeoutMs: timeoutMs) {
-                    return try await Task.detached(priority: .userInitiated) {
+                    return await Task.detached(priority: .userInitiated) {
                         return self.adapter.loadInterstitial(placementId: placement, meta: meta, timeoutMs: timeoutMs)
                     }.value
                 }

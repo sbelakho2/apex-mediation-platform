@@ -1,5 +1,7 @@
 import XCTest
 @testable import RivalApexMediationSDK
+
+#if canImport(UIKit)
 import UIKit
 
 @MainActor
@@ -32,3 +34,13 @@ final class BelRewardedInterstitialTests: XCTestCase {
         XCTAssertFalse(closedCalled, "Closed callback should not fire")
     }
 }
+
+#else
+
+final class BelRewardedInterstitialTests: XCTestCase {
+    func testUIKitUnavailable() throws {
+        throw XCTSkip("UIKit not available on this platform")
+    }
+}
+
+#endif

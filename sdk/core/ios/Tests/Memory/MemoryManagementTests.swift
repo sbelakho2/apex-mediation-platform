@@ -12,7 +12,7 @@ final class MemoryManagementTests: XCTestCase {
         
         do {
             // Create a local scope to test deallocation
-            let sdk = await MediationSDK.shared
+            let sdk = MediationSDK.shared
             weakSDK = sdk
             
             // Verify SDK is alive
@@ -230,7 +230,7 @@ final class MemoryManagementTests: XCTestCase {
     // MARK: - Edge Cases
     
     func testSDKReinitializationAfterReset() async throws {
-        let sdk = await MediationSDK.shared
+        let sdk = MediationSDK.shared
         
         // Note: SDK doesn't currently support reset/reinitialize
         // This test documents the expected behavior
@@ -249,7 +249,7 @@ final class MemoryManagementTests: XCTestCase {
     
     func testLoadAdAfterSDKDeinit() async throws {
         // SDK is singleton, so this test verifies behavior remains stable
-        let sdk = await MediationSDK.shared
+        let sdk = MediationSDK.shared
         
         // Try loading ad before initialization
         do {

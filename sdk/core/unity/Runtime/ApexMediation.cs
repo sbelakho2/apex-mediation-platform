@@ -9,7 +9,6 @@ namespace Apex.Mediation
     public static class ApexMediation
     {
         public static event Action<AdEventArgs>? OnAdEvent;
-        public static event Action<PaidEventArgs>? OnPaidEvent;
 
         public static bool IsInitialized => MediationSDK.Instance.IsInitialized;
 

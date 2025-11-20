@@ -4,6 +4,7 @@ import { authenticateOrApiKey } from '../middleware/authEither';
 import { cache, invalidatePublisherCache } from '../middleware/cache';
 import { cacheTTL } from '../utils/redis';
 import * as analyticsController from '../controllers/analytics.controller';
+import { ingestByoSpans, getByoAdapterMetrics, getByoTraces } from '../controllers/byoTelemetry.controller';
 import { authRateLimiter } from '../middleware/redisRateLimiter';
 
 const router = Router();
@@ -48,3 +49,25 @@ router.post('/events/clicks', authRateLimiter, invalidatePublisherCache(), analy
 router.post('/events/revenue', authRateLimiter, invalidatePublisherCache(), analyticsController.recordRevenue);
 
 export default router;
+
+// ========================================
+// BYO Observability (Adapter Spans) Endpoints
+// ========================================
+// POST /api/v1/analytics/byo/spans - Ingest sampled adapter span events from SDK (rate-limited)
+router.post('/byo/spans', authRateLimiter, ingestByoSpans);
+
+// GET /api/v1/analytics/byo/adapter-metrics - Summary metrics (auth required)
+router.get(
+  '/byo/adapter-metrics',
+  authenticateOrApiKey,
+  cache({ ttl: cacheTTL.short, varyBy: ['query.appId','query.placement','query.adapter','query.from','query.to'] }),
+  getByoAdapterMetrics
+);
+
+// GET /api/v1/analytics/byo/traces - Recent sanitized traces (auth required)
+router.get(
+  '/byo/traces',
+  authenticateOrApiKey,
+  cache({ ttl: cacheTTL.short, varyBy: ['query.appId','query.placement','query.adapter','query.from','query.to','query.limit'] }),
+  getByoTraces
+);

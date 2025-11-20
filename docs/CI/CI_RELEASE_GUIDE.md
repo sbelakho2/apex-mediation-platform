@@ -49,7 +49,8 @@ The `release-sdks.yml` workflow remains to support existing tag-based releases b
        ├── Console Tests (Jest + Playwright)
        ├── Android SDK (Gradle + Dokka)
        ├── iOS SDK (SwiftPM + XCTest)
-       ├── Unity SDK (Package validation)
+      ├── Unity Footprint Gate (compressed runtime + .NET tests)
+      ├── Unity SDK (Package validation)
        └── ML Pipeline (Python + pytest)
 
 ┌─────────────┐
@@ -108,11 +109,12 @@ The `sdk-release.yml` workflow performs the following jobs:
 2. **generate-changelog** - Creates changelog from conventional commits
 3. **build-ios-sdk** - Builds XCFramework for iOS devices + simulator
 4. **build-android-sdk** - Builds AAR and runs tests
-5. **build-unity-sdk** - Packages UPM tarball
-6. **publish-ios** - Publishes to CocoaPods (if configured)
-7. **publish-android** - Publishes to Maven Central/GitHub Packages
-8. **publish-unity** - Publishes to UPM registry
-9. **create-github-release** - Creates GitHub Release with artifacts
+5. **unity-footprint-gate** - Runs `sdk/core/unity/scripts/check_package_constraints.sh` to enforce the 100KB compressed runtime limit and execute the Unity .NET tests before any platform-specific builds continue
+6. **build-unity-sdk** - Packages UPM tarball
+7. **publish-ios** - Publishes to CocoaPods (if configured)
+8. **publish-android** - Publishes to Maven Central/GitHub Packages
+9. **publish-unity** - Publishes to UPM registry
+10. **create-github-release** - Creates GitHub Release with artifacts
 
 #### 3. Monitor Release
 

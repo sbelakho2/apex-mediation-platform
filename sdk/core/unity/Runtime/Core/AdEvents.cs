@@ -8,8 +8,7 @@ namespace Apex.Mediation.Core
         FailedToLoad,
         Shown,
         Clicked,
-        Closed,
-        Paid
+        Closed
     }
 
     public sealed class AdEventArgs : EventArgs
@@ -26,21 +25,5 @@ namespace Apex.Mediation.Core
         public AdEventType Type { get; }
         public string Adapter { get; }
         public string? Message { get; }
-    }
-
-    public sealed class PaidEventArgs : EventArgs
-    {
-        public PaidEventArgs(string placementId, string adapter, decimal value, string currency)
-        {
-            PlacementId = placementId;
-            Adapter = adapter;
-            ValueMicros = value;
-            CurrencyCode = currency;
-        }
-
-        public string PlacementId { get; }
-        public string Adapter { get; }
-        public decimal ValueMicros { get; }
-        public string CurrencyCode { get; }
     }
 }

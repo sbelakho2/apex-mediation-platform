@@ -23,12 +23,12 @@ public class BaseStubAdapter: AdNetworkAdapter {
 
     public func initialize(config: [String : Any]) throws {
         guard let v = config[requiredConfigKey] as? String, !v.isEmpty else {
-            throw AdapterError.loadFailed("\(requiredConfigKey) required")
+            throw AdapterRegistryError.loadFailed("\(requiredConfigKey) required")
         }
         isInitialized = true
     }
 
-    public func loadAd(placement: String, adType: AdType, config: [String : Any], completion: @escaping (Result<Ad, AdapterError>) -> Void) {
+    public func loadAd(placement: String, adType: AdType, config: [String : Any], completion: @escaping (Result<Ad, AdapterRegistryError>) -> Void) {
         guard isInitialized else { completion(.failure(.notInitialized)); return }
         guard supportsAdType(adType) else { completion(.failure(.unsupportedAdType)); return }
         // Return a basic mock banner

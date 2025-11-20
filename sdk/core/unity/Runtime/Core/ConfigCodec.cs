@@ -10,6 +10,16 @@ namespace Apex.Mediation.Core
 {
     public static class ConfigCodec
     {
+#if !UNITY_2020_3_OR_NEWER
+        private static readonly JsonSerializerOptions JsonOptions = new()
+        {
+            WriteIndented = true,
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+            IncludeFields = true,
+            PropertyNameCaseInsensitive = true
+        };
+#endif
+
         public static string Export(ApexConfig config, string signingKey)
         {
             if (config == null)
@@ -19,7 +29,6 @@ namespace Apex.Mediation.Core
 
             var document = ConfigDocument.From(config);
             var payload = Serialize(document.WithoutSignature());
-            Console.WriteLine($"EXPORT payload: {payload}");
             document.signature = ConfigSignature.Sign(payload, signingKey);
             return Serialize(document);
         }
@@ -38,7 +47,6 @@ namespace Apex.Mediation.Core
             }
 
             var payload = Serialize(document.WithoutSignature());
-            Console.WriteLine($"IMPORT payload: {payload}");
             if (!ConfigSignature.Verify(payload, signingKey, document.signature))
             {
                 throw new InvalidOperationException("Signature mismatch");
@@ -52,16 +60,16 @@ namespace Apex.Mediation.Core
 #if UNITY_2020_3_OR_NEWER
             return JsonUtility.ToJson(document, prettyPrint: true);
 #else
-            return JsonSerializer.Serialize(document, new JsonSerializerOptions { WriteIndented = true, PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+        return JsonSerializer.Serialize(document, JsonOptions);
 #endif
         }
 
-        private static ConfigDocument Deserialize(string json)
+        private static ConfigDocument? Deserialize(string json)
         {
 #if UNITY_2020_3_OR_NEWER
             return JsonUtility.FromJson<ConfigDocument>(json);
 #else
-            return JsonSerializer.Deserialize<ConfigDocument>(json, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+        return JsonSerializer.Deserialize<ConfigDocument>(json, JsonOptions);
 #endif
         }
 
@@ -179,16 +187,16 @@ namespace Apex.Mediation.Core
         [Serializable]
         private sealed class AdapterDto
         {
-            public string name;
+            public string name = string.Empty;
             public bool supportsS2S;
-            public string[] requiredCredentialKeys;
+            public string[] requiredCredentialKeys = Array.Empty<string>();
         }
 
         [Serializable]
         private sealed class PlacementDto
         {
-            public string placementId;
-            public string format;
+            public string placementId = string.Empty;
+            public string format = PlacementFormat.Interstitial.ToString();
             public double floorCpm;
         }
 

@@ -46,9 +46,90 @@ class TelemetryCollector(
     
     private val batchSize = 10
     private val flushInterval = 30000L // 30 seconds
+    private val random = java.util.Random()
     
     @Volatile
     private var isRunning = false
+    private val sampleRate: Double get() = config.observabilitySampleRate.coerceIn(0.0, 1.0)
+
+    // --- P1.9: Lightweight in-memory observability metrics (privacy-clean) ---
+    // We track per {placement, adapter} rolling latencies and outcome counters in-memory
+    // for quick developer diagnostics. Bounded memory via small reservoirs per key.
+    private data class Key(val placement: String, val adapter: String)
+    private data class Counters(
+        var fills: Long = 0,
+        var noFills: Long = 0,
+        var timeouts: Long = 0,
+        var errors: Long = 0,
+    )
+    private val counters = java.util.concurrent.ConcurrentHashMap<Key, Counters>()
+    private val latencyReservoirs = java.util.concurrent.ConcurrentHashMap<Key, ArrayDeque<Long>>()
+    private val reservoirMax = 200 // up to 200 recent latencies per key
+
+    private fun getOrCreateCounters(key: Key): Counters {
+        var c = counters[key]
+        if (c != null) return c
+        val created = Counters()
+        val prev = counters.putIfAbsent(key, created)
+        return prev ?: created
+    }
+
+    private fun getOrCreateReservoir(key: Key): ArrayDeque<Long> {
+        var dq = latencyReservoirs[key]
+        if (dq != null) return dq
+        val created = ArrayDeque<Long>()
+        val prev = latencyReservoirs.putIfAbsent(key, created)
+        return prev ?: created
+    }
+
+    private fun recordOutcomeSampled(placement: String, adapter: String, outcome: String, latencyMs: Long?) {
+        if (!config.observabilityEnabled) return
+        if (!shouldSample()) return
+        val key = Key(placement, adapter)
+        // Update counters
+        val c = getOrCreateCounters(key)
+        when (outcome) {
+            "fill" -> c.fills++
+            "no_fill" -> c.noFills++
+            "timeout" -> c.timeouts++
+            "error" -> c.errors++
+        }
+        // Update latency reservoir
+        if (latencyMs != null && latencyMs >= 0) {
+            val dq = getOrCreateReservoir(key)
+            dq.addLast(latencyMs)
+            while (dq.size > reservoirMax) dq.removeFirst()
+        }
+    }
+
+    // Percentiles computed over the local reservoir (best-effort, dev-only diagnostics)
+    fun getLocalPercentiles(placement: String, adapter: String): Map<String, Long> {
+        val key = Key(placement, adapter)
+        val arr = latencyReservoirs[key]?.toLongArray() ?: LongArray(0)
+        if (arr.isEmpty()) return emptyMap()
+        java.util.Arrays.sort(arr)
+        fun pct(p: Double): Long {
+            if (arr.isEmpty()) return 0L
+            val idx = kotlin.math.min(arr.size - 1, kotlin.math.max(0, kotlin.math.floor(p * (arr.size - 1)).toInt()))
+            return arr[idx]
+        }
+        return mapOf(
+            "p50" to pct(0.50),
+            "p95" to pct(0.95),
+            "p99" to pct(0.99),
+        )
+    }
+
+    fun getLocalCounters(placement: String, adapter: String): Map<String, Long> {
+        val key = Key(placement, adapter)
+        val c = counters[key] ?: return emptyMap()
+        return mapOf(
+            "fills" to c.fills,
+            "no_fills" to c.noFills,
+            "timeouts" to c.timeouts,
+            "errors" to c.errors,
+        )
+    }
     
     /**
      * Start telemetry collection
@@ -152,6 +233,65 @@ class TelemetryCollector(
     }
 
     /**
+     * Adapter span start (observability). Uses sampling; no secrets allowed.
+     */
+    fun recordAdapterSpanStart(traceId: String, placement: String, adapter: String) {
+        if (!config.observabilityEnabled) return
+        if (!shouldSample()) return
+        recordEvent(
+            TelemetryEvent(
+                eventType = EventType.ADAPTER_SPAN_START,
+                placement = placement,
+                networkName = adapter,
+                metadata = mapOf(
+                    "trace_id" to traceId,
+                    "phase" to "start"
+                )
+            )
+        )
+    }
+
+    /**
+     * Adapter span finish (observability). Outcome taxonomy: fill | no_fill | timeout | error.
+     * Includes latency and normalized error code/message when applicable. Uses sampling.
+     */
+    fun recordAdapterSpanFinish(
+        traceId: String,
+        placement: String,
+        adapter: String,
+        outcome: String,
+        latencyMs: Long?,
+        errorCode: String? = null,
+        errorMessage: String? = null,
+        metadata: Map<String, Any> = emptyMap()
+    ) {
+        if (!config.observabilityEnabled) return
+        // Update local metrics using the same sampling gate
+        recordOutcomeSampled(placement, adapter, outcome, latencyMs)
+        if (!shouldSample()) return
+        val safeMeta = HashMap<String, Any>()
+        safeMeta["trace_id"] = traceId
+        safeMeta["phase"] = "finish"
+        safeMeta["outcome"] = outcome
+        if (latencyMs != null) safeMeta["latency_ms"] = latencyMs
+        // Merge limited caller-provided metadata (must be non-sensitive)
+        for ((k, v) in metadata) {
+            if (k.length <= 40) safeMeta[k] = v
+        }
+        recordEvent(
+            TelemetryEvent(
+                eventType = EventType.ADAPTER_SPAN_FINISH,
+                placement = placement,
+                networkName = adapter,
+                latency = latencyMs,
+                errorCode = errorCode,
+                errorMessage = errorMessage?.take(200),
+                metadata = safeMeta
+            )
+        )
+    }
+
+    /**
      * Record a credential validation success for a given network (BYO ValidationMode).
      * Metadata must not contain secrets; only include key names or booleans.
      */
@@ -196,6 +336,13 @@ class TelemetryCollector(
             if (eventQueue.size >= batchSize) {
                 executor.execute { flushEvents() }
             }
+
+            // Apply hard cap to queue size to avoid memory growth
+            val maxQ = (if (config.observabilityMaxQueue > 0) config.observabilityMaxQueue else 500).coerceAtLeast(100)
+            if (eventQueue.size > maxQ) {
+                // Drop oldest beyond cap
+                eventQueue.subList(0, eventQueue.size - maxQ).clear()
+            }
         }
     }
     
@@ -220,10 +367,10 @@ class TelemetryCollector(
             // Re-queue events on failure
             synchronized(queueLock) {
                 eventQueue.addAll(0, eventsToSend)
-                
-                // Limit queue size to prevent memory issues
-                if (eventQueue.size > 1000) {
-                    eventQueue.subList(0, eventQueue.size - 1000).clear()
+                // Limit queue size to prevent memory issues (configurable)
+                val maxQ = (if (config.observabilityMaxQueue > 0) config.observabilityMaxQueue else 500).coerceAtLeast(100)
+                if (eventQueue.size > maxQ) {
+                    eventQueue.subList(0, eventQueue.size - maxQ).clear()
                 }
             }
         }
@@ -266,6 +413,13 @@ class TelemetryCollector(
             gzip.write(data)
         }
         return outputStream.toByteArray()
+    }
+
+    private fun shouldSample(): Boolean {
+        val p = sampleRate
+        if (p >= 1.0) return true
+        if (p <= 0.0) return false
+        return random.nextDouble() < p
     }
 }
 

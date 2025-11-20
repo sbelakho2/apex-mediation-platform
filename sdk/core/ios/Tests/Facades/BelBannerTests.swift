@@ -1,5 +1,7 @@
 import XCTest
 @testable import RivalApexMediationSDK
+
+#if canImport(UIKit)
 import UIKit
 
 @MainActor
@@ -52,3 +54,13 @@ final class BelBannerTests: XCTestCase {
     // Note: Full banner lifecycle test would require SDK initialization
     // and mock ad responses, which is tested in integration tests
 }
+
+#else
+
+final class BelBannerTests: XCTestCase {
+    func testUIKitUnavailable() throws {
+        throw XCTSkip("UIKit not available on this platform")
+    }
+}
+
+#endif

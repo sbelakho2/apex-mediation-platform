@@ -22,6 +22,7 @@ import {
   ShieldCheck,
   CreditCard,
   GitCompare,
+  Wrench,
 } from 'lucide-react'
 
 type FeatureFlagKey = 'transparency' | 'billing' | 'migrationStudio'
@@ -45,6 +46,9 @@ const NAV_BLUEPRINT: NavBlueprint[] = [
   { key: 'fraud', label: 'Fraud Detection', href: '/fraud', icon: ShieldAlert },
   { key: 'payouts', label: 'Payouts', href: '/payouts', icon: DollarSign },
   { key: 'billing', label: 'Billing', href: '/billing/usage', icon: CreditCard, featureFlag: 'billing' },
+  // Developer tools (always visible to authenticated users)
+  { key: 'tool-app-ads-inspector', label: 'app-ads.txt Inspector', href: '/tools/app-ads-inspector', icon: Wrench },
+  { key: 'tool-mediation-debugger', label: 'Mediation Debugger', href: '/tools/mediation-debugger', icon: BarChart3 },
   { key: 'settings', label: 'Settings', href: '/settings', icon: Settings },
   { key: 'admin', label: 'Admin', href: '/admin/health', icon: Settings, roles: ['admin'] },
 ]

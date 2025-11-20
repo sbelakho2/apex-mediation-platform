@@ -25,8 +25,15 @@ namespace Apex.Mediation.Core
                 return false;
             }
 
-            var expected = Sign(payload, secret);
-            return FixedTimeEquals(Convert.FromBase64String(expected), Convert.FromBase64String(signature));
+            try
+            {
+                var expected = Sign(payload, secret);
+                return FixedTimeEquals(Convert.FromBase64String(expected), Convert.FromBase64String(signature));
+            }
+            catch (FormatException)
+            {
+                return false;
+            }
         }
 
         private static bool FixedTimeEquals(ReadOnlySpan<byte> left, ReadOnlySpan<byte> right)

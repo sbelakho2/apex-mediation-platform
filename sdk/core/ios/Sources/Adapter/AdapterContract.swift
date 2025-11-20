@@ -2,24 +2,24 @@ import Foundation
 
 // MARK: - Data Contracts
 
-public struct AdapterCredentials: Codable, Equatable {
+public struct AdapterCredentials: Codable, Equatable, Sendable {
     public let key: String
     public let secret: String?
     public let appId: String?
     public let accountIds: [String: String]?
 }
 
-public struct AdapterOptions: Codable, Equatable {
+public struct AdapterOptions: Codable, Equatable, Sendable {
     public let startMuted: Bool?
     public let testMode: Bool?
     public let bidFloorMicros: Int64?
 }
 
-public enum PartnerRegion: String, Codable {
+public enum PartnerRegion: String, Codable, Sendable {
     case us, eu, apac, cn, global
 }
 
-public struct ConsentState: Codable, Equatable {
+public struct ConsentState: Codable, Equatable, Sendable {
     public let iabTCFv2: String?
     public let iabUSGPP: String?
     public let coppa: Bool
@@ -27,11 +27,11 @@ public struct ConsentState: Codable, Equatable {
     public let limitAdTracking: Bool
 }
 
-public enum ATTStatus: String, Codable {
+public enum ATTStatus: String, Codable, Sendable {
     case authorized, denied, notDetermined, restricted
 }
 
-public struct AdapterConfig: Codable, Equatable {
+public struct PartnerAdapterConfig: Codable, Equatable, Sendable {
     public let partner: String
     public let credentials: AdapterCredentials
     public let placements: [String: String]
@@ -40,43 +40,43 @@ public struct AdapterConfig: Codable, Equatable {
     public let options: AdapterOptions?
 }
 
-public struct DeviceMeta: Codable, Equatable {
+public struct DeviceMeta: Codable, Equatable, Sendable {
     public let os: String
     public let osVersion: String
     public let model: String
 }
 
-public struct UserMeta: Codable, Equatable {
+public struct UserMeta: Codable, Equatable, Sendable {
     public let ageRestricted: Bool
     public let consent: ConsentState
 }
 
-public struct NetworkMeta: Codable, Equatable {
+public struct NetworkMeta: Codable, Equatable, Sendable {
     public let ipPrefixed: String
     public let uaNormalized: String
     public let connType: ConnectionType
 }
 
-public enum ConnectionType: String, Codable {
+public enum ConnectionType: String, Codable, Sendable {
     case wifi, cell, other
 }
 
-public struct ContextMeta: Codable, Equatable {
+public struct ContextMeta: Codable, Equatable, Sendable {
     public let orientation: Orientation
     public let sessionDepth: Int
 }
 
-public enum Orientation: String, Codable {
+public enum Orientation: String, Codable, Sendable {
     case portrait, landscape
 }
 
-public struct AuctionMeta: Codable, Equatable {
+public struct AuctionMeta: Codable, Equatable, Sendable {
     public let floorsMicros: Int64?
     public let sChain: String?
     public let sellersJsonOk: Bool?
 }
 
-public struct RequestMeta: Codable, Equatable {
+public struct RequestMeta: Codable, Equatable, Sendable {
     public let requestId: String
     public let device: DeviceMeta
     public let user: UserMeta
@@ -85,7 +85,7 @@ public struct RequestMeta: Codable, Equatable {
     public let auction: AuctionMeta
 }
 
-public struct AdHandle: Codable, Equatable {
+public struct AdHandle: Codable, Equatable, Sendable {
     public let id: String
     public let adType: AdType
     public let partnerPlacementId: String?
@@ -99,7 +99,7 @@ public struct AdHandle: Codable, Equatable {
     }
 }
 
-public struct LoadResult: Codable, Equatable {
+public struct LoadResult: Codable, Sendable {
     public let handle: AdHandle
     public let ttlMs: Int
     public let priceMicros: Int64?
@@ -107,13 +107,13 @@ public struct LoadResult: Codable, Equatable {
     public let partnerMeta: [String: AnyCodable]
 }
 
-public struct InitResult: Codable, Equatable {
+public struct InitResult: Codable, Sendable {
     public let success: Bool
     public let error: AdapterError?
     public let partnerMeta: [String: AnyCodable]
 }
 
-public struct PaidEvent: Codable, Equatable {
+public struct PaidEvent: Codable, Equatable, Sendable {
     public let valueMicros: Int64
     public let currency: String
     public let precision: PaidEventPrecision
@@ -123,15 +123,15 @@ public struct PaidEvent: Codable, Equatable {
     public let creativeId: String?
 }
 
-public enum PaidEventPrecision: String, Codable { case publisher, estimated }
+public enum PaidEventPrecision: String, Codable, Sendable { case publisher, estimated }
 
 // MARK: - Error Taxonomy
 
-public enum AdapterErrorCode: String, Codable {
+public enum AdapterErrorCode: String, Codable, Sendable {
     case noFill, timeout, networkError, belowFloor, error, circuitOpen, config, noAdReady
 }
 
-public struct AdapterError: Error, Codable, Equatable {
+public struct AdapterError: Error, Codable, Equatable, Sendable {
     public let code: AdapterErrorCode
     public let detail: String
     public let vendorCode: String?
@@ -140,7 +140,7 @@ public struct AdapterError: Error, Codable, Equatable {
 
 // MARK: - Callbacks
 
-public enum CloseReason: String, Codable { case completed, skipped, dismissed }
+public enum CloseReason: String, Codable, Sendable { case completed, skipped, dismissed }
 
 public protocol ShowCallbacks: AnyObject {
     func onImpression(meta: [String: Any]?)
@@ -159,7 +159,7 @@ public protocol BannerCallbacks: ShowCallbacks {
     func onViewDetached(reason: CloseReason)
 }
 
-public struct AdSize: Codable, Equatable {
+public struct AdSize: Codable, Equatable, Sendable {
     public let width: Int
     public let height: Int
     public static let banner320x50 = AdSize(width: 320, height: 50)
@@ -168,7 +168,7 @@ public struct AdSize: Codable, Equatable {
 // MARK: - Core Adapter Protocol
 
 public protocol AdNetworkAdapterV2 {
-    func initAdapter(config: AdapterConfig, timeoutMs: Int) -> InitResult
+    func initAdapter(config: PartnerAdapterConfig, timeoutMs: Int) -> InitResult
     func loadInterstitial(placementId: String, meta: RequestMeta, timeoutMs: Int) -> LoadResult
     func showInterstitial(handle: AdHandle, viewController: AnyObject, callbacks: ShowCallbacks)
     func loadRewarded(placementId: String, meta: RequestMeta, timeoutMs: Int) -> LoadResult
@@ -178,46 +178,4 @@ public protocol AdNetworkAdapterV2 {
     func isAdReady(handle: AdHandle) -> Bool
     func expiresAt(handle: AdHandle) -> Int64
     func invalidate(handle: AdHandle)
-}
-
-// MARK: - AnyCodable helper
-
-public struct AnyCodable: Codable, Equatable {
-    public let value: Any
-    
-    public init(_ value: Any) { self.value = value }
-    
-    public init(from decoder: Decoder) throws {
-        let container = try decoder.singleValueContainer()
-        if let intValue = try? container.decode(Int.self) {
-            value = intValue
-        } else if let doubleValue = try? container.decode(Double.self) {
-            value = doubleValue
-        } else if let boolValue = try? container.decode(Bool.self) {
-            value = boolValue
-        } else if let stringValue = try? container.decode(String.self) {
-            value = stringValue
-        } else if let arrayValue = try? container.decode([AnyCodable].self) {
-            value = arrayValue.map { $0.value }
-        } else if let dictValue = try? container.decode([String: AnyCodable].self) {
-            value = dictValue.mapValues { $0.value }
-        } else {
-            throw DecodingError.dataCorruptedError(in: container, debugDescription: "Unsupported type")
-        }
-    }
-    
-    public func encode(to encoder: Encoder) throws {
-        var container = encoder.singleValueContainer()
-        switch value {
-        case let intValue as Int: try container.encode(intValue)
-        case let doubleValue as Double: try container.encode(doubleValue)
-        case let boolValue as Bool: try container.encode(boolValue)
-        case let stringValue as String: try container.encode(stringValue)
-        case let arrayValue as [Any]: try container.encode(arrayValue.map { AnyCodable($0) })
-        case let dictValue as [String: Any]: try container.encode(dictValue.mapValues { AnyCodable($0) })
-        default:
-            let context = EncodingError.Context(codingPath: container.codingPath, debugDescription: "Unsupported type")
-            throw EncodingError.invalidValue(value, context)
-        }
-    }
 }

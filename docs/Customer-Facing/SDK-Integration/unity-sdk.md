@@ -1,583 +1,162 @@
-# Unity SDK Integration Guide
+# Unity SDK Integration Guide (BYO)
 
-Get started with the ApexMediation Unity SDK in under 10 minutes.
+> Updated: 20 Nov 2025 -- Unity 2020.3+ (URP/HDRP compatible)  
+> Scope: Bring-Your-Own demand mode with Config-as-Code, transparency proofs, and debugger overlay.
 
----
+## TL;DR (single-entry quick start)
+1. **Install package:** `Window > Package Manager > + > Add package from git URL...` -> `https://github.com/sbelakho2/Ad-Project.git?path=sdk/core/unity#main`
+2. **Export a signed config:** `Apex Mediation > Config-as-Code` -> click **Export Mock Config** or paste your placements, set the signing key, and copy the JSON.
+3. **Create a TextAsset:** in Unity, create `Assets/Config/apex_config.json`, paste the signed JSON, set `TextAsset` import settings to UTF-8.
+4. **Drop `ApexMediationEntryPoint` into your bootstrap scene:** assign the TextAsset, signing key, optional adapter credentials, and (if desired) keep "Attach Debugger Overlay in Editor" enabled.
+5. **Press Play:** the component initializes the SDK, verifies the signature, spawns the Mediation Debugger (toggle with backquote `\``), and logs sanitized ad events to the Console.
 
-## Prerequisites
-
-- Unity 2020.3 or higher
-- Target platforms: iOS 12+, Android 5.0+ (API 21)
-- Active ApexMediation account with API credentials
-
----
-
-## Installation
-
-### Method 1: Unity Package Manager (Recommended)
-
-1. Open Unity Package Manager (`Window > Package Manager`)
-2. Click `+` → `Add package from git URL`
-3. Enter: `https://github.com/apexmediation/unity-sdk.git`
-4. Click `Add`
-
-### Method 2: Manual Installation
-
-1. Download the latest `.unitypackage` from [releases](https://github.com/apexmediation/unity-sdk/releases)
-2. Import into Unity: `Assets > Import Package > Custom Package`
-3. Select all files and click `Import`
+The rest of this guide breaks each step down in detail.
 
 ---
 
-## Initial Setup
+## 1. Installing the Unity package
 
-### 1. Configure SDK
+| Method | Steps |
+| --- | --- |
+| **Git (recommended)** | `Window > Package Manager > + > Add package from git URL...` -> `https://github.com/sbelakho2/Ad-Project.git?path=sdk/core/unity#main` |
+| **Local folder** | Clone this repo, then in Package Manager choose **Add package from disk...** and select `sdk/core/unity/package.json`. |
 
-Create a new file at `Assets/Resources/ApexMediationSettings.asset`:
+The package ships two asmdefs:
+- `ApexMediation` (Runtime) -- C# facade + platform bridges + Config-as-Code runtime.
+- `ApexMediation.Editor` -- Config-as-Code window, migration helpers, app-ads inspector hooks.
+
+No vendor SDKs are bundled; publishers continue to control adapter binaries in their project.
+
+---
+
+## 2. Config-as-Code workflow
+
+1. Open **Apex Mediation > Config-as-Code**.
+2. Provide a signing key (any shared secret; store it securely).
+3. Use **Export Mock Config** for a sample or paste your existing JSON into the export area.
+4. Save the signed JSON into a `TextAsset` (e.g., `Assets/Config/apex_config.json`).
+5. The same window can validate imports before shipping -- paste a JSON blob, press **Validate & Load**, and verify adapter/placement counts.
+
+All configs are HMAC signed and verified inside the runtime via `ConfigCodec`. If the signature fails, initialization is aborted and a clear Editor error is logged.
+
+---
+
+## 3. Single entry point: `ApexMediationEntryPoint`
+
+Add the new component (`Add Component > Apex Mediation > Apex Mediation Entry Point`) to a bootstrap GameObject that lives for the lifetime of your session.
+
+### Serialized fields
+- **Signed Config Json** -- TextAsset containing the signed Config-as-Code document.
+- **Signing Key** -- The HMAC key used to export the JSON. This is required to verify integrity. (For production you can inject via scriptable secret.)
+- **Initialize On Awake** -- If unchecked, call `InitializeIfNeeded()` manually (e.g., after your own consent gate).
+- **Attach Debugger Overlay In Editor** -- Automatically spawns a persistent HUD that surfaces telemetry traces and transparency proofs. Toggle with backquote.
+- **Log Ad Events To Console** -- When enabled, every `OnAdEvent` is mirrored to the Unity Console with sanitized metadata.
+- **Adapter Credentials** -- Optional array; each entry captures a network ID plus key/value pairs. The component wires these into the runtime `AdapterConfigProvider` so you do not have to script per-network injection for local testing.
+
+If the SDK is already initialized (for example from end-to-end tests), calling `InitializeIfNeeded()` is a no-op, keeping the "single point of entry" invariant intact.
+
+---
+
+## 4. Loading and showing ads via the facade
+
+Once the entry point initializes successfully, interact exclusively through the static `ApexMediation` class. Typical usage:
 
 ```csharp
+using Apex.Mediation;
 using UnityEngine;
-using ApexMediation;
 
-[CreateAssetMenu(fileName = "ApexMediationSettings", menuName = "ApexMediation/Settings")]
-public class ApexMediationSettings : ScriptableObject
+public sealed class PlacementController : MonoBehaviour
 {
-    public string publisherId = "YOUR_PUBLISHER_ID";
-    public string apiKey = "YOUR_API_KEY";
-    public bool testMode = true;
-}
-```
+    [SerializeField] private string interstitialPlacement = "level-complete";
+    [SerializeField] private string rewardedPlacement = "extra-life";
 
-### 2. Initialize SDK
-
-Create an initialization script in your main scene:
-
-```csharp
-using UnityEngine;
-using ApexMediation;
-
-public class ApexMediationManager : MonoBehaviour
-{
-    void Start()
+    private void OnEnable()
     {
-        // Load settings
-        var settings = Resources.Load<ApexMediationSettings>("ApexMediationSettings");
+        ApexMediation.OnAdEvent += HandleAdEvent;
+    }
 
-        // Initialize SDK
-        ApexMediationSDK.Initialize(new ApexMediationConfig
+    private void OnDisable()
+    {
+        ApexMediation.OnAdEvent -= HandleAdEvent;
+    }
+
+    public void PreloadInterstitial()
+    {
+        ApexMediation.LoadInterstitial(interstitialPlacement, (success, error) =>
         {
-            PublisherId = settings.publisherId,
-            ApiKey = settings.apiKey,
-            TestMode = settings.testMode,
-            GdprConsent = true, // Set based on user consent
-            CoppaCompliant = false // Set to true for children's apps
+            if (!success)
+            {
+                Debug.LogWarning($"Interstitial failed to load: {error}");
+            }
         });
-
-        // Listen for initialization complete
-        ApexMediationSDK.OnInitialized += OnApexMediationInitialized;
-    }
-
-    private void OnApexMediationInitialized(bool success)
-    {
-        if (success)
-        {
-            Debug.Log("ApexMediation initialized successfully!");
-        }
-        else
-        {
-            Debug.LogError("ApexMediation initialization failed");
-        }
-    }
-}
-```
-
----
-
-## Ad Formats
-
-### Banner Ads
-
-**Standard banner at bottom of screen:**
-
-```csharp
-using ApexMediation;
-
-public class BannerExample : MonoBehaviour
-{
-    private BannerAd bannerAd;
-
-    void Start()
-    {
-        // Create banner
-        bannerAd = new BannerAd("banner_main_menu", BannerSize.Standard);
-
-        // Set callbacks
-        bannerAd.OnLoaded += () => Debug.Log("Banner loaded");
-        bannerAd.OnClicked += () => Debug.Log("Banner clicked");
-        bannerAd.OnLoadFailed += (error) => Debug.LogError($"Banner failed: {error}");
-
-        // Load and show
-        bannerAd.Load();
-        bannerAd.Show(BannerPosition.Bottom);
-    }
-
-    void OnDestroy()
-    {
-        bannerAd?.Destroy();
-    }
-}
-```
-
-**Banner sizes:**
-- `BannerSize.Standard` - 320x50
-- `BannerSize.Large` - 320x100
-- `BannerSize.MediumRectangle` - 300x250
-- `BannerSize.Leaderboard` - 728x90 (tablets)
-
-### Interstitial Ads
-
-**Full-screen ads between game levels:**
-
-```csharp
-using ApexMediation;
-
-public class InterstitialExample : MonoBehaviour
-{
-    private InterstitialAd interstitialAd;
-
-    void Start()
-    {
-        // Create interstitial
-        interstitialAd = new InterstitialAd("interstitial_level_complete");
-
-        // Set callbacks
-        interstitialAd.OnLoaded += () => Debug.Log("Interstitial ready");
-        interstitialAd.OnShown += () => Debug.Log("Interstitial displayed");
-        interstitialAd.OnClosed += () => OnInterstitialClosed();
-        interstitialAd.OnLoadFailed += (error) => Debug.LogError($"Interstitial failed: {error}");
-
-        // Preload
-        interstitialAd.Load();
     }
 
     public void ShowInterstitial()
     {
-        if (interstitialAd.IsReady())
-        {
-            interstitialAd.Show();
-        }
-        else
-        {
-            Debug.LogWarning("Interstitial not ready");
-            // Reload
-            interstitialAd.Load();
-        }
+        ApexMediation.ShowInterstitial(interstitialPlacement);
     }
 
-    private void OnInterstitialClosed()
+    public void ShowRewarded()
     {
-        Debug.Log("User closed interstitial");
-        // Preload next ad
-        interstitialAd.Load();
-        // Continue game flow
-        LoadNextLevel();
-    }
-}
-```
-
-### Rewarded Video Ads
-
-**Watch video to earn rewards:**
-
-```csharp
-using ApexMediation;
-
-public class RewardedVideoExample : MonoBehaviour
-{
-    private RewardedVideoAd rewardedAd;
-
-    void Start()
-    {
-        // Create rewarded video
-        rewardedAd = new RewardedVideoAd("rewarded_extra_lives");
-
-        // Set callbacks
-        rewardedAd.OnLoaded += () => Debug.Log("Rewarded video ready");
-        rewardedAd.OnShown += () => Debug.Log("User watching video");
-        rewardedAd.OnRewarded += OnUserRewarded;
-        rewardedAd.OnClosed += OnRewardedClosed;
-        rewardedAd.OnLoadFailed += (error) => Debug.LogError($"Rewarded failed: {error}");
-
-        // Preload
-        rewardedAd.Load();
-    }
-
-    public void ShowRewardedVideo()
-    {
-        if (rewardedAd.IsReady())
+        ApexMediation.LoadRewarded(rewardedPlacement);
+        ApexMediation.ShowRewarded(rewardedPlacement, (success, error) =>
         {
-            rewardedAd.Show();
-        }
-        else
-        {
-            Debug.LogWarning("Rewarded video not ready");
-            ShowErrorMessage("Video not available. Try again later.");
-        }
-    }
-
-    private void OnUserRewarded(Reward reward)
-    {
-        Debug.Log($"User earned reward: {reward.Type} x{reward.Amount}");
-
-        // Grant reward to user
-        switch (reward.Type)
-        {
-            case "coins":
-                PlayerInventory.AddCoins(reward.Amount);
-                break;
-            case "lives":
-                PlayerInventory.AddLives(reward.Amount);
-                break;
-        }
-    }
-
-    private void OnRewardedClosed(bool completed)
-    {
-        if (completed)
-        {
-            Debug.Log("User completed video");
-        }
-        else
-        {
-            Debug.Log("User skipped video early");
-        }
-
-        // Preload next video
-        rewardedAd.Load();
-    }
-}
-```
-
-### Native Ads
-
-**Customizable ads that match your UI:**
-
-```csharp
-using ApexMediation;
-using UnityEngine.UI;
-
-public class NativeAdExample : MonoBehaviour
-{
-    private NativeAd nativeAd;
-
-    [SerializeField] private Text titleText;
-    [SerializeField] private Text descriptionText;
-    [SerializeField] private RawImage iconImage;
-    [SerializeField] private Button ctaButton;
-
-    void Start()
-    {
-        // Create native ad
-        nativeAd = new NativeAd("native_shop");
-
-        // Set callbacks
-        nativeAd.OnLoaded += OnNativeAdLoaded;
-        nativeAd.OnClicked += () => Debug.Log("Native ad clicked");
-        nativeAd.OnLoadFailed += (error) => Debug.LogError($"Native ad failed: {error}");
-
-        // Load
-        nativeAd.Load();
-    }
-
-    private void OnNativeAdLoaded(NativeAdAssets assets)
-    {
-        // Populate UI with ad content
-        titleText.text = assets.Title;
-        descriptionText.text = assets.Description;
-        ctaButton.GetComponentInChildren<Text>().text = assets.CallToAction;
-
-        // Load icon image
-        StartCoroutine(LoadImage(assets.IconUrl, iconImage));
-
-        // Register clickable views
-        nativeAd.RegisterViews(
-            gameObject,
-            new[] { ctaButton.gameObject, iconImage.gameObject }
-        );
-    }
-
-    private IEnumerator LoadImage(string url, RawImage target)
-    {
-        using (UnityWebRequest www = UnityWebRequestTexture.GetTexture(url))
-        {
-            yield return www.SendWebRequest();
-            if (www.result == UnityWebRequest.Result.Success)
+            if (!success)
             {
-                target.texture = DownloadHandlerTexture.GetContent(www);
+                Debug.LogWarning($"Rewarded show failed: {error}");
             }
-        }
-    }
-}
-```
-
----
-
-## Ad Placement Best Practices
-
-### Interstitials
-✅ **DO**: Show between levels, after achievements, during natural breaks
-❌ **DON'T**: Show during gameplay, on app launch, more than once per minute
-
-### Rewarded Videos
-✅ **DO**: Offer clear value (extra lives, coins, power-ups)
-✅ **DO**: Make it optional (never force users to watch)
-❌ **DON'T**: Gate core gameplay behind ads
-
-### Banners
-✅ **DO**: Place at top or bottom of screen
-✅ **DO**: Remove during core gameplay (distracting)
-❌ **DON'T**: Cover important UI elements
-
----
-
-## GDPR Compliance
-
-For users in the EU, you must obtain consent before showing personalized ads:
-
-```csharp
-using ApexMediation;
-
-public class GDPRConsentManager : MonoBehaviour
-{
-    void Start()
-    {
-        // Check if user is in EU
-        if (ApexMediationSDK.IsGdprApplicable())
-        {
-            // Show consent dialog
-            ShowConsentDialog((consent) =>
-            {
-                ApexMediationSDK.SetGdprConsent(consent);
-                InitializeAds();
-            });
-        }
-        else
-        {
-            // Not in EU, no consent needed
-            InitializeAds();
-        }
-    }
-
-    private void ShowConsentDialog(System.Action<bool> callback)
-    {
-        // Your custom consent UI
-        // Or use ApexMediation's built-in consent dialog:
-        ApexMediationSDK.ShowConsentDialog((consent) =>
-        {
-            callback(consent);
-        });
-    }
-}
-```
-
----
-
-## COPPA Compliance
-
-For apps directed at children under 13 (US):
-
-```csharp
-ApexMediationSDK.Initialize(new ApexMediationConfig
-{
-    PublisherId = "YOUR_PUBLISHER_ID",
-    ApiKey = "YOUR_API_KEY",
-    CoppaCompliant = true, // Disables personalized ads
-    TestMode = false
-});
-```
-
----
-
-## Testing
-
-### Test Mode
-
-Enable test mode to receive test ads (no revenue, safe for development):
-
-```csharp
-ApexMediationSDK.Initialize(new ApexMediationConfig
-{
-    PublisherId = "YOUR_PUBLISHER_ID",
-    ApiKey = "YOUR_API_KEY",
-    TestMode = true // Remove in production!
-});
-```
-
-### Test Device IDs
-
-To test real ads without affecting stats:
-
-```csharp
-ApexMediationSDK.AddTestDevice("YOUR_DEVICE_ID");
-```
-
-Find your device ID in Unity Console on first SDK initialization.
-
----
-
-## Ad Mediation
-
-ApexMediation automatically mediates across 20+ ad networks for maximum fill rate and revenue.
-
-### Enable Mediation
-
-No code changes needed - mediation is automatic. Configure in dashboard:
-
-1. Go to [dashboard.apexmediation.ee](https://dashboard.apexmediation.ee)
-2. Navigate to **Mediation > Waterfall**
-3. Enable ad networks
-4. Set floor prices
-
-**Supported networks:**
-- AdMob (Google)
-- Meta Audience Network
-- Unity Ads
-- AppLovin
-- IronSource
-- Vungle
-- And 15+ more
-
----
-
-## Analytics
-
-Track custom events for deeper insights:
-
-```csharp
-using ApexMediation;
-
-public class AnalyticsExample : MonoBehaviour
-{
-    void OnLevelComplete(int level, int score)
-    {
-        ApexMediationAnalytics.LogEvent("level_complete", new Dictionary<string, object>
-        {
-            { "level", level },
-            { "score", score },
-            { "time_seconds", Time.time }
         });
     }
 
-    void OnPurchase(string itemId, decimal price)
+    private static void HandleAdEvent(AdEventArgs evt)
     {
-        ApexMediationAnalytics.LogPurchase(itemId, price, "USD");
+        Debug.Log($"[{evt.Adapter}] {evt.PlacementId} -> {evt.Type} ({evt.Message})");
     }
 }
 ```
 
----
+API snapshot:
+- `ApexMediation.Initialize(ApexConfig config, Action<bool> onComplete = null)` -- invoked automatically by the entry point.
+- `SetConsent(ConsentOptions options)` -- push updated consent snapshots (GDPR, GPP, US Privacy, COPPA, ATT). Auto-read is enabled by default but explicit calls always win.
+- `SetNetworkConfig(string network, IReadOnlyDictionary<string, object?> creds)` -- supply credentials at runtime (e.g., from your encrypted storage).
+- `LoadInterstitial/ShowInterstitial`, `LoadRewarded/ShowRewarded`, `LoadBanner/AttachBanner/DestroyBanner` -- format-specific helpers.
+- `GetTelemetryTraces()` and `GetTransparencyProofs()` -- backing collections for debugger overlays or custom diagnostics.
 
-## Advanced Features
-
-### A/B Testing
-
-Test different ad placements automatically:
-
-```csharp
-// ApexMediation automatically assigns users to experiments
-// No code changes needed - configure in dashboard
-```
-
-### Frequency Capping
-
-Limit how often users see ads:
-
-```csharp
-ApexMediationSDK.SetFrequencyCap(new FrequencyCap
-{
-    InterstitialMinInterval = 60, // seconds
-    RewardedMinInterval = 300, // 5 minutes
-    MaxInterstitialsPerHour = 4
-});
-```
+> **Paid events:** BYO integrations rely on the publisher's own network payouts, so Unity exposes only the sanitized `OnAdEvent` stream today. Managed demand will re-enable standardized paid events in a future release.
 
 ---
 
-## Troubleshooting
+## 5. Transparency & debugging
 
-### Ads Not Showing
-
-1. **Check initialization**: Ensure `ApexMediationSDK.OnInitialized` fires successfully
-2. **Verify credentials**: Check Publisher ID and API Key in dashboard
-3. **Test mode**: Enable test mode to verify integration
-4. **Internet connection**: Ads require active internet
-5. **Fill rate**: No ads available for your region (rare)
-
-### Low Fill Rate
-
-1. **Enable mediation**: Add more ad networks in dashboard
-2. **Check floor prices**: Lower floor prices increase fill
-3. **Geographic location**: Fill rates vary by country
-4. **App category**: Some categories have higher demand
-
-### Performance Issues
-
-```csharp
-// Reduce memory usage
-ApexMediationSDK.SetConfig(new ApexMediationConfig
-{
-    MaxCachedAds = 2, // Default: 3
-    ImageCacheSize = 10 * 1024 * 1024, // 10 MB (default: 50 MB)
-    VideoCacheEnabled = false // Disable if not using video ads
-});
-```
+- **Debugger Overlay:** Toggle with backquote once attached. Shows the latest 50 traces plus the head of the transparency ledger (hash snippet). Safe for development builds only.
+- **Telemetry snapshot:** `ApexMediation.GetTelemetryTraces()` returns immutable data you can serialize or forward to your own tooling.
+- **Transparency proofs:** Each load/show is chained via `TransparencyLedger`. Share the proof hashes with your ops team for auditability.
 
 ---
 
-## Migration from Other SDKs
+## 6. Runtime credentials & consent best practices
 
-### From Unity Ads
-
-```csharp
-// Unity Ads
-Advertisement.Show("rewardedVideo");
-
-// ApexMediation equivalent
-rewardedAd.Show();
-```
-
-### From AdMob
-
-```csharp
-// AdMob
-RewardedAd.Load("ca-app-pub-xxx", ...);
-
-// ApexMediation equivalent
-var rewardedAd = new RewardedVideoAd("rewarded_placement");
-rewardedAd.Load();
-```
+- Never hardcode API keys in source control. Provide placeholder values in the entry point for local testing, but inject real secrets via your own secure store before shipping.
+- When using `Adapter Credentials` on the entry point, note that they are serialized inside the scene/prefab. Use them only for mock networks or development values.
+- If you maintain your own consent UI, call `ApexMediation.SetConsent` whenever the user updates preferences. The mediator forwards normalized strings/flags to every adapter and to any active S2S bridge.
 
 ---
 
-## Sample Projects
+## 7. Config-as-Code tips
 
-Download complete sample projects:
-
-- **Hypercasual Game**: [github.com/apexmediation/unity-samples/hypercasual](https://github.com/apexmediation/unity-samples/hypercasual)
-- **RPG Game**: [github.com/apexmediation/unity-samples/rpg](https://github.com/apexmediation/unity-samples/rpg)
-- **Puzzle Game**: [github.com/apexmediation/unity-samples/puzzle](https://github.com/apexmediation/unity-samples/puzzle)
+- **Signing keys:** Keep the signing key outside of source control. For CI, set it via environment variables and feed it into the editor window using scripting, or supply it through the entry point at runtime.
+- **Diff-friendly reviews:** Commit the exported JSON (with signature) next to your Unity scenes and treat it like any other asset. Because it is camelCase and sorted, diffs are stable.
+- **Validation:** Run `sdk/core/unity/scripts/check_package_constraints.sh` locally or in CI to make sure the runtime stays under the 100KB compressed budget and all .NET tests pass before pushing.
 
 ---
 
-## Support
+## 8. Troubleshooting
 
-- **Documentation**: [docs.apexmediation.ee](https://docs.apexmediation.ee)
-- **Email**: support@bel-consulting.ee
-- **Discord**: [discord.gg/apexmediation](https://discord.gg/apexmediation)
-- **Response Time**: < 24 hours (Premium: < 4 hours)
+| Symptom | Likely cause | Fix |
+| --- | --- | --- |
+| `Config signature mismatch` | Signing key in entry point doesn't match export key | Re-export with the same key or update the entry point field |
+| `SDK not initialized` when calling load/show | Entry point disabled or failed early | Check Console for errors, ensure `Initialize On Awake` is enabled or invoke `InitializeIfNeeded()` manually |
+| Debugger overlay missing | Overlay disabled or stripped | Enable "Attach Debugger Overlay In Editor" or add `MediationDebuggerOverlay` manually in dev builds |
+| CI fails `Unity Footprint Gate` | Runtime exceeded 100KB compressed or .NET tests failed | Run `./scripts/check_package_constraints.sh` locally, prune unused runtime code/assets, fix tests |
 
----
-
-**Last Updated**: November 2025
-**SDK Version**: 2.0.0
-**Unity Version**: 2020.3+
+Need more help? Reach out via `support@bel-consulting.ee` with your latest transparency proof hash and telemetry snapshot.

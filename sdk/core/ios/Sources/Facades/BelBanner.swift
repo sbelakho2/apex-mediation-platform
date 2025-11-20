@@ -1,3 +1,4 @@
+#if canImport(UIKit)
 import Foundation
 import UIKit
 
@@ -110,102 +111,103 @@ public enum BelBanner {
     public static func isReady(placementId: String) -> Bool {
         return activeBanners[placementId] != nil
     }
-}
+    // MARK: - Internal BannerView
 
-// MARK: - Internal BannerView
-
-private class BannerView: UIView {
-    let ad: Ad
-    let size: BelBanner.BannerSize
-    let position: BelBanner.BannerPosition
-    
-    init(frame: CGRect, size: BelBanner.BannerSize, position: BelBanner.BannerPosition, ad: Ad) {
-        self.ad = ad
-        self.size = size
-        self.position = position
-        super.init(frame: frame)
-        setupView()
-    }
-    
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) not implemented")
-    }
-    
-    private func setupView() {
-        translatesAutoresizingMaskIntoConstraints = false
+    private class BannerView: UIView {
+        let ad: Ad
+        let size: BelBanner.BannerSize
+        let position: BelBanner.BannerPosition
         
-        let dimensions = size.dimensions
-        
-        // Size constraints
-        NSLayoutConstraint.activate([
-            widthAnchor.constraint(equalToConstant: dimensions.width),
-            heightAnchor.constraint(equalToConstant: dimensions.height)
-        ])
-        
-        // Position constraints
-        guard let superview = superview else { return }
-        
-        switch position {
-        case .top:
-            NSLayoutConstraint.activate([
-                topAnchor.constraint(equalTo: superview.safeAreaLayoutGuide.topAnchor),
-                centerXAnchor.constraint(equalTo: superview.centerXAnchor)
-            ])
-        case .topLeft:
-            NSLayoutConstraint.activate([
-                topAnchor.constraint(equalTo: superview.safeAreaLayoutGuide.topAnchor),
-                leadingAnchor.constraint(equalTo: superview.leadingAnchor)
-            ])
-        case .topRight:
-            NSLayoutConstraint.activate([
-                topAnchor.constraint(equalTo: superview.safeAreaLayoutGuide.topAnchor),
-                trailingAnchor.constraint(equalTo: superview.trailingAnchor)
-            ])
-        case .bottom:
-            NSLayoutConstraint.activate([
-                bottomAnchor.constraint(equalTo: superview.safeAreaLayoutGuide.bottomAnchor),
-                centerXAnchor.constraint(equalTo: superview.centerXAnchor)
-            ])
-        case .bottomLeft:
-            NSLayoutConstraint.activate([
-                bottomAnchor.constraint(equalTo: superview.safeAreaLayoutGuide.bottomAnchor),
-                leadingAnchor.constraint(equalTo: superview.leadingAnchor)
-            ])
-        case .bottomRight:
-            NSLayoutConstraint.activate([
-                bottomAnchor.constraint(equalTo: superview.safeAreaLayoutGuide.bottomAnchor),
-                trailingAnchor.constraint(equalTo: superview.trailingAnchor)
-            ])
-        case .center:
-            NSLayoutConstraint.activate([
-                centerXAnchor.constraint(equalTo: superview.centerXAnchor),
-                centerYAnchor.constraint(equalTo: superview.centerYAnchor)
-            ])
-        }
-        
-        // Placeholder rendering (debug mode)
-        #if DEBUG
-        backgroundColor = .systemGray5
-        let label = UILabel()
-        label.text = "Banner Ad\n\(ad.networkName)"
-        label.textAlignment = .center
-        label.numberOfLines = 0
-        label.font = .systemFont(ofSize: 12)
-        label.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(label)
-        NSLayoutConstraint.activate([
-            label.centerXAnchor.constraint(equalTo: centerXAnchor),
-            label.centerYAnchor.constraint(equalTo: centerYAnchor),
-            label.leadingAnchor.constraint(greaterThanOrEqualTo: leadingAnchor, constant: 8),
-            label.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -8)
-        ])
-        #endif
-    }
-    
-    override func didMoveToSuperview() {
-        super.didMoveToSuperview()
-        if superview != nil {
+        init(frame: CGRect, size: BelBanner.BannerSize, position: BelBanner.BannerPosition, ad: Ad) {
+            self.ad = ad
+            self.size = size
+            self.position = position
+            super.init(frame: frame)
             setupView()
         }
+        
+        required init?(coder: NSCoder) {
+            fatalError("init(coder:) not implemented")
+        }
+        
+        private func setupView() {
+            translatesAutoresizingMaskIntoConstraints = false
+            
+            let dimensions = size.dimensions
+            
+            // Size constraints
+            NSLayoutConstraint.activate([
+                widthAnchor.constraint(equalToConstant: dimensions.width),
+                heightAnchor.constraint(equalToConstant: dimensions.height)
+            ])
+            
+            // Position constraints
+            guard let superview = superview else { return }
+            
+            switch position {
+            case .top:
+                NSLayoutConstraint.activate([
+                    topAnchor.constraint(equalTo: superview.safeAreaLayoutGuide.topAnchor),
+                    centerXAnchor.constraint(equalTo: superview.centerXAnchor)
+                ])
+            case .topLeft:
+                NSLayoutConstraint.activate([
+                    topAnchor.constraint(equalTo: superview.safeAreaLayoutGuide.topAnchor),
+                    leadingAnchor.constraint(equalTo: superview.leadingAnchor)
+                ])
+            case .topRight:
+                NSLayoutConstraint.activate([
+                    topAnchor.constraint(equalTo: superview.safeAreaLayoutGuide.topAnchor),
+                    trailingAnchor.constraint(equalTo: superview.trailingAnchor)
+                ])
+            case .bottom:
+                NSLayoutConstraint.activate([
+                    bottomAnchor.constraint(equalTo: superview.safeAreaLayoutGuide.bottomAnchor),
+                    centerXAnchor.constraint(equalTo: superview.centerXAnchor)
+                ])
+            case .bottomLeft:
+                NSLayoutConstraint.activate([
+                    bottomAnchor.constraint(equalTo: superview.safeAreaLayoutGuide.bottomAnchor),
+                    leadingAnchor.constraint(equalTo: superview.leadingAnchor)
+                ])
+            case .bottomRight:
+                NSLayoutConstraint.activate([
+                    bottomAnchor.constraint(equalTo: superview.safeAreaLayoutGuide.bottomAnchor),
+                    trailingAnchor.constraint(equalTo: superview.trailingAnchor)
+                ])
+            case .center:
+                NSLayoutConstraint.activate([
+                    centerXAnchor.constraint(equalTo: superview.centerXAnchor),
+                    centerYAnchor.constraint(equalTo: superview.centerYAnchor)
+                ])
+            }
+            
+            // Placeholder rendering (debug mode)
+            #if DEBUG
+            backgroundColor = .systemGray5
+            let label = UILabel()
+            label.text = "Banner Ad\n\(ad.networkName)"
+            label.textAlignment = .center
+            label.numberOfLines = 0
+            label.font = .systemFont(ofSize: 12)
+            label.translatesAutoresizingMaskIntoConstraints = false
+            addSubview(label)
+            NSLayoutConstraint.activate([
+                label.centerXAnchor.constraint(equalTo: centerXAnchor),
+                label.centerYAnchor.constraint(equalTo: centerYAnchor),
+                label.leadingAnchor.constraint(greaterThanOrEqualTo: leadingAnchor, constant: 8),
+                label.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -8)
+            ])
+            #endif
+        }
+        
+        override func didMoveToSuperview() {
+            super.didMoveToSuperview()
+            if superview != nil {
+                setupView()
+            }
+        }
     }
 }
+
+#endif

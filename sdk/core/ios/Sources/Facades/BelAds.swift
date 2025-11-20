@@ -27,8 +27,7 @@ public enum BelAds {
     ) {
         Task {
             do {
-                var config = SDKConfig.default(appId: appId)
-                config.testMode = testMode
+                let config = SDKConfig.default(appId: appId, testMode: testMode)
                 try await MediationSDK.shared.initialize(appId: appId, configuration: config)
                 completion(.success(()))
             } catch {

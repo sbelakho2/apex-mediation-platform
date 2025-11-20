@@ -1,3 +1,4 @@
+#if canImport(UIKit)
 import Foundation
 import UIKit
 
@@ -89,3 +90,5 @@ public enum BelRewardedInterstitial {
         return cache[placement] != nil
     }
 }
+
+#endif

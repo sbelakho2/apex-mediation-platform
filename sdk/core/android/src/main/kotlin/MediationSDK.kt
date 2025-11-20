@@ -12,6 +12,8 @@ import java.util.concurrent.Future
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeoutException
 import kotlinx.coroutines.*
+import okhttp3.CertificatePinner
+import okhttp3.OkHttpClient
 import com.rivalapexmediation.sdk.config.ConfigManager
 import com.rivalapexmediation.sdk.telemetry.TelemetryCollector
 import com.rivalapexmediation.sdk.models.*
@@ -310,9 +312,38 @@ class MediationSDK private constructor(
     private fun ensureAuctionClient(): AuctionClient {
         val existing = auctionClient
         if (existing != null) return existing
-        val created = AuctionClient(config.auctionEndpoint, auctionApiKey)
+        val created = AuctionClient(config.auctionEndpoint, auctionApiKey, buildPinnedHttpClientIfEnabled())
         auctionClient = created
         return created
+    }
+
+    /**
+     * Build an OkHttpClient with Certificate Pinning when enabled via remote feature flags.
+     * Returns null when disabled or misconfigured so AuctionClient falls back to its default client.
+     */
+    private fun buildPinnedHttpClientIfEnabled(): OkHttpClient? {
+        return try {
+            val features = configManager.getFeatureFlags()
+            if (!features.netTlsPinningEnabled) return null
+            val pinMap = features.netTlsPinning
+            if (pinMap.isEmpty()) return null
+            val pinnerBuilder = CertificatePinner.Builder()
+            for ((host, pins) in pinMap) {
+                if (host.isNullOrBlank()) continue
+                pins.forEach { pin ->
+                    if (!pin.isNullOrBlank()) {
+                        pinnerBuilder.add(host, pin)
+                    }
+                }
+            }
+            val pinner = pinnerBuilder.build()
+            OkHttpClient.Builder()
+                .certificatePinner(pinner)
+                .retryOnConnectionFailure(false)
+                .build()
+        } catch (_: Throwable) {
+            null
+        }
     }
 
     fun setTestModeOverride(enabled: Boolean?) {
@@ -377,6 +408,7 @@ class MediationSDK private constructor(
     fun loadAd(placement: String, callback: AdLoadCallback) {
         val loadTask = Runnable {
             val startTime = System.currentTimeMillis()
+            val traceId = try { java.util.UUID.randomUUID().toString() } catch (_: Throwable) { "trace-${System.currentTimeMillis()}" }
 
             try {
                 // Check kill switch before any work
@@ -398,6 +430,8 @@ class MediationSDK private constructor(
                 // 1) Try S2S auction first if enabled for this mode; fallback to adapters on no_fill.
                 if (shouldUseS2SForPlacement(placement)) {
                     try {
+                        telemetry.recordAdapterSpanStart(traceId, placement, "s2s")
+                        val s2sStart = System.currentTimeMillis()
                         val client = ensureAuctionClient()
                         val meta = mutableMapOf<String, String>()
                         val effectiveTest = testModeOverride ?: config.testMode
@@ -427,12 +461,28 @@ class MediationSDK private constructor(
                         cacheAd(placement, ad)
                         val latency = System.currentTimeMillis() - startTime
                         telemetry.recordAdLoad(placement, latency, true)
+                        telemetry.recordAdapterSpanFinish(
+                            traceId = traceId,
+                            placement = placement,
+                            adapter = "s2s",
+                            outcome = "fill",
+                            latencyMs = System.currentTimeMillis() - s2sStart,
+                        )
                         postToMainThread { callback.onAdLoaded(ad) }
                         return@Runnable
                     } catch (ae: AuctionClient.AuctionException) {
                         // Map taxonomy to AdError; if no_fill, proceed to adapter fallback; else report error
                         val reason = ae.reason
                         if (reason == "no_fill") {
+                            telemetry.recordAdapterSpanFinish(
+                                traceId = traceId,
+                                placement = placement,
+                                adapter = "s2s",
+                                outcome = "no_fill",
+                                latencyMs = System.currentTimeMillis() - startTime,
+                                errorCode = reason,
+                                errorMessage = ae.message
+                            )
                             // proceed to adapters
                         } else {
                             val err = when {
@@ -442,6 +492,15 @@ class MediationSDK private constructor(
                                 else -> AdError.INTERNAL_ERROR
                             }
                             telemetry.recordAdLoad(placement, System.currentTimeMillis() - startTime, false)
+                            telemetry.recordAdapterSpanFinish(
+                                traceId = traceId,
+                                placement = placement,
+                                adapter = "s2s",
+                                outcome = if (reason == "timeout") "timeout" else "error",
+                                latencyMs = System.currentTimeMillis() - startTime,
+                                errorCode = reason,
+                                errorMessage = ae.message
+                            )
                             postToMainThread { callback.onError(err, reason) }
                             return@Runnable
                         }
@@ -460,7 +519,35 @@ class MediationSDK private constructor(
 
                 val futures: List<Future<AdResponse?>> = adapters.map { adapter ->
                     networkExecutor.submit(Callable {
-                        loadWithCircuitBreaker(adapter, placement, placementConfig)
+                        val adapterStart = System.currentTimeMillis()
+                        telemetry.recordAdapterSpanStart(traceId, placement, adapter.name)
+                        try {
+                            val resp = loadWithCircuitBreaker(adapter, placement, placementConfig)
+                            val latency = System.currentTimeMillis() - adapterStart
+                            val outcome = if (resp?.isValid() == true) "fill" else "no_fill"
+                            telemetry.recordAdapterSpanFinish(
+                                traceId = traceId,
+                                placement = placement,
+                                adapter = adapter.name,
+                                outcome = outcome,
+                                latencyMs = latency,
+                                metadata = mapOf("path" to "adapter")
+                            )
+                            resp
+                        } catch (t: Throwable) {
+                            val latency = System.currentTimeMillis() - adapterStart
+                            telemetry.recordAdapterSpanFinish(
+                                traceId = traceId,
+                                placement = placement,
+                                adapter = adapter.name,
+                                outcome = "error",
+                                latencyMs = latency,
+                                errorCode = "exception",
+                                errorMessage = t.message,
+                                metadata = mapOf("path" to "adapter")
+                            )
+                            throw t
+                        }
                     })
                 }
 
@@ -674,6 +761,10 @@ data class SDKConfig @JvmOverloads constructor(
     val autoConsentReadEnabled: Boolean = false,
     // Enable developer credential validation flows (no ad requests)
     val validationModeEnabled: Boolean = false,
+    // P1.9 Observability flags
+    val observabilityEnabled: Boolean = false,
+    val observabilitySampleRate: Double = 0.1,
+    val observabilityMaxQueue: Int = 500,
 ) {
     class Builder {
         private var appId: String = ""
@@ -691,6 +782,9 @@ data class SDKConfig @JvmOverloads constructor(
         private var enableS2SWhenCapable: Boolean = false
         private var autoConsentReadEnabled: Boolean = false
         private var validationModeEnabled: Boolean = false
+        private var observabilityEnabled: Boolean = false
+        private var observabilitySampleRate: Double = 0.1
+        private var observabilityMaxQueue: Int = 500
         
         fun appId(id: String) = apply { this.appId = id }
         fun testMode(enabled: Boolean) = apply { this.testMode = enabled }
@@ -708,6 +802,9 @@ data class SDKConfig @JvmOverloads constructor(
         fun enableS2SWhenCapable(enabled: Boolean) = apply { this.enableS2SWhenCapable = enabled }
         fun autoConsentReadEnabled(enabled: Boolean) = apply { this.autoConsentReadEnabled = enabled }
         fun validationModeEnabled(enabled: Boolean) = apply { this.validationModeEnabled = enabled }
+        fun observabilityEnabled(enabled: Boolean) = apply { this.observabilityEnabled = enabled }
+        fun observabilitySampleRate(rate: Double) = apply { this.observabilitySampleRate = rate }
+        fun observabilityMaxQueue(max: Int) = apply { this.observabilityMaxQueue = max }
 
         fun build() = SDKConfig(
             appId = appId,
@@ -725,6 +822,9 @@ data class SDKConfig @JvmOverloads constructor(
             enableS2SWhenCapable = enableS2SWhenCapable,
             autoConsentReadEnabled = autoConsentReadEnabled,
             validationModeEnabled = validationModeEnabled,
+            observabilityEnabled = observabilityEnabled,
+            observabilitySampleRate = observabilitySampleRate,
+            observabilityMaxQueue = observabilityMaxQueue,
         )
     }
 }

@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("ApexMediation.Tests")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+38aef277ead34c5c9b95034b7f8dbce8a21666cf")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+c51c8cb16ea86f60989f75ce06d986005b2412f5")]
 [assembly: System.Reflection.AssemblyProductAttribute("ApexMediation.Tests")]
 [assembly: System.Reflection.AssemblyTitleAttribute("ApexMediation.Tests")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

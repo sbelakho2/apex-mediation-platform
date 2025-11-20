@@ -3,7 +3,7 @@ import Foundation
 // MARK: - Ad Models
 
 /// Ad creative types
-public enum AdType: String, Codable {
+public enum AdType: String, Codable, Sendable {
     case banner = "banner"
     case interstitial = "interstitial"
     case rewarded = "rewarded"
@@ -13,7 +13,7 @@ public enum AdType: String, Codable {
 }
 
 /// Creative content
-public enum Creative: Codable {
+public enum Creative: Codable, Sendable {
     case banner(imageURL: String, clickURL: String, width: Int, height: Int)
     case video(videoURL: String, clickURL: String, duration: Int)
     case native(title: String, description: String, iconURL: String, imageURL: String, clickURL: String, ctaText: String)
@@ -94,7 +94,7 @@ public enum Creative: Codable {
 }
 
 /// Ad instance
-public struct Ad: Codable {
+public struct Ad: Codable, Sendable {
     public let adId: String
     public let placement: String
     public let adType: AdType
@@ -217,10 +217,12 @@ public struct AnyCodable: Codable {
     }
 }
 
+extension AnyCodable: @unchecked Sendable {}
+
 // MARK: - Telemetry Models
 
 /// Event types
-public enum EventType: String, Codable {
+public enum EventType: String, Codable, Sendable {
     case sdkInit = "sdk_init"
     case adLoaded = "ad_loaded"
     case adFailed = "ad_failed"
@@ -231,7 +233,7 @@ public enum EventType: String, Codable {
 }
 
 /// Telemetry event
-public struct TelemetryEvent: Codable {
+public struct TelemetryEvent: Codable, Sendable {
     public let eventType: EventType
     public let timestamp: Date
     public let placement: String?

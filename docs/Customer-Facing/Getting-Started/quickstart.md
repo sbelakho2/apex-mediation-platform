@@ -40,22 +40,24 @@ Choose your platform:
 
 ### Unity (Recommended for Games)
 
-1. Download the SDK from the dashboard
-2. Import the `.unitypackage` into your project
-3. Add the ApexMediation component to your scene:
+1. In **Package Manager** select **Add package from git URL...** and paste `https://github.com/sbelakho2/Ad-Project.git?path=sdk/core/unity#main`.
+2. Open **Apex Mediation > Config-as-Code**, export a signed config JSON, and save it as a `TextAsset` (e.g., `Assets/Config/apex_config.json`).
+3. Drop the **Apex Mediation Entry Point** component onto a bootstrap GameObject, assign the TextAsset + signing key, and enable "Attach Debugger Overlay in Editor" for local runs.
+4. Drive everything else through the static facade:
 
 ```csharp
-using ApexMediation;
+using Apex.Mediation;
 
 public class AdManager : MonoBehaviour
 {
     void Start()
     {
-        // Initialize with your API key
-        ApexMediationSDK.Initialize("YOUR_API_KEY");
-        
-        // Load a banner ad
-        ApexMediationSDK.LoadBannerAd("home_screen", BannerPosition.Bottom);
+        ApexMediation.LoadInterstitial("home_screen");
+    }
+
+    public void ShowInterstitial()
+    {
+        ApexMediation.ShowInterstitial("home_screen");
     }
 }
 ```

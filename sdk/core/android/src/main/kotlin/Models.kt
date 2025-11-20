@@ -157,7 +157,10 @@ enum class EventType {
     CIRCUIT_OPEN,
     ANR_DETECTED,
     CREDENTIAL_VALIDATION_SUCCESS,
-    CREDENTIAL_VALIDATION_FAILED
+    CREDENTIAL_VALIDATION_FAILED,
+    // Observability adapter spans (P1.9)
+    ADAPTER_SPAN_START,
+    ADAPTER_SPAN_FINISH,
 }
 
 /**
@@ -189,6 +192,10 @@ data class FeatureFlags(
     // Developer-only banner to warn about app-ads.txt issues (propagated via remote config).
     // SDK never calls inspector; console/back-end compute and set this flag. Default false.
     val devAppAdsInspectorWarn: Boolean = false,
+    // Network TLS pinning (P1.10): enable and provide host->pins mapping (OkHttp sha256/sha1 pins)
+    // Example JSON: { "auction.rivalapexmediation.com": ["sha256/AAAAAAAA...", "sha256/BBBBBBBB..."] }
+    val netTlsPinningEnabled: Boolean = false,
+    val netTlsPinning: Map<String, List<String>> = emptyMap(),
 )
 
 /**

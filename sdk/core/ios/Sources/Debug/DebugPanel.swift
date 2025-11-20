@@ -1,3 +1,4 @@
+#if canImport(UIKit)
 import Foundation
 import UIKit
 #if canImport(AppTrackingTransparency)
@@ -114,3 +115,5 @@ public enum DebugPanel {
         )
     }
 }
+
+#endif

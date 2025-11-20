@@ -1,10 +1,110 @@
 import Foundation
+import Dispatch
 
-@MainActor
 public final class MediationSDK {
     public static let shared = MediationSDK()
 
-    private let _sdkVersion = "1.0.0"
+    private let sdkVersionValue = "1.0.0"
+    private let runtime: MediationRuntime
+    private let snapshotLock = NSLock()
+    private var snapshot: SDKSnapshot = .empty
+
+    private init() {
+        runtime = MediationRuntime(sdkVersion: sdkVersionValue)
+    }
+    
+    // MARK: - Debug/Diagnostics accessors (read-only)
+    public var isInitialized: Bool {
+        readSnapshot { $0.isInitialized }
+    }
+
+    public func currentAppId() -> String? {
+        readSnapshot { $0.appId }
+    }
+
+    public func currentPlacementIds() -> [String] {
+        readSnapshot { $0.placementIds }
+    }
+    
+    public var sdkVersion: String {
+        sdkVersionValue
+    }
+    
+    public var isTestMode: Bool {
+        readSnapshot { $0.testMode }
+    }
+    
+    public var remoteConfigVersion: Int? {
+        readSnapshot { $0.remoteConfigVersion }
+    }
+    
+    public var registeredAdapterCount: Int {
+        readSnapshot { $0.registeredAdapters }
+    }
+
+    /// Initialize the mediation SDK.
+    public func initialize(appId: String, configuration: SDKConfig? = nil) async throws {
+        let digest = try await runtime.initialize(appId: appId, configuration: configuration)
+        updateSnapshot(digest)
+    }
+
+    /// Load an ad for the supplied placement.
+    public func loadAd(placementId: String) async throws -> Ad? {
+        let ad = try await runtime.loadAd(placementId: placementId)
+        await refreshSnapshot()
+        return ad
+    }
+
+    /// Check if an ad is cached and ready. Placeholder implementation; caching is pending.
+    public func isAdReady(placementId: String) -> Bool {
+        false
+    }
+
+    /// Shutdown the SDK and release resources.
+    public func shutdown() {
+        let semaphore = DispatchSemaphore(value: 0)
+        Task {
+            let digest = await runtime.shutdown()
+            updateSnapshot(digest)
+            semaphore.signal()
+        }
+        semaphore.wait()
+    }
+
+    private func refreshSnapshot() async {
+        let digest = await runtime.snapshot()
+        updateSnapshot(digest)
+    }
+
+    private func updateSnapshot(_ newSnapshot: SDKSnapshot) {
+        snapshotLock.lock()
+        snapshot = newSnapshot
+        snapshotLock.unlock()
+    }
+
+    private func readSnapshot<T>(_ transform: (SDKSnapshot) -> T) -> T {
+        snapshotLock.lock()
+        let value = transform(snapshot)
+        snapshotLock.unlock()
+        return value
+    }
+}
+
+// MARK: - Private Runtime Types
+
+private struct SDKSnapshot {
+    let appId: String?
+    let placementIds: [String]
+    let remoteConfigVersion: Int?
+    let registeredAdapters: Int
+    let testMode: Bool
+    let isInitialized: Bool
+
+    static let empty = SDKSnapshot(appId: nil, placementIds: [], remoteConfigVersion: nil, registeredAdapters: 0, testMode: false, isInitialized: false)
+}
+
+private actor MediationRuntime {
+    private let sdkVersion: String
 
     private var config: SDKConfig?
     private var remoteConfig: SDKRemoteConfig?
@@ -12,78 +112,23 @@ public final class MediationSDK {
     private var telemetry: TelemetryCollector?
     private var adapterRegistry: AdapterRegistry?
     private var signatureVerifier: SignatureVerifier?
-    private var _isInitialized = false
+    private var initialized = false
 
-    private init() {}
-    
-    /// Check if SDK is initialized (public accessor for BelAds)
-    public var isInitialized: Bool {
-        return _isInitialized
+    init(sdkVersion: String) {
+        self.sdkVersion = sdkVersion
     }
 
-    // MARK: - Debug/Diagnostics accessors (read-only)
-    /// Current appId set during initialize(), if any.
-    public func currentAppId() -> String? {
-        return config?.appId
-    }
-    /// Current placement identifiers from the last loaded remote config.
-    public func currentPlacementIds() -> [String] {
-        if let cfg = remoteConfig {
-            return cfg.placements.map { $0.placementId }
-        }
-        return []
-    }
-    
-    // MARK: - Section 3.1 Debug Panel Support
-    /// SDK version for debug panel display
-    public var sdkVersion: String {
-        return _sdkVersion
-    }
-    
-    /// Test mode indicator for debug panel
-    public var isTestMode: Bool {
-        return config?.testMode ?? false
-    }
-    
-    /// Remote config version for debug panel
-    public var remoteConfigVersion: Int? {
-        return remoteConfig?.version
-    }
-    
-    /// Registered adapter count for debug panel
-    public var registeredAdapterCount: Int {
-        return adapterRegistry?.registeredCount ?? 0
-    }
-
-    /// Initialize the mediation SDK.
-    /// - Parameters:
-    ///   - appId: Application identifier provisioned in the Rival Apex console.
-    ///   - configuration: Optional configuration to override defaults. When omitted, production endpoints are used.
-    public func initialize(appId: String, configuration: SDKConfig? = nil) async throws {
-        guard !isInitialized else {
+    func initialize(appId: String, configuration: SDKConfig?) async throws -> SDKSnapshot {
+        guard !initialized else {
             throw SDKError.alreadyInitialized
         }
 
         let providedConfig = configuration ?? SDKConfig.default(appId: appId)
         let resolvedConfig = providedConfig.withAppId(appId)
 
-        // Configure signature verifier with safe gating for test-mode bypass
         if resolvedConfig.configSignaturePublicKey != nil || resolvedConfig.testMode {
-            let enableTestMode: Bool = {
-                if resolvedConfig.testMode == false { return false }
-                #if DEBUG
-                return true
-                #else
-                // Allow test-mode bypass only if the host app bundle is allowlisted in Info.plist
-                let bundleId = Bundle.main.bundleIdentifier ?? ""
-                if let list = Bundle.main.object(forInfoDictionaryKey: "ApexMediationDebugAllowlist") as? [String] {
-                    return list.contains(bundleId)
-                }
-                return false
-                #endif
-            }()
             signatureVerifier = SignatureVerifier(
-                testMode: enableTestMode,
+                testMode: Self.shouldEnableTestBypass(for: resolvedConfig),
                 productionPublicKey: resolvedConfig.configSignaturePublicKey
             )
         } else {
@@ -93,7 +138,7 @@ public final class MediationSDK {
         let manager = ConfigManager(config: resolvedConfig, signatureVerifier: signatureVerifier)
         let remote = try await manager.loadConfig()
 
-        let registry = AdapterRegistry(sdkVersion: _sdkVersion)
+        let registry = AdapterRegistry(sdkVersion: sdkVersion)
         configureAdapters(registry: registry, with: remote)
 
         let telemetryCollector = TelemetryCollector(config: resolvedConfig)
@@ -105,14 +150,13 @@ public final class MediationSDK {
         configManager = manager
         telemetry = telemetryCollector
         adapterRegistry = registry
-        _isInitialized = true
+        initialized = true
+
+        return snapshot()
     }
 
-    /// Load an ad for the supplied placement.
-    /// - Parameter placementId: Placement identifier configured in the console.
-    /// - Returns: Loaded ad or `nil` when no adapter returned fill.
-    public func loadAd(placementId: String) async throws -> Ad? {
-        guard _isInitialized else {
+    func loadAd(placementId: String) async throws -> Ad? {
+        guard initialized else {
             throw SDKError.notInitialized
         }
 
@@ -129,6 +173,8 @@ public final class MediationSDK {
         guard !adaptersInPriority.isEmpty else {
             return nil
         }
+
+        assert(!Thread.isMainThread, "MediationRuntime.loadAd should not execute on the main thread")
 
         for networkName in adaptersInPriority {
             guard let adapterConfig = config.adapters[networkName], adapterConfig.enabled else {
@@ -159,7 +205,7 @@ public final class MediationSDK {
                     success: true
                 )
                 return ad
-            } catch AdapterError.timeout {
+            } catch let adapterError as AdapterError where adapterError.code == .timeout {
                 telemetry?.recordTimeout(placement: placementId, adType: placement.adType, reason: "adapter_timeout")
             } catch {
                 let latency = Int(Date().timeIntervalSince(start) * 1_000)
@@ -184,15 +230,10 @@ public final class MediationSDK {
         return nil
     }
 
-    /// Check if an ad is cached and ready. Placeholder implementation; caching is pending.
-    public func isAdReady(placementId: String) -> Bool {
-        // TODO: Implement ad caching in a follow-up pass.
-        return false
-    }
-
-    /// Shutdown the SDK and release resources.
-    public func shutdown() {
-        guard _isInitialized else { return }
+    func shutdown() -> SDKSnapshot {
+        guard initialized else {
+            return snapshot()
+        }
 
         telemetry?.stop()
         adapterRegistry?.destroy()
@@ -204,7 +245,19 @@ public final class MediationSDK {
         remoteConfig = nil
         config = nil
         signatureVerifier = nil
-        _isInitialized = false
+        initialized = false
+        return snapshot()
+    }
+
+    func snapshot() -> SDKSnapshot {
+        SDKSnapshot(
+            appId: config?.appId,
+            placementIds: remoteConfig?.placements.map { $0.placementId } ?? [],
+            remoteConfigVersion: remoteConfig?.version,
+            registeredAdapters: adapterRegistry?.registeredCount ?? 0,
+            testMode: config?.testMode ?? false,
+            isInitialized: initialized
+        )
     }
 
     private func ensureRemoteConfig() async throws -> SDKRemoteConfig {
@@ -248,6 +301,19 @@ public final class MediationSDK {
                 continuation.resume(with: result)
             }
         }
+    }
+
+    private static func shouldEnableTestBypass(for config: SDKConfig) -> Bool {
+        guard config.testMode else { return false }
+        #if DEBUG
+        return true
+        #else
+        let bundleId = Bundle.main.bundleIdentifier ?? ""
+        if let list = Bundle.main.object(forInfoDictionaryKey: "ApexMediationDebugAllowlist") as? [String] {
+            return list.contains(bundleId)
+        }
+        return false
+        #endif
     }
 }
 
