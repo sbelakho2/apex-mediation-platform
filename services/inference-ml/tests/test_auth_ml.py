@@ -8,11 +8,18 @@ import json
 import os
 import sys
 import time
+import warnings
 from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
 from prometheus_client import REGISTRY
+
+warnings.filterwarnings(
+    "ignore",
+    message="Please use `import python_multipart` instead.",
+    category=PendingDeprecationWarning,
+)
 
 
 MODULE_NAME = "ml_inference_main"

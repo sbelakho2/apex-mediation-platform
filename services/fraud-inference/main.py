@@ -9,6 +9,7 @@ import logging
 import os
 import sys
 import time
+import warnings
 from collections import defaultdict, deque
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -32,6 +33,19 @@ def _ensure_python_multipart() -> None:
 
 
 _ensure_python_multipart()
+
+warnings.filterwarnings(
+    "ignore",
+    message="Please use `import python_multipart` instead.",
+    category=PendingDeprecationWarning,
+    module="multipart.multipart",
+)
+warnings.filterwarnings(
+    "ignore",
+    message="Please use `import python_multipart` instead.",
+    category=PendingDeprecationWarning,
+    module="starlette.formparsers",
+)
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from prometheus_client import CONTENT_TYPE_LATEST, Counter, Gauge, Histogram, generate_latest

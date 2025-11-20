@@ -2,6 +2,7 @@ import axios, { AxiosInstance, AxiosError, AxiosHeaders, InternalAxiosRequestCon
 import { getCsrfToken, readXsrfCookie } from './csrf'
 
 const USE_MOCK_API = process.env.NEXT_PUBLIC_USE_MOCK_API === 'true'
+const TENANT_HEADER = process.env.NEXT_PUBLIC_TENANT_HEADER || 'X-Publisher-Id'
 
 const appendApiVersion = (value: string, defaultSuffix = '/api/v1') => {
   const normalized = value.replace(/\/+$/, '')
@@ -59,6 +60,11 @@ export const analyticsApiClient: AxiosInstance = axios.create({
 const MUTATING_METHODS = new Set(['post', 'put', 'patch', 'delete'])
 
 let inflightCsrfRequest: Promise<string | null> | null = null
+let activeTenantId: string | null = null
+
+export function setActiveTenantId(nextTenantId: string | null) {
+  activeTenantId = typeof nextTenantId === 'string' && nextTenantId.trim().length > 0 ? nextTenantId : null
+}
 
 async function ensureBrowserCsrfToken(): Promise<string | null> {
   if (typeof window === 'undefined') return null
@@ -83,6 +89,12 @@ const requestInterceptor = async (config: InternalAxiosRequestConfig) => {
       headers.set('X-CSRF-Token', token)
       config.headers = headers
     }
+  }
+
+  if (activeTenantId) {
+    const headers = AxiosHeaders.from(config.headers || {})
+    headers.set(TENANT_HEADER, activeTenantId)
+    config.headers = headers
   }
   return config
 }

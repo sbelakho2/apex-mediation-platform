@@ -17,6 +17,24 @@ export default function TransparencyReceiptsPage() {
           </div>
         </header>
 
+        {/* Bulk actions bar placeholder (appears when rows are selected) */}
+        <div className="rounded-[12px] border bg-gray-50 p-3 text-sm text-gray-600" style={{borderColor:'var(--gray-200)'}} aria-hidden>
+          <div className="flex items-center justify-between">
+            <span>Bulk actions: 0 selected</span>
+            <div className="flex items-center gap-2">
+              <button className="btn-ghost" disabled aria-disabled>
+                Export
+              </button>
+              <button className="btn-ghost" disabled aria-disabled>
+                Mark as Verified
+              </button>
+              <button className="btn-ghost text-danger" disabled aria-disabled>
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+
         {/* Filters */}
         <div className="card-v2">
           <div className="card-v2-body grid grid-cols-1 gap-3 md:grid-cols-4">

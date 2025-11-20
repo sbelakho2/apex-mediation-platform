@@ -8,6 +8,7 @@ import json
 import os
 import sys
 import time
+import warnings
 from collections import defaultdict, deque
 from dataclasses import dataclass
 from pathlib import Path
@@ -31,6 +32,19 @@ def _ensure_python_multipart() -> None:
 
 
 _ensure_python_multipart()
+
+warnings.filterwarnings(
+    "ignore",
+    message="Please use `import python_multipart` instead.",
+    category=PendingDeprecationWarning,
+    module="multipart.multipart",
+)
+warnings.filterwarnings(
+    "ignore",
+    message="Please use `import python_multipart` instead.",
+    category=PendingDeprecationWarning,
+    module="starlette.formparsers",
+)
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import PlainTextResponse
@@ -579,7 +593,7 @@ async def predict_fraud(
         )
         response.transparency_receipt = make_transparency_receipt(
             tenant,
-            payload.dict(),
+            payload.model_dump(),
             response.prediction,
             require_transparency_secret(),
         )
@@ -612,7 +626,7 @@ async def predict_ctr(
         )
         response.transparency_receipt = make_transparency_receipt(
             tenant,
-            payload.dict(),
+            payload.model_dump(),
             response.prediction,
             require_transparency_secret(),
         )
@@ -650,7 +664,7 @@ async def optimize_bid(
         )
         response.transparency_receipt = make_transparency_receipt(
             tenant,
-            payload.dict(),
+            payload.model_dump(),
             response.prediction,
             require_transparency_secret(),
         )
@@ -692,7 +706,7 @@ async def replay_auction(
         {
             "auction_id": payload.auction_id,
             "request_payload": payload.request_payload,
-            "snapshots": [snap.dict() for snap in payload.snapshots],
+            "snapshots": [snap.model_dump() for snap in payload.snapshots],
         },
         response_payload,
         require_transparency_secret(),

@@ -30,7 +30,7 @@ import type {
   NetworkCredentialInput,
   NetworkCredentialToken,
   NetworkCredentialsList,
-  NetworkIngestionResult,
+  NetworkVerificationResult,
   AppAdsInspectorResult,
 } from '@/types'
 
@@ -738,37 +738,12 @@ export const byoApi = {
     apiClient.delete(`/byo/credentials/${network}`),
 
   /**
-   * Upload an AdMob CSV export and ingest it for revenue reconciliation
+   * Request an on-demand verification of the stored identifiers against the network's public endpoints.
    */
-  ingestAdmobCsv: async (file: File) => {
-    validateCsvFile(file)
-    const formData = new FormData()
-    formData.append('report', file)
-    const response = await apiClient.post<SuccessEnvelope<NetworkIngestionResult>>(
-      '/byo/ingestion/admob/csv',
-      formData
-    )
-    return unwrapSuccessEnvelope(response.data)
-  },
-
-  /**
-   * Trigger AdMob ingestion via Reporting API using stored credentials
-   */
-  ingestAdmobApi: async (params: { startDate: string; endDate: string }) => {
-    const response = await apiClient.post<SuccessEnvelope<NetworkIngestionResult>>(
-      '/byo/ingestion/admob/api',
-      params
-    )
-    return unwrapSuccessEnvelope(response.data)
-  },
-
-  /**
-   * Trigger Unity Ads ingestion via Monetization API using stored credentials
-   */
-  ingestUnityApi: async (params: { startDate: string; endDate: string }) => {
-    const response = await apiClient.post<SuccessEnvelope<NetworkIngestionResult>>(
-      '/byo/ingestion/unity',
-      params
+  verifyNetwork: async (network: string) => {
+    const response = await apiClient.post<SuccessEnvelope<NetworkVerificationResult>>(
+      `/byo/credentials/${network}/verify`,
+      {}
     )
     return unwrapSuccessEnvelope(response.data)
   },

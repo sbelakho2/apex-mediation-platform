@@ -6,65 +6,65 @@ import SocialIconLink from '@/components/SocialIconLink';
  */
 export default function Footer() {
   return (
-    <footer className="bg-primary-blue text-white py-16">
-      <div className="container mx-auto px-4">
+    <footer className="bg-white text-gray-700 py-16 border-t" style={{borderColor:'var(--gray-200)'}}>
+      <div className="container">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-8 mb-12">
           {/* About */}
           <div>
-            <h3 className="text-sunshine-yellow font-bold uppercase text-sm mb-4 pb-2 border-b-2 border-sunshine-yellow">
+            <h3 className="text-sm font-semibold text-gray-900 mb-4 pb-2 border-b" style={{borderColor:'var(--gray-200)'}}>
               About ApexMediation
             </h3>
             <ul className="space-y-2 text-sm">
-              <li><a href="/about" className="hover:underline">Our Mission</a></li>
-              <li><a href="/contact" className="hover:underline">Contact</a></li>
-              <li><a href="/team" className="hover:underline">Team</a></li>
-              <li><a href="/careers" className="hover:underline">Careers</a></li>
-              <li><a href="/press" className="hover:underline">Press Kit</a></li>
+              <li><a href="/about" className="text-brand-600 hover:text-brand-700 hover:underline">Our Mission</a></li>
+              <li><a href="/contact" className="text-brand-600 hover:text-brand-700 hover:underline">Contact</a></li>
+              <li><a href="/team" className="text-brand-600 hover:text-brand-700 hover:underline">Team</a></li>
+              <li><a href="/careers" className="text-brand-600 hover:text-brand-700 hover:underline">Careers</a></li>
+              <li><a href="/press" className="text-brand-600 hover:text-brand-700 hover:underline">Press Kit</a></li>
             </ul>
           </div>
 
           {/* Product */}
           <div>
-            <h3 className="text-sunshine-yellow font-bold uppercase text-sm mb-4 pb-2 border-b-2 border-sunshine-yellow">
+            <h3 className="text-sm font-semibold text-gray-900 mb-4 pb-2 border-b" style={{borderColor:'var(--gray-200)'}}>
               Product
             </h3>
             <ul className="space-y-2 text-sm">
-              <li><a href="/#features" className="hover:underline">Features</a></li>
-              <li><a href="/pricing" className="hover:underline">Pricing</a></li>
-              <li><a href="/documentation" className="hover:underline">Documentation</a></li>
-              <li><a href="/changelog" className="hover:underline">Changelog</a></li>
+              <li><a href="/#features" className="text-brand-600 hover:text-brand-700 hover:underline">Features</a></li>
+              <li><a href="/pricing" className="text-brand-600 hover:text-brand-700 hover:underline">Pricing</a></li>
+              <li><a href="/documentation" className="text-brand-600 hover:text-brand-700 hover:underline">Documentation</a></li>
+              <li><a href="/changelog" className="text-brand-600 hover:text-brand-700 hover:underline">Changelog</a></li>
             </ul>
           </div>
 
           {/* Resources */}
           <div>
-            <h3 className="text-sunshine-yellow font-bold uppercase text-sm mb-4 pb-2 border-b-2 border-sunshine-yellow">
+            <h3 className="text-sm font-semibold text-gray-900 mb-4 pb-2 border-b" style={{borderColor:'var(--gray-200)'}}>
               Resources
             </h3>
             <ul className="space-y-2 text-sm">
-              <li><a href="/blog" className="hover:underline">Blog</a></li>
-              <li><a href="/guides" className="hover:underline">Guides</a></li>
-              <li><a href="/case-studies" className="hover:underline">Case Studies</a></li>
-              <li><a href="/support" className="hover:underline">Support</a></li>
+              <li><a href="/blog" className="text-brand-600 hover:text-brand-700 hover:underline">Blog</a></li>
+              <li><a href="/guides" className="text-brand-600 hover:text-brand-700 hover:underline">Guides</a></li>
+              <li><a href="/case-studies" className="text-brand-600 hover:text-brand-700 hover:underline">Case Studies</a></li>
+              <li><a href="/support" className="text-brand-600 hover:text-brand-700 hover:underline">Support</a></li>
             </ul>
           </div>
 
           {/* Legal */}
           <div>
-            <h3 className="text-sunshine-yellow font-bold uppercase text-sm mb-4 pb-2 border-b-2 border-sunshine-yellow">
+            <h3 className="text-sm font-semibold text-gray-900 mb-4 pb-2 border-b" style={{borderColor:'var(--gray-200)'}}>
               Legal
             </h3>
             <ul className="space-y-2 text-sm">
-              <li><a href="/privacy" className="hover:underline">Privacy Policy</a></li>
-              <li><a href="/terms" className="hover:underline">Terms of Service</a></li>
-              <li><a href="/gdpr" className="hover:underline">GDPR</a></li>
-              <li><a href="/security" className="hover:underline">Security</a></li>
+              <li><a href="/privacy" className="text-brand-600 hover:text-brand-700 hover:underline">Privacy Policy</a></li>
+              <li><a href="/terms" className="text-brand-600 hover:text-brand-700 hover:underline">Terms of Service</a></li>
+              <li><a href="/gdpr" className="text-brand-600 hover:text-brand-700 hover:underline">GDPR</a></li>
+              <li><a href="/security" className="text-brand-600 hover:text-brand-700 hover:underline">Security</a></li>
             </ul>
           </div>
 
           {/* Follow Us */}
           <div>
-            <h3 className="text-sunshine-yellow font-bold uppercase text-sm mb-4 pb-2 border-b-2 border-sunshine-yellow">
+            <h3 className="text-sm font-semibold text-gray-900 mb-4 pb-2 border-b" style={{borderColor:'var(--gray-200)'}}>
               Follow Us
             </h3>
             <div className="flex gap-4">
@@ -92,15 +92,15 @@ export default function Footer() {
         </div>
 
         {/* Bottom Section */}
-        <div className="border-t border-sunshine-yellow/30 pt-8">
+        <div className="border-t pt-8" style={{borderColor:'var(--gray-200)'}}>
           <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-            <p className="text-sm text-white/70">
+            <p className="text-sm text-gray-600">
               © 2025 ApexMediation. All rights reserved.
             </p>
             <div className="flex gap-6 text-sm">
-              <a href="/privacy" className="hover:text-sunshine-yellow transition-colors">Privacy</a>
-              <a href="/terms" className="hover:text-sunshine-yellow transition-colors">Terms</a>
-              <a href="/cookies" className="hover:text-sunshine-yellow transition-colors">Cookies</a>
+              <a href="/privacy" className="text-brand-600 hover:text-brand-700 transition-colors">Privacy</a>
+              <a href="/terms" className="text-brand-600 hover:text-brand-700 transition-colors">Terms</a>
+              <a href="/cookies" className="text-brand-600 hover:text-brand-700 transition-colors">Cookies</a>
             </div>
           </div>
         </div>

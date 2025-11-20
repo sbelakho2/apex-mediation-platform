@@ -8,6 +8,7 @@ import json
 import os
 import sys
 import time
+import warnings
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -15,6 +16,12 @@ import numpy as np
 import pytest
 from fastapi.testclient import TestClient
 from prometheus_client import REGISTRY
+
+warnings.filterwarnings(
+    "ignore",
+    message="Please use `import python_multipart` instead.",
+    category=PendingDeprecationWarning,
+)
 
 
 MODULE_NAME = "fraud_inference_main"

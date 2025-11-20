@@ -134,12 +134,12 @@ website/
 │   │       ├── placements/page.tsx    # ✅ Complete
 │   │       └── settings/page.tsx      # ✅ Complete
 │   ├── components/
-│   │   ├── NotificationBar.tsx        # Golden banner with scalloped edge
+│   │   ├── NotificationBar.tsx        # Notification banner (tokenized)
 │   │   ├── HomeNav.tsx                # Responsive navigation
 │   │   ├── Footer.tsx                 # 5-column footer
 │   │   ├── NewsletterPanel.tsx        # Email signup
 │   │   ├── CookieBanner.tsx           # Cookie consent
-│   │   ├── ScallopedDivider.tsx       # Reusable wavy divider
+│   │   ├── (removed) ScallopedDivider.tsx  # Decorative divider (deprecated)
 │   │   └── dashboard/
 │   │       ├── Sidebar.tsx            # Navigation with golden active states
 │   │       ├── TopBar.tsx             # User menu, notifications
@@ -161,25 +161,29 @@ website/
 
 ## 🎨 Design System
 
-### Colors (Study in Sweden)
+### Colors (WEBSITE_FIX tokens)
 
-| Color | Hex | Usage |
-|-------|-----|-------|
-| **Primary Blue** | `#005293` | Headers, navigation, text links |
-| **Sunshine Yellow** | `#FECB00` | Primary CTAs, active states, highlights |
-| **Cream** | `#E8E3D1` | Section backgrounds, cards |
-| **Accent Red** | `#C04437` | Error states, alerts |
-| **White** | `#FFFFFF` | Backgrounds, cards |
+This website now uses tokenized colors defined as CSS variables in `src/app/globals.css` and mapped in `tailwind.config.ts`.
+
+- Brand scale: `brand-50 … brand-900` (primary `brand-500` = `#356eff`)
+- Neutrals: `gray-50 … gray-900`
+- Semantic: `success`, `warning`, `danger`, `info`
+
+Usage examples:
+- Links: `text-brand-600` hover `text-brand-700`
+- Buttons: `.btn-primary`, `.btn-secondary`, `.btn-ghost`
+- Cards: `.card-v2`
+- Inputs: `.input-v2`
 
 ### Typography
 
-**Font Family:** Sweden Sans (book, bold)
+**Font Family:** Inter (system fallback)
 
 | Element | Desktop | Tablet | Mobile |
 |---------|---------|--------|--------|
 | **Hero** | 5rem | 3rem | 2rem |
 | **H2** | 2.8rem | 2rem | 1.5rem |
-| **Body** | 1rem | 1rem | 1.2rem |
+| **Body** | 1.15rem | 1.15rem | 1rem |
 
 **Letter Spacing:**
 
@@ -189,28 +193,20 @@ website/
 ### Components Reference
 
 ```tsx
-// Primary button (golden yellow)
-<button className="btn-primary-yellow">
-  Get Started
-</button>
+// Primary button (brand)
+<button className="btn-primary">Get Started</button>
 
-// Secondary button (deep blue)
-<button className="btn-secondary-blue">
-  Learn More
-</button>
+// Secondary button (neutral)
+<button className="btn-secondary">Learn More</button>
 
-// Card (white with shadow)
-<div className="card p-6">
-  Content here
-</div>
-
-// Card (deep blue background)
-<div className="card-blue p-6">
-  Premium content
+// Card (v2)
+<div className="card-v2">
+  <div className="card-v2-header">Title</div>
+  <div className="card-v2-body">Content here</div>
 </div>
 
 // Form input
-<input className="input" type="text" placeholder="Email" />
+<input className="input-v2" type="text" placeholder="Email" />
 ```
 
 ---
@@ -334,21 +330,28 @@ SLACK_WEBHOOK_URL=https://hooks.slack.com/...
 
 ### Tailwind Configuration
 
-The design system colors are configured in `tailwind.config.ts`:
+Token mapping lives in `tailwind.config.ts` and reads CSS variables from `src/app/globals.css`:
 
 ```typescript
-theme: {
-  extend: {
-    colors: {
-      'primary-blue': '#005293',
-      'sunshine-yellow': '#FECB00',
-      'cream': '#E8E3D1',
-      'accent-red': '#C04437',
+// tailwind.config.ts (excerpt)
+extend: {
+  colors: {
+    brand: {
+      50: 'var(--brand-50)', 100: 'var(--brand-100)', 200: 'var(--brand-200)',
+      300: 'var(--brand-300)', 400: 'var(--brand-400)', 500: 'var(--brand-500)',
+      600: 'var(--brand-600)', 700: 'var(--brand-700)', 800: 'var(--brand-800)', 900: 'var(--brand-900)'
     },
-    fontFamily: {
-      sans: ['Sweden Sans', 'system-ui', 'sans-serif'],
+    gray: {
+      50: 'var(--gray-50)', 100: 'var(--gray-100)', 200: 'var(--gray-200)', 300: 'var(--gray-300)',
+      400: 'var(--gray-400)', 500: 'var(--gray-500)', 600: 'var(--gray-600)', 700: 'var(--gray-700)',
+      800: 'var(--gray-800)', 900: 'var(--gray-900)'
     },
+    success: 'var(--success)', warning: 'var(--warning)', danger: 'var(--danger)', info: 'var(--info)'
   },
+  borderRadius: { DEFAULT: '10px', xl: '12px', '2xl': '16px' },
+  boxShadow: {
+    sm:'0 1px 2px rgba(15,23,42,.06)', md:'0 4px 16px rgba(15,23,42,.08)', lg:'0 10px 30px rgba(15,23,42,.12)'
+  }
 }
 ```
 

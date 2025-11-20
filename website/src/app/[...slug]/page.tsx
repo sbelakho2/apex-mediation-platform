@@ -56,12 +56,12 @@ function PageLayout({
   heroTag?: string;
 }) {
   return (
-    <main className="min-h-screen bg-primary-blue text-white">
+    <main className="min-h-screen bg-white text-gray-900">
       <div className="container mx-auto max-w-6xl px-4 py-16 space-y-10">
-        <nav className="text-xs font-semibold uppercase tracking-[0.2em] text-sunshine-yellow/80">
+        <nav className="text-xs font-semibold uppercase tracking-[0.2em] text-gray-600">
           <Link
             href="/"
-            className="hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-sunshine-yellow"
+            className="hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-brand-500"
           >
             Home
           </Link>
@@ -70,7 +70,7 @@ function PageLayout({
               /{' '}
               <Link
                 href={crumb.href}
-                className="hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-sunshine-yellow"
+                className="hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-brand-500"
               >
                 {crumb.label}
               </Link>
@@ -80,14 +80,14 @@ function PageLayout({
 
         <header className="space-y-4">
           {heroTag && (
-            <span className="inline-flex items-center rounded-full bg-sunshine-yellow px-3 py-1 text-xs font-bold uppercase tracking-[0.2em] text-primary-blue">
+            <span className="inline-flex items-center rounded-full bg-brand-50 px-3 py-1 text-xs font-semibold tracking-[0.1em] text-brand-700">
               {heroTag}
             </span>
           )}
-          <h1 className="text-h2-sm md:text-h2-md lg:text-h2 font-bold uppercase text-sunshine-yellow">
+          <h1 className="text-h2-sm md:text-h2-md lg:text-h2 font-semibold text-gray-900">
             {title}
           </h1>
-          <p className="max-w-3xl text-body text-white/90 leading-relaxed">
+          <p className="max-w-3xl text-body text-gray-600 leading-relaxed">
             {intro}
           </p>
         </header>
@@ -110,34 +110,34 @@ function renderContent(slugKey: string, breadcrumbs: Breadcrumb[]): React.ReactN
         >
           <div className="grid gap-8 lg:grid-cols-[260px_1fr]">
             <aside>
-              <nav className="sticky top-24 space-y-3 rounded-3xl bg-white/10 p-6 text-sm font-semibold uppercase tracking-wide text-white/80">
-                <span className="block text-sunshine-yellow/80">Contents</span>
-                <a href="#getting-started" className="block hover:text-sunshine-yellow">Getting started</a>
-                <a href="#real-time-bidding" className="block hover:text-sunshine-yellow">Real-time bidding</a>
-                <a href="#ml-fraud-detection" className="block hover:text-sunshine-yellow">ML fraud detection</a>
-                <a href="#ab-testing-platform" className="block hover:text-sunshine-yellow">A/B testing</a>
-                <a href="#integration-checklist" className="block hover:text-sunshine-yellow">Integration checklist</a>
-                <a href="#sdk-reference" className="block hover:text-sunshine-yellow">SDK reference</a>
+              <nav className="sticky top-24 space-y-3 rounded-3xl bg-gray-50 p-6 text-sm font-semibold tracking-wide text-gray-700">
+                <span className="block text-gray-500">Contents</span>
+                <a href="#getting-started" className="block hover:text-brand-600">Getting started</a>
+                <a href="#real-time-bidding" className="block hover:text-brand-600">Real-time bidding</a>
+                <a href="#ml-fraud-detection" className="block hover:text-brand-600">ML fraud detection</a>
+                <a href="#ab-testing-platform" className="block hover:text-brand-600">A/B testing</a>
+                <a href="#integration-checklist" className="block hover:text-brand-600">Integration checklist</a>
+                <a href="#sdk-reference" className="block hover:text-brand-600">SDK reference</a>
               </nav>
             </aside>
             <div className="space-y-8">
-              <section id="getting-started" className="rounded-3xl bg-white p-8 shadow-xl ring-1 ring-primary-blue/10">
-                <h2 className="text-h3 font-bold uppercase text-primary-blue">1. Getting Started</h2>
+              <section id="getting-started" className="rounded-3xl bg-white p-8 shadow-xl ring-1 ring-gray-200">
+                <h2 className="text-h3 font-semibold text-gray-900">1. Getting Started</h2>
                 <p className="mt-4 text-body text-gray-700 leading-relaxed">
                   Create an account, add your first app, and invite collaborators. Once your app is connected you can enable premium demand with a single toggle.
                 </p>
                 <ol className="mt-6 space-y-3 text-body text-gray-700">
-                  <li className="rounded-2xl border border-primary-blue/20 bg-cream/40 p-4">
-                    <span className="font-bold text-primary-blue">Step 1:</span> Go to <Link href="/signup" className="font-bold underline">Sign Up</Link> and provision your workspace.
+                  <li className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
+                    <span className="font-semibold text-gray-900">Step 1:</span> Go to <Link href="/signup" className="font-semibold underline">Sign Up</Link> and provision your workspace.
                   </li>
-                  <li className="rounded-2xl border border-primary-blue/20 bg-cream/40 p-4">
-                    <span className="font-bold text-primary-blue">Step 2:</span> In the dashboard, open <Link href="/dashboard/apps" className="font-bold underline">Apps</Link> and add each platform build (iOS, Android, Unity, Web).
+                  <li className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
+                    <span className="font-semibold text-gray-900">Step 2:</span> In the dashboard, open <Link href="/dashboard/apps" className="font-semibold underline">Apps</Link> and add each platform build (iOS, Android, Unity, Web).
                   </li>
-                  <li className="rounded-2xl border border-primary-blue/20 bg-cream/40 p-4">
-                    <span className="font-bold text-primary-blue">Step 3:</span> Download the SDK bundle that matches your engine and integrate with the code sample below.
+                  <li className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
+                    <span className="font-semibold text-gray-900">Step 3:</span> Download the SDK bundle that matches your engine and integrate with the code sample below.
                   </li>
                 </ol>
-                <pre className="mt-6 overflow-x-auto rounded-2xl bg-primary-blue/90 p-6 text-sm text-white">
+                <pre className="mt-6 overflow-x-auto rounded-2xl bg-gray-900 p-6 text-sm text-white">
 {`import { ApexMediation } from '@apexmediation/sdk';
 
 ApexMediation.configure({
@@ -150,28 +150,28 @@ ApexMediation.loadInterstitial({ placementId: 'level_complete' });`}
                 </pre>
               </section>
 
-              <section id="real-time-bidding" className="rounded-3xl bg-white p-8 shadow-xl ring-1 ring-primary-blue/10">
-                <h2 className="text-h3 font-bold uppercase text-primary-blue">2. Real-Time Bidding</h2>
+              <section id="real-time-bidding" className="rounded-3xl bg-white p-8 shadow-xl ring-1 ring-gray-200">
+                <h2 className="text-h3 font-semibold text-gray-900">2. Real-Time Bidding</h2>
                 <p className="mt-4 text-body text-gray-700 leading-relaxed">
                   Every impression is auctioned across premium demand partners with transparent clearing pricing. Enable header bidding, waterfall mediation, or a hybrid approach from the control center.
                 </p>
                 <ul className="mt-4 space-y-3 text-body text-gray-700">
                   <li className="flex items-start gap-3">
-                    <span className="mt-1 h-2 w-2 rounded-full bg-sunshine-yellow" aria-hidden="true" />
+                    <span className="mt-1 h-2 w-2 rounded-full bg-brand-500" aria-hidden="true" />
                     Real-time logs show bidder response time, CPM, and win rate.
                   </li>
                   <li className="flex items-start gap-3">
-                    <span className="mt-1 h-2 w-2 rounded-full bg-sunshine-yellow" aria-hidden="true" />
+                    <span className="mt-1 h-2 w-2 rounded-full bg-brand-500" aria-hidden="true" />
                     Configure floors per country, device, or user cohort.
                   </li>
                   <li className="flex items-start gap-3">
-                    <span className="mt-1 h-2 w-2 rounded-full bg-sunshine-yellow" aria-hidden="true" />
+                    <span className="mt-1 h-2 w-2 rounded-full bg-brand-500" aria-hidden="true" />
                     Export raw auction trails to BigQuery or S3 on an hourly cadence.
                   </li>
                 </ul>
-                <div className="mt-6 rounded-2xl bg-cream p-6 text-sm text-primary-blue">
-                  <p className="font-bold uppercase">API Endpoint</p>
-                  <pre className="mt-2 overflow-x-auto text-xs text-primary-blue">
+                <div className="mt-6 rounded-2xl bg-gray-50 p-6 text-sm text-gray-900">
+                  <p className="font-semibold">API Endpoint</p>
+                  <pre className="mt-2 overflow-x-auto text-xs text-gray-800">
 {`POST https://api.apexmediation.com/v1/auctions
 Body: {
   "placement_id": "level_complete",
@@ -183,14 +183,14 @@ Body: {
                 </div>
               </section>
 
-              <section id="ml-fraud-detection" className="rounded-3xl bg-white p-8 shadow-xl ring-1 ring-primary-blue/10">
-                <h2 className="text-h3 font-bold uppercase text-primary-blue">3. ML Fraud Detection</h2>
+              <section id="ml-fraud-detection" className="rounded-3xl bg-white p-8 shadow-xl ring-1 ring-gray-200">
+                <h2 className="text-h3 font-semibold text-gray-900">3. ML Fraud Detection</h2>
                 <p className="mt-4 text-body text-gray-700 leading-relaxed">
                   Our anomaly detection models are trained on 500k+ installs and refreshed nightly. Suspicious signals trigger automated quarantines and optional manual review flows.
                 </p>
                 <div className="mt-6 grid gap-4 md:grid-cols-2">
-                  <div className="rounded-2xl border border-primary-blue/10 bg-cream/60 p-4">
-                    <h3 className="text-sm font-bold uppercase text-primary-blue">Signals</h3>
+                  <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
+                    <h3 className="text-sm font-semibold text-gray-900">Signals</h3>
                     <ul className="mt-3 space-y-2 text-sm text-gray-700">
                       <li>Device fingerprint velocity</li>
                       <li>Bid shading anomalies</li>
@@ -198,8 +198,8 @@ Body: {
                       <li>Click-to-install delta</li>
                     </ul>
                   </div>
-                  <div className="rounded-2xl border border-primary-blue/10 bg-cream/60 p-4">
-                    <h3 className="text-sm font-bold uppercase text-primary-blue">Actions</h3>
+                  <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
+                    <h3 className="text-sm font-semibold text-gray-900">Actions</h3>
                     <ul className="mt-3 space-y-2 text-sm text-gray-700">
                       <li>Auto-reject suspicious bids</li>
                       <li>Throttle inventory per network</li>

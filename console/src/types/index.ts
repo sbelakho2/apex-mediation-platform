@@ -467,6 +467,15 @@ export interface NetworkCredentialsList {
   credentials: NetworkCredential[]
 }
 
+export interface NetworkVerificationResult {
+  network: string
+  verified: boolean
+  checkedAt: string
+  issues: string[]
+  snapshotCount?: number
+  sampleWindow?: { start: string; end: string }
+}
+
 export interface NetworkIngestionResult {
   success: boolean
   rowsProcessed: number
@@ -475,4 +484,22 @@ export interface NetworkIngestionResult {
   errors: string[]
   startDate: string
   endDate: string
+}
+
+export interface FraudDiagnostics {
+  mode: 'shadow' | 'block'
+  updatedAt: string
+  histogramBuckets: string[]
+  histogramValues: number[]
+  drift: {
+    current: number
+    trend: Array<{ timestamp: string; value: number }>
+  }
+  weakLabels: Array<{ label: string; correlation: number }>
+  promotionSuggestion?: {
+    recommendedMode: 'shadow' | 'block'
+    confidence: number
+    reason: string
+    blockers?: string[]
+  }
 }

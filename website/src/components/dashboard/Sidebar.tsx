@@ -30,6 +30,7 @@ type FeatureFlags = Partial<{
   apps: boolean;
   placements: boolean;
   observability: boolean;
+  reconciliation: boolean;
   transparency: boolean;
   settings: boolean;
 }>;
@@ -48,6 +49,8 @@ const NAV_BLUEPRINT: NavItem[] = [
   // Transparency
   { name: 'Receipts', href: '/dashboard/transparency/receipts', icon: ShieldCheckIcon, flag: 'transparency' },
   { name: 'Config Rollouts', href: '/dashboard/transparency/config-rollouts', icon: Cog6ToothIcon, flag: 'transparency' },
+  // Reconciliation
+  { name: 'Reconciliation', href: '/dashboard/reconciliation', icon: Cog6ToothIcon, flag: 'reconciliation' },
   // Observability
   { name: 'Observability Overview', href: '/dashboard/observability/overview', icon: ChartBarIcon, flag: 'observability' },
   { name: 'Adapter Metrics', href: '/dashboard/observability/metrics', icon: ChartBarIcon, flag: 'observability' },
@@ -76,12 +79,12 @@ export default function DashboardSidebar({ mobileOpen = false, onClose }: Dashbo
         setFeatures(res.data);
       } else {
         // Default-safe: show common pages except experimental AB tests
-        setFeatures({ revenue: true, analytics: true, networks: true, fraud: true, apps: true, placements: true, transparency: true, observability: true, settings: true, abTests: false });
+        setFeatures({ revenue: true, analytics: true, networks: true, fraud: true, apps: true, placements: true, transparency: true, reconciliation: true, observability: true, settings: true, abTests: false });
       }
       setLoadingFlags(false);
     })().catch(() => {
       if (!alive) return;
-      setFeatures({ revenue: true, analytics: true, networks: true, fraud: true, apps: true, placements: true, transparency: true, observability: true, settings: true, abTests: false });
+      setFeatures({ revenue: true, analytics: true, networks: true, fraud: true, apps: true, placements: true, transparency: true, reconciliation: true, observability: true, settings: true, abTests: false });
       setLoadingFlags(false);
     });
     return () => {

@@ -15,7 +15,12 @@ export default function TransparencyConfigRolloutsPage() {
           <div className="flex items-center gap-2">
             <button className="btn-ghost">Pause</button>
             <button className="btn-secondary">Advance</button>
-            <button className="btn-primary" aria-label="Rollback configuration">Rollback</button>
+            <button
+              className="btn-primary !bg-[var(--danger)] hover:!bg-[#b91c1c]"
+              aria-label="Rollback configuration"
+            >
+              Rollback
+            </button>
           </div>
         </header>
 

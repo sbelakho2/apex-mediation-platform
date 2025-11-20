@@ -4,7 +4,7 @@ import { useMemo, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import axios from 'axios'
-import { apiClient, AUTH_UNAUTHORIZED_EVENT } from './api-client'
+import { apiClient, AUTH_UNAUTHORIZED_EVENT, setActiveTenantId } from './api-client'
 import { clearInvoicePdfCache } from './billing'
 import { readXsrfCookie } from './csrf'
 
@@ -115,8 +115,17 @@ export function useSession(options?: UseSessionOptions) {
     },
   })
 
+  const resolvedUser = (MOCK_SESSION as SessionUser | null) ?? query.data ?? null
+
+  useEffect(() => {
+    setActiveTenantId(resolvedUser?.publisherId ?? null)
+    return () => {
+      setActiveTenantId(null)
+    }
+  }, [resolvedUser?.publisherId])
+
   return {
-    user: (MOCK_SESSION as SessionUser | null) ?? query.data ?? null,
+    user: resolvedUser,
     isLoading: isMockedSession ? false : query.isLoading,
     error: query.error,
     refetch: query.refetch,
