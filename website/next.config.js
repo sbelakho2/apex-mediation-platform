@@ -3,9 +3,11 @@ const nextConfig = {
   reactStrictMode: true,
   swcMinify: true,
   
-  // Use src directory for app and pages
+  // Use src directory for app and pages + other experimental flags
   experimental: {
     appDir: true,
+    optimizeCss: false,
+    optimizePackageImports: ['react-icons', 'framer-motion'],
   },
   
   // Specify that we're using src/ directory
@@ -127,11 +129,7 @@ const nextConfig = {
     return config;
   },
 
-  // Experimental features
-  experimental: {
-    optimizeCss: false,
-    optimizePackageImports: ['react-icons', 'framer-motion'],
-  },
+  // Experimental features merged above
 };
 
 module.exports = nextConfig;

@@ -3,9 +3,11 @@
 import base64
 import hashlib
 import hmac
+import importlib
 import json
 import logging
 import os
+import sys
 import time
 from collections import defaultdict, deque
 from contextlib import asynccontextmanager
@@ -16,9 +18,24 @@ from typing import Any, Dict, List, Optional
 import joblib
 import numpy as np
 import onnxruntime as ort
+
+
+def _ensure_python_multipart() -> None:
+    try:  # pragma: no cover
+        import python_multipart  # type: ignore  # noqa: F401
+    except ImportError:
+        try:
+            module = importlib.import_module("multipart")
+        except ImportError:
+            return
+        sys.modules.setdefault("python_multipart", module)
+
+
+_ensure_python_multipart()
+
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
-from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_latest
-from pydantic import BaseModel, Field
+from prometheus_client import CONTENT_TYPE_LATEST, Counter, Gauge, Histogram, generate_latest
+from pydantic import BaseModel, ConfigDict, Field
 
 # Configure logging
 logging.basicConfig(
@@ -31,19 +48,34 @@ logger = logging.getLogger(__name__)
 REQUEST_COUNT = Counter(
     "fraud_inference_requests_total",
     "Total fraud inference requests",
-    ["endpoint", "status"],
+    ["endpoint", "status", "tenant"],
 )
 REQUEST_DURATION = Histogram(
     "fraud_inference_duration_seconds",
     "Fraud inference request duration",
-    ["endpoint"],
+    ["endpoint", "tenant"],
     buckets=[0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0],
 )
 ERROR_COUNT = Counter(
     "fraud_inference_errors_total",
     "Total fraud inference errors",
-    ["endpoint", "error_type"],
+    ["endpoint", "error_type", "tenant"],
 )
+
+FRAUD_SCORE_HISTOGRAM = Histogram(
+    "fraud_score_histogram",
+    "Distribution of fraud scores per tenant",
+    ["tenant", "model_version"],
+    buckets=[0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0],
+)
+FRAUD_DRIFT_GAUGE = Gauge(
+    "fraud_drift_js_divergence",
+    "Jensen-Shannon divergence between tenant scores and global baseline",
+    ["tenant"],
+)
+
+SCORE_WINDOWS: Dict[str, deque] = defaultdict(lambda: deque(maxlen=400))
+GLOBAL_SCORE_WINDOW: deque = deque(maxlen=4000)
 
 
 class FraudFeatures(BaseModel):
@@ -54,15 +86,40 @@ class FraudFeatures(BaseModel):
     # Add more features as needed
 
 
+class FraudDetectionRequest(FraudFeatures):
+    """Fraud detection request enriched with consent state."""
+
+    consent_gdpr: Optional[bool] = Field(
+        default=None,
+        description="End-user GDPR consent flag",
+    )
+    consent_tcf: Optional[str] = Field(
+        default=None,
+        description="Encoded IAB TCF string (redacted at rest)",
+    )
+    us_privacy: Optional[str] = Field(
+        default=None,
+        description="US Privacy / CCPA string (redacted at rest)",
+    )
+    coppa: Optional[bool] = Field(
+        default=None,
+        description="Child-directed treatment flag",
+    )
+
+
 class FraudScore(BaseModel):
     """Fraud detection response."""
     fraud_score: float = Field(..., ge=0.0, le=1.0, description="Fraud probability")
     is_fraud: bool = Field(..., description="Binary fraud decision")
     threshold: float = Field(..., description="Decision threshold used")
     latency_ms: float = Field(..., description="Inference latency in milliseconds")
+    mode: str = Field(..., description="Fraud decision mode for this tenant")
+    shadow_decision: bool = Field(..., description="Raw fraud decision prior to mode gating")
 
 
 class HealthResponse(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
+
     """Health check response."""
     status: str
     model_loaded: bool
@@ -94,6 +151,20 @@ ALLOWED_ROLES = {
 }
 RATE_LIMIT_MAX_REQUESTS = int(os.getenv("RATE_LIMIT_MAX_REQUESTS", "300"))
 RATE_LIMIT_WINDOW_SECONDS = int(os.getenv("RATE_LIMIT_WINDOW_SECONDS", "60"))
+DEFAULT_FRAUD_MODE = os.getenv("FRAUD_MODE", "shadow").strip().lower() or "shadow"
+if DEFAULT_FRAUD_MODE not in {"shadow", "block"}:
+    logger.warning("Unsupported FRAUD_MODE provided; defaulting to shadow", extra={"mode": DEFAULT_FRAUD_MODE})
+    DEFAULT_FRAUD_MODE = "shadow"
+
+_mode_overrides_raw = os.getenv("FRAUD_MODE_OVERRIDES_JSON", "{}")
+try:
+    TENANT_MODE_OVERRIDES = json.loads(_mode_overrides_raw)
+    if not isinstance(TENANT_MODE_OVERRIDES, dict):
+        logger.warning("FRAUD_MODE_OVERRIDES_JSON must be a JSON object")
+        TENANT_MODE_OVERRIDES = {}
+except json.JSONDecodeError:
+    logger.warning("Invalid FRAUD_MODE_OVERRIDES_JSON; ignoring overrides")
+    TENANT_MODE_OVERRIDES = {}
 
 
 class RateLimiter:
@@ -139,6 +210,56 @@ class AuthContext(BaseModel):
     publisher_id: str
     email: str
     role: Optional[str] = None
+
+
+def mode_for(tenant: str) -> str:
+    override = TENANT_MODE_OVERRIDES.get(tenant)
+    if isinstance(override, str):
+        candidate = override.strip().lower()
+        if candidate in {"shadow", "block"}:
+            return candidate
+    return DEFAULT_FRAUD_MODE
+
+
+class RedactedRequestBuffer:
+    """Thread-safe redaction buffer for debugging without storing PII."""
+
+    def __init__(self, maxlen: int = 200) -> None:
+        self._entries: deque = deque(maxlen=maxlen)
+        self._lock = Lock()
+
+    def record(self, tenant: str, payload: "FraudDetectionRequest") -> None:
+        redacted = {
+            "tenant": tenant,
+            "timestamp": time.time(),
+            "features": {
+                "feature_1": round(float(payload.feature_1), 6),
+                "feature_2": round(float(payload.feature_2), 6),
+                "feature_3": round(float(payload.feature_3), 6),
+            },
+            "consent": {
+                "gdpr": payload.consent_gdpr,
+                "coppa": payload.coppa,
+                "tcf_hash": _hash_text(payload.consent_tcf),
+                "us_privacy_hash": _hash_text(payload.us_privacy),
+            },
+        }
+        with self._lock:
+            self._entries.append(redacted)
+
+    def snapshot(self) -> List[Dict[str, Any]]:
+        with self._lock:
+            return list(self._entries)
+
+
+def _hash_text(value: Optional[str]) -> Optional[str]:
+    if value is None:
+        return None
+    digest = hashlib.sha256(value.encode("utf-8")).hexdigest()
+    return digest[:12]
+
+
+DEBUG_BUFFER = RedactedRequestBuffer()
 
 
 def _base64url_decode(segment: str) -> bytes:
@@ -198,6 +319,14 @@ def decode_jwt_token(token: str) -> Dict[str, Any]:
     return payload
 
 
+def _require_tenant(request: Request) -> str:
+    tenant = request.headers.get(TENANT_HEADER)
+    if not tenant:
+        raise HTTPException(status_code=400, detail=f"Missing {TENANT_HEADER}")
+    request.state.tenant = tenant
+    return tenant
+
+
 def authorize_request(request: Request) -> AuthContext:
     auth_header = request.headers.get("authorization")
     if not auth_header or not auth_header.startswith("Bearer "):
@@ -217,8 +346,8 @@ def authorize_request(request: Request) -> AuthContext:
     if ALLOWED_ROLES and role not in ALLOWED_ROLES:
         raise HTTPException(status_code=403, detail="Role not permitted")
 
-    tenant_hint = request.headers.get(TENANT_HEADER)
-    if tenant_hint and tenant_hint != publisher_id:
+    tenant_hint = _require_tenant(request)
+    if tenant_hint != publisher_id:
         raise HTTPException(status_code=403, detail="Tenant mismatch")
 
     context = AuthContext(user_id=user_id, publisher_id=publisher_id, email=email, role=role)
@@ -305,18 +434,55 @@ def load_model():
         raise
 
 
+def _encode_bool_flag(flag: Optional[bool]) -> float:
+    if flag is True:
+        return 1.0
+    if flag is False:
+        return 0.0
+    return -1.0
+
+
+def _encode_string_feature(value: Optional[str]) -> float:
+    if not value:
+        return -1.0
+    digest = hashlib.sha256(value.encode("utf-8")).digest()
+    return int.from_bytes(digest[:4], "big") / 0xFFFFFFFF
+
+
 def transform_features(sample: FraudFeatures) -> np.ndarray:
     """Build model-ready feature array and run optional preprocessing."""
-    feature_array = np.array(
-        [
-            [
-                sample.feature_1,
-                sample.feature_2,
-                sample.feature_3,
-            ]
-        ],
-        dtype=np.float32,
-    )
+
+    feature_map = {
+        "feature_1": float(sample.feature_1),
+        "feature_2": float(sample.feature_2),
+        "feature_3": float(sample.feature_3),
+        "consent_gdpr": _encode_bool_flag(None),
+        "consent_tcf": -1.0,
+        "us_privacy": -1.0,
+        "coppa": _encode_bool_flag(None),
+    }
+
+    if isinstance(sample, FraudDetectionRequest):
+        feature_map.update(
+            {
+                "consent_gdpr": _encode_bool_flag(sample.consent_gdpr),
+                "consent_tcf": _encode_string_feature(sample.consent_tcf),
+                "us_privacy": _encode_string_feature(sample.us_privacy),
+                "coppa": _encode_bool_flag(sample.coppa),
+            }
+        )
+
+    ordered_names = state.feature_names or [
+        "feature_1",
+        "feature_2",
+        "feature_3",
+        "consent_gdpr",
+        "consent_tcf",
+        "us_privacy",
+        "coppa",
+    ]
+    row = [feature_map.get(name, 0.0) for name in ordered_names]
+    feature_array = np.array([row], dtype=np.float32)
 
     if state.scaler is not None:
         try:
@@ -325,6 +491,45 @@ def transform_features(sample: FraudFeatures) -> np.ndarray:
             logger.warning("Failed to transform features with scaler", extra={"error": str(exc)})
 
     return feature_array.astype(np.float32, copy=False)
+
+
+def _record_score_metrics(tenant: str, score: float) -> None:
+    FRAUD_SCORE_HISTOGRAM.labels(tenant=tenant, model_version=state.model_version).observe(score)
+    tenant_window = SCORE_WINDOWS[tenant]
+    tenant_window.append(score)
+    GLOBAL_SCORE_WINDOW.append(score)
+    _update_drift_metric(tenant)
+
+
+def _update_drift_metric(tenant: str) -> None:
+    tenant_window = SCORE_WINDOWS.get(tenant)
+    if not tenant_window or len(tenant_window) < 5 or len(GLOBAL_SCORE_WINDOW) < 20:
+        return
+
+    tenant_dist = _distribution_from_window(tenant_window)
+    global_dist = _distribution_from_window(GLOBAL_SCORE_WINDOW)
+    drift = _js_divergence(tenant_dist, global_dist)
+    FRAUD_DRIFT_GAUGE.labels(tenant=tenant).set(float(drift))
+
+
+def _distribution_from_window(values: deque) -> np.ndarray:
+    hist, _ = np.histogram(list(values), bins=10, range=(0.0, 1.0))
+    total = hist.sum()
+    if total == 0:
+        return np.full(10, 0.1)
+    return hist / total
+
+
+def _js_divergence(p: np.ndarray, q: np.ndarray) -> float:
+    m = 0.5 * (p + q)
+
+    def _kl(a: np.ndarray, b: np.ndarray) -> float:
+        mask = (a > 0) & (b > 0)
+        if not np.any(mask):
+            return 0.0
+        return float(np.sum(a[mask] * np.log2(a[mask] / b[mask])))
+
+    return 0.5 * _kl(p, m) + 0.5 * _kl(q, m)
 
 
 @asynccontextmanager
@@ -348,23 +553,26 @@ app = FastAPI(
 async def metrics_middleware(request: Request, call_next):
     """Record RED metrics for all requests."""
     start_time = time.time()
-    
+    tenant = getattr(request.state, "tenant", request.headers.get(TENANT_HEADER, "unknown"))
+
     try:
         response = await call_next(request)
         duration = time.time() - start_time
         
         endpoint = request.url.path
-        REQUEST_COUNT.labels(endpoint=endpoint, status=response.status_code).inc()
-        REQUEST_DURATION.labels(endpoint=endpoint).observe(duration)
+        tenant = getattr(request.state, "tenant", tenant)
+        REQUEST_COUNT.labels(endpoint=endpoint, status=response.status_code, tenant=tenant).inc()
+        REQUEST_DURATION.labels(endpoint=endpoint, tenant=tenant).observe(duration)
         
         return response
     
     except Exception as e:
         duration = time.time() - start_time
         endpoint = request.url.path
+        tenant = getattr(request.state, "tenant", tenant)
         
-        ERROR_COUNT.labels(endpoint=endpoint, error_type=type(e).__name__).inc()
-        REQUEST_DURATION.labels(endpoint=endpoint).observe(duration)
+        ERROR_COUNT.labels(endpoint=endpoint, error_type=type(e).__name__, tenant=tenant).inc()
+        REQUEST_DURATION.labels(endpoint=endpoint, tenant=tenant).observe(duration)
         
         raise
 
@@ -407,22 +615,28 @@ async def metrics():
 
 
 @app.post("/v1/score", response_model=FraudScore, tags=["Inference"])
-async def score_fraud(features: FraudFeatures, auth: AuthContext = Depends(authorize_request)):
+async def score_fraud(
+    payload: FraudDetectionRequest,
+    request: Request,
+    auth: AuthContext = Depends(authorize_request),
+):
     """
     Score fraud probability for given features.
     
     Returns fraud score (0-1) and binary decision based on threshold.
     """
     _ = auth  # enforce dependency evaluation
+    tenant = getattr(request.state, "tenant", _require_tenant(request))
+    DEBUG_BUFFER.record(tenant, payload)
     if state.model is None:
-        ERROR_COUNT.labels(endpoint="/v1/score", error_type="ModelNotLoaded").inc()
+        ERROR_COUNT.labels(endpoint="/v1/score", error_type="ModelNotLoaded", tenant=tenant).inc()
         raise HTTPException(status_code=503, detail="Model not loaded")
     
     start_time = time.time()
     
     try:
         # Prepare input features
-        feature_array = transform_features(features)
+        feature_array = transform_features(payload)
         
         # Run inference
         input_name = state.model.get_inputs()[0].name
@@ -437,23 +651,30 @@ async def score_fraud(features: FraudFeatures, auth: AuthContext = Depends(autho
             fraud_score = float(outputs[0][0])
         
         latency_ms = (time.time() - start_time) * 1000
-        
+        _record_score_metrics(tenant, fraud_score)
+        mode = mode_for(tenant)
+        shadow_decision = fraud_score >= state.threshold
+        is_fraud = shadow_decision and mode == "block"
+
         return FraudScore(
             fraud_score=fraud_score,
-            is_fraud=fraud_score >= state.threshold,
+            is_fraud=is_fraud,
             threshold=state.threshold,
             latency_ms=latency_ms,
+            mode=mode,
+            shadow_decision=shadow_decision,
         )
     
     except Exception as e:
         logger.error(f"Inference error: {e}")
-        ERROR_COUNT.labels(endpoint="/v1/score", error_type=type(e).__name__).inc()
+        ERROR_COUNT.labels(endpoint="/v1/score", error_type=type(e).__name__, tenant=tenant).inc()
         raise HTTPException(status_code=500, detail=f"Inference failed: {str(e)}")
 
 
 @app.post("/v1/score/batch", response_model=List[FraudScore], tags=["Inference"])
 async def score_fraud_batch(
-    features_list: List[FraudFeatures],
+    features_list: List[FraudDetectionRequest],
+    request: Request,
     auth: AuthContext = Depends(authorize_request),
 ):
     """
@@ -461,9 +682,10 @@ async def score_fraud_batch(
     More efficient than individual requests for large batches.
     """
     _ = auth
+    tenant = getattr(request.state, "tenant", _require_tenant(request))
 
     if state.model is None:
-        ERROR_COUNT.labels(endpoint="/v1/score/batch", error_type="ModelNotLoaded").inc()
+        ERROR_COUNT.labels(endpoint="/v1/score/batch", error_type="ModelNotLoaded", tenant=tenant).inc()
         raise HTTPException(status_code=503, detail="Model not loaded")
     
     if len(features_list) > 1000:
@@ -473,6 +695,9 @@ async def score_fraud_batch(
     
     try:
         # Prepare batch input
+        for item in features_list:
+            DEBUG_BUFFER.record(tenant, item)
+
         feature_matrix = np.vstack([transform_features(f) for f in features_list])
         
         # Batch inference
@@ -490,19 +715,29 @@ async def score_fraud_batch(
         total_latency_ms = (time.time() - start_time) * 1000
         per_sample_latency = total_latency_ms / len(features_list)
         
-        return [
+        mode = mode_for(tenant)
+        shadow_flags = [score >= state.threshold for score in fraud_scores]
+
+        results = [
             FraudScore(
                 fraud_score=score,
-                is_fraud=score >= state.threshold,
+                is_fraud=(flag and mode == "block"),
                 threshold=state.threshold,
                 latency_ms=per_sample_latency,
+                mode=mode,
+                shadow_decision=flag,
             )
-            for score in fraud_scores
+            for score, flag in zip(fraud_scores, shadow_flags)
         ]
+
+        for score in fraud_scores:
+            _record_score_metrics(tenant, float(score))
+
+        return results
     
     except Exception as e:
         logger.error(f"Batch inference error: {e}")
-        ERROR_COUNT.labels(endpoint="/v1/score/batch", error_type=type(e).__name__).inc()
+        ERROR_COUNT.labels(endpoint="/v1/score/batch", error_type=type(e).__name__, tenant=tenant).inc()
         raise HTTPException(status_code=500, detail=f"Batch inference failed: {str(e)}")
 
 

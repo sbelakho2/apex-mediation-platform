@@ -51,7 +51,7 @@ export default function ContactPage() {
             <Link
               href={`mailto:${EMAIL}`}
               aria-label={`Email ApexMediation at ${EMAIL}`}
-              className="inline-flex items-center gap-2 no-underline font-medium text-primary-600 hover:underline focus:outline-none focus-visible:ring focus-visible:ring-primary-500/50"
+              className="inline-flex items-center gap-2 no-underline font-medium text-brand-600 hover:underline focus:outline-none focus-visible:ring focus-visible:ring-brand-500/50"
             >
               {EMAIL}
             </Link>

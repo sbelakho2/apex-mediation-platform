@@ -3,8 +3,10 @@
 import base64
 import hashlib
 import hmac
+import importlib
 import json
 import os
+import sys
 import time
 from collections import defaultdict, deque
 from dataclasses import dataclass
@@ -15,10 +17,25 @@ from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 import onnxruntime as ort
 import structlog
+
+
+def _ensure_python_multipart() -> None:
+    try:  # pragma: no cover - best-effort import
+        import python_multipart  # type: ignore  # noqa: F401
+    except ImportError:
+        try:
+            module = importlib.import_module("multipart")
+        except ImportError:
+            return
+        sys.modules.setdefault("python_multipart", module)
+
+
+_ensure_python_multipart()
+
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import PlainTextResponse
 from prometheus_client import CONTENT_TYPE_LATEST, Counter, Gauge, Histogram, generate_latest
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 logger = structlog.get_logger()
 
@@ -92,6 +109,8 @@ class AuctionReplayRequest(BaseModel):
 
 
 class InferenceResponse(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
+
     model_name: str
     model_version: str
     prediction: Any
@@ -101,6 +120,8 @@ class InferenceResponse(BaseModel):
 
 
 class HealthResponse(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
+
     status: str
     models_loaded: int
     models_required_ready: bool

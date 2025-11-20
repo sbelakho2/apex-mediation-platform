@@ -30,6 +30,7 @@ type FeatureFlags = Partial<{
   apps: boolean;
   placements: boolean;
   observability: boolean;
+  transparency: boolean;
   settings: boolean;
 }>;
 
@@ -44,6 +45,9 @@ const NAV_BLUEPRINT: NavItem[] = [
   { name: 'Fraud Detection', href: '/dashboard/fraud', icon: ShieldCheckIcon, flag: 'fraud' },
   { name: 'Apps', href: '/dashboard/apps', icon: DevicePhoneMobileIcon, flag: 'apps' },
   { name: 'Placements', href: '/dashboard/placements', icon: MapPinIcon, flag: 'placements' },
+  // Transparency
+  { name: 'Receipts', href: '/dashboard/transparency/receipts', icon: ShieldCheckIcon, flag: 'transparency' },
+  { name: 'Config Rollouts', href: '/dashboard/transparency/config-rollouts', icon: Cog6ToothIcon, flag: 'transparency' },
   // Observability
   { name: 'Observability Overview', href: '/dashboard/observability/overview', icon: ChartBarIcon, flag: 'observability' },
   { name: 'Adapter Metrics', href: '/dashboard/observability/metrics', icon: ChartBarIcon, flag: 'observability' },
@@ -72,12 +76,12 @@ export default function DashboardSidebar({ mobileOpen = false, onClose }: Dashbo
         setFeatures(res.data);
       } else {
         // Default-safe: show common pages except experimental AB tests
-        setFeatures({ revenue: true, analytics: true, networks: true, fraud: true, apps: true, placements: true, observability: true, settings: true, abTests: false });
+        setFeatures({ revenue: true, analytics: true, networks: true, fraud: true, apps: true, placements: true, transparency: true, observability: true, settings: true, abTests: false });
       }
       setLoadingFlags(false);
     })().catch(() => {
       if (!alive) return;
-      setFeatures({ revenue: true, analytics: true, networks: true, fraud: true, apps: true, placements: true, observability: true, settings: true, abTests: false });
+      setFeatures({ revenue: true, analytics: true, networks: true, fraud: true, apps: true, placements: true, transparency: true, observability: true, settings: true, abTests: false });
       setLoadingFlags(false);
     });
     return () => {
@@ -140,26 +144,26 @@ export default function DashboardSidebar({ mobileOpen = false, onClose }: Dashbo
   return (
     <>
       {/* Desktop sidebar */}
-      <div className="hidden lg:fixed lg:inset-y-0 lg:flex lg:w-64 lg:flex-col">
-        <div className="flex flex-grow flex-col overflow-y-auto bg-primary-blue pt-5 pb-4">
+      <div className="hidden lg:fixed lg:inset-y-0 lg:flex lg:w-[280px] lg:flex-col">
+        <div className="flex flex-grow flex-col overflow-y-auto bg-white pt-5 pb-4 border-r" style={{borderColor: 'var(--gray-200)'}}>
           <div className="flex flex-shrink-0 items-center px-4">
-            <h1 className="text-2xl font-bold uppercase tracking-tight text-sunshine-yellow">ApexMediation</h1>
+            <h1 className="text-xl font-semibold tracking-tight text-gray-900">ApexMediation</h1>
           </div>
-          <nav className="mt-5 flex flex-1 flex-col divide-y divide-sunshine-yellow/20 overflow-y-auto" aria-label="Sidebar">
-            <div className="space-y-1 px-2">
+          <nav className="mt-4 flex flex-1 flex-col overflow-y-auto" aria-label="Sidebar">
+            <div className="space-y-1 px-3">
               {navigation.map((item) => {
                 const isActive = pathname === item.href;
                 return (
                   <Link
                     key={item.name}
                     href={item.href}
-                    className={`group flex items-center rounded-md px-2 py-2 text-sm font-medium leading-6 ${
+                    className={`group flex items-center gap-3 rounded-[999px] px-3 py-2 text-sm font-medium leading-6 transition-colors ${
                       isActive
-                        ? 'bg-sunshine-yellow text-primary-blue font-bold'
-                        : 'text-white hover:bg-primary-blue/50 hover:text-sunshine-yellow'
+                        ? 'bg-brand-50 text-brand-700 border border-brand-500'
+                        : 'text-gray-700 hover:bg-brand-50 hover:text-brand-700'
                     }`}
                   >
-                    <item.icon className="mr-4 h-6 w-6 flex-shrink-0" aria-hidden="true" />
+                    <item.icon className={`h-5 w-5 flex-shrink-0 ${isActive ? 'text-brand-600' : 'text-gray-400 group-hover:text-brand-600'}`} aria-hidden="true" />
                     {item.name}
                   </Link>
                 );
@@ -175,17 +179,17 @@ export default function DashboardSidebar({ mobileOpen = false, onClose }: Dashbo
           <div className="fixed inset-0 z-40 bg-black/50" onClick={onClose} aria-hidden="true" />
           <div
             ref={panelRef}
-            className="fixed inset-y-0 right-0 z-50 flex w-72 flex-col bg-primary-blue pt-5 pb-6 shadow-2xl"
+            className="fixed inset-y-0 right-0 z-50 flex w-72 flex-col bg-white pt-5 pb-6 shadow-2xl"
           >
             <div className="flex items-center justify-between px-4">
-              <h2 id="mobile-sidebar-title" className="text-lg font-bold uppercase tracking-widest text-sunshine-yellow">
+              <h2 id="mobile-sidebar-title" className="text-lg font-semibold tracking-tight text-gray-900">
                 Navigate
               </h2>
               <button
                 type="button"
                 onClick={onClose}
                 ref={firstFocusRef}
-                className="rounded-full border border-sunshine-yellow/60 bg-primary-blue/80 px-3 py-1 text-sunshine-yellow transition hover:bg-primary-blue focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sunshine-yellow"
+                className="rounded-full border px-3 py-1 text-gray-700 transition hover:bg-gray-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
               >
                 Close
               </button>
@@ -199,11 +203,11 @@ export default function DashboardSidebar({ mobileOpen = false, onClose }: Dashbo
                       key={item.name}
                       href={item.href}
                       onClick={handleNavigate}
-                      className={`flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-semibold uppercase tracking-wide transition ${
-                        isActive ? 'bg-sunshine-yellow text-primary-blue' : 'text-sunshine-yellow hover:bg-primary-blue/60 hover:text-white'
+                      className={`flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium transition ${
+                        isActive ? 'bg-brand-50 text-brand-700 border border-brand-500' : 'text-gray-700 hover:bg-gray-50'
                       }`}
                     >
-                      <item.icon className="h-5 w-5" aria-hidden="true" />
+                      <item.icon className={`h-5 w-5 ${isActive ? 'text-brand-600' : 'text-gray-400'}`} aria-hidden="true" />
                       {item.name}
                     </Link>
                   );

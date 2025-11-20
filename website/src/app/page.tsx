@@ -5,7 +5,6 @@ import Footer from '@/components/Footer';
 import HomeNav from '@/components/HomeNav';
 import NewsletterPanel from '@/components/NewsletterPanel';
 import NotificationBar from '@/components/NotificationBar';
-import ScallopedDivider from '@/components/ScallopedDivider';
 import SectionHeading from '@/components/SectionHeading';
 import Section from '@/components/ui/Section';
 import Container from '@/components/ui/Container';
@@ -16,16 +15,16 @@ export default function HomePage() {
       <NotificationBar />
 
       <main
-        className="relative isolate overflow-hidden bg-primary-blue text-white"
+        className="relative isolate overflow-hidden bg-white text-gray-900"
         role="main"
         aria-labelledby="hero-heading"
       >
         <div
-          className="pointer-events-none absolute -left-40 top-24 hidden h-[520px] w-[520px] rounded-full bg-sunshine-yellow/25 blur-3xl md:block"
+          className="pointer-events-none absolute -left-40 top-24 hidden h-[520px] w-[520px] rounded-full bg-brand-50 blur-3xl md:block"
           aria-hidden="true"
         />
         <div
-          className="pointer-events-none absolute right-[-140px] top-[-160px] hidden h-[500px] w-[500px] rounded-full bg-sunshine-yellow/15 blur-3xl lg:block"
+          className="pointer-events-none absolute right-[-140px] top-[-160px] hidden h-[500px] w-[500px] rounded-full bg-brand-100 blur-3xl lg:block"
           aria-hidden="true"
         />
 
@@ -36,7 +35,7 @@ export default function HomePage() {
         <HeroSection />
       </main>
 
-      <ScallopedDivider color="white" position="top" />
+      {/* Decorative divider removed per new visual spec */}
 
       <Section>
         <Container className="space-y-6">
@@ -50,7 +49,7 @@ export default function HomePage() {
         </Container>
       </Section>
 
-      <ScallopedDivider color="white" position="bottom" />
+      {/* Decorative divider removed per new visual spec */}
 
       <Section>
         <Container className="space-y-6">
@@ -58,7 +57,7 @@ export default function HomePage() {
         </Container>
       </Section>
 
-      <ScallopedDivider color="cream" position="top" />
+      {/* Decorative divider removed per new visual spec */}
 
       <Section>
         <Container className="space-y-6">
@@ -92,25 +91,22 @@ function HeroSection() {
     >
       <div className="container flex flex-col items-center gap-12 text-center">
         <div className="flex flex-col items-center gap-4">
-          <span className="section-eyebrow text-white/80">Calm systems for monetization teams</span>
-          <h1
-            id="hero-heading"
-            className="text-hero-sm text-sunshine-yellow drop-shadow-lg md:text-hero-md lg:text-hero"
-          >
+          <span className="section-eyebrow text-gray-600">Calm systems for monetization teams</span>
+          <h1 id="hero-heading" className="text-hero-sm md:text-hero-md lg:text-hero">
             ApexMediation is your control center for ad revenue
           </h1>
-          <p className="max-w-3xl text-body-large text-white/90">
+          <p className="max-w-3xl text-body-large text-gray-600">
             Transparent mediation, ML-powered fraud detection, and delightful dashboards—crafted with editorial-grade clarity for modern ad ops teams.
           </p>
         </div>
 
         <div className="flex flex-col items-center gap-3 sm:flex-row sm:gap-4">
-          <a href="/signup" className="btn-primary-yellow text-base sm:text-lg">
+          <a href="/signup" className="btn-primary text-base sm:text-lg">
             Launch your console →
           </a>
           <a
             href="/documentation"
-            className="inline-flex items-center justify-center rounded-full border border-white/60 bg-white/5 px-8 py-3 text-xs font-bold uppercase tracking-[0.28em] text-white transition-transform duration-200 hover:-translate-y-0.5 hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white sm:text-sm"
+            className="btn-secondary text-xs sm:text-sm"
           >
             Explore documentation
           </a>

@@ -1,3 +1,31 @@
+Changelog — BYO Tenant Enforcement Wave (2025-11-20)
+
+Summary
+- Restores the Unity BYO onboarding flow with a production-ready quickstart, SDK README cross-links, and index updates so publishers can self-serve the new Config-as-Code bootstrap.
+- Hardens `services/inference-ml` for BYO-only mode: tenant header enforcement, role/audience validation, transparency receipts, auction replay endpoint, and per-tenant metrics with deterministic tests.
+- Ships the `services/fraud-inference` shadow-mode experience: consent passthrough, tenant-scoped decisions, drift monitoring, redaction buffer, and override-driven promotion controls.
+
+What changed (highlights)
+- Unity docs refresh
+  - Added `docs/Customer-Facing/SDKs/UNITY_QUICKSTART.md` covering install, consent, lifecycle, debugging, and platform-specific nuances.
+  - Updated `sdk/core/unity/README.md` and `docs/Customer-Facing/SDKs/INDEX.md` to point to the new quickstart and highlight the Config-as-Code workflow.
+
+- Inference service safeguards
+  - `services/inference-ml/main.py` now requires `X-Publisher-Id` headers, validates JWT audience/roles, tags Prometheus metrics with tenant labels, and blocks model loads outside the BYO allowlist.
+  - Added transparency receipt helpers, HMAC signing via `TRANSPARENCY_SECRET`, adapter snapshot schemas, and `/v1/replay/auction` for deterministic adjudication.
+  - Responses include receipts, tenant-aware metrics, and tests in `services/inference-ml/tests/test_auth_ml.py` cover missing headers, replay determinism, and receipt verification.
+
+- Fraud shadow-mode rollout
+  - `services/fraud-inference/main.py` enforces tenant headers, enriches requests with consent flags, hashes consent strings for logging, and routes encoded flags through the model pipeline.
+  - Added `FRAUD_MODE` + per-tenant overrides, shadow vs. block decisions, tenant RED metrics, score histograms, and Jensen–Shannon drift gauges to feed console dashboards.
+  - Introduced `RedactedRequestBuffer`, consent hashing utilities, and test coverage in `services/fraud-inference/tests/test_auth_fraud.py` for tenant validation, shadow/block semantics, redaction, and observability.
+
+Validation and QA
+- Inference service: `source .venv/bin/activate && pytest services/inference-ml/tests/test_auth_ml.py`
+- Fraud service: `source .venv/bin/activate && pytest services/fraud-inference/tests/test_auth_fraud.py`
+
+---
+
 Changelog — Unity SDK Config-as-Code + Footprint Gate (2025-11-20)
 
 Summary
