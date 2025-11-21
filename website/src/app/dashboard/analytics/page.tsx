@@ -119,7 +119,7 @@ export default function AnalyticsPage() {
       <Container className="space-y-6">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-h2-sm font-bold uppercase text-primary-blue tracking-tight">Analytics Dashboard</h1>
+            <h1 className="text-h2-sm md:text-h2-md lg:text-h2 font-semibold text-gray-900">Analytics Dashboard</h1>
             <p className="text-sm text-gray-600 mt-1">Comprehensive insights into your ad performance and user engagement</p>
           </div>
           <div className="flex gap-2">
@@ -127,8 +127,8 @@ export default function AnalyticsPage() {
               <button
                 key={range}
                 onClick={() => setTimeRange(range)}
-                className={`px-4 py-2 text-sm font-bold uppercase rounded ${
-                  timeRange === range ? 'bg-sunshine-yellow text-primary-blue' : 'bg-white text-gray-600 border border-gray-300 hover:border-primary-blue'
+                className={`px-4 py-2 text-sm font-semibold rounded border transition-colors ${
+                  timeRange === range ? 'bg-brand-50 text-brand-700 border-brand-500' : 'bg-white text-gray-700 border-gray-300 hover:border-brand-500'
                 }`}
                 aria-pressed={timeRange === range}
               >
@@ -147,20 +147,20 @@ export default function AnalyticsPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {loading
             ? [...Array(6)].map((_, i) => (
-                <div key={i} className="card p-6 animate-pulse" aria-hidden="true">
+                <div key={i} className="card-v2 p-6 animate-pulse" aria-hidden="true">
                   <div className="h-4 w-24 bg-gray-200 rounded mb-3" />
                   <div className="h-7 w-28 bg-gray-200 rounded mb-2" />
                   <div className="h-3 w-20 bg-gray-200 rounded" />
                 </div>
               ))
             : metricCards.map((card) => (
-                <div key={card.title} className="card p-6">
+                <div key={card.title} className="card-v2 p-6">
                   <div className="flex items-start justify-between">
                     <div>
                       <p className="text-sm text-gray-600 font-medium uppercase">{card.title}</p>
-                      <p className="text-2xl font-bold text-primary-blue mt-1">{card.value}</p>
+                      <p className="text-2xl font-semibold text-gray-900 mt-1">{card.value}</p>
                     </div>
-                    <div className="bg-sunshine-yellow/20 text-primary-blue p-3 rounded">
+                    <div className="bg-brand-50 text-brand-700 p-3 rounded">
                       <card.icon className="w-6 h-6" />
                     </div>
                   </div>
@@ -168,15 +168,15 @@ export default function AnalyticsPage() {
               ))}
         </div>
 
-        <div className="card p-6">
+        <div className="card-v2 p-6">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h2 className="text-primary-blue font-bold uppercase text-lg">Revenue Performance</h2>
-              <p className="text-sm text-gray-500">Last {timeRange === 'today' ? '24h' : timeRange}</p>
+              <h2 className="text-gray-900 font-semibold text-lg">Revenue Performance</h2>
+              <p className="text-sm text-gray-600">Last {timeRange === 'today' ? '24h' : timeRange}</p>
             </div>
             <div className="text-right">
               <p className="text-xs text-gray-500">Total Revenue</p>
-              <p className="text-2xl font-bold text-primary-blue">{currencyFmt.format(Math.max(0, totals.revenue))}</p>
+              <p className="text-2xl font-semibold text-gray-900">{currencyFmt.format(Math.max(0, totals.revenue))}</p>
             </div>
           </div>
           {loading ? (
@@ -188,8 +188,8 @@ export default function AnalyticsPage() {
           )}
         </div>
 
-        <div className="card p-6">
-          <h2 className="text-primary-blue font-bold uppercase text-lg mb-4 border-b-2 border-sunshine-yellow pb-2">Adapter Performance</h2>
+        <div className="card-v2 p-6">
+          <h2 className="text-gray-900 font-semibold text-lg mb-4 border-b pb-2" style={{borderColor:'var(--gray-200)'}}>Adapter Performance</h2>
           {loading ? (
             <div className="space-y-3" aria-busy="true">
               {[...Array(4)].map((_, i) => (
@@ -214,7 +214,7 @@ export default function AnalyticsPage() {
                 <tbody>
                   {performance.map((row) => (
                     <tr key={row.adapter} className="border-b last:border-0">
-                      <td className="py-3 font-semibold text-primary-blue">{row.adapter}</td>
+                      <td className="py-3 font-semibold text-gray-900">{row.adapter}</td>
                       <td className="py-3">{row.requests.toLocaleString()}</td>
                       <td className="py-3">{row.impressions.toLocaleString()}</td>
                       <td className="py-3">{row.clicks.toLocaleString()}</td>

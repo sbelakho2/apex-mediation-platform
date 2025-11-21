@@ -155,7 +155,7 @@ class MediationSDK private constructor(
     // Consent preferences propagated to auction metadata (GDPR/USP/COPPA/LAT)
     @Volatile private var consentState: ConsentManager.State = ConsentManager.State()
     @Volatile private var auctionClient: AuctionClient? = null
-    @Volatile private var auctionApiKey: String = ""
+    @Volatile private var auctionApiKey: String = config.auctionApiKey.orEmpty()
     @Volatile private var testModeOverride: Boolean? = null
     @Volatile private var testDeviceId: String? = null
     @Volatile private var adapterConfigProvider: AdapterConfigProvider? = null
@@ -1112,6 +1112,7 @@ data class SDKConfig @JvmOverloads constructor(
     val telemetryEnabled: Boolean = true,
     val configEndpoint: String = "https://config.rivalapexmediation.com",
     val auctionEndpoint: String = "https://auction.rivalapexmediation.com",
+    val auctionApiKey: String? = null,
     // Debug-only: if true, enable StrictMode penaltyDeath. Default false to avoid crashing host apps.
     val strictModePenaltyDeath: Boolean = false,
     // Optional: Base64-encoded Ed25519 public key for config signature verification (non-test builds)
@@ -1139,6 +1140,7 @@ data class SDKConfig @JvmOverloads constructor(
         private var telemetryEnabled: Boolean = true
         private var configEndpoint: String = "https://config.rivalapexmediation.com"
         private var auctionEndpoint: String = "https://auction.rivalapexmediation.com"
+        private var auctionApiKey: String? = null
         private var strictModePenaltyDeath: Boolean = false
         private var configPublicKeyBase64: String? = null
         private var circuitBreakerFailureThreshold: Int = 5
@@ -1158,6 +1160,7 @@ data class SDKConfig @JvmOverloads constructor(
         fun telemetryEnabled(enabled: Boolean) = apply { this.telemetryEnabled = enabled }
         fun configEndpoint(url: String) = apply { this.configEndpoint = url }
         fun auctionEndpoint(url: String) = apply { this.auctionEndpoint = url }
+        fun auctionApiKey(key: String?) = apply { this.auctionApiKey = key }
         fun strictModePenaltyDeath(enabled: Boolean) = apply { this.strictModePenaltyDeath = enabled }
         fun configPublicKeyBase64(b64: String?) = apply { this.configPublicKeyBase64 = b64 }
         fun circuitBreakerThreshold(threshold: Int) = apply { this.circuitBreakerFailureThreshold = threshold }
@@ -1179,6 +1182,7 @@ data class SDKConfig @JvmOverloads constructor(
             telemetryEnabled = telemetryEnabled,
             configEndpoint = configEndpoint,
             auctionEndpoint = auctionEndpoint,
+            auctionApiKey = auctionApiKey,
             strictModePenaltyDeath = strictModePenaltyDeath,
             configPublicKeyBase64 = configPublicKeyBase64,
             circuitBreakerFailureThreshold = circuitBreakerFailureThreshold,

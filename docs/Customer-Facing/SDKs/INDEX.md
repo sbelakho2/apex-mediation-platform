@@ -5,7 +5,7 @@ Welcome to the SDKs index. Choose your platform to get started quickly. Each gui
 Platforms
 - Android SDK Quickstart
   - Path: docs/Customer-Facing/SDKs/ANDROID_QUICKSTART.md
-  - Highlights: one dependency, initialize(), simple load/show APIs, test mode, consent, OTA‑safe config, Debug Panel, troubleshooting.
+  - Highlights: BYO-first initialize/load/show APIs, runtime adapter bridge, optional S2S via `BelAds.setAuctionApiKey`, consent helpers, OTA-safe config, Debug Panel, troubleshooting.
 - iOS SDK Quickstart
   - Path: docs/Customer-Facing/SDKs/IOS_QUICKSTART.md
   - Highlights: Swift Package, initialize(), load/show, normalized taxonomy, consent propagation, in‑app Debug Panel, troubleshooting.

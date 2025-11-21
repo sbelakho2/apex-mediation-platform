@@ -1,10 +1,11 @@
 "use client";
+export const dynamic = 'force-dynamic';
 
 // Reference: Design.md § "Dashboard Pages" & WEBSITE_DESIGN.md § "Placements Page"
 // Ad placements management with performance heatmap and format configuration
 
 import { CheckCircleIcon, PlusCircleIcon, XCircleIcon } from '@heroicons/react/24/outline';
-import { useEffect, useMemo, useState } from 'react';
+import { Suspense, useEffect, useMemo, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { api } from '@/lib/api';
 import Section from '@/components/ui/Section';
@@ -26,7 +27,7 @@ interface Placement {
   config?: any;
 }
 
-export default function PlacementsPage() {
+function PlacementsPageInner() {
   const router = useRouter();
   const search = useSearchParams();
   const pathname = usePathname();
@@ -350,40 +351,40 @@ export default function PlacementsPage() {
       </div>
 
       {/* Best Practices */}
-      <div className="card-blue p-6">
-        <h2 className="text-sunshine-yellow font-bold uppercase text-lg mb-4">
+      <div className="card-v2 p-6">
+        <h2 className="text-gray-900 font-semibold text-lg mb-4">
           Placement Best Practices
         </h2>
-        <div className="grid md:grid-cols-2 gap-6 text-white text-sm">
+        <div className="grid md:grid-cols-2 gap-6 text-sm text-gray-700">
           <div className="space-y-3">
             <div className="flex items-start gap-2">
-              <span className="text-sunshine-yellow">✓</span>
+              <span className="text-brand-600">✓</span>
               <div>
-                <p className="font-bold mb-1">Banner Ads</p>
-                <p className="text-white/80">Place at top or bottom of screen. Avoid covering content. Refresh every 30-60 seconds.</p>
+                <p className="font-semibold mb-1 text-gray-900">Banner Ads</p>
+                <p className="text-gray-700">Place at top or bottom of screen. Avoid covering content. Refresh every 30-60 seconds.</p>
               </div>
             </div>
             <div className="flex items-start gap-2">
-              <span className="text-sunshine-yellow">✓</span>
+              <span className="text-brand-600">✓</span>
               <div>
-                <p className="font-bold mb-1">Interstitial Ads</p>
-                <p className="text-white/80">Show at natural break points (level complete, menu transitions). Limit frequency to once per 2-3 minutes.</p>
+                <p className="font-semibold mb-1 text-gray-900">Interstitial Ads</p>
+                <p className="text-gray-700">Show at natural break points (level complete, menu transitions). Limit frequency to once per 2-3 minutes.</p>
               </div>
             </div>
           </div>
           <div className="space-y-3">
             <div className="flex items-start gap-2">
-              <span className="text-sunshine-yellow">✓</span>
+              <span className="text-brand-600">✓</span>
               <div>
-                <p className="font-bold mb-1">Rewarded Video</p>
-                <p className="text-white/80">Offer clear value (extra lives, hints, coins). Always optional. Show reward before video starts.</p>
+                <p className="font-semibold mb-1 text-gray-900">Rewarded Video</p>
+                <p className="text-gray-700">Offer clear value (extra lives, hints, coins). Always optional. Show reward before video starts.</p>
               </div>
             </div>
             <div className="flex items-start gap-2">
-              <span className="text-sunshine-yellow">✓</span>
+              <span className="text-brand-600">✓</span>
               <div>
-                <p className="font-bold mb-1">Native Ads</p>
-                <p className="text-white/80">Match your app's design. Clearly label as "Sponsored". Use in content feeds or articles.</p>
+                <p className="font-semibold mb-1 text-gray-900">Native Ads</p>
+                <p className="text-gray-700">Match your app's design. Clearly label as "Sponsored". Use in content feeds or articles.</p>
               </div>
             </div>
           </div>
@@ -423,6 +424,14 @@ export default function PlacementsPage() {
       />
       </Container>
     </Section>
+  );
+}
+
+export default function PlacementsPage() {
+  return (
+    <Suspense fallback={<div className="container py-10"><div className="space-y-3 minh-table" aria-hidden="true">{[...Array(5)].map((_, i) => (<div key={i} className="h-20 bg-gray-100 animate-pulse rounded" />))}</div></div>}>
+      <PlacementsPageInner />
+    </Suspense>
   );
 }
 
@@ -654,8 +663,8 @@ function PlacementModal({
                 <div className="flex items-center justify-between">
                   <div className="text-sm text-gray-600">Status: <span className="font-semibold text-gray-900">{state.placement.status}</span></div>
                   <div className="flex items-center gap-2">
-                    <a href={`/dashboard/placements/${state.placement.id}`} className="btn-primary-yellow px-4 py-2 text-sm">View full report</a>
-                    <button onClick={() => onArchive(state.placement.id)} className="px-4 py-2 text-sm border rounded text-red-700 border-red-300 hover:bg-red-50">Archive</button>
+                    <a href={`/dashboard/placements/${state.placement.id}`} className="btn-primary px-4 py-2 text-sm">View full report</a>
+                    <button onClick={() => onArchive(state.placement.id)} className="px-4 py-2 text-sm rounded text-white bg-[var(--danger)] hover:bg-[#b91c1c]">Archive</button>
                   </div>
                 </div>
               </div>
@@ -667,7 +676,7 @@ function PlacementModal({
                 <div className="grid md:grid-cols-2 gap-4">
                   <Field label="Geos (ISO-CC)">
                     <input
-                      className="w-full border rounded px-3 py-2"
+                      className="input-v2 w-full"
                       placeholder="e.g., US, CA, GB"
                       value={geos}
                       onChange={(e) => setGeos(e.target.value)}
@@ -678,7 +687,7 @@ function PlacementModal({
                   </Field>
                   <Field label="Platforms">
                     <select
-                      className="w-full border rounded px-3 py-2"
+                      className="input-v2 w-full"
                       value={platforms}
                       onChange={(e) => setPlatforms(e.target.value)}
                     >
@@ -691,7 +700,7 @@ function PlacementModal({
                     <input
                       type="number"
                       min={0}
-                      className="w-full border rounded px-3 py-2"
+                      className="input-v2 w-full"
                       placeholder="e.g., 3 per day"
                       value={frequencyCap}
                       onChange={(e) => setFrequencyCap(e.target.value === '' ? '' : Number(e.target.value))}
@@ -705,7 +714,7 @@ function PlacementModal({
                       type="number"
                       min={0}
                       step="0.01"
-                      className="w-full border rounded px-3 py-2"
+                      className="input-v2 w-full"
                       placeholder="e.g., 0.50"
                       value={floorPriceUsd}
                       onChange={(e) => setFloorPriceUsd(e.target.value === '' ? '' : Number(e.target.value))}
@@ -737,7 +746,7 @@ function PlacementModal({
                       };
                       onSaveConfig(state.placement.id, payload);
                     }}
-                    className="btn-primary-yellow px-6 py-2 text-sm disabled:opacity-50"
+                    className="btn-primary px-6 py-2 text-sm disabled:opacity-50"
                     disabled={Boolean(fieldErrors.geos || fieldErrors.frequencyCap || fieldErrors.floorPriceUsd)}
                   >
                     Save
@@ -752,7 +761,7 @@ function PlacementModal({
                 <div className="grid md:grid-cols-2 gap-4">
                   <Field label="iOS unit ID">
                     <input
-                      className="w-full border rounded px-3 py-2 font-mono"
+                      className="input-v2 w-full font-mono"
                       placeholder="com.app.ios.banner.home"
                       value={unitIdIos}
                       onChange={(e) => setUnitIdIos(e.target.value)}
@@ -760,7 +769,7 @@ function PlacementModal({
                   </Field>
                   <Field label="Android unit ID">
                     <input
-                      className="w-full border rounded px-3 py-2 font-mono"
+                      className="input-v2 w-full font-mono"
                       placeholder="com.app.android.banner.home"
                       value={unitIdAndroid}
                       onChange={(e) => setUnitIdAndroid(e.target.value)}
@@ -780,7 +789,7 @@ function PlacementModal({
                       };
                       onSaveConfig(state.placement.id, payload);
                     }}
-                    className="btn-primary-yellow px-6 py-2 text-sm"
+                    className="btn-primary px-6 py-2 text-sm"
                   >
                     Save
                   </button>
@@ -804,7 +813,7 @@ function TabButton({ label, active, onClick }: { label: string; active: boolean;
       type="button"
       onClick={onClick}
       aria-pressed={active}
-      className={`px-4 py-2 text-sm font-semibold border-b-4 ${active ? 'border-sunshine-yellow text-primary-blue' : 'border-transparent text-gray-600 hover:text-primary-blue'}`}
+      className={`px-4 py-2 text-sm font-semibold border-b-4 ${active ? 'border-brand-500 text-brand-700' : 'border-transparent text-gray-600 hover:text-brand-700'}`}
     >
       {label}
     </button>

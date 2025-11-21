@@ -159,7 +159,7 @@ export default function AppsPage() {
       {/* Page Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-h2-sm font-bold uppercase text-primary-blue tracking-tight">
+          <h1 className="text-h2-sm md:text-h2-md lg:text-h2 font-semibold text-gray-900">
             Apps Management
           </h1>
           <p className="text-sm text-gray-600 mt-1">
@@ -167,7 +167,7 @@ export default function AppsPage() {
           </p>
         </div>
         <button
-          className="btn-primary-yellow px-6 py-3 flex items-center gap-2"
+          className="btn-primary px-6 py-3 flex items-center gap-2"
           onClick={() => openModal('add')}
         >
           <PlusCircleIcon className="w-5 h-5" />
@@ -177,33 +177,33 @@ export default function AppsPage() {
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <div className="card-blue p-6">
-          <p className="text-sunshine-yellow font-bold uppercase text-sm mb-2">
+        <div className="card-v2 p-6">
+          <p className="text-xs font-semibold uppercase tracking-wide text-brand-600 mb-2">
             Active Apps
           </p>
-          <p className="text-white text-4xl font-bold">{activeApps}</p>
-          <p className="text-white text-sm mt-1">of {apps.length} total</p>
+          <p className="text-3xl font-semibold text-gray-900">{activeApps}</p>
+          <p className="text-sm text-gray-600 mt-1">of {apps.length} total</p>
         </div>
-        <div className="card-blue p-6">
-          <p className="text-sunshine-yellow font-bold uppercase text-sm mb-2">
+        <div className="card-v2 p-6">
+          <p className="text-xs font-semibold uppercase tracking-wide text-brand-600 mb-2">
             Daily Revenue
           </p>
-          <p className="text-white text-4xl font-bold">${totalRevenue.toLocaleString()}</p>
-          <p className="text-white text-sm mt-1">across all apps</p>
+          <p className="text-3xl font-semibold text-gray-900">${totalRevenue.toLocaleString()}</p>
+          <p className="text-sm text-gray-600 mt-1">across all apps</p>
         </div>
-        <div className="card-blue p-6">
-          <p className="text-sunshine-yellow font-bold uppercase text-sm mb-2">
+        <div className="card-v2 p-6">
+          <p className="text-xs font-semibold uppercase tracking-wide text-brand-600 mb-2">
             Daily Impressions
           </p>
-          <p className="text-white text-4xl font-bold">{totalImpressions.toLocaleString()}</p>
-          <p className="text-white text-sm mt-1">today</p>
+          <p className="text-3xl font-semibold text-gray-900">{totalImpressions.toLocaleString()}</p>
+          <p className="text-sm text-gray-600 mt-1">today</p>
         </div>
-        <div className="card-blue p-6">
-          <p className="text-sunshine-yellow font-bold uppercase text-sm mb-2">
+        <div className="card-v2 p-6">
+          <p className="text-xs font-semibold uppercase tracking-wide text-brand-600 mb-2">
             Total Users
           </p>
-          <p className="text-white text-4xl font-bold">{totalUsers.toLocaleString()}</p>
-          <p className="text-white text-sm mt-1">daily active</p>
+          <p className="text-3xl font-semibold text-gray-900">{totalUsers.toLocaleString()}</p>
+          <p className="text-sm text-gray-600 mt-1">daily active</p>
         </div>
       </div>
 
@@ -225,7 +225,7 @@ export default function AppsPage() {
       </div>
 
       {/* SDK Integration Guide */}
-      <div className="card p-6">
+      <div className="card-v2 p-6">
         <h2 className="text-primary-blue font-bold uppercase text-lg mb-4 border-b-2 border-sunshine-yellow pb-2">
           SDK Integration Guide
         </h2>
@@ -312,7 +312,7 @@ export default function AppsPage() {
           </div>
           <a
             href="/changelog"
-            className="btn-primary-yellow px-6 py-2 text-sm whitespace-nowrap"
+            className="btn-primary px-6 py-2 text-sm whitespace-nowrap"
           >
             View Changelog
           </a>
@@ -340,7 +340,7 @@ function AppCard({ app, onConfigure, onViewStats, onResume, onFixIntegration }: 
       color: 'text-green-500',
       bg: 'bg-green-50 text-green-800 border-green-300',
       label: 'Active',
-      border: 'border-sunshine-yellow',
+      border: 'border-gray-200',
     },
     paused: {
       icon: ExclamationTriangleIcon,
@@ -369,13 +369,13 @@ function AppCard({ app, onConfigure, onViewStats, onResume, onFixIntegration }: 
   const StatusIcon = config.icon;
 
   return (
-    <div className={`card p-6 border-2 ${config.border}`}>
+    <div className={`card-v2 p-6 border ${config.border}`}>
       {/* Header */}
       <div className="flex items-start justify-between mb-4">
         <div className="flex items-start gap-3 flex-1">
           <span className="text-3xl">{platformIcons[app.platform]}</span>
           <div className="flex-1">
-            <h3 className="text-xl font-bold text-primary-blue mb-1">{app.name}</h3>
+            <h3 className="text-lg md:text-xl font-semibold text-gray-900 mb-1">{app.name}</h3>
             <div className="flex items-center gap-3 text-sm text-gray-600">
               <span>{app.platform}</span>
               <span>•</span>
@@ -571,11 +571,11 @@ function AppModal({ state, onClose }: { state: ModalState; onClose: () => void }
             Close
           </button>
           {state.type === 'add' ? (
-            <a href="/documentation#integration-checklist" className="btn-primary-yellow px-6 py-3 text-sm">
+            <a href="/documentation#integration-checklist" className="btn-primary px-6 py-3 text-sm">
               Start Integration
             </a>
           ) : (
-            <a href={`/dashboard/apps/${state.app.id}`} className="btn-primary-yellow px-6 py-3 text-sm">
+            <a href={`/dashboard/apps/${state.app.id}`} className="btn-primary px-6 py-3 text-sm">
               Open details
             </a>
           )}

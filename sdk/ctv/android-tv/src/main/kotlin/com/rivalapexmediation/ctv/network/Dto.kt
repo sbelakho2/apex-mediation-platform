@@ -29,6 +29,16 @@ data class AuctionWin(
 data class TrackingUrls(
     val impression: String,
     val click: String,
+    val start: String? = null,
+    val firstQuartile: String? = null,
+    val midpoint: String? = null,
+    val thirdQuartile: String? = null,
+    val complete: String? = null,
+    val pause: String? = null,
+    val resume: String? = null,
+    val mute: String? = null,
+    val unmute: String? = null,
+    val close: String? = null,
 )
 
 data class AuctionResponseEnvelope(

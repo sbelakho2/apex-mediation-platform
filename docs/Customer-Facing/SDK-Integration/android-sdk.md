@@ -1,709 +1,283 @@
 # Android SDK Integration Guide
 
-Integrate ApexMediation into your Android app with Kotlin or Java.
+_Last updated: 2025-11-21_
+
+This guide explains how to integrate the ApexMediation Android SDK (`sdk/core/android`) with a BYO-first posture, optional server-to-server (S2S) auctions, normalized consent plumbing, and runtime adapter rendering.
 
 ---
 
-## Prerequisites
+## 1. Key Concepts
 
-- Android 5.0+ (API level 21)
-- Android Studio Arctic Fox or higher
-- Gradle 7.0+
-- Active ApexMediation account with API credentials
-
----
-
-## Installation
-
-### Gradle (Recommended)
-
-Add to your project-level `build.gradle`:
-
-```gradle
-buildscript {
-    repositories {
-        google()
-        mavenCentral()
-    }
-}
-
-allprojects {
-    repositories {
-        google()
-        mavenCentral()
-        maven { url 'https://maven.apexmediation.ee/releases' }
-    }
-}
-```
-
-Add to your app-level `build.gradle`:
-
-```gradle
-dependencies {
-    implementation 'ee.apexmediation:sdk:2.0.0'
-
-    // Required dependencies
-    implementation 'com.google.android.gms:play-services-ads-identifier:18.0.1'
-    implementation 'androidx.appcompat:appcompat:1.6.1'
-    implementation 'androidx.recyclerview:recyclerview:1.3.2'
-}
-```
-
-### Manual Installation
-
-1. Download `apexmediation-sdk-2.0.0.aar` from [releases](https://github.com/apexmediation/android-sdk/releases)
-2. Place in `app/libs/`
-3. Add to `build.gradle`:
-
-```gradle
-dependencies {
-    implementation files('libs/apexmediation-sdk-2.0.0.aar')
-}
-```
+- **Bel* facades** expose a small, boring API surface: `BelAds` for lifecycle/consent, plus `BelInterstitial`, `BelRewarded`, `BelRewardedInterstitial`, `BelAppOpen`, and `BelBanner` for placements.
+- **BYO mode is the default.** All fills are sourced through client adapters (legacy + runtime V2 bridge). S2S is opt-in and requires an API key.
+- **Runtime Adapter Bridge.** Ads loaded through the runtime V2 pipeline include opaque handles. `MediationSDK.renderAd(...)` routes show() calls back into the adapter runtime on the publisher’s main thread.
+- **Telemetry Guardrails.** `TelemetryCollector` redacts stack traces, clamps metadata keys, and offers local percentiles/counters for the debug panel. Credential validation events never include secrets.
 
 ---
 
-## Initial Setup
+## 2. Requirements
 
-### 1. Configure AndroidManifest.xml
+| Requirement | Notes |
+| --- | --- |
+| Android API level | minSdk 21, targetSdk 34 |
+| Tooling | Android Studio Ladybug+, Gradle 8.5+, Kotlin 1.9+, Java 17 |
+| Permissions | `android.permission.INTERNET` (required), `ACCESS_NETWORK_STATE` (recommended) |
+| StrictMode | Enabled automatically in `debug`; opt into `penaltyDeath` via `SDKConfig.strictModePenaltyDeath(true)` for CI smoke apps |
 
-Add required permissions and configuration:
+Manifest essentials:
 
 ```xml
-<?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.yourapp">
-
-    <!-- Required permissions -->
-    <uses-permission android:name="android.permission.INTERNET" />
-    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-
-    <!-- Optional: For location-based ads (requires user permission) -->
-    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
-
-    <!-- Google Play Services Advertising ID -->
-    <uses-permission android:name="com.google.android.gms.permission.AD_ID" />
-
-    <application
-        android:name=".MyApplication"
-        android:allowBackup="true"
-        android:icon="@mipmap/ic_launcher"
-        android:label="@string/app_name"
-        android:theme="@style/Theme.AppCompat">
-
-        <!-- ApexMediation Configuration -->
-        <meta-data
-            android:name="ee.apexmediation.PUBLISHER_ID"
-            android:value="YOUR_PUBLISHER_ID" />
-        <meta-data
-            android:name="ee.apexmediation.API_KEY"
-            android:value="YOUR_API_KEY" />
-
-        <!-- Activities and other components -->
-
-    </application>
-
-</manifest>
+<uses-permission android:name="android.permission.INTERNET" />
+<uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 ```
 
-### 2. Initialize SDK (Kotlin)
+---
 
-Create or update your `Application` class:
+## 3. Add the SDK to your project
+
+### Option A — Include the module directly
+
+1. Add the SDK module to `settings.gradle`:
+   ```gradle
+   include(":sdk-core-android")
+   project(":sdk-core-android").projectDir = file("sdk/core/android")
+   ```
+2. Depend on it from your app module:
+   ```gradle
+   dependencies {
+       implementation project(":sdk-core-android")
+   }
+   ```
+
+### Option B — Build an AAR
+
+```bash
+cd sdk/core/android
+./gradlew assembleRelease
+```
+Copy `sdk/core/android/build/outputs/aar/core-release.aar` to your app’s `libs/` folder and reference it via `implementation files("libs/core-release.aar")`.
+
+---
+
+## 4. Initialize early
+
+Initialize from `Application.onCreate`. BYO mode is already the default but we set it explicitly for clarity.
 
 ```kotlin
-import android.app.Application
-import ee.apexmediation.sdk.ApexMediation
-import ee.apexmediation.sdk.ApexMediationConfig
-import ee.apexmediation.sdk.ApexMediationInitializationListener
-
-class MyApplication : Application() {
-
+class SampleApp : Application() {
     override fun onCreate() {
         super.onCreate()
 
-        // Configure SDK
-        val config = ApexMediationConfig.Builder(this)
-            .setPublisherId("YOUR_PUBLISHER_ID")
-            .setApiKey("YOUR_API_KEY")
-            .setTestMode(true) // Remove in production!
-            .setGdprConsent(true) // Set based on user consent
-            .setCoppaCompliant(false) // Set true for children's apps
+        val cfg = SDKConfig.Builder()
+            .appId("publisher-demo-app")
+            .sdkMode(SdkMode.BYO)                 // default; disables S2S
+            .configEndpoint("https://config.rivalapexmediation.com")
+            .auctionEndpoint("https://auction.rivalapexmediation.com")
+            .configPublicKeyBase64("BASE64_X509_ED25519_PUBLIC_KEY")
+            .strictModePenaltyDeath(BuildConfig.DEBUG)
+            .observabilityEnabled(true)
+            .observabilitySampleRate(0.25)
             .build()
 
-        // Initialize SDK
-        ApexMediation.initialize(config, object : ApexMediationInitializationListener {
-            override fun onInitializationComplete(success: Boolean) {
-                if (success) {
-                    println("ApexMediation initialized successfully")
-                } else {
-                    println("ApexMediation initialization failed")
-                }
-            }
-        })
+        BelAds.initialize(this, cfg.appId, cfg)
+        BelAds.setLogLevel(LogLevel.DEBUG)
     }
 }
 ```
 
-### 3. Initialize SDK (Java)
-
-```java
-import android.app.Application;
-import ee.apexmediation.sdk.ApexMediation;
-import ee.apexmediation.sdk.ApexMediationConfig;
-import ee.apexmediation.sdk.ApexMediationInitializationListener;
-
-public class MyApplication extends Application {
-
-    @Override
-    public void onCreate() {
-        super.onCreate();
-
-        // Configure SDK
-        ApexMediationConfig config = new ApexMediationConfig.Builder(this)
-            .setPublisherId("YOUR_PUBLISHER_ID")
-            .setApiKey("YOUR_API_KEY")
-            .setTestMode(true) // Remove in production!
-            .setGdprConsent(true)
-            .setCoppaCompliant(false)
-            .build();
-
-        // Initialize SDK
-        ApexMediation.initialize(config, new ApexMediationInitializationListener() {
-            @Override
-            public void onInitializationComplete(boolean success) {
-                if (success) {
-                    System.out.println("ApexMediation initialized successfully");
-                } else {
-                    System.out.println("ApexMediation initialization failed");
-                }
-            }
-        });
-    }
-}
-```
+`BelAds.initialize(...)` is idempotent. If you hot-reload config in tests the SDK tears down adapters, telemetry, and caches before re-instantiating.
 
 ---
 
-## Ad Formats
+## 5. Operating modes & S2S
 
-### Banner Ads
+| Mode | Description | When to use |
+| --- | --- | --- |
+| `SdkMode.BYO` | Client adapters only. Runtime bridge enforces single-use cached ads. | Default for all BYO tenants |
+| `SdkMode.HYBRID` | S2S first (if enabled) with BYO fallback. Requires API key. | When you have managed demand + BYO credentials |
+| `SdkMode.MANAGED` | Managed demand only (not yet GA). | Internal testing |
 
-**XML Layout:**
-
-```xml
-<LinearLayout
-    xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
-    android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:orientation="vertical">
-
-    <!-- Your content -->
-
-    <ee.apexmediation.sdk.ApexMediationBannerView
-        android:id="@+id/bannerView"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="center_horizontal"
-        app:adSize="BANNER"
-        app:placementId="banner_main" />
-
-</LinearLayout>
-```
-
-**Kotlin Activity:**
+To enable S2S in HYBRID/MANAGED:
 
 ```kotlin
-import android.os.Bundle
-import androidx.appcompat.app.AppCompatActivity
-import ee.apexmediation.sdk.ApexMediationBannerView
-import ee.apexmediation.sdk.ApexMediationBannerListener
-
-class MainActivity : AppCompatActivity() {
-
-    private lateinit var bannerView: ApexMediationBannerView
-
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_main)
-
-        // Get banner view from layout
-        bannerView = findViewById(R.id.bannerView)
-
-        // Set listener
-        bannerView.setListener(object : ApexMediationBannerListener {
-            override fun onBannerLoaded() {
-                println("Banner loaded")
-            }
-
-            override fun onBannerFailed(error: String) {
-                println("Banner failed: $error")
-            }
-
-            override fun onBannerClicked() {
-                println("Banner clicked")
-            }
-        })
-
-        // Load ad
-        bannerView.load()
-    }
-
-    override fun onDestroy() {
-        bannerView.destroy()
-        super.onDestroy()
-    }
-}
-```
-
-**Java Activity:**
-
-```java
-import android.os.Bundle;
-import androidx.appcompat.app.AppCompatActivity;
-import ee.apexmediation.sdk.ApexMediationBannerView;
-import ee.apexmediation.sdk.ApexMediationBannerListener;
-
-public class MainActivity extends AppCompatActivity {
-
-    private ApexMediationBannerView bannerView;
-
-    @Override
-    protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_main);
-
-        // Get banner view from layout
-        bannerView = findViewById(R.id.bannerView);
-
-        // Set listener
-        bannerView.setListener(new ApexMediationBannerListener() {
-            @Override
-            public void onBannerLoaded() {
-                System.out.println("Banner loaded");
-            }
-
-            @Override
-            public void onBannerFailed(String error) {
-                System.out.println("Banner failed: " + error);
-            }
-
-            @Override
-            public void onBannerClicked() {
-                System.out.println("Banner clicked");
-            }
-        });
-
-        // Load ad
-        bannerView.load();
-    }
-
-    @Override
-    protected void onDestroy() {
-        bannerView.destroy();
-        super.onDestroy();
-    }
-}
-```
-
-**Banner Sizes:**
-- `BANNER` - 320x50
-- `LARGE_BANNER` - 320x100
-- `MEDIUM_RECTANGLE` - 300x250
-- `LEADERBOARD` - 728x90 (tablets)
-
-### Interstitial Ads
-
-**Kotlin:**
-
-```kotlin
-import ee.apexmediation.sdk.ApexMediationInterstitial
-import ee.apexmediation.sdk.ApexMediationInterstitialListener
-
-class GameActivity : AppCompatActivity() {
-
-    private var interstitial: ApexMediationInterstitial? = null
-
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_game)
-
-        loadInterstitial()
-    }
-
-    private fun loadInterstitial() {
-        interstitial = ApexMediationInterstitial(this, "interstitial_level_complete")
-
-        interstitial?.setListener(object : ApexMediationInterstitialListener {
-            override fun onInterstitialLoaded() {
-                println("Interstitial ready")
-            }
-
-            override fun onInterstitialFailed(error: String) {
-                println("Interstitial failed: $error")
-            }
-
-            override fun onInterstitialShown() {
-                println("Interstitial shown")
-                // Pause game
-            }
-
-            override fun onInterstitialDismissed() {
-                println("Interstitial dismissed")
-                // Resume game
-                loadInterstitial() // Preload next
-            }
-        })
-
-        interstitial?.load()
-    }
-
-    fun showInterstitial() {
-        if (interstitial?.isReady() == true) {
-            interstitial?.show()
-        } else {
-            println("Interstitial not ready")
-            loadInterstitial()
-        }
-    }
-}
-```
-
-**Java:**
-
-```java
-import ee.apexmediation.sdk.ApexMediationInterstitial;
-import ee.apexmediation.sdk.ApexMediationInterstitialListener;
-
-public class GameActivity extends AppCompatActivity {
-
-    private ApexMediationInterstitial interstitial;
-
-    @Override
-    protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_game);
-
-        loadInterstitial();
-    }
-
-    private void loadInterstitial() {
-        interstitial = new ApexMediationInterstitial(this, "interstitial_level_complete");
-
-        interstitial.setListener(new ApexMediationInterstitialListener() {
-            @Override
-            public void onInterstitialLoaded() {
-                System.out.println("Interstitial ready");
-            }
-
-            @Override
-            public void onInterstitialFailed(String error) {
-                System.out.println("Interstitial failed: " + error);
-            }
-
-            @Override
-            public void onInterstitialShown() {
-                System.out.println("Interstitial shown");
-            }
-
-            @Override
-            public void onInterstitialDismissed() {
-                System.out.println("Interstitial dismissed");
-                loadInterstitial(); // Preload next
-            }
-        });
-
-        interstitial.load();
-    }
-
-    public void showInterstitial() {
-        if (interstitial != null && interstitial.isReady()) {
-            interstitial.show();
-        }
-    }
-}
-```
-
-### Rewarded Video Ads
-
-**Kotlin:**
-
-```kotlin
-import ee.apexmediation.sdk.ApexMediationRewardedVideo
-import ee.apexmediation.sdk.ApexMediationRewardedVideoListener
-import ee.apexmediation.sdk.Reward
-
-class RewardManager {
-
-    private var rewardedVideo: ApexMediationRewardedVideo? = null
-
-    fun loadRewardedVideo(activity: Activity) {
-        rewardedVideo = ApexMediationRewardedVideo(activity, "rewarded_extra_coins")
-
-        rewardedVideo?.setListener(object : ApexMediationRewardedVideoListener {
-            override fun onRewardedVideoLoaded() {
-                println("Rewarded video ready")
-            }
-
-            override fun onRewardedVideoFailed(error: String) {
-                println("Rewarded video failed: $error")
-            }
-
-            override fun onRewardedVideoStarted() {
-                println("User started watching")
-            }
-
-            override fun onRewardedVideoCompleted(reward: Reward) {
-                println("User earned: ${reward.type} x${reward.amount}")
-
-                // Grant reward
-                when (reward.type) {
-                    "coins" -> UserInventory.addCoins(reward.amount)
-                    "lives" -> UserInventory.addLives(reward.amount)
-                }
-            }
-
-            override fun onRewardedVideoDismissed(completed: Boolean) {
-                if (completed) {
-                    println("User completed video")
-                } else {
-                    println("User closed early - no reward")
-                }
-
-                // Preload next video
-                loadRewardedVideo(activity)
-            }
-        })
-
-        rewardedVideo?.load()
-    }
-
-    fun showRewardedVideo() {
-        if (rewardedVideo?.isReady() == true) {
-            rewardedVideo?.show()
-        } else {
-            // Show error message
-            Toast.makeText(context, "Video not available", Toast.LENGTH_SHORT).show()
-        }
-    }
-}
-```
-
-### Native Ads
-
-**Kotlin:**
-
-```kotlin
-import ee.apexmediation.sdk.ApexMediationNativeAd
-import ee.apexmediation.sdk.ApexMediationNativeAdListener
-import ee.apexmediation.sdk.ApexMediationNativeAdLoader
-
-class NativeAdAdapter(private val context: Context) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
-
-    private var nativeAd: ApexMediationNativeAd? = null
-
-    fun loadNativeAd() {
-        val adLoader = ApexMediationNativeAdLoader(context, "native_feed")
-
-        adLoader.setListener(object : ApexMediationNativeAdListener {
-            override fun onNativeAdLoaded(ad: ApexMediationNativeAd) {
-                nativeAd = ad
-                notifyDataSetChanged()
-            }
-
-            override fun onNativeAdFailed(error: String) {
-                println("Native ad failed: $error")
-            }
-        })
-
-        adLoader.load()
-    }
-
-    override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
-        if (holder is NativeAdViewHolder) {
-            nativeAd?.let { ad ->
-                holder.titleView.text = ad.title
-                holder.bodyView.text = ad.body
-                holder.ctaButton.text = ad.callToAction
-
-                // Load icon
-                Glide.with(context)
-                    .load(ad.iconUrl)
-                    .into(holder.iconView)
-
-                // Register views for click tracking
-                ad.registerViews(
-                    holder.itemView,
-                    listOf(holder.ctaButton, holder.iconView)
-                )
-            }
-        }
-    }
-}
-
-class NativeAdViewHolder(view: View) : RecyclerView.ViewHolder(view) {
-    val iconView: ImageView = view.findViewById(R.id.ad_icon)
-    val titleView: TextView = view.findViewById(R.id.ad_title)
-    val bodyView: TextView = view.findViewById(R.id.ad_body)
-    val ctaButton: Button = view.findViewById(R.id.ad_cta)
-}
-```
-
----
-
-## ProGuard Configuration
-
-Add to your `proguard-rules.pro`:
-
-```proguard
-# ApexMediation SDK
--keep class ee.apexmediation.sdk.** { *; }
--dontwarn ee.apexmediation.sdk.**
-
-# Google Play Services
--keep class com.google.android.gms.ads.identifier.** { *; }
-```
-
----
-
-## GDPR Compliance
-
-```kotlin
-import ee.apexmediation.sdk.ApexMediation
-
-fun checkGDPRConsent() {
-    if (ApexMediation.isGDPRApplicable()) {
-        // User is in EU - show consent dialog
-        showConsentDialog { consent ->
-            ApexMediation.setGDPRConsent(consent)
-        }
-    }
-}
-
-// Using ApexMediation's built-in consent dialog
-fun showBuiltInConsentDialog() {
-    ApexMediation.showConsentDialog(this) { consent ->
-        println("User consent: $consent")
-    }
-}
-```
-
----
-
-## COPPA Compliance
-
-For apps directed at children under 13:
-
-```kotlin
-val config = ApexMediationConfig.Builder(this)
-    .setPublisherId("YOUR_PUBLISHER_ID")
-    .setApiKey("YOUR_API_KEY")
-    .setCoppaCompliant(true) // Disables personalized ads
+val cfg = SDKConfig.Builder()
+    .appId("publisher")
+    .sdkMode(SdkMode.HYBRID)
+    .enableS2SWhenCapable(true)
+    .auctionApiKey("pub-live-abc123")  // preferred: set at build time
     .build()
+
+BelAds.initialize(appContext, cfg.appId, cfg)
+BelAds.setAuctionApiKey("pub-rotated-key") // optional rotation
 ```
+
+When the API key is blank the SDK automatically short-circuits the S2S path and falls back to runtime adapters.
 
 ---
 
-## Testing
+## 6. Consent & privacy
 
-### Test Mode
-
-```kotlin
-val config = ApexMediationConfig.Builder(this)
-    .setPublisherId("YOUR_PUBLISHER_ID")
-    .setApiKey("YOUR_API_KEY")
-    .setTestMode(true) // Remove in production!
-    .build()
-```
-
-### Test Device
+Source-of-truth consent should come from your CMP. Provide it explicitly:
 
 ```kotlin
-ApexMediation.addTestDevice("YOUR_DEVICE_GAID")
-```
-
-Find GAID in Logcat on first SDK initialization.
-
----
-
-## Advanced Features
-
-### Frequency Capping
-
-```kotlin
-val frequencyCap = ApexMediationFrequencyCap(
-    interstitialMinInterval = 60, // seconds
-    rewardedMinInterval = 300, // 5 minutes
-    maxInterstitialsPerHour = 4
-)
-
-ApexMediation.setFrequencyCap(frequencyCap)
-```
-
-### Analytics
-
-```kotlin
-import ee.apexmediation.sdk.ApexMediationAnalytics
-
-// Log custom events
-ApexMediationAnalytics.logEvent("level_complete", mapOf(
-    "level" to 10,
-    "score" to 5000,
-    "time_seconds" to 120
-))
-
-// Log purchases
-ApexMediationAnalytics.logPurchase(
-    itemId = "premium_pack",
-    price = 9.99,
-    currency = "USD"
+BelAds.setConsent(
+    gdprApplies = true,
+    tcString = cmpState.tcfString,
+    usPrivacy = cmpState.usPrivacy,
+    coppa = false,
+    limitAdTracking = userPrefs.limitAdTracking,
 )
 ```
 
+If you store IAB strings in shared preferences, normalize them before calling `BelAds.setConsent`:
+
+```kotlin
+val state = ConsentManager.fromIabStorage(context)
+BelAds.setConsent(
+    gdprApplies = state.gdprApplies,
+    tcString = state.consentString,
+    usPrivacy = state.usPrivacy
+)
+```
+
+`MediationSDK.currentAuctionConsent()` maps these values into S2S metadata, while runtime adapters receive the same via `RuntimeAdapterConfig.privacy`.
+
 ---
 
-## Troubleshooting
+## 7. Load & show ads
 
-### Ads Not Showing
+### Interstitials
 
-1. Check initialization callback
-2. Verify credentials in dashboard
-3. Enable test mode
-4. Check internet connection
-5. Review Logcat for errors
+```kotlin
+BelInterstitial.load(appContext, "interstitial_home", object : AdLoadCallback {
+    override fun onAdLoaded(ad: com.rivalapexmediation.sdk.models.Ad) {
+        // cache hit handled internally
+    }
+    override fun onError(error: AdError, message: String) {
+        Log.w("Ads", "Interstitial failed: $error $message")
+    }
+})
 
-### Build Errors
-
-**Error**: `Manifest merger failed`
-**Solution**: Add `tools:replace="android:label"` to `<application>` tag
-
-**Error**: `Duplicate class found`
-**Solution**: Exclude duplicate dependencies:
-```gradle
-implementation('ee.apexmediation:sdk:2.0.0') {
-    exclude group: 'com.google.android.gms'
+if (BelInterstitial.isReady()) {
+    BelInterstitial.show(activity)
 }
 ```
 
+`BelInterstitial.show()` first attempts `MediationSDK.renderAd(ad, activity)`. If the ad originated from the runtime V2 pipeline the bound adapter renders; if it came from S2S the fallback HTML renderer executes.
+
+### Rewarded & Rewarded Interstitial
+
+```kotlin
+BelRewarded.load(appContext, "rewarded_daily", object : AdLoadCallback {
+    override fun onAdLoaded(ad: Ad) = Unit
+    override fun onError(error: AdError, message: String) = Log.e("Ads", message)
+})
+
+if (BelRewarded.isReady()) {
+    BelRewarded.show(activity)
+}
+```
+
+The runtime show path automatically calls the registered `RewardedCallbacks`, ensuring OM video sessions and rewards fire on the main thread.
+
+### App Open
+
+```kotlin
+BelAppOpen.load(appContext, "app_open_splash", listener)
+if (BelAppOpen.isReady()) {
+    BelAppOpen.show(activity)
+}
+```
+
+### Banner attach/detach
+
+```kotlin
+val container: ViewGroup = findViewById(R.id.banner_container)
+BelBanner.attach(container, "banner_home")
+// ...onDestroy
+BelBanner.detach(container)
+```
+
+`BelBanner` renders cached HTML creatives. In test mode it injects a safe placeholder if nothing is cached.
+
 ---
 
-## Sample Projects
+## 8. Runtime adapter bridge
 
-- **Kotlin Sample**: [github.com/apexmediation/android-samples/kotlin](https://github.com/apexmediation/android-samples/kotlin)
-- **Java Sample**: [github.com/apexmediation/android-samples/java](https://github.com/apexmediation/android-samples/java)
-- **Compose Sample**: [github.com/apexmediation/android-samples/compose](https://github.com/apexmediation/android-samples/compose)
-
----
-
-## Support
-
-- **Documentation**: [docs.apexmediation.ee](https://docs.apexmediation.ee)
-- **Email**: support@bel-consulting.ee
-- **Discord**: [discord.gg/apexmediation](https://discord.gg/apexmediation)
-- **Response Time**: < 24 hours
+- The SDK caches runtime handles with metadata (`runtime_partner`, `runtime_handle`).
+- When an ad is evicted or consumed the handle is invalidated and never reused.
+- `handleRuntimeBindings(...)` ensures only the winning adapter retains its handle; all other handles are immediately invalidated to honor BYO guardrails.
+- `Bel*` facades never expose adapter credentials or raw handles to the publisher app.
 
 ---
 
-**Last Updated**: November 2025
-**SDK Version**: 2.0.0
-**Android Version**: 5.0+ (API 21+)
+## 9. Telemetry & validation
+
+Enable observability when you need adapter span metrics:
+
+```kotlin
+val cfg = SDKConfig.Builder()
+    .observabilityEnabled(true)
+    .observabilitySampleRate(0.1)
+    .observabilityMaxQueue(500)
+    .build()
+```
+
+Key points:
+
+- `TelemetryCollector.recordAdapterSpanStart/Finish` automatically tags `strategy`, `sdk_mode`, and test mode metadata.
+- Latencies feed a bounded reservoir per `{placement, adapter}`. Access via the debug panel or directly (`getLocalPercentiles`).
+- ValidationMode (`SDKConfig.validationModeEnabled(true)`) lets you ping adapter credentials without issuing ad requests:
+  ```kotlin
+  sdk.validateCredentials(listOf("applovin"), object : ValidationCallback {
+      override fun onComplete(results: Map<String, ValidationResult>) {
+          Log.d("Validation", "applovin => ${results["applovin"]}")
+      }
+  })
+  ```
+
+---
+
+## 10. Debugging tools
+
+- **Debug Panel:** `BelAds.showDebugPanel(activity)` surfaces placements, cached ads, consent state, and local telemetry.
+- **OM SDK:** Inject `BelAds.setOmSdkController(...)` to bridge into your OMID implementation. `Bel*` facades automatically start/end sessions when ads render.
+- **StrictMode:** In `debug`, the SDK enforces thread policies. If you enable `strictModePenaltyDeath(true)` your app will crash on violations, mirroring the CI `strictmodeSmoke` gate.
+
+---
+
+## 11. Testing & CI
+
+- Run unit tests (Robolectric + MockWebServer) locally:
+  ```bash
+  cd sdk/core/android
+  JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 ./gradlew testDebugUnitTest
+  ```
+- The primary CI job also runs `strictmodeSmoke`, Dokka (`generateApiDocs`), and an AAR size gate. Ensure these pass before release candidates.
+
+---
+
+## 12. Troubleshooting checklist
+
+| Symptom | Action |
+| --- | --- |
+| `IllegalStateException: SDK not initialized` | Call `BelAds.initialize()` once in `Application.onCreate` before any load/show calls. |
+| `AdError.NO_FILL` immediately | Verify placement exists in remote config and at least one adapter is enabled. In BYO mode, ensure `AdapterConfigProvider` returns credentials. |
+| S2S path never fires | Confirm `sdkMode` ≠ BYO, `enableS2SWhenCapable(true)`, and `auctionApiKey` is non-empty. Use debug logs to confirm `shouldUseS2SForPlacement` is true. |
+| OM measurement missing | Ensure you set a custom controller via `BelAds.setOmSdkController` and that the IAB OM SDK dependency is included. |
+| Telemetry queues grow | Increase `observabilityMaxQueue`, or disable telemetry during local tests. |
+
+---
+
+## 13. Reference commands
+
+```bash
+# Build + test
+cd sdk/core/android
+JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 ./gradlew testDebugUnitTest
+
+# Generate Dokka docs (matches CI)
+JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 ./gradlew generateApiDocs
+```
+
+Need help? Reach out via the console’s Support workspace with your app ID, SDK log snippet, and consent state summary from the debug panel.

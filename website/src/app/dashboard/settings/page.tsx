@@ -1,16 +1,17 @@
 'use client';
+export const dynamic = 'force-dynamic';
 
 // Reference: Design.md § "Dashboard Pages" & WEBSITE_DESIGN.md § "Settings Page"
 // Settings page for account, payment, and notification preferences
 
 import { BanknotesIcon, BellIcon, CreditCardIcon, ShieldCheckIcon, UserCircleIcon } from '@heroicons/react/24/outline';
 import { useSearchParams } from 'next/navigation';
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, Suspense, useEffect, useMemo, useState } from 'react';
 import { api } from '@/lib/api';
 import Section from '@/components/ui/Section';
 import Container from '@/components/ui/Container';
 
-export default function SettingsPage() {
+function SettingsPageInner() {
   const searchParams = useSearchParams();
   const tabParam = searchParams.get('tab');
   const initialTab = useMemo(() => {
@@ -31,53 +32,61 @@ export default function SettingsPage() {
   return (
     <Section>
       <Container className="space-y-6">
-      {/* Page Header */}
-      <div>
-        <h1 className="text-h2-sm font-bold uppercase text-primary-blue tracking-tight">
-          Settings
-        </h1>
-        <p className="text-sm text-gray-600 mt-1">
-          Manage your account, payment methods, and preferences
-        </p>
-      </div>
-
-      {/* Tabs */}
-      <div className="border-b-2 border-gray-200">
-        <div className="flex gap-1 overflow-x-auto">
-          <TabButton
-            active={activeTab === 'profile'}
-            onClick={() => setActiveTab('profile')}
-            icon={UserCircleIcon}
-            label="Profile"
-          />
-          <TabButton
-            active={activeTab === 'payment'}
-            onClick={() => setActiveTab('payment')}
-            icon={CreditCardIcon}
-            label="Payment Methods"
-          />
-          <TabButton
-            active={activeTab === 'notifications'}
-            onClick={() => setActiveTab('notifications')}
-            icon={BellIcon}
-            label="Notifications"
-          />
-          <TabButton
-            active={activeTab === 'security'}
-            onClick={() => setActiveTab('security')}
-            icon={ShieldCheckIcon}
-            label="Security"
-          />
+        {/* Page Header */}
+        <div>
+          <h1 className="text-h2-sm md:text-h2-md lg:text-h2 font-semibold text-gray-900">
+            Settings
+          </h1>
+          <p className="text-sm text-gray-600 mt-1">
+            Manage your account, payment methods, and preferences
+          </p>
         </div>
-      </div>
 
-      {/* Tab Content */}
-      {activeTab === 'profile' && <ProfileTab />}
-      {activeTab === 'payment' && <PaymentTab />}
-      {activeTab === 'notifications' && <NotificationsTab />}
-      {activeTab === 'security' && <SecurityTab />}
+        {/* Tabs */}
+        <div className="border-b-2 border-gray-200">
+          <div className="flex gap-1 overflow-x-auto">
+            <TabButton
+              active={activeTab === 'profile'}
+              onClick={() => setActiveTab('profile')}
+              icon={UserCircleIcon}
+              label="Profile"
+            />
+            <TabButton
+              active={activeTab === 'payment'}
+              onClick={() => setActiveTab('payment')}
+              icon={CreditCardIcon}
+              label="Payment Methods"
+            />
+            <TabButton
+              active={activeTab === 'notifications'}
+              onClick={() => setActiveTab('notifications')}
+              icon={BellIcon}
+              label="Notifications"
+            />
+            <TabButton
+              active={activeTab === 'security'}
+              onClick={() => setActiveTab('security')}
+              icon={ShieldCheckIcon}
+              label="Security"
+            />
+          </div>
+        </div>
+
+        {/* Tab Content */}
+        {activeTab === 'profile' && <ProfileTab />}
+        {activeTab === 'payment' && <PaymentTab />}
+        {activeTab === 'notifications' && <NotificationsTab />}
+        {activeTab === 'security' && <SecurityTab />}
       </Container>
     </Section>
+  );
+}
+
+export default function SettingsPage() {
+  return (
+    <Suspense fallback={<div className="container py-10"><div className="space-y-3" aria-hidden="true">{[...Array(3)].map((_, i) => (<div key={i} className="h-10 bg-gray-100 animate-pulse rounded" />))}</div></div>}>
+      <SettingsPageInner />
+    </Suspense>
   );
 }
 
@@ -94,10 +103,10 @@ function TabButton({ active, onClick, icon: Icon, label }: TabButtonProps) {
       type="button"
       onClick={onClick}
       aria-pressed={active}
-      className={`flex items-center gap-2 px-6 py-3 font-bold text-sm transition-colors border-b-4 ${
+      className={`flex items-center gap-2 px-5 py-3 font-semibold text-sm transition-colors border-b-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus)] ${
         active
-          ? 'border-sunshine-yellow text-primary-blue'
-          : 'border-transparent text-gray-600 hover:text-primary-blue'
+          ? 'border-brand-500 text-brand-700'
+          : 'border-transparent text-gray-600 hover:text-brand-700 hover:border-brand-200'
       }`}
     >
       <Icon className="w-5 h-5" />
@@ -167,7 +176,7 @@ function ProfileTab() {
               id="company-name"
               name="company"
               type="text"
-              className="input w-full"
+              className="input-v2 w-full"
               defaultValue="Awesome Games Inc."
             />
           </div>
@@ -175,7 +184,7 @@ function ProfileTab() {
             <label className="block text-sm font-bold text-primary-blue mb-2" htmlFor="time-zone">
               Time Zone
             </label>
-            <select id="time-zone" name="timezone" className="input w-full" defaultValue="UTC-8 (Pacific Time)">
+            <select id="time-zone" name="timezone" className="input-v2 w-full" defaultValue="UTC-8 (Pacific Time)">
               <option>UTC-8 (Pacific Time)</option>
               <option>UTC-5 (Eastern Time)</option>
               <option>UTC+0 (London)</option>
@@ -183,11 +192,11 @@ function ProfileTab() {
             </select>
           </div>
           <div className="pt-4 flex flex-col gap-3">
-            <button type="submit" className="btn-primary-yellow px-8 py-3">
+            <button type="submit" className="btn-primary px-8 py-3">
               Save Changes
             </button>
             {status === 'success' && (
-              <span className="text-sm text-success-green font-bold" role="status">
+              <span className="text-sm text-success font-semibold" role="status">
                 Profile updated successfully.
               </span>
             )}
@@ -195,7 +204,7 @@ function ProfileTab() {
         </div>
       </form>
 
-      <div className="card p-6 border-2 border-red-300">
+      <div className="card-v2 p-6 border-2 border-red-300">
         <h2 className="text-red-600 font-bold uppercase text-lg mb-4">
           Danger Zone
         </h2>
@@ -205,7 +214,7 @@ function ProfileTab() {
         <button
           type="button"
           onClick={handleDelete}
-          className="px-6 py-2 text-sm font-bold text-white bg-red-600 rounded hover:bg-red-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-blue"
+          className="px-6 py-2 text-sm font-semibold text-white rounded bg-[var(--danger)] hover:bg-[#b91c1c] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus)]"
         >
           Delete Account
         </button>
@@ -218,22 +227,22 @@ function PaymentTab() {
   return (
     <div className="space-y-6">
       {/* Payout Information */}
-      <div className="card-blue p-6">
+      <div className="card-v2 p-6">
         <div className="flex items-start justify-between">
           <div>
-            <h2 className="text-sunshine-yellow font-bold uppercase text-lg mb-2">
+            <h2 className="text-gray-900 font-semibold text-lg mb-2">
               Next Payout
             </h2>
-            <p className="text-white text-3xl font-bold mb-1">$8,934.18</p>
-            <p className="text-white text-sm">Monthly payout (NET 30)</p>
+            <p className="text-3xl font-semibold text-gray-900 mb-1">$8,934.18</p>
+            <p className="text-sm text-gray-600">Monthly payout (NET 30)</p>
           </div>
-          <BanknotesIcon className="w-12 h-12 text-sunshine-yellow" />
+          <BanknotesIcon className="w-12 h-12 text-brand-600" />
         </div>
       </div>
 
       {/* Payment Methods */}
-      <div className="card p-6">
-        <h2 className="text-primary-blue font-bold uppercase text-lg mb-6 border-b-2 border-sunshine-yellow pb-2">
+      <div className="card-v2 p-6">
+        <h2 className="text-gray-900 font-semibold text-lg mb-6 border-b pb-2" style={{borderColor:'var(--gray-200)'}}>
           Payment Methods
         </h2>
         <div className="space-y-4">
@@ -249,27 +258,27 @@ function PaymentTab() {
             details="john@apexmediation.com"
           />
         </div>
-        <button className="mt-4 px-6 py-2 text-sm font-bold text-primary-blue border-2 border-primary-blue rounded hover:bg-primary-blue hover:text-white transition-colors">
+        <button className="mt-4 btn-secondary text-sm">
           + Add Payment Method
         </button>
       </div>
 
       {/* Payout Settings */}
-      <div className="card p-6">
-        <h2 className="text-primary-blue font-bold uppercase text-lg mb-6 border-b-2 border-sunshine-yellow pb-2">
+      <div className="card-v2 p-6">
+        <h2 className="text-gray-900 font-semibold text-lg mb-6 border-b pb-2" style={{borderColor:'var(--gray-200)'}}>
           Payout Settings
         </h2>
         <div className="space-y-4 max-w-2xl">
           <div>
-            <label className="block text-sm font-bold text-primary-blue mb-2">Payout Schedule</label>
-            <select className="input w-full">
+            <label className="block text-sm font-semibold text-gray-900 mb-2">Payout Schedule</label>
+            <select className="input-v2 w-full">
               <option>Monthly (NET 30)</option>
               <option>Monthly (1st of month)</option>
             </select>
           </div>
           <div>
-            <label className="block text-sm font-bold text-primary-blue mb-2">Minimum Payout</label>
-            <select className="input w-full">
+            <label className="block text-sm font-semibold text-gray-900 mb-2">Minimum Payout</label>
+            <select className="input-v2 w-full">
               <option>$0 (Premium accounts only)</option>
               <option>$100 (Standard)</option>
               <option>$500</option>
@@ -281,7 +290,7 @@ function PaymentTab() {
           </div>
           <div>
             <label className="block text-sm font-bold text-primary-blue mb-2">Currency</label>
-            <select className="input w-full">
+            <select className="input-v2 w-full">
               <option>USD - US Dollar</option>
               <option>EUR - Euro</option>
               <option>GBP - British Pound</option>
@@ -289,7 +298,7 @@ function PaymentTab() {
             </select>
           </div>
           <div className="pt-4">
-            <button className="btn-primary-yellow px-8 py-3">
+            <button className="btn-primary px-8 py-3">
               Save Settings
             </button>
           </div>
@@ -297,8 +306,8 @@ function PaymentTab() {
       </div>
 
       {/* Tax Information */}
-      <div className="card p-6">
-        <h2 className="text-primary-blue font-bold uppercase text-lg mb-6 border-b-2 border-sunshine-yellow pb-2">
+      <div className="card-v2 p-6">
+        <h2 className="text-gray-900 font-semibold text-lg mb-6 border-b pb-2" style={{borderColor:'var(--gray-200)'}}>
           Tax Information
         </h2>
         <div className="space-y-4">
@@ -311,7 +320,7 @@ function PaymentTab() {
               Your tax information is up to date. Updated on 2025-10-15
             </p>
           </div>
-          <button className="px-6 py-2 text-sm font-bold text-primary-blue border-2 border-primary-blue rounded hover:bg-primary-blue hover:text-white transition-colors">
+          <button className="btn-secondary text-sm">
             Update Tax Information
           </button>
         </div>
@@ -570,25 +579,25 @@ function SecurityTab() {
             <label className="block text-sm font-bold text-primary-blue mb-2">Current Password</label>
             <input
               type="password"
-              className="input w-full"
+              className="input-v2 w-full"
             />
           </div>
           <div>
             <label className="block text-sm font-bold text-primary-blue mb-2">New Password</label>
             <input
               type="password"
-              className="input w-full"
+              className="input-v2 w-full"
             />
           </div>
           <div>
             <label className="block text-sm font-bold text-primary-blue mb-2">Confirm New Password</label>
             <input
               type="password"
-              className="input w-full"
+              className="input-v2 w-full"
             />
           </div>
           <div className="pt-4">
-            <button className="btn-primary-yellow px-8 py-3">
+            <button className="btn-primary px-8 py-3">
               Update Password
             </button>
           </div>
@@ -604,7 +613,7 @@ function SecurityTab() {
             Add an extra layer of security to your account. When enabled, you'll need to enter a code from your phone in addition to your password.
           </p>
           <div className="flex items-center gap-3">
-            <button className="btn-primary-yellow px-6 py-2 text-sm disabled:opacity-60" onClick={handleEnroll2FA} disabled={loading2fa}>
+            <button className="btn-primary px-6 py-2 text-sm disabled:opacity-60" onClick={handleEnroll2FA} disabled={loading2fa}>
               {loading2fa ? 'Please wait…' : 'Enable 2FA'}
             </button>
             {twofaMsg && <span className="text-sm font-bold text-primary-blue">{twofaMsg}</span>}
@@ -618,12 +627,12 @@ function SecurityTab() {
               <input
                 type="text"
                 inputMode="numeric"
-                className="input w-40"
+                className="input-v2 w-40"
                 placeholder="123456"
                 value={token}
                 onChange={(e) => setToken(e.target.value)}
               />
-              <button className="px-4 py-2 text-sm font-bold text-white bg-primary-blue rounded" onClick={handleVerify2FA} disabled={loading2fa}>
+              <button className="btn-secondary text-sm" onClick={handleVerify2FA} disabled={loading2fa}>
                 Verify
               </button>
             </div>

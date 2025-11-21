@@ -99,15 +99,15 @@ export default function SignUpPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-primary-blue py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-md w-full space-y-8 bg-white p-10 rounded-xl shadow-lg">
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8 text-gray-900">
+      <div className="max-w-md w-full space-y-8 bg-white p-10 rounded-xl shadow-md">
         <div>
-          <h2 className="mt-6 text-center text-h2-sm font-bold uppercase text-primary-blue tracking-tight">
+          <h2 className="mt-6 text-center text-h2-sm font-semibold text-gray-900 tracking-tight">
             Create your account
           </h2>
           <p className="mt-2 text-center text-sm text-gray-600">
             Already have an account?{' '}
-            <Link href="/signin" className="font-bold text-primary-blue underline">
+            <Link href="/signin" className="font-semibold text-brand-600 hover:text-brand-700 underline">
               Sign in
             </Link>
           </p>
@@ -134,7 +134,7 @@ export default function SignUpPage() {
                 name="name"
                 type="text"
                 required
-                className="input w-full mt-1"
+                className="input-v2 w-full mt-1"
                 placeholder="John Doe"
                 value={formData.name}
                 onChange={handleChange}
@@ -152,7 +152,7 @@ export default function SignUpPage() {
                 type="email"
                 autoComplete="email"
                 required
-                className="input w-full mt-1"
+                className="input-v2 w-full mt-1"
                 placeholder="you@example.com"
                 value={formData.email}
                 onChange={handleChange}
@@ -168,7 +168,7 @@ export default function SignUpPage() {
                 id="companyName"
                 name="companyName"
                 type="text"
-                className="input w-full mt-1"
+                className="input-v2 w-full mt-1"
                 placeholder="Your Company Inc."
                 value={formData.companyName}
                 onChange={handleChange}
@@ -186,7 +186,7 @@ export default function SignUpPage() {
                 type="password"
                 autoComplete="new-password"
                 required
-                className="input w-full mt-1"
+                className="input-v2 w-full mt-1"
                 placeholder="At least 10 chars; 3 of upper/lower/number/symbol"
                 value={formData.password}
                 onChange={handleChange}
@@ -207,7 +207,7 @@ export default function SignUpPage() {
                 type="password"
                 autoComplete="new-password"
                 required
-                className="input w-full mt-1"
+                className="input-v2 w-full mt-1"
                 placeholder="Confirm your password"
                 value={formData.confirmPassword}
                 onChange={handleChange}
@@ -222,14 +222,14 @@ export default function SignUpPage() {
               id="consent"
               name="consent"
               type="checkbox"
-              className="mt-1 h-4 w-4 text-sunshine-yellow focus:ring-sunshine-yellow border-gray-300 rounded"
+              className="mt-1 h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500"
               checked={consent}
               onChange={(e) => setConsent(e.target.checked)}
               aria-describedby="consent-hint"
             />
             <label htmlFor="consent" className="text-sm text-gray-900">
-              I agree to the <a href="/terms" className="text-primary-blue font-bold underline">Terms of Service</a> and{' '}
-              <a href="/privacy" className="text-primary-blue font-bold underline">Privacy Policy</a>.
+              I agree to the <a href="/terms" className="text-brand-600 hover:text-brand-700 font-semibold underline">Terms of Service</a> and{' '}
+              <a href="/privacy" className="text-brand-600 hover:text-brand-700 font-semibold underline">Privacy Policy</a>.
             </label>
           </div>
           <p id="consent-hint" className="sr-only">Required to create an account.</p>
@@ -241,7 +241,7 @@ export default function SignUpPage() {
             <button
               type="submit"
               disabled={!canSubmit}
-              className="btn-primary-yellow w-full py-3 font-bold uppercase disabled:opacity-50 disabled:cursor-not-allowed"
+              className="btn-primary w-full py-3 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading ? 'Creating account...' : 'Create account →'}
             </button>

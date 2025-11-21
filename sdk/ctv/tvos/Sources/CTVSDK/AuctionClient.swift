@@ -9,7 +9,20 @@ public struct AuctionWin: Codable, Equatable {
     public let ttlSeconds: Int
     public let creativeUrl: String
     public let tracking: Tracking
-    public struct Tracking: Codable, Equatable { public let impression: String; public let click: String }
+    public struct Tracking: Codable, Equatable {
+        public let impression: String
+        public let click: String
+        public let start: String?
+        public let firstQuartile: String?
+        public let midpoint: String?
+        public let thirdQuartile: String?
+        public let complete: String?
+        public let pause: String?
+        public let resume: String?
+        public let mute: String?
+        public let unmute: String?
+        public let close: String?
+    }
 }
 
 public final class AuctionClient {
@@ -23,8 +36,8 @@ public final class AuctionClient {
 
     public struct Result {
         public let win: AuctionWin?
-        public let noFill: Bool
-        public let error: String?
+        public let error: LoadError?
+        public var noFill: Bool { error == .noFill }
     }
 
     public func requestBid(placementId: String,
@@ -51,7 +64,7 @@ public final class AuctionClient {
         }
         let envelope = ["body": body]
         guard let data = try? JSONSerialization.data(withJSONObject: envelope) else {
-            completion(Result(win: nil, noFill: false, error: "encode_error")); return
+            completion(Result(win: nil, error: .generic("encode_error"))); return
         }
         let url = URL(string: config.apiBaseUrl.trimmingCharacters(in: CharacterSet(charactersIn: "/")) + "/rtb/bid")!
         var req = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: TimeInterval(config.requestTimeoutMs) / 1000.0)
@@ -59,30 +72,59 @@ public final class AuctionClient {
         req.addValue("application/json", forHTTPHeaderField: "Content-Type")
         if let key = config.apiKey { req.addValue("Bearer \(key)", forHTTPHeaderField: "Authorization") }
         req.httpBody = data
+        let startTime = Date()
 
         let task = session.dataTask(with: req) { d, r, e in
-            if let e = e { completion(Result(win: nil, noFill: false, error: "network_error")); return }
-            guard let http = r as? HTTPURLResponse else { completion(Result(win: nil, noFill: false, error: "no_response")); return }
-            if http.statusCode == 204 { completion(Result(win: nil, noFill: true, error: nil)); return }
-            guard http.statusCode >= 200 && http.statusCode < 300 else {
-                let code: String
-                switch http.statusCode { case 400: code = "invalid_request"; case 401: code = "unauthorized"; case 429: code = "rate_limited"; case 500...599: code = "server_error"; default: code = "http_\(http.statusCode)" }
-                completion(Result(win: nil, noFill: false, error: code)); return
+            func finish(_ win: AuctionWin?, _ error: LoadError?) {
+                let success = (error == nil) || (error == .noFill)
+                ApexMediation.shared.recordSloSample(success: success)
+                let elapsed = Date().timeIntervalSince(startTime) * 1000.0
+                MetricsRecorder.shared.recordRequest(durationMs: elapsed, error: error)
+                completion(Result(win: win, error: error))
             }
-            guard let d = d else { completion(Result(win: nil, noFill: false, error: "empty")); return }
+            if let err = e as NSError? {
+                let loadError: LoadError = err.domain == NSURLErrorDomain && err.code == NSURLErrorTimedOut ? .timeout : .network
+                finish(nil, loadError)
+                return
+            }
+            guard let http = r as? HTTPURLResponse else {
+                finish(nil, .generic("no_response"))
+                return
+            }
+            if http.statusCode == 204 {
+                finish(nil, .noFill)
+                return
+            }
+            guard http.statusCode >= 200 && http.statusCode < 300 else {
+                finish(nil, self.mapStatusError(http.statusCode))
+                return
+            }
+            guard let d = d else {
+                finish(nil, .generic("empty"))
+                return
+            }
             do {
-                // Try envelope first
                 if let obj = try JSONSerialization.jsonObject(with: d) as? [String: Any], let resp = obj["response"] {
                     let respData = try JSONSerialization.data(withJSONObject: resp)
                     let win = try JSONDecoder().decode(AuctionWin.self, from: respData)
-                    completion(Result(win: win, noFill: false, error: nil)); return
+                    finish(win, nil)
+                    return
                 }
                 let win = try JSONDecoder().decode(AuctionWin.self, from: d)
-                completion(Result(win: win, noFill: false, error: nil))
+                finish(win, nil)
             } catch {
-                completion(Result(win: nil, noFill: false, error: "parse_error"))
+                finish(nil, .generic("parse_error"))
             }
         }
         task.resume()
+    }
+
+    private func mapStatusError(_ code: Int) -> LoadError {
+        if code == 408 || code == 504 { return .timeout }
+        if code == 429 { return .status(code: code, label: "status_429") }
+        if code == 401 { return .status(code: code, label: "status_401") }
+        if (400..<500).contains(code) { return .status(code: code, label: "status_4xx") }
+        if (500..<600).contains(code) { return .status(code: code, label: "status_5xx") }
+        return .status(code: code, label: "status_\(code)")
     }
 }

@@ -71,15 +71,15 @@ function SignInInner() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-primary-blue py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-md w-full space-y-8 bg-white p-10 rounded-xl shadow-lg">
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8 text-gray-900">
+      <div className="max-w-md w-full space-y-8 bg-white p-10 rounded-xl shadow-md">
         <div>
-          <h2 className="mt-6 text-center text-h2-sm font-bold uppercase text-primary-blue tracking-tight">
+          <h2 className="mt-6 text-center text-h2-sm font-semibold text-gray-900 tracking-tight">
             Sign in to your account
           </h2>
           <p className="mt-2 text-center text-sm text-gray-600">
             Or{' '}
-            <Link href="/signup" className="font-bold text-primary-blue underline">
+            <Link href="/signup" className="font-semibold text-brand-600 hover:text-brand-700 underline">
               create a new account
             </Link>
           </p>
@@ -107,7 +107,7 @@ function SignInInner() {
                 type="email"
                 autoComplete="email"
                 required
-                className="input w-full"
+                className="input-v2 w-full"
                 placeholder="Email address"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -124,7 +124,7 @@ function SignInInner() {
                 type="password"
                 autoComplete="current-password"
                 required
-                className="input w-full"
+                className="input-v2 w-full"
                 placeholder="Password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -139,7 +139,7 @@ function SignInInner() {
                 id="remember-me"
                 name="remember-me"
                 type="checkbox"
-                className="h-4 w-4 text-sunshine-yellow focus:ring-sunshine-yellow border-gray-300 rounded"
+                className="h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500"
                 checked={rememberMe}
                 onChange={(e) => setRememberMe(e.target.checked)}
               />
@@ -149,7 +149,7 @@ function SignInInner() {
             </div>
 
             <div className="text-sm">
-              <a href="/support#account-access" className="font-bold text-primary-blue underline">
+              <a href="/support#account-access" className="font-semibold text-brand-600 hover:text-brand-700 underline">
                 Forgot your password?
               </a>
             </div>
@@ -159,7 +159,7 @@ function SignInInner() {
             <button
               type="submit"
               disabled={loading || !emailValid || password.length === 0}
-              className="btn-primary-yellow w-full py-3 font-bold uppercase disabled:opacity-50 disabled:cursor-not-allowed"
+              className="btn-primary w-full py-3 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading ? 'Signing in...' : 'Sign in →'}
             </button>
@@ -176,7 +176,7 @@ function SignInInner() {
               <span className="px-2 bg-white text-gray-500">Demo Credentials</span>
             </div>
           </div>
-          <div className="mt-4 text-xs text-center text-gray-600 bg-cream p-3 rounded">
+          <div className="mt-4 text-xs text-center text-gray-700 bg-gray-50 p-3 rounded border" style={{borderColor:'var(--gray-200)'}}>
             <p className="mb-1">Email: demo@apexmediation.com</p>
             <p>Password: demo1234</p>
           </div>

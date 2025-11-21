@@ -5,6 +5,7 @@ import androidx.test.core.app.ApplicationProvider
 import com.google.gson.Gson
 import com.rivalapexmediation.ctv.SDKConfig
 import com.rivalapexmediation.ctv.network.AuctionClient
+import com.rivalapexmediation.ctv.network.LoadError
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import org.junit.After
@@ -34,15 +35,12 @@ class AuctionClientTests {
         server.enqueue(MockResponse().setResponseCode(204))
         val cfg = SDKConfig(appId = "app-1", apiBaseUrl = server.url("/api/v1").toString())
         val client = AuctionClient(context, cfg)
-        var noFill = false
-        var err: String? = null
+        var err: LoadError? = null
         client.requestBid("p1", "interstitial", 0.0, null) { res ->
-            noFill = res.noFill
             err = res.error
         }
         Thread.sleep(100) // wait async
-        assertTrue(noFill)
-        assertEquals(null, err)
+        assertTrue(err is LoadError.NoFill)
     }
 
     @Test
@@ -64,9 +62,9 @@ class AuctionClientTests {
         val cfg = SDKConfig(appId = "app-1", apiBaseUrl = server.url("/api/v1").toString())
         val client = AuctionClient(context, cfg)
         var ok = false
-        var err: String? = null
+        var err: LoadError? = null
         client.requestBid("p1", "interstitial", 0.0, null) { res ->
-            ok = res.win != null && !res.noFill
+            ok = res.win != null && res.error == null
             err = res.error
         }
         Thread.sleep(100)

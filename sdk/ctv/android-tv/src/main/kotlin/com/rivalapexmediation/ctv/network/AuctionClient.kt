@@ -2,13 +2,23 @@ package com.rivalapexmediation.ctv.network
 
 import android.content.Context
 import android.os.Build
+import android.os.SystemClock
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+import com.rivalapexmediation.ctv.ApexMediation
 import com.rivalapexmediation.ctv.SDKConfig
 import com.rivalapexmediation.ctv.consent.ConsentData
+import com.rivalapexmediation.ctv.metrics.MetricsRecorder
 import com.rivalapexmediation.ctv.util.Logger
-import okhttp3.*
+import okhttp3.Call
+import okhttp3.Callback
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.Response
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.IOException
+import java.net.SocketTimeoutException
 import java.util.*
 import java.util.concurrent.TimeUnit
 
@@ -25,8 +35,7 @@ class AuctionClient(
 
     data class Result(
         val win: AuctionWin?,
-        val noFill: Boolean,
-        val error: String? = null,
+        val error: LoadError? = null,
     )
 
     fun requestBid(
@@ -48,37 +57,38 @@ class AuctionClient(
             consent = buildConsentMap(consent),
             signal = null,
         )
-        val body = RequestBody.create(MediaType.parse("application/json"), gson.toJson(mapOf("body" to req)))
+        val body = gson.toJson(mapOf("body" to req)).toRequestBody("application/json".toMediaType())
         val url = config.apiBaseUrl.trimEnd('/') + "/rtb/bid"
         val builder = Request.Builder().url(url).post(body)
             .header("Content-Type", "application/json")
         config.apiKey?.let { builder.header("Authorization", "Bearer $it") }
         val httpReq = builder.build()
 
+        val start = SystemClock.elapsedRealtime()
         client.newCall(httpReq).enqueue(object: Callback {
             override fun onFailure(call: Call, e: IOException) {
                 Logger.w("Auction HTTP error: ${e.message}", e)
-                callback(Result(null, false, "network_error"))
+                val err = if (e is SocketTimeoutException) LoadError.Timeout else LoadError.Network
+                ApexMediation.recordSloSample(false)
+                MetricsRecorder.recordRequest(SystemClock.elapsedRealtime() - start, err)
+                callback(Result(null, err))
             }
             override fun onResponse(call: Call, response: Response) {
                 response.use { res ->
                     try {
-                        if (res.code() == 204) {
-                            callback(Result(null, true, null)); return
+                        if (res.code == 204) {
+                            ApexMediation.recordSloSample(true)
+                            MetricsRecorder.recordRequest(SystemClock.elapsedRealtime() - start, LoadError.NoFill)
+                            callback(Result(null, LoadError.NoFill)); return
                         }
                         if (!res.isSuccessful) {
                             // Map simple taxonomy
-                            val code = when (res.code()) {
-                                400 -> "invalid_request"
-                                401 -> "unauthorized"
-                                429 -> "rate_limited"
-                                in 500..599 -> "server_error"
-                                else -> "http_${res.code()}"
-                            }
-                            callback(Result(null, false, code)); return
+                            val err = mapStatusError(res.code)
+                            ApexMediation.recordSloSample(false)
+                            MetricsRecorder.recordRequest(SystemClock.elapsedRealtime() - start, err)
+                            callback(Result(null, err)); return
                         }
-                        val bodyStr = res.body()?.string() ?: "{}"
-                        // Response shape may be plain object or envelope depending on server; handle both
+                        val bodyStr = res.body?.string() ?: "{}"
                         val mapType = object: TypeToken<Map<String, Any>>(){}.type
                         val parsed: Map<String, Any> = try { gson.fromJson(bodyStr, mapType) } catch (_: Exception) { emptyMap() }
                         val winJson = when {
@@ -86,10 +96,20 @@ class AuctionClient(
                             else -> bodyStr
                         }
                         val win = gson.fromJson(winJson, AuctionWin::class.java)
-                        callback(Result(win, false, null))
+                        val loadError = if (win?.creativeUrl.isNullOrBlank()) LoadError.NoFill else null
+                        ApexMediation.recordSloSample(true)
+                        MetricsRecorder.recordRequest(SystemClock.elapsedRealtime() - start, loadError)
+                        if (loadError == null) {
+                            callback(Result(win, null))
+                        } else {
+                            callback(Result(null, loadError))
+                        }
                     } catch (e: Exception) {
                         Logger.w("Auction parse error: ${e.message}", e)
-                        callback(Result(null, false, "parse_error"))
+                        ApexMediation.recordSloSample(false)
+                        val err = LoadError.Generic("parse_error")
+                        MetricsRecorder.recordRequest(SystemClock.elapsedRealtime() - start, err)
+                        callback(Result(null, err))
                     }
                 }
             }
@@ -107,8 +127,19 @@ class AuctionClient(
 
     private fun buildApp(): Map<String, Any?> = mapOf(
         "id" to config.appId,
-        "name" to context.applicationInfo.loadLabel(context.packageManager)?.toString(),
+        "name" to context.applicationInfo.loadLabel(context.packageManager).toString(),
         "bundle" to context.packageName,
         "version" to try { context.packageManager.getPackageInfo(context.packageName, 0).versionName } catch (_: Exception) { null }
     )
+
+    private fun mapStatusError(code: Int): LoadError {
+        return when {
+            code == 408 || code == 504 -> LoadError.Timeout
+            code == 429 -> LoadError.Status("status_429", code)
+            code == 401 -> LoadError.Status("status_401", code)
+            code in 400..499 -> LoadError.Status("status_4xx", code)
+            code in 500..599 -> LoadError.Status("status_5xx", code)
+            else -> LoadError.Status("status_${code}", code)
+        }
+    }
 }

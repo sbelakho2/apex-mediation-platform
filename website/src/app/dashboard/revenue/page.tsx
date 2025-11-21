@@ -149,7 +149,7 @@ export default function RevenuePage() {
       {/* Page Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-h2-sm font-bold uppercase text-primary-blue tracking-tight">
+          <h1 className="text-h2-sm md:text-h2-md lg:text-h2 font-semibold text-gray-900">
             Revenue Dashboard
           </h1>
           <p className="text-sm text-gray-600 mt-1">
@@ -161,10 +161,10 @@ export default function RevenuePage() {
             <button
               key={range}
               onClick={() => setTimeRange(range)}
-              className={`px-4 py-2 text-sm font-bold uppercase rounded ${
+              className={`px-4 py-2 text-sm font-semibold rounded border transition-colors ${
                 timeRange === range
-                  ? 'bg-sunshine-yellow text-primary-blue'
-                  : 'bg-white text-gray-600 border border-gray-300 hover:border-primary-blue'
+                  ? 'bg-brand-50 text-brand-700 border-brand-500'
+                  : 'bg-white text-gray-700 border-gray-300 hover:border-brand-500'
               }`}
               aria-pressed={timeRange === range}
             >
@@ -225,14 +225,14 @@ export default function RevenuePage() {
       </div>
 
       {/* Revenue Chart */}
-      <div className="card-blue p-6">
-        <h2 className="text-sunshine-yellow font-bold uppercase text-lg mb-6">
+      <div className="card-v2 p-6">
+        <h2 className="text-gray-900 font-semibold text-lg mb-6">
           Revenue Trend
         </h2>
         {loading ? (
-          <div className="h-64 animate-pulse bg-white/30 rounded" aria-hidden="true" />
+          <div className="h-64 animate-pulse bg-gray-100 rounded" aria-hidden="true" />
         ) : series.points.length === 0 ? (
-          <p className="text-white">No data for this period.</p>
+          <p className="text-sm text-gray-600">No data for this period.</p>
         ) : (
           <div className="h-64 flex items-end justify-between gap-2" aria-live="polite">
             {series.points.map((p, i) => {
@@ -247,11 +247,11 @@ export default function RevenuePage() {
               return (
                 <div key={i} className="flex-1 flex flex-col items-center gap-2" aria-label={`${label}: ${curFmt.format(value)}`}>
                   <div
-                    className="w-full bg-sunshine-yellow rounded-t transition-all hover:opacity-80"
+                    className="w-full bg-brand-500 rounded-t transition-all hover:opacity-90"
                     style={{ height: `${height}%` }}
                     title={`${label} — ${curFmt.format(value)}`}
                   />
-                  <span className="text-xs text-white font-bold">{label}</span>
+                  <span className="text-xs text-gray-600">{label}</span>
                 </div>
               );
             })}
@@ -321,29 +321,29 @@ export default function RevenuePage() {
       </div>
 
       {/* Payout Information */}
-      <div className="card-blue p-6">
+      <div className="card-v2 p-6">
         <div className="flex items-start justify-between">
           <div>
-            <h2 className="text-sunshine-yellow font-bold uppercase text-lg mb-2">
+            <h2 className="text-gray-900 font-semibold text-lg mb-2">
               Next Payout Schedule
             </h2>
-            <p className="text-white text-body mb-4">
+            <p className="text-gray-700 text-body mb-4">
               Configure payout destination and threshold to enable automated transfers.
             </p>
-            <div className="space-y-2 text-sm text-white">
+            <div className="space-y-2 text-sm text-gray-700">
               <div className="flex items-center gap-2">
-                <div className="w-2 h-2 bg-sunshine-yellow rounded-full" />
+                <div className="w-2 h-2 bg-brand-500 rounded-full" />
                 <span>Minimum threshold: configurable in Settings</span>
               </div>
               <div className="flex items-center gap-2">
-                <div className="w-2 h-2 bg-sunshine-yellow rounded-full" />
+                <div className="w-2 h-2 bg-brand-500 rounded-full" />
                 <span>Supported methods depend on your region and currency</span>
               </div>
             </div>
           </div>
           <a
             href="/dashboard/settings"
-            className="btn-primary-yellow px-6 py-2 text-sm"
+            className="btn-primary px-6 py-2 text-sm"
           >
             Update Settings
           </a>

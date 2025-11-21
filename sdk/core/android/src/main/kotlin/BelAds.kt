@@ -3,7 +3,6 @@ package com.rivalapexmediation.sdk
 import android.app.Activity
 import android.content.Context
 import com.rivalapexmediation.sdk.logging.Logger
-import com.rivalapexmediation.sdk.network.AuctionClient
 import com.rivalapexmediation.sdk.debug.DebugPanel
 
 /**
@@ -43,6 +42,12 @@ object BelAds {
     /** Set log verbosity at runtime; sensitive fields are always redacted. */
     @JvmStatic
     fun setLogLevel(level: LogLevel) { Logger.setLevel(level) }
+
+    /** Provide or rotate the auction API key for S2S auctions (HYBRID/MANAGED modes only). */
+    @JvmStatic
+    fun setAuctionApiKey(apiKey: String) {
+        try { MediationSDK.getInstance().setAuctionApiKey(apiKey) } catch (_: Throwable) {}
+    }
 
     /** Explicit consent source of truth. */
     @JvmStatic

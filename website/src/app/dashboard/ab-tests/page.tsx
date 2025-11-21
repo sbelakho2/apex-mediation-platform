@@ -134,7 +134,7 @@ export default function ABTestsPage() {
             Optimize your ad strategy with Bayesian statistics & Thompson Sampling
           </p>
         </div>
-        <button className="btn-primary-yellow px-6 py-3 flex items-center gap-2">
+        <button className="btn-primary px-6 py-3 flex items-center gap-2">
           <BeakerIcon className="w-5 h-5" />
           Create New Test
         </button>
@@ -142,33 +142,33 @@ export default function ABTestsPage() {
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <div className="card-blue p-6">
+        <div className="card-v2 p-6">
           <div className="flex items-center gap-3 mb-2">
-            <PlayIcon className="w-6 h-6 text-sunshine-yellow" />
-            <p className="text-sunshine-yellow font-bold uppercase text-sm">Running Tests</p>
+            <PlayIcon className="w-6 h-6 text-brand-600" />
+            <p className="text-brand-700 font-semibold text-sm">Running Tests</p>
           </div>
-          <p className="text-white text-4xl font-bold">{runningTests}</p>
+          <p className="text-3xl font-semibold text-gray-900">{runningTests}</p>
         </div>
-        <div className="card p-6 border-2 border-primary-blue">
+        <div className="card-v2 p-6">
           <div className="flex items-center gap-3 mb-2">
             <CheckCircleIcon className="w-6 h-6 text-green-500" />
-            <p className="text-primary-blue font-bold uppercase text-sm">Completed</p>
+            <p className="text-gray-900 font-semibold text-sm">Completed</p>
           </div>
-          <p className="text-primary-blue text-4xl font-bold">{completedTests}</p>
+          <p className="text-3xl font-semibold text-gray-900">{completedTests}</p>
         </div>
-        <div className="card p-6 border-2 border-sunshine-yellow">
+        <div className="card-v2 p-6">
           <div className="flex items-center gap-3 mb-2">
-            <BeakerIcon className="w-6 h-6 text-sunshine-yellow" />
-            <p className="text-primary-blue font-bold uppercase text-sm">Avg Lift</p>
+            <BeakerIcon className="w-6 h-6 text-brand-600" />
+            <p className="text-gray-900 font-semibold text-sm">Avg Lift</p>
           </div>
-          <p className="text-primary-blue text-4xl font-bold">+14.2%</p>
+          <p className="text-3xl font-semibold text-gray-900">+14.2%</p>
         </div>
-        <div className="card p-6 border-2 border-gray-300">
+        <div className="card-v2 p-6">
           <div className="flex items-center gap-3 mb-2">
             <ClockIcon className="w-6 h-6 text-gray-500" />
-            <p className="text-primary-blue font-bold uppercase text-sm">Avg Duration</p>
+            <p className="text-gray-900 font-semibold text-sm">Avg Duration</p>
           </div>
-          <p className="text-primary-blue text-4xl font-bold">12 days</p>
+          <p className="text-3xl font-semibold text-gray-900">12 days</p>
         </div>
       </div>
 
@@ -180,55 +180,55 @@ export default function ABTestsPage() {
       </div>
 
       {/* Statistical Method Info */}
-      <div className="card-blue p-6">
-        <h2 className="text-sunshine-yellow font-bold uppercase text-lg mb-4">
+      <div className="card-v2 p-6">
+        <h2 className="text-gray-900 font-semibold text-lg mb-4">
           How Our A/B Testing Works
         </h2>
-        <div className="grid md:grid-cols-2 gap-6 text-white">
+        <div className="grid md:grid-cols-2 gap-6 text-gray-700">
           <div>
-            <h3 className="font-bold text-sunshine-yellow mb-2">Bayesian Statistics</h3>
+            <h3 className="font-semibold text-gray-900 mb-2">Bayesian Statistics</h3>
             <p className="text-sm leading-relaxed mb-4">
               Unlike frequentist methods, our Bayesian approach provides:
             </p>
             <ul className="space-y-2 text-sm">
               <li className="flex items-start gap-2">
-                <span className="text-sunshine-yellow">•</span>
+                <span className="text-brand-600">•</span>
                 <span>Real-time probability of winning (not just p-values)</span>
               </li>
               <li className="flex items-start gap-2">
-                <span className="text-sunshine-yellow">•</span>
+                <span className="text-brand-600">•</span>
                 <span>Continuous learning as data accumulates</span>
               </li>
               <li className="flex items-start gap-2">
-                <span className="text-sunshine-yellow">•</span>
+                <span className="text-brand-600">•</span>
                 <span>No need for pre-defined sample sizes</span>
               </li>
               <li className="flex items-start gap-2">
-                <span className="text-sunshine-yellow">•</span>
+                <span className="text-brand-600">•</span>
                 <span>Confidence intervals that actually make sense</span>
               </li>
             </ul>
           </div>
           <div>
-            <h3 className="font-bold text-sunshine-yellow mb-2">Thompson Sampling</h3>
+            <h3 className="font-semibold text-gray-900 mb-2">Thompson Sampling</h3>
             <p className="text-sm leading-relaxed mb-4">
               Our multi-armed bandit algorithm automatically:
             </p>
             <ul className="space-y-2 text-sm">
               <li className="flex items-start gap-2">
-                <span className="text-sunshine-yellow">•</span>
+                <span className="text-brand-600">•</span>
                 <span>Allocates more traffic to winning variants</span>
               </li>
               <li className="flex items-start gap-2">
-                <span className="text-sunshine-yellow">•</span>
+                <span className="text-brand-600">•</span>
                 <span>Minimizes opportunity cost during testing</span>
               </li>
               <li className="flex items-start gap-2">
-                <span className="text-sunshine-yellow">•</span>
+                <span className="text-brand-600">•</span>
                 <span>Balances exploration vs exploitation</span>
               </li>
               <li className="flex items-start gap-2">
-                <span className="text-sunshine-yellow">•</span>
+                <span className="text-brand-600">•</span>
                 <span>Reaches conclusions 30% faster than traditional A/B tests</span>
               </li>
             </ul>

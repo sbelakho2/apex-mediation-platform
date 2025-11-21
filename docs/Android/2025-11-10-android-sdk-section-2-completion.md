@@ -8,6 +8,14 @@
 
 Completed comprehensive quality improvements for the Android SDK including Java interop verification, API documentation generation, main-thread callback guarantees, and extensive network/timeout test coverage. All work follows best practices for SDK development with focus on publisher adoption and production reliability.
 
+## Addendum — Runtime Adapter Bridge & Documentation Wiring (2025-11-21)
+
+- **SDKConfig wiring:** Introduced `auctionApiKey` to `SDKConfig` + builder so HYBRID/MANAGED tenants can ship S2S credentials declaratively. The runtime variable now seeds from config at init time.
+- **BelAds facade:** Added `BelAds.setAuctionApiKey(...)` so publishers no longer need to reach for `MediationSDK` directly when rotating keys.
+- **Docs refresh:** Updated `docs/Customer-Facing/SDKs/ANDROID_QUICKSTART.md` and `docs/Customer-Facing/SDK-Integration/android-sdk.md` to reflect BYO-by-default, runtime adapter rendering, and explicit opt-in steps for S2S (sdkMode + enable flag + API key). The SDK index highlights the new flow.
+- **Changelog:** Logged the wiring work under the BYO guardrail wave together with the telemetry redaction callouts.
+- **Validation:** `JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 ./gradlew testDebugUnitTest` exercises the updated adapters + docs-driven tests (Facade + OM + telemetry suites).
+
 ## Objectives
 
 Transform the Android SDK from feature-complete to production-ready with:

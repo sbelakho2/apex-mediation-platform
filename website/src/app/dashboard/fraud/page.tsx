@@ -127,7 +127,7 @@ export default function FraudPage() {
       {/* Page Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-h2-sm font-bold uppercase text-primary-blue tracking-tight">
+          <h1 className="text-h2-sm md:text-h2-md lg:text-h2 font-semibold text-gray-900">
             Fraud Detection
           </h1>
           <p className="text-sm text-gray-600 mt-1">
@@ -139,10 +139,10 @@ export default function FraudPage() {
             <button
               key={range}
               onClick={() => setTimeRange(range)}
-              className={`px-4 py-2 text-sm font-bold uppercase rounded ${
+              className={`px-4 py-2 text-sm font-semibold rounded border transition-colors ${
                 timeRange === range
-                  ? 'bg-sunshine-yellow text-primary-blue'
-                  : 'bg-white text-gray-600 border border-gray-300 hover:border-primary-blue'
+                  ? 'bg-brand-50 text-brand-700 border-brand-500'
+                  : 'bg-white text-gray-700 border-gray-300 hover:border-brand-500'
               }`}
             >
               {range}
@@ -152,22 +152,22 @@ export default function FraudPage() {
       </div>
 
       {/* Summary cards */}
-      <div className="card-blue p-6">
+      <div className="card-v2 p-6">
         <div className="flex items-center gap-3 mb-6">
-          <ShieldCheckIcon className="w-8 h-8 text-sunshine-yellow" />
+          <ShieldCheckIcon className="w-8 h-8 text-brand-600" />
           <div>
-            <h2 className="text-sunshine-yellow font-bold uppercase text-lg">
+            <h2 className="text-gray-900 font-semibold text-lg">
               Fraud Summary
             </h2>
-            <p className="text-white text-sm">Last {timeRange === 'today' ? '24 hours' : timeRange}</p>
+            <p className="text-gray-600 text-sm">Last {timeRange === 'today' ? '24 hours' : timeRange}</p>
           </div>
         </div>
         {loading ? (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-6" aria-busy="true">
             {[0,1,2,3].map((i) => (
               <div key={i} className="animate-pulse">
-                <div className="h-8 w-24 bg-yellow-300/60 rounded mb-2" />
-                <div className="h-3 w-28 bg-white/40 rounded" />
+                <div className="h-8 w-24 bg-gray-200 rounded mb-2" />
+                <div className="h-3 w-28 bg-gray-100 rounded" />
               </div>
             ))}
           </div>
@@ -178,20 +178,20 @@ export default function FraudPage() {
         ) : summary ? (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
             <div>
-              <p className="text-sunshine-yellow text-4xl font-bold">{numberFmt.format(summary.totalDetected)}</p>
-              <p className="text-white text-sm mt-1">Detections</p>
+              <p className="text-3xl font-semibold text-gray-900">{numberFmt.format(summary.totalDetected)}</p>
+              <p className="text-sm text-gray-600 mt-1">Detections</p>
             </div>
             <div>
-              <p className="text-sunshine-yellow text-4xl font-bold">{currencyFmt.format(Math.max(0, summary.blockedRevenue))}</p>
-              <p className="text-white text-sm mt-1">Blocked Revenue</p>
+              <p className="text-3xl font-semibold text-gray-900">{currencyFmt.format(Math.max(0, summary.blockedRevenue))}</p>
+              <p className="text-sm text-gray-600 mt-1">Blocked Revenue</p>
             </div>
             <div>
-              <p className="text-sunshine-yellow text-4xl font-bold">{percentFmt.format(Math.max(0, summary.detectionRate / 100))}</p>
-              <p className="text-white text-sm mt-1">Detection Rate</p>
+              <p className="text-3xl font-semibold text-gray-900">{percentFmt.format(Math.max(0, summary.detectionRate / 100))}</p>
+              <p className="text-sm text-gray-600 mt-1">Detection Rate</p>
             </div>
             <div>
-              <p className="text-sunshine-yellow text-4xl font-bold">{summary.lastDetectionAt ? new Date(summary.lastDetectionAt).toLocaleTimeString() : '—'}</p>
-              <p className="text-white text-sm mt-1">Last Detection</p>
+              <p className="text-3xl font-semibold text-gray-900">{summary.lastDetectionAt ? new Date(summary.lastDetectionAt).toLocaleTimeString() : '—'}</p>
+              <p className="text-sm text-gray-600 mt-1">Last Detection</p>
             </div>
           </div>
         ) : null}

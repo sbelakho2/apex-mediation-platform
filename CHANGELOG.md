@@ -1,3 +1,26 @@
+Changelog — Android SDK Runtime Bridge + Docs Refresh (2025-11-21)
+
+Summary
+- Wires BYO runtime adapter bridge end-to-end: `SDKConfig` now carries `auctionApiKey`, and publishers can update credentials at runtime via the BelAds facade without diving into internal SDK classes.
+- Refreshes the customer-facing Android docs (Quickstart + deep integration guide + SDK index) so all onboarding paths describe the BYO-by-default runtime, SDK modes, consent, telemetry, and S2S setup.
+- Ensures recent guardrail work stays validated via `testDebugUnitTest`, covering telemetry percentile fixes, adapter registry wiring, and OM SDK facade behavior.
+
+What changed (highlights)
+- Runtime wiring
+  - `sdk/core/android/src/main/kotlin/MediationSDK.kt` seeds the runtime adapter bridge with `SDKConfig.auctionApiKey`, keeping S2S credentials consistent from initialization onward.
+  - `sdk/core/android/src/main/kotlin/BelAds.kt` exposes `setAuctionApiKey(String)` so apps rotating keys (or enabling S2S post-initialization) can update state through the public facade.
+  - Updated telemetry/adapters tests to cover the new control surface and ensure runtime payloads return `AdResponse` as expected.
+
+- Documentation
+  - `docs/Customer-Facing/SDKs/ANDROID_QUICKSTART.md` now highlights BYO mode defaults, runtime-rendered adapters, S2S prerequisites (`sdkMode`, `enableS2S`, API key), telemetry behavior, and revised numbering.
+  - `docs/Customer-Facing/SDK-Integration/android-sdk.md` is fully rewritten to walk through initialization, consent, runtime bridge configuration, credential rotation, and troubleshooting for BYO/HYBRID tenants.
+  - `docs/Customer-Facing/SDKs/INDEX.md` Android entry calls out the runtime bridge + S2S updates so customers land on the right guide.
+
+Validation and QA
+- Android SDK: `cd sdk/core/android && JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 ./gradlew testDebugUnitTest`
+
+---
+
 Changelog — BYO Tenant Enforcement Wave (2025-11-20)
 
 Summary
