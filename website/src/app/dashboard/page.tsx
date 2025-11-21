@@ -11,10 +11,10 @@ export default async function DashboardPage() {
     <Section>
       <Container className="space-y-6">
         <div className="mb-2">
-          <h1 className="text-h2-sm font-bold uppercase text-primary-blue tracking-tight">
+          <h1 className="text-h2-sm md:text-h2-md lg:text-h2 font-semibold text-gray-900">
             Welcome back, {user?.name || user?.email}!
           </h1>
-          <p className="text-sm text-gray-600 mt-1">
+          <p className="mt-1 text-sm text-gray-600">
             Here's what's happening with your ad monetization today.
           </p>
         </div>
@@ -25,9 +25,11 @@ export default async function DashboardPage() {
         <DashboardStats />
 
         {/* Getting Started */}
-        <div className="card p-6">
-          <h2 className="text-primary-blue font-bold uppercase text-lg mb-4">🚀 Get Started</h2>
-          <div className="space-y-3">
+        <div className="card-v2">
+          <div className="card-v2-header">
+            <h2 className="text-sm font-semibold text-gray-900">🚀 Get Started</h2>
+          </div>
+          <div className="card-v2-body space-y-3">
             <ChecklistItem completed={false}>Add your first app</ChecklistItem>
             <ChecklistItem completed={false}>Create an ad placement</ChecklistItem>
             <ChecklistItem completed={false}>Integrate the SDK</ChecklistItem>
@@ -52,7 +54,7 @@ function ChecklistItem({
         type="checkbox"
         checked={completed}
         readOnly
-        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+        className="h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500"
       />
       <span className={`ml-3 text-sm ${completed ? 'line-through text-gray-500' : 'text-gray-700'}`}>
         {children}

@@ -270,6 +270,16 @@ class AdapterRuntimeWrapper(
             }
         }
     }
+
+    fun showRewardedOnMain(handle: AdHandle, viewContext: Any, callbacks: RewardedCallbacks) {
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            adapter.showRewarded(handle, viewContext, callbacks)
+        } else {
+            mainHandler.post {
+                adapter.showRewarded(handle, viewContext, callbacks)
+            }
+        }
+    }
 }
 
 // MARK: - Thread Guard (Debug)

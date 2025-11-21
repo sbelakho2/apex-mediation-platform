@@ -102,7 +102,7 @@ export default function RevenuePage() {
         return;
       }
       setSeries({
-        points: seriesRes.data.map((point) => ({
+        points: (seriesRes.data.data || []).map((point: any) => ({
           ts: point.timestamp,
           revenue: point.revenue,
           impressions: point.impressions,

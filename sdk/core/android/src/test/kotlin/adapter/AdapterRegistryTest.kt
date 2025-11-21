@@ -4,9 +4,12 @@ import androidx.test.core.app.ApplicationProvider
 import com.rivalapexmediation.sdk.models.AdType
 import org.junit.Assert.*
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
+@RunWith(RobolectricTestRunner::class)
 class AdapterRegistryTest {
 
     @Test

@@ -114,12 +114,12 @@ export default function NetworksPage() {
         return;
       }
       const adapters = performanceRes.data.adapters ?? [];
-      const healthList = healthRes.success && Array.isArray(healthRes.data) ? healthRes.data : [];
+      const healthList: AdapterHealthRow[] = (healthRes.success && Array.isArray(healthRes.data) ? healthRes.data : []) as AdapterHealthRow[];
       const healthMap = new Map<string, AdapterHealthRow>();
-      healthList.forEach((entry) => {
+      healthList.forEach((entry: AdapterHealthRow) => {
         healthMap.set(entry.adapterId, entry);
       });
-      const mapped: NetworkRow[] = adapters.map((adapter) => normalize(adapter, healthMap.get(adapter.adapterId)));
+      const mapped: NetworkRow[] = adapters.map((adapter: AdapterPerformanceRow) => normalize(adapter, healthMap.get(adapter.adapterId)));
       // Include adapters that have health signals but no revenue in window
       healthList.forEach((health) => {
         if (!mapped.some((row) => row.id === health.adapterId)) {
@@ -160,14 +160,14 @@ export default function NetworksPage() {
       {/* Page Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-h2-sm font-bold uppercase text-primary-blue tracking-tight">
+          <h1 className="text-h2-sm md:text-h2-md lg:text-h2 font-semibold text-gray-900">
             Ad Networks
           </h1>
           <p className="text-sm text-gray-600 mt-1">
             Manage your ad network integrations and monitor performance
           </p>
         </div>
-        <button className="btn-primary-yellow px-6 py-3 flex items-center gap-2">
+        <button className="btn-primary flex items-center gap-2">
           <PlusCircleIcon className="w-5 h-5" />
           Add Network
         </button>
@@ -175,44 +175,50 @@ export default function NetworksPage() {
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="card-blue p-6">
-          <p className="text-sunshine-yellow font-bold uppercase text-sm mb-2">
-            Active Networks
-          </p>
-          {loading ? (
-            <div className="h-9 w-24 bg-white/30 rounded animate-pulse" aria-hidden="true" />
-          ) : (
-            <>
-              <p className="text-white text-4xl font-bold">{activeNetworks}</p>
-              <p className="text-white text-sm mt-1">of {rows.length} total</p>
-            </>
-          )}
+        <div className="card-v2">
+          <div className="card-v2-body">
+            <p className="text-xs font-semibold uppercase tracking-wide text-brand-600 mb-2">
+              Active Networks
+            </p>
+            {loading ? (
+              <div className="h-9 w-24 bg-gray-100 rounded animate-pulse" aria-hidden="true" />
+            ) : (
+              <>
+                <p className="text-3xl font-semibold text-gray-900">{activeNetworks}</p>
+                <p className="text-sm text-gray-600 mt-1">of {rows.length} total</p>
+              </>
+            )}
+          </div>
         </div>
-        <div className="card-blue p-6">
-          <p className="text-sunshine-yellow font-bold uppercase text-sm mb-2">
-            Total Revenue (Week)
-          </p>
-          {loading ? (
-            <div className="h-9 w-40 bg-white/30 rounded animate-pulse" aria-hidden="true" />
-          ) : (
-            <>
-              <p className="text-white text-4xl font-bold">{curFmt.format(Math.max(0, totalRevenue))}</p>
-              <p className="text-white text-sm mt-1">across all networks</p>
-            </>
-          )}
+        <div className="card-v2">
+          <div className="card-v2-body">
+            <p className="text-xs font-semibold uppercase tracking-wide text-brand-600 mb-2">
+              Total Revenue (Week)
+            </p>
+            {loading ? (
+              <div className="h-9 w-40 bg-gray-100 rounded animate-pulse" aria-hidden="true" />
+            ) : (
+              <>
+                <p className="text-3xl font-semibold text-gray-900">{curFmt.format(Math.max(0, totalRevenue))}</p>
+                <p className="text-sm text-gray-600 mt-1">across all networks</p>
+              </>
+            )}
+          </div>
         </div>
-        <div className="card-blue p-6">
-          <p className="text-sunshine-yellow font-bold uppercase text-sm mb-2">
-            Total Impressions
-          </p>
-          {loading ? (
-            <div className="h-9 w-40 bg-white/30 rounded animate-pulse" aria-hidden="true" />
-          ) : (
-            <>
-              <p className="text-white text-4xl font-bold">{numFmt.format(Math.max(0, totalImpressions))}</p>
-              <p className="text-white text-sm mt-1">this week</p>
-            </>
-          )}
+        <div className="card-v2">
+          <div className="card-v2-body">
+            <p className="text-xs font-semibold uppercase tracking-wide text-brand-600 mb-2">
+              Total Impressions
+            </p>
+            {loading ? (
+              <div className="h-9 w-40 bg-gray-100 rounded animate-pulse" aria-hidden="true" />
+            ) : (
+              <>
+                <p className="text-3xl font-semibold text-gray-900">{numFmt.format(Math.max(0, totalImpressions))}</p>
+                <p className="text-sm text-gray-600 mt-1">this week</p>
+              </>
+            )}
+          </div>
         </div>
       </div>
 
@@ -237,42 +243,44 @@ export default function NetworksPage() {
       )}
 
       {/* Integration Instructions */}
-      <div className="card p-6">
-        <h2 className="text-primary-blue font-bold uppercase text-lg mb-4 border-b-2 border-sunshine-yellow pb-2">
-          How to Add a Network
-        </h2>
-        <ol className="space-y-3 text-body text-gray-700">
-          <li className="flex gap-3">
-            <span className="font-bold text-sunshine-yellow">1.</span>
-            <span>
-              Click the "Add Network" button above and select your ad network from the list
-            </span>
-          </li>
-          <li className="flex gap-3">
-            <span className="font-bold text-sunshine-yellow">2.</span>
-            <span>
-              Enter your API credentials (App ID, API Key, etc.) from the network's dashboard
-            </span>
-          </li>
-          <li className="flex gap-3">
-            <span className="font-bold text-sunshine-yellow">3.</span>
-            <span>
-              Configure bidding parameters: min eCPM, timeout, priority level
-            </span>
-          </li>
-          <li className="flex gap-3">
-            <span className="font-bold text-sunshine-yellow">4.</span>
-            <span>
-              Test the connection and wait for the first ad request (usually within 5 minutes)
-            </span>
-          </li>
-          <li className="flex gap-3">
-            <span className="font-bold text-sunshine-yellow">5.</span>
-            <span>
-              Monitor performance in real-time and adjust settings as needed
-            </span>
-          </li>
-        </ol>
+      <div className="card-v2">
+        <div className="card-v2-header">
+          <h2 className="text-sm font-semibold text-gray-900">How to Add a Network</h2>
+        </div>
+        <div className="card-v2-body">
+          <ol className="space-y-3 text-sm text-gray-700">
+            <li className="flex gap-3">
+              <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border text-xs font-semibold text-brand-700" style={{borderColor:'var(--brand-500)'}}>1</span>
+              <span>
+                Click the "Add Network" button above and select your ad network from the list
+              </span>
+            </li>
+            <li className="flex gap-3">
+              <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border text-xs font-semibold text-brand-700" style={{borderColor:'var(--brand-500)'}}>2</span>
+              <span>
+                Enter your API credentials (App ID, API Key, etc.) from the network's dashboard
+              </span>
+            </li>
+            <li className="flex gap-3">
+              <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border text-xs font-semibold text-brand-700" style={{borderColor:'var(--brand-500)'}}>3</span>
+              <span>
+                Configure bidding parameters: min eCPM, timeout, priority level
+              </span>
+            </li>
+            <li className="flex gap-3">
+              <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border text-xs font-semibold text-brand-700" style={{borderColor:'var(--brand-500)'}}>4</span>
+              <span>
+                Test the connection and wait for the first ad request (usually within 5 minutes)
+              </span>
+            </li>
+            <li className="flex gap-3">
+              <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border text-xs font-semibold text-brand-700" style={{borderColor:'var(--brand-500)'}}>5</span>
+              <span>
+                Monitor performance in real-time and adjust settings as needed
+              </span>
+            </li>
+          </ol>
+        </div>
       </div>
       </Container>
     </Section>
@@ -312,75 +320,79 @@ function NetworkCard({ network, curFmt, numFmt }: NetworkCardProps) {
   const note = network.note ? `Issue: ${network.note}` : 'No recent incidents';
 
   return (
-    <div className={`card p-6 ${network.status === 'active' ? 'border-2 border-sunshine-yellow' : ''}`}>
+    <div className="card-v2">
       {/* Header */}
-      <div className="flex items-start justify-between mb-4">
-        <div className="flex-1">
-          <h3 className="text-xl font-bold text-primary-blue mb-1">{network.name}</h3>
-          <div className={`flex items-center gap-2 ${config.color}`}>
-            <StatusIcon className="w-4 h-4" />
-            <span className="text-sm font-bold">{config.label}</span>
+      <div className="card-v2-header">
+        <div className="flex items-start justify-between w-full">
+          <div className="flex-1">
+            <h3 className="text-base md:text-lg font-semibold text-gray-900">{network.name}</h3>
+            <div className={`mt-1 inline-flex items-center gap-2 ${config.color}`}>
+              <StatusIcon className="w-4 h-4" />
+              <span className="text-xs font-semibold">{config.label}</span>
+            </div>
           </div>
+          {network.status === 'active' && (
+            <div className="inline-flex items-center rounded-full bg-brand-50 px-3 py-1 text-xs font-semibold uppercase text-brand-700 border" style={{borderColor:'var(--brand-500)'}}>
+              Live
+            </div>
+          )}
         </div>
-        {network.status === 'active' && (
-          <div className="bg-sunshine-yellow text-primary-blue px-3 py-1 rounded text-xs font-bold uppercase">
-            Live
-          </div>
-        )}
       </div>
 
-      {/* Metrics */}
-      {network.status === 'active' ? (
-        <div className="grid grid-cols-2 gap-4 mb-4">
-          <div>
-            <p className="text-xs text-gray-600 uppercase">Revenue (Week)</p>
-            <p className="text-lg font-bold text-primary-blue">{curFmt.format(Math.max(0, network.revenue))}</p>
+      <div className="card-v2-body">
+        {/* Metrics */}
+        {network.status === 'active' ? (
+          <div className="grid grid-cols-2 gap-4 mb-4">
+            <div>
+              <p className="text-xs text-gray-600 uppercase">Revenue (Week)</p>
+              <p className="text-lg font-semibold text-gray-900">{curFmt.format(Math.max(0, network.revenue))}</p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-600 uppercase">Impressions</p>
+              <p className="text-lg font-semibold text-gray-900">{numFmt.format(Math.max(0, totalOrZero(network.impressions)))}{/* helper inline to satisfy TS */}</p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-600 uppercase">eCPM</p>
+              <p className="text-lg font-semibold text-gray-900">{curFmt.format(Math.max(0, network.ecpm))}</p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-600 uppercase">Fill Rate</p>
+              <p className="text-lg font-semibold text-gray-900">{Math.round(network.fillRatePct)}%</p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-600 uppercase">CTR</p>
+              <p className="text-lg font-semibold text-gray-900">{Math.round(network.ctr * 10) / 10}%</p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-600 uppercase">Health Score</p>
+              <p className="text-lg font-semibold text-gray-900">{network.healthScore !== undefined ? Math.round(network.healthScore) : '—'}</p>
+            </div>
           </div>
-          <div>
-            <p className="text-xs text-gray-600 uppercase">Impressions</p>
-            <p className="text-lg font-bold text-primary-blue">{numFmt.format(Math.max(0, network.impressions))}</p>
+        ) : (
+          <div className={`${config.bg} p-4 rounded mb-4`}>
+            <p className="text-sm text-gray-700">
+              {network.status === 'inactive' && 'This network is not connected. Click "Configure" to set up.'}
+              {network.status === 'error' && 'Connection error. Check your credentials and try reconnecting. Review logs for details.'}
+            </p>
           </div>
-          <div>
-            <p className="text-xs text-gray-600 uppercase">eCPM</p>
-            <p className="text-lg font-bold text-primary-blue">{curFmt.format(Math.max(0, network.ecpm))}</p>
-          </div>
-          <div>
-            <p className="text-xs text-gray-600 uppercase">Fill Rate</p>
-            <p className="text-lg font-bold text-primary-blue">{Math.round(network.fillRatePct)}%</p>
-          </div>
-          <div>
-            <p className="text-xs text-gray-600 uppercase">CTR</p>
-            <p className="text-lg font-bold text-primary-blue">{Math.round(network.ctr * 10) / 10}%</p>
-          </div>
-          <div>
-            <p className="text-xs text-gray-600 uppercase">Health Score</p>
-            <p className="text-lg font-bold text-primary-blue">{network.healthScore !== undefined ? Math.round(network.healthScore) : '—'}</p>
-          </div>
-        </div>
-      ) : (
-        <div className={`${config.bg} p-4 rounded mb-4`}>
-          <p className="text-sm text-gray-700">
-            {network.status === 'inactive' && 'This network is not connected. Click "Configure" to set up.'}
-            {network.status === 'error' && 'Connection error. Check your credentials and try reconnecting. Review logs for details.'}
-          </p>
-        </div>
-      )}
+        )}
 
-      {/* Footer */}
-      <div className="flex items-center justify-between pt-4 border-t border-gray-200">
-        <div className="text-xs text-gray-500 space-y-1">
-          {network.uptime !== undefined && (
-            <p>Uptime {network.uptime.toFixed(1)}%</p>
-          )}
-          <p>{note}</p>
+        {/* Footer */}
+        <div className="flex items-center justify-between pt-4 border-t" style={{borderColor:'var(--gray-200)'}}>
+          <div className="text-xs text-gray-500 space-y-1">
+            {network.uptime !== undefined && (
+              <p>Uptime {network.uptime.toFixed(1)}%</p>
+            )}
+            <p>{note}</p>
+          </div>
+          <a href="/docs/Adapters" className="btn-secondary text-sm">
+            Configure
+          </a>
         </div>
-        <a
-          href="/docs/Adapters"
-          className="px-4 py-2 text-sm font-bold text-primary-blue border border-primary-blue rounded hover:bg-primary-blue hover:text-white transition-colors"
-        >
-          Configure
-        </a>
       </div>
     </div>
   );
 }
+
+// small helper for readability
+function totalOrZero(n: number | undefined) { return Math.max(0, n || 0); }

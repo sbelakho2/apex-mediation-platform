@@ -126,6 +126,6 @@ class TelemetryCollectorAdditionalTest {
         org.junit.Assert.assertEquals(1L, counters["fills"])
         org.junit.Assert.assertEquals(1L, counters["no_fills"])
         org.junit.Assert.assertEquals(42L, pct["p50"]) // floor index rule over 2 items -> first item
-        org.junit.Assert.assertEquals(84L, pct["p95"]) // highest value with tiny sample
+        org.junit.Assert.assertEquals(42L, pct["p95"]) // floor rule clamps to first sample with 2 values
     }
 }

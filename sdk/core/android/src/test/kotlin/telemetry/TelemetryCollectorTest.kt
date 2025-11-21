@@ -12,7 +12,7 @@ import org.junit.Before
 import org.junit.Test
 import java.util.concurrent.TimeUnit
 
-class TelemetryCollectorTest {
+class TelemetryCollectorNetworkTest {
     private lateinit var server: MockWebServer
 
     @Before

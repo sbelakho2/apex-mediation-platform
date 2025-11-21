@@ -2,6 +2,8 @@ package com.rivalapexmediation.sdk.consent
 
 import android.content.Context
 import com.rivalapexmediation.sdk.network.AuctionClient
+import com.rivalapexmediation.sdk.contract.ConsentState as RuntimeConsentState
+import com.rivalapexmediation.sdk.contract.AttStatus as RuntimeAttStatus
 
 /**
  * ConsentManager: helper to normalize app-provided consent strings into SDK options.
@@ -82,6 +84,24 @@ object ConsentManager {
         usPrivacy = state.usPrivacy,
         coppa = state.coppa,
         limitAdTracking = state.limitAdTracking,
+    )
+
+    /** Convert to runtime adapter consent payload. */
+    fun toRuntimeConsent(state: State): RuntimeConsentState = RuntimeConsentState(
+        iabTcfV2 = state.consentString,
+        iabUsPrivacy = state.usPrivacy,
+        coppa = state.coppa == true,
+        attStatus = RuntimeAttStatus.NOT_DETERMINED,
+        limitAdTracking = state.limitAdTracking == true,
+    )
+
+    /** Lightweight debug summary with redacted strings for UI/debugger panels. */
+    fun debugSummary(state: State): Map<String, Any?> = mapOf(
+        "gdpr_applies" to state.gdprApplies,
+        "us_privacy" to state.usPrivacy?.let { redact(it) },
+        "tc_string" to state.consentString?.let { redact(it) },
+        "coppa" to state.coppa,
+        "limit_ad_tracking" to state.limitAdTracking
     )
 
     /** Redact consent strings for logs (keeps first 8 and last 4 chars). */

@@ -37,6 +37,11 @@ class FacadeApisTaxonomyTest {
         server.shutdown()
     }
 
+    private fun startSdk(cfg: SDKConfig) {
+        BelAds.initialize(appContext, cfg.appId, cfg)
+        MediationSDK.getInstance().setAuctionApiKey("test-key")
+    }
+
     private fun configBody(placementId: String = "pl_tax"): String {
         val body = mapOf(
             "configId" to "cfg-tax",
@@ -81,9 +86,11 @@ class FacadeApisTaxonomyTest {
             logLevel = LogLevel.DEBUG,
             telemetryEnabled = false,
             configEndpoint = baseUrl,
-            auctionEndpoint = baseUrl
+            auctionEndpoint = baseUrl,
+            sdkMode = SdkMode.HYBRID,
+            enableS2SWhenCapable = true
         )
-        BelAds.initialize(appContext, "app-1", cfg)
+        startSdk(cfg)
 
         val latch = CountDownLatch(1)
         var onMain = false
@@ -128,9 +135,11 @@ class FacadeApisTaxonomyTest {
             logLevel = LogLevel.DEBUG,
             telemetryEnabled = false,
             configEndpoint = baseUrl,
-            auctionEndpoint = baseUrl
+            auctionEndpoint = baseUrl,
+            sdkMode = SdkMode.HYBRID,
+            enableS2SWhenCapable = true
         )
-        BelAds.initialize(appContext, "app-1", cfg)
+        startSdk(cfg)
 
         val latch = CountDownLatch(1)
         var onMain = false

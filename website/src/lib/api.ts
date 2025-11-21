@@ -1,3 +1,13 @@
+type Method = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+
+export type ApiResponse<T> = {
+  success: boolean;
+  data?: T;
+  error?: string;
+  status?: number;
+};
+
+const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
 
 const inflight = new Map<string, Promise<ApiResponse<any>>>();
 

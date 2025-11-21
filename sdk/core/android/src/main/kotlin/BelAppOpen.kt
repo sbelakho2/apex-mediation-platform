@@ -24,6 +24,9 @@ object BelAppOpen {
         val placement = lastPlacement ?: return false
         val sdk = MediationSDK.getInstance()
         val ad: Ad = sdk.consumeCachedAd(placement) ?: return false
+        if (sdk.renderAd(ad, activity)) {
+            return true
+        }
         if (ad.adType != AdType.APP_OPEN && ad.adType != AdType.INTERSTITIAL) {
             // Fallback to interstitial rendering path for now
         }

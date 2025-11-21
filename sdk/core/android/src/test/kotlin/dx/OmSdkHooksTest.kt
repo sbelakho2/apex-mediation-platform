@@ -56,6 +56,11 @@ class OmSdkHooksTest {
         try { server.shutdown() } catch (_: Throwable) {}
     }
 
+    private fun startSdk(cfg: SDKConfig) {
+        BelAds.initialize(appContext, cfg.appId, cfg)
+        MediationSDK.getInstance().setAuctionApiKey("test-key")
+    }
+
     private fun configBody(placementId: String, adType: String = "INTERSTITIAL"): String {
         val body = mapOf(
             "configId" to "cfg-omsdk",
@@ -109,9 +114,11 @@ class OmSdkHooksTest {
             logLevel = LogLevel.DEBUG,
             telemetryEnabled = false,
             configEndpoint = baseUrl,
-            auctionEndpoint = baseUrl
+            auctionEndpoint = baseUrl,
+            sdkMode = SdkMode.HYBRID,
+            enableS2SWhenCapable = true
         )
-        BelAds.initialize(appContext, "app-1", cfg)
+        startSdk(cfg)
 
         // Install a test OM controller to capture calls
         val calls = mutableListOf<Call>()
@@ -160,9 +167,11 @@ class OmSdkHooksTest {
             logLevel = LogLevel.DEBUG,
             telemetryEnabled = false,
             configEndpoint = baseUrl,
-            auctionEndpoint = baseUrl
+            auctionEndpoint = baseUrl,
+            sdkMode = SdkMode.HYBRID,
+            enableS2SWhenCapable = true
         )
-        BelAds.initialize(appContext, "app-1", cfg)
+        startSdk(cfg)
 
         val calls = mutableListOf<Call>()
         installOmController(calls)
@@ -206,9 +215,11 @@ class OmSdkHooksTest {
             logLevel = LogLevel.DEBUG,
             telemetryEnabled = false,
             configEndpoint = baseUrl,
-            auctionEndpoint = baseUrl
+            auctionEndpoint = baseUrl,
+            sdkMode = SdkMode.HYBRID,
+            enableS2SWhenCapable = true
         )
-        BelAds.initialize(appContext, "app-1", cfg)
+        startSdk(cfg)
 
         val calls = mutableListOf<Call>()
         installOmController(calls)
@@ -250,9 +261,11 @@ class OmSdkHooksTest {
             logLevel = LogLevel.DEBUG,
             telemetryEnabled = false,
             configEndpoint = baseUrl,
-            auctionEndpoint = baseUrl
+            auctionEndpoint = baseUrl,
+            sdkMode = SdkMode.HYBRID,
+            enableS2SWhenCapable = true
         )
-        BelAds.initialize(appContext, "app-1", cfg)
+        startSdk(cfg)
 
         val calls = mutableListOf<Call>()
         installOmController(calls)

@@ -1,6 +1,8 @@
 package com.rivalapexmediation.sdk
 
+import android.app.Activity
 import android.content.Context
+import android.content.res.Configuration
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
@@ -15,20 +17,49 @@ import kotlinx.coroutines.*
 import okhttp3.CertificatePinner
 import okhttp3.OkHttpClient
 import com.rivalapexmediation.sdk.config.ConfigManager
+import com.rivalapexmediation.sdk.consent.ConsentManager
+import com.rivalapexmediation.sdk.contract.AdHandle
+import com.rivalapexmediation.sdk.contract.AdapterError
+import com.rivalapexmediation.sdk.contract.AdapterConfig as RuntimeAdapterConfig
+import com.rivalapexmediation.sdk.contract.AdapterCredentials as RuntimeAdapterCredentials
+import com.rivalapexmediation.sdk.contract.AdapterOptions as RuntimeAdapterOptions
+import com.rivalapexmediation.sdk.contract.CloseReason
+import com.rivalapexmediation.sdk.contract.AttStatus as RuntimeAttStatus
+import com.rivalapexmediation.sdk.contract.AuctionMeta as RuntimeAuctionMeta
+import com.rivalapexmediation.sdk.contract.ConnectionType as RuntimeConnectionType
+import com.rivalapexmediation.sdk.contract.ContextMeta as RuntimeContextMeta
+import com.rivalapexmediation.sdk.contract.ConsentState as RuntimeConsentState
+import com.rivalapexmediation.sdk.contract.DeviceMeta as RuntimeDeviceMeta
+import com.rivalapexmediation.sdk.contract.LoadResult as RuntimeLoadResult
+import com.rivalapexmediation.sdk.contract.NetworkMeta as RuntimeNetworkMeta
+import com.rivalapexmediation.sdk.contract.Orientation as RuntimeOrientation
+import com.rivalapexmediation.sdk.contract.UserMeta as RuntimeUserMeta
+import com.rivalapexmediation.sdk.contract.PaidEvent
+import com.rivalapexmediation.sdk.contract.RequestMeta as RuntimeRequestMeta
+import com.rivalapexmediation.sdk.contract.RewardedCallbacks
+import com.rivalapexmediation.sdk.contract.ShowCallbacks
 import com.rivalapexmediation.sdk.telemetry.TelemetryCollector
 import com.rivalapexmediation.sdk.models.*
 import com.rivalapexmediation.sdk.threading.CircuitBreaker
 import com.rivalapexmediation.sdk.network.AuctionClient
+import java.util.concurrent.atomic.AtomicInteger
+import kotlinx.coroutines.runBlocking
 
 /**
  * Main entry point for the Rival ApexMediation SDK
- * 
+ *
+ * BYO guardrails:
+ * - Never persist or transmit adapter credentials; only pull them via AdapterConfigProvider.
+ * - Default to BYO mode with S2S disabled unless explicitly re-enabled.
+ * - Validation mode performs credential pings only; ad loads are blocked while enabled.
+ * - All telemetry and cached ads must redact secrets and tag strategy/test metadata for debugging.
+ *
  * Thread-Safety Guarantees:
  * - All network I/O on background threads
  * - UI thread only for view rendering
  * - StrictMode enforcement in debug builds
  * - Circuit breakers per adapter
- * 
+ *
  * Performance Targets:
  * - Cold start: ≤100ms
  * - Warm start: ≤50ms
@@ -107,12 +138,22 @@ class MediationSDK private constructor(
     }
     private val telemetry = TelemetryCollector(context, config)
     private val adapterRegistry = AdapterRegistry()
+    private val sessionDepth = AtomicInteger(0)
+    private val runtimeHandles = ConcurrentHashMap<String, RuntimeHandleBinding>()
+    private val runtimeShowCallbacks = object : RewardedCallbacks {
+        override fun onImpression(meta: Map<String, Any?>) {}
+        override fun onPaidEvent(event: PaidEvent) {}
+        override fun onClick(meta: Map<String, Any?>) {}
+        override fun onClosed(reason: CloseReason) {}
+        override fun onError(error: AdapterError) {}
+        override fun onRewardVerified(rewardType: String, rewardAmount: Double) {}
+    }
     private val circuitBreakers = ConcurrentHashMap<String, CircuitBreaker>()
     // Simple in-memory ad cache per placement (interstitials): preserves last loaded ad for fast show.
     private data class CachedAd(val ad: Ad, val expiryAtMs: Long)
     private val adCache = mutableMapOf<String, CachedAd>()
     // Consent preferences propagated to auction metadata (GDPR/USP/COPPA/LAT)
-    @Volatile private var consentOptions: AuctionClient.ConsentOptions = AuctionClient.ConsentOptions()
+    @Volatile private var consentState: ConsentManager.State = ConsentManager.State()
     @Volatile private var auctionClient: AuctionClient? = null
     @Volatile private var auctionApiKey: String = ""
     @Volatile private var testModeOverride: Boolean? = null
@@ -123,12 +164,7 @@ class MediationSDK private constructor(
     fun getAppId(): String = config.appId
     fun getPlacements(): List<String> = try { configManager.getAllPlacements().keys.toList() } catch (_: Throwable) { emptyList() }
     fun isTestModeEffective(): Boolean = (testModeOverride ?: config.testMode)
-    fun getConsentDebugSummary(): Map<String, Any?> = mapOf(
-        "gdpr_applies" to consentOptions.gdprApplies,
-        "us_privacy" to consentOptions.usPrivacy,
-        "coppa" to consentOptions.coppa,
-        "limit_ad_tracking" to consentOptions.limitAdTracking,
-    )
+    fun getConsentDebugSummary(): Map<String, Any?> = ConsentManager.debugSummary(consentState)
     
     /**
      * Enable StrictMode in debug builds to catch threading violations
@@ -178,10 +214,10 @@ class MediationSDK private constructor(
         coppa: Boolean? = null,
         limitAdTracking: Boolean? = null,
     ) {
-        this.consentOptions = AuctionClient.ConsentOptions(
+        this.consentState = ConsentManager.normalize(
+            tcf = consentString,
+            usp = usPrivacy,
             gdprApplies = gdprApplies,
-            consentString = consentString,
-            usPrivacy = usPrivacy,
             coppa = coppa,
             limitAdTracking = limitAdTracking,
         )
@@ -411,6 +447,15 @@ class MediationSDK private constructor(
             val traceId = try { java.util.UUID.randomUUID().toString() } catch (_: Throwable) { "trace-${System.currentTimeMillis()}" }
 
             try {
+                if (config.validationModeEnabled) {
+                    val message = "ValidationMode is enabled; ad loads are blocked until disabled"
+                    telemetry.recordError("validation_mode_blocked", IllegalStateException(message))
+                    postToMainThread {
+                        callback.onError(AdError.INTERNAL_ERROR, "validation_mode_enabled")
+                    }
+                    return@Runnable
+                }
+
                 // Check kill switch before any work
                 val features = configManager.getFeatureFlags()
                 if (features.killSwitch) {
@@ -430,11 +475,16 @@ class MediationSDK private constructor(
                 // 1) Try S2S auction first if enabled for this mode; fallback to adapters on no_fill.
                 if (shouldUseS2SForPlacement(placement)) {
                     try {
-                        telemetry.recordAdapterSpanStart(traceId, placement, "s2s")
+                        telemetry.recordAdapterSpanStart(
+                            traceId,
+                            placement,
+                            "s2s",
+                            runtimeTelemetryMetadata(LoadStrategy.S2S)
+                        )
                         val s2sStart = System.currentTimeMillis()
                         val client = ensureAuctionClient()
                         val meta = mutableMapOf<String, String>()
-                        val effectiveTest = testModeOverride ?: config.testMode
+                        val effectiveTest = isTestModeEffective()
                         if (effectiveTest) meta["test_mode"] = "1" else meta["test_mode"] = "0"
                         testDeviceId?.let { if (it.isNotBlank()) meta["test_device"] = it }
                         val opts = AuctionClient.InterstitialOptions(
@@ -446,7 +496,7 @@ class MediationSDK private constructor(
                             timeoutMs = placementConfig.timeoutMs.toInt().coerceAtLeast(100),
                             auctionType = "header_bidding",
                         )
-                        val result = client.requestInterstitial(opts, consentOptions)
+                        val result = client.requestInterstitial(opts, currentAuctionConsent())
                         // Map to Ad model and callback success
                         val ttlMs = computeDefaultExpiryMs(placementConfig)
                         val ad = Ad(
@@ -456,6 +506,7 @@ class MediationSDK private constructor(
                             adType = AdType.INTERSTITIAL,
                             ecpm = result.ecpm,
                             creative = Creative.Banner(width = 0, height = 0, markupHtml = result.adMarkup ?: ""),
+                            metadata = buildRuntimeAdMetadata(LoadStrategy.S2S),
                             expiryTimeMs = System.currentTimeMillis() + ttlMs
                         )
                         cacheAd(placement, ad)
@@ -467,6 +518,7 @@ class MediationSDK private constructor(
                             adapter = "s2s",
                             outcome = "fill",
                             latencyMs = System.currentTimeMillis() - s2sStart,
+                            metadata = runtimeTelemetryMetadata(LoadStrategy.S2S)
                         )
                         postToMainThread { callback.onAdLoaded(ad) }
                         return@Runnable
@@ -481,16 +533,12 @@ class MediationSDK private constructor(
                                 outcome = "no_fill",
                                 latencyMs = System.currentTimeMillis() - startTime,
                                 errorCode = reason,
-                                errorMessage = ae.message
+                                errorMessage = ae.message,
+                                metadata = runtimeTelemetryMetadata(LoadStrategy.S2S)
                             )
                             // proceed to adapters
                         } else {
-                            val err = when {
-                                reason == "timeout" -> AdError.TIMEOUT
-                                reason == "network_error" -> AdError.NETWORK_ERROR
-                                reason.startsWith("status_") -> AdError.INTERNAL_ERROR
-                                else -> AdError.INTERNAL_ERROR
-                            }
+                            val err = mapAuctionReasonToAdError(reason)
                             telemetry.recordAdLoad(placement, System.currentTimeMillis() - startTime, false)
                             telemetry.recordAdapterSpanFinish(
                                 traceId = traceId,
@@ -499,28 +547,80 @@ class MediationSDK private constructor(
                                 outcome = if (reason == "timeout") "timeout" else "error",
                                 latencyMs = System.currentTimeMillis() - startTime,
                                 errorCode = reason,
-                                errorMessage = ae.message
+                                errorMessage = ae.message,
+                                metadata = runtimeTelemetryMetadata(LoadStrategy.S2S)
                             )
-                            postToMainThread { callback.onError(err, reason) }
+                            postToMainThread { callback.onError(err, ae.message ?: reason) }
                             return@Runnable
                         }
                     }
                 }
 
-                // 2) Adapter fallback: parallel loading with timeouts
-                val adapters = getEnabledAdapters(placementConfig)
+                // 2) Adapter fallback: prefer runtime V2 adapters, fallback to legacy when needed.
+                val runtimeEntries = adapterRegistry.getRuntimeAdapters(placementConfig.enabledNetworks)
+                val legacyAdapters = getEnabledAdapters(placementConfig)
 
-                if (adapters.isEmpty()) {
+                if (runtimeEntries.isEmpty() && legacyAdapters.isEmpty()) {
                     postToMainThread {
                         callback.onError(AdError.NO_FILL, "No adapters available")
                     }
                     return@Runnable
                 }
 
-                val futures: List<Future<AdResponse?>> = adapters.map { adapter ->
-                    networkExecutor.submit(Callable {
+                val futures = mutableListOf<Future<AdapterResult>>()
+
+                runtimeEntries.forEach { entry ->
+                    futures += networkExecutor.submit(Callable {
                         val adapterStart = System.currentTimeMillis()
-                        telemetry.recordAdapterSpanStart(traceId, placement, adapter.name)
+                        val metadata = runtimeTelemetryMetadata(
+                            LoadStrategy.CLIENT_ADAPTER,
+                            mapOf("path" to "adapter", "api" to "runtime_v2")
+                        )
+                        telemetry.recordAdapterSpanStart(
+                            traceId,
+                            placement,
+                            entry.partnerId,
+                            metadata
+                        )
+                        try {
+                            val payload = loadViaRuntime(entry, placement, placementConfig)
+                            val latency = System.currentTimeMillis() - adapterStart
+                            val response = payload?.response?.copy(loadTime = latency)
+                            val outcome = if (response?.isValid() == true) "fill" else "no_fill"
+                            telemetry.recordAdapterSpanFinish(
+                                traceId = traceId,
+                                placement = placement,
+                                adapter = entry.partnerId,
+                                outcome = outcome,
+                                latencyMs = latency,
+                                metadata = metadata
+                            )
+                            AdapterResult(response, payload?.binding)
+                        } catch (t: Throwable) {
+                            val latency = System.currentTimeMillis() - adapterStart
+                            telemetry.recordAdapterSpanFinish(
+                                traceId = traceId,
+                                placement = placement,
+                                adapter = entry.partnerId,
+                                outcome = "error",
+                                latencyMs = latency,
+                                errorCode = "exception",
+                                errorMessage = t.message,
+                                metadata = metadata
+                            )
+                            throw t
+                        }
+                    })
+                }
+
+                legacyAdapters.forEach { adapter ->
+                    futures += networkExecutor.submit(Callable {
+                        val adapterStart = System.currentTimeMillis()
+                        val metadata = runtimeTelemetryMetadata(
+                            LoadStrategy.CLIENT_ADAPTER,
+                            mapOf("path" to "adapter", "api" to "legacy_v1")
+                        )
+                        telemetry.recordAdapterSpanStart(traceId, placement, adapter.name, metadata)
                         try {
                             val resp = loadWithCircuitBreaker(adapter, placement, placementConfig)
                             val latency = System.currentTimeMillis() - adapterStart
@@ -531,9 +631,9 @@ class MediationSDK private constructor(
                                 adapter = adapter.name,
                                 outcome = outcome,
                                 latencyMs = latency,
-                                metadata = mapOf("path" to "adapter")
+                                metadata = metadata
                             )
-                            resp
+                            AdapterResult(resp, null)
                         } catch (t: Throwable) {
                             val latency = System.currentTimeMillis() - adapterStart
                             telemetry.recordAdapterSpanFinish(
@@ -544,32 +644,34 @@ class MediationSDK private constructor(
                                 latencyMs = latency,
                                 errorCode = "exception",
                                 errorMessage = t.message,
-                                metadata = mapOf("path" to "adapter")
+                                metadata = metadata
                             )
                             throw t
                         }
                     })
                 }
 
-                // Collect results with timeout
-                val results = futures.mapNotNull { future ->
+                val adapterResults = mutableListOf<AdapterResult>()
+                futures.forEach { future ->
                     try {
-                        future.get(placementConfig.timeoutMs, TimeUnit.MILLISECONDS)
+                        val result = future.get(placementConfig.timeoutMs, TimeUnit.MILLISECONDS)
+                        adapterResults += result
                     } catch (e: TimeoutException) {
                         telemetry.recordTimeout(placement, "adapter_timeout")
-                        null
                     } catch (e: Exception) {
                         telemetry.recordError("adapter_load_failed", e)
-                        null
                     }
                 }
 
+                val results = adapterResults.mapNotNull { it.response }
+
                 // Select best ad (highest eCPM)
                 val bestAd = selectBestAd(results)
-                
+                handleRuntimeBindings(adapterResults, bestAd)
+
                 if (bestAd != null) {
-                    // Cache with TTL for readiness & fast show
-                    val cached = bestAd.copy(expiryTimeMs = System.currentTimeMillis() + computeDefaultExpiryMs(placementConfig))
+                    val expiry = bestAd.expiryTimeMs ?: (System.currentTimeMillis() + computeDefaultExpiryMs(placementConfig))
+                    val cached = bestAd.copy(expiryTimeMs = expiry)
                     cacheAd(placement, cached)
                     val latency = System.currentTimeMillis() - startTime
                     telemetry.recordAdLoad(placement, latency, true)
@@ -668,11 +770,15 @@ class MediationSDK private constructor(
         try { adapterRegistry.shutdown() } catch (_: Throwable) {}
         try { configManager.shutdown() } catch (_: Throwable) {}
         circuitBreakers.clear()
+        clearRuntimeBindings()
         synchronized(adCache) { adCache.clear() }
     }
     
     /**
-     * Check if an ad is ready to show
+     * Check if an ad is ready to show.
+     *
+     * BYO guarantee: cached ads are metadata-rich, single-use, and purged immediately when expired.
+     * This allows publishers to gate show() calls deterministically without exposing credentials.
      */
     fun isAdReady(placement: String): Boolean {
         // This can be called from any thread
@@ -687,6 +793,7 @@ class MediationSDK private constructor(
     private fun cacheAd(placement: String, ad: Ad) {
         val expiry = ad.expiryTimeMs ?: (System.currentTimeMillis() + 60_000L)
         synchronized(adCache) {
+            adCache[placement]?.ad?.let { releaseRuntimeBinding(it) }
             adCache[placement] = CachedAd(ad, expiry)
             pruneExpiredLocked()
         }
@@ -697,7 +804,10 @@ class MediationSDK private constructor(
         val it = adCache.entries.iterator()
         while (it.hasNext()) {
             val e = it.next()
-            if (now >= e.value.expiryAtMs) it.remove()
+            if (now >= e.value.expiryAtMs) {
+                releaseRuntimeBinding(e.value.ad)
+                it.remove()
+            }
         }
     }
 
@@ -705,6 +815,233 @@ class MediationSDK private constructor(
         // If refreshInterval provided, use 2x refresh as TTL; else default to 60 minutes.
         val refreshSec = placementConfig.refreshInterval
         return if (refreshSec != null && refreshSec > 0) (refreshSec * 2L * 1000L) else 60L * 60L * 1000L
+    }
+
+    private fun loadViaRuntime(
+        entry: AdapterRegistry.RuntimeAdapterEntry,
+        placement: String,
+        placementConfig: PlacementConfig
+    ): RuntimeLoadPayload? {
+        val adapterConfig = buildRuntimeAdapterConfig(entry.partnerId, placementConfig) ?: return null
+        val timeout = placementConfig.timeoutMs.toInt().coerceAtLeast(100)
+        val initResult = try {
+            entry.ensureInitialized(adapterConfig, timeout)
+        } catch (t: Throwable) {
+            telemetry.recordError("${entry.partnerId}_init_exception", t)
+            return null
+        }
+        if (!initResult.success) {
+            initResult.error?.let { telemetry.recordError("${entry.partnerId}_init_failed", it) }
+            return null
+        }
+        val requestMeta = buildRuntimeRequestMeta(placement, placementConfig)
+        val loadResult = runBlocking {
+            entry.loadInterstitial(placement, requestMeta, timeout)
+        }
+        val response = adFromRuntime(placement, placementConfig, entry.partnerId, loadResult)
+        val binding = RuntimeHandleBinding(entry.partnerId, loadResult.handle, placementConfig.adType)
+        return RuntimeLoadPayload(response, binding)
+    }
+
+    private fun buildRuntimeAdapterConfig(networkId: String, placementConfig: PlacementConfig): RuntimeAdapterConfig? {
+        val creds = adapterConfigProvider?.getCredentials(networkId)?.takeIf { it.isNotEmpty() } ?: return null
+        val key = creds["key"] ?: creds["api_key"] ?: creds["app_key"] ?: return null
+        val secret = creds["secret"] ?: creds["app_secret"]
+        val appId = creds["app_id"]
+        val accountIds = creds
+            .filterKeys { it.startsWith("account.") }
+            .mapKeys { it.key.removePrefix("account.") }
+        val placementKey = "placement.${placementConfig.placementId}"
+        val mappedPlacement = creds[placementKey]
+            ?: creds["placement_id"]
+            ?: placementConfig.placementId
+        val placements = mapOf(placementConfig.placementId to mappedPlacement)
+        return RuntimeAdapterConfig(
+            partner = networkId,
+            credentials = RuntimeAdapterCredentials(
+                key = key,
+                secret = secret,
+                appId = appId,
+                accountIds = if (accountIds.isEmpty()) null else accountIds
+            ),
+            placements = placements,
+            privacy = buildRuntimeConsentState(),
+            options = RuntimeAdapterOptions(
+                testMode = isTestModeEffective()
+            )
+        )
+    }
+
+    private fun buildRuntimeConsentState(): RuntimeConsentState = ConsentManager.toRuntimeConsent(consentState)
+
+    private fun currentAuctionConsent(): AuctionClient.ConsentOptions = ConsentManager.toAuctionConsent(consentState)
+
+    private fun buildRuntimeRequestMeta(placement: String, placementConfig: PlacementConfig): RuntimeRequestMeta {
+        val consent = buildRuntimeConsentState()
+        val device = RuntimeDeviceMeta(
+            os = "android",
+            osVersion = Build.VERSION.RELEASE ?: "",
+            model = Build.MODEL ?: ""
+        )
+        val user = RuntimeUserMeta(
+            ageRestricted = consent.coppa,
+            consent = consent
+        )
+        val net = RuntimeNetworkMeta(
+            ipPrefixed = "",
+            uaNormalized = "",
+            connType = RuntimeConnectionType.OTHER
+        )
+        val contextMeta = RuntimeContextMeta(
+            orientation = determineOrientation(),
+            sessionDepth = sessionDepth.incrementAndGet()
+        )
+        val floorMicros = placementConfig.floorPrice
+            .takeIf { it > 0 }
+            ?.let { (it * 1_000_000L).toLong() }
+        val auction = RuntimeAuctionMeta(
+            floorsMicros = floorMicros,
+            sChain = null,
+            sellersJsonOk = null
+        )
+        return RuntimeRequestMeta(
+            requestId = java.util.UUID.randomUUID().toString(),
+            device = device,
+            user = user,
+            net = net,
+            context = contextMeta,
+            auction = auction
+        )
+    }
+
+    private fun determineOrientation(): RuntimeOrientation {
+        val orientation = context.resources?.configuration?.orientation
+        return if (orientation == Configuration.ORIENTATION_LANDSCAPE) {
+            RuntimeOrientation.LANDSCAPE
+        } else {
+            RuntimeOrientation.PORTRAIT
+        }
+    }
+
+    private fun adFromRuntime(
+        placement: String,
+        placementConfig: PlacementConfig,
+        partner: String,
+        loadResult: RuntimeLoadResult
+    ): AdResponse {
+        val metadata = buildRuntimeAdMetadata(LoadStrategy.CLIENT_ADAPTER).toMutableMap()
+        metadata["runtime_handle"] = loadResult.handle.id
+        metadata["runtime_partner"] = partner
+        metadata["runtime_api"] = "runtime_v2"
+        loadResult.partnerMeta.forEach { (k, v) ->
+            metadata["partner_$k"] = v?.toString() ?: ""
+        }
+        val ttlMs = loadResult.ttlMs.coerceAtLeast(1_000)
+        val expiry = System.currentTimeMillis() + ttlMs
+        val ecpm = loadResult.priceMicros?.let { it.toDouble() / 1_000_000.0 } ?: 0.0
+        val ad = Ad(
+            id = loadResult.handle.id,
+            placementId = placement,
+            networkName = partner,
+            adType = placementConfig.adType,
+            ecpm = ecpm,
+            creative = Creative.Banner(width = 0, height = 0, markupHtml = ""),
+            metadata = metadata,
+            expiryTimeMs = expiry
+        )
+        return AdResponse(
+            ad = ad,
+            ecpm = ecpm,
+            loadTime = 0L,
+            networkName = partner
+        )
+    }
+
+    private fun handleRuntimeBindings(results: List<AdapterResult>, winner: Ad?) {
+        val winnerHandle = winner?.metadata?.get("runtime_handle")
+        results.forEach { result ->
+            val binding = result.runtimeBinding ?: return@forEach
+            if (winnerHandle != null && binding.handle.id == winnerHandle) {
+                registerRuntimeBinding(binding)
+            } else {
+                adapterRegistry.getRuntimeEntry(binding.partner)?.invalidate(binding.handle)
+            }
+        }
+    }
+
+    private fun registerRuntimeBinding(binding: RuntimeHandleBinding) {
+        runtimeHandles[binding.handle.id] = binding
+    }
+
+    private fun releaseRuntimeBinding(ad: Ad) {
+        val handleId = ad.metadata["runtime_handle"] ?: return
+        val binding = runtimeHandles.remove(handleId) ?: return
+        adapterRegistry.getRuntimeEntry(binding.partner)?.invalidate(binding.handle)
+    }
+
+    private fun clearRuntimeBindings() {
+        val bindings = runtimeHandles.values.toList()
+        runtimeHandles.clear()
+        bindings.forEach { binding ->
+            adapterRegistry.getRuntimeEntry(binding.partner)?.invalidate(binding.handle)
+        }
+    }
+
+    private data class AdapterResult(
+        val response: AdResponse?,
+        val runtimeBinding: RuntimeHandleBinding?
+    )
+
+    private data class RuntimeLoadPayload(
+        val response: AdResponse,
+        val binding: RuntimeHandleBinding
+    )
+
+    private data class RuntimeHandleBinding(
+        val partner: String,
+        val handle: AdHandle,
+        val adType: AdType
+    )
+
+    private fun buildRuntimeAdMetadata(strategy: LoadStrategy): Map<String, String> {
+        val meta = LinkedHashMap<String, String>()
+        meta["strategy"] = strategy.tag
+        meta["sdk_mode"] = config.sdkMode.name.lowercase()
+        meta["test_mode"] = if (isTestModeEffective()) "1" else "0"
+        testDeviceId?.takeIf { it.isNotBlank() }?.let { meta["test_device_id"] = it }
+        if (config.validationModeEnabled) meta["validation_mode"] = "1"
+        return meta
+    }
+
+    private fun runtimeTelemetryMetadata(strategy: LoadStrategy, extra: Map<String, Any> = emptyMap()): Map<String, Any> {
+        if (!config.observabilityEnabled) return emptyMap()
+        val meta = LinkedHashMap<String, Any>()
+        meta["strategy"] = strategy.tag
+        meta["sdk_mode"] = config.sdkMode.name.lowercase()
+        meta["test_mode"] = if (isTestModeEffective()) "1" else "0"
+        if (config.validationModeEnabled) meta["validation_mode"] = "1"
+        for ((k, v) in extra) {
+            meta[k] = v
+        }
+        return meta
+    }
+
+    private fun mapAuctionReasonToAdError(reason: String?): AdError {
+        return when {
+            reason == null -> AdError.INTERNAL_ERROR
+            reason.equals("timeout", ignoreCase = true) -> AdError.TIMEOUT
+            reason.equals("network_error", ignoreCase = true) -> AdError.NETWORK_ERROR
+            reason.equals("no_fill", ignoreCase = true) -> AdError.NO_FILL
+            reason.equals("below_floor", ignoreCase = true) -> AdError.NO_FILL
+            reason.startsWith("status_4", ignoreCase = true) -> AdError.INTERNAL_ERROR
+            reason.startsWith("status_5", ignoreCase = true) -> AdError.NETWORK_ERROR
+            else -> AdError.INTERNAL_ERROR
+        }
+    }
+
+    private enum class LoadStrategy(val tag: String) {
+        S2S("s2s"),
+        CLIENT_ADAPTER("client_sdk")
     }
     
     /**
@@ -724,11 +1061,40 @@ class MediationSDK private constructor(
         }
     }
 
+    /**
+     * Render a cached ad using the runtime adapter bridge when applicable.
+     * Falls back to false when the ad was sourced from S2S.
+     */
+    fun renderAd(ad: Ad, activity: Activity): Boolean {
+        val handleId = ad.metadata["runtime_handle"] ?: return false
+        val binding = runtimeHandles[handleId] ?: return false
+        val entry = adapterRegistry.getRuntimeEntry(binding.partner)
+        if (entry == null) {
+            runtimeHandles.remove(handleId)
+            return false
+        }
+        return try {
+            when (binding.adType) {
+                AdType.REWARDED, AdType.REWARDED_INTERSTITIAL ->
+                    entry.showRewarded(binding.handle, activity, runtimeShowCallbacks)
+                else -> entry.showInterstitial(binding.handle, activity, runtimeShowCallbacks)
+            }
+            true
+        } catch (t: Throwable) {
+            telemetry.recordError("runtime_show_failed", t)
+            false
+        } finally {
+            runtimeHandles.remove(handleId)
+            entry.invalidate(binding.handle)
+        }
+    }
+
     fun shutdown() {
         backgroundExecutor.execute {
             telemetry.stop()
             adapterRegistry.shutdown()
             configManager.shutdown()
+            clearRuntimeBindings()
             
             backgroundExecutor.shutdown()
             networkExecutor.shutdown()

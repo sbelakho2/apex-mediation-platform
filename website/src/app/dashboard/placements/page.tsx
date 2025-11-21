@@ -181,15 +181,15 @@ export default function PlacementsPage() {
       {/* Page Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-h2-sm font-bold uppercase text-primary-blue tracking-tight">
+          <h1 className="text-h2-sm md:text-h2-md lg:text-h2 font-semibold text-gray-900">
             Ad Placements
           </h1>
-          <p className="text-sm text-gray-600 mt-1">
+          <p className="mt-1 text-sm text-gray-600">
             Manage ad placements and optimize performance across all apps
           </p>
         </div>
         <button
-          className="btn-primary-yellow px-6 py-3 flex items-center gap-2"
+          className="btn-primary flex items-center gap-2"
           onClick={() => openModal('create')}
         >
           <PlusCircleIcon className="w-5 h-5" />
@@ -198,69 +198,71 @@ export default function PlacementsPage() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <div className="card-blue p-6">
-          <p className="text-sunshine-yellow font-bold uppercase text-sm mb-2">
-            Active Placements
-          </p>
-          <p className="text-white text-4xl font-bold">{activePlacements}</p>
-          <p className="text-white text-sm mt-1">of {placements.length} total</p>
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+        <div className="card-v2">
+          <div className="card-v2-body">
+            <p className="text-xs font-semibold uppercase tracking-wide text-brand-600 mb-2">Active Placements</p>
+            <p className="text-3xl font-semibold text-gray-900">{activePlacements}</p>
+            <p className="mt-1 text-sm text-gray-600">of {placements.length} total</p>
+          </div>
         </div>
-        <div className="card-blue p-6">
-          <p className="text-sunshine-yellow font-bold uppercase text-sm mb-2">
-            Total Revenue
-          </p>
-          <p className="text-white text-4xl font-bold">{curFmt.format(totalRevenue)}</p>
-          <p className="text-white text-sm mt-1">this week</p>
+        <div className="card-v2">
+          <div className="card-v2-body">
+            <p className="text-xs font-semibold uppercase tracking-wide text-brand-600 mb-2">Total Revenue</p>
+            <p className="text-3xl font-semibold text-gray-900">{curFmt.format(totalRevenue)}</p>
+            <p className="mt-1 text-sm text-gray-600">this week</p>
+          </div>
         </div>
-        <div className="card-blue p-6">
-          <p className="text-sunshine-yellow font-bold uppercase text-sm mb-2">
-            Avg eCPM
-          </p>
-          <p className="text-white text-4xl font-bold">{curFmt.format(avgEcpm)}</p>
-          <p className="text-white text-sm mt-1">across all placements</p>
+        <div className="card-v2">
+          <div className="card-v2-body">
+            <p className="text-xs font-semibold uppercase tracking-wide text-brand-600 mb-2">Avg eCPM</p>
+            <p className="text-3xl font-semibold text-gray-900">{curFmt.format(avgEcpm)}</p>
+            <p className="mt-1 text-sm text-gray-600">across all placements</p>
+          </div>
         </div>
-        <div className="card-blue p-6">
-          <p className="text-sunshine-yellow font-bold uppercase text-sm mb-2">
-            Impressions
-          </p>
-          <p className="text-white text-4xl font-bold">{totalImpressions.toLocaleString()}</p>
-          <p className="text-white text-sm mt-1">this week</p>
+        <div className="card-v2">
+          <div className="card-v2-body">
+            <p className="text-xs font-semibold uppercase tracking-wide text-brand-600 mb-2">Impressions</p>
+            <p className="text-3xl font-semibold text-gray-900">{totalImpressions.toLocaleString()}</p>
+            <p className="mt-1 text-sm text-gray-600">this week</p>
+          </div>
         </div>
       </div>
 
       {/* Format Filter */}
-      <div className="card p-6">
-        <h2 className="text-primary-blue font-bold uppercase text-sm mb-4">
-          Filter by Format
-        </h2>
-        <div className="flex flex-wrap gap-3">
-          {['all', 'banner', 'interstitial', 'rewarded', 'native'].map((format) => (
-            <button
-              key={format}
-              onClick={() => setSelectedFormat(format as any)}
-              className={`px-6 py-3 text-sm font-bold uppercase rounded transition-colors ${
-                selectedFormat === format
-                  ? 'bg-sunshine-yellow text-primary-blue'
-                  : 'bg-white text-gray-600 border-2 border-gray-300 hover:border-primary-blue'
-              }`}
-            >
-              {format === 'all' ? '📊 All Formats' :
-               format === 'banner' ? '📱 Banner' :
-               format === 'interstitial' ? '🖼️ Interstitial' :
-               format === 'rewarded' ? '🎁 Rewarded' :
-               '📰 Native'}
-            </button>
-          ))}
+      <div className="card-v2">
+        <div className="card-v2-header">
+          <h2 className="text-sm font-semibold text-gray-900">Filter by Format</h2>
+        </div>
+        <div className="card-v2-body">
+          <div className="flex flex-wrap gap-3">
+            {['all', 'banner', 'interstitial', 'rewarded', 'native'].map((format) => (
+              <button
+                key={format}
+                onClick={() => setSelectedFormat(format as any)}
+                className={`rounded-xl px-4 py-2 text-sm font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${
+                  selectedFormat === format
+                    ? 'bg-brand-50 text-brand-700 border border-brand-500'
+                    : 'bg-white text-gray-700 border border-gray-300 hover:border-brand-500'
+                }`}
+              >
+                {format === 'all' ? '📊 All Formats' :
+                 format === 'banner' ? '📱 Banner' :
+                 format === 'interstitial' ? '🖼️ Interstitial' :
+                 format === 'rewarded' ? '🎁 Rewarded' :
+                 '📰 Native'}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
       {/* Performance Heatmap */}
-      <div className="card p-6">
-        <h2 className="text-primary-blue font-bold uppercase text-lg mb-4 border-b-2 border-sunshine-yellow pb-2">
-          Format Performance Comparison
-        </h2>
-        <div className="grid md:grid-cols-4 gap-6">
+      <div className="card-v2">
+        <div className="card-v2-header">
+          <h2 className="text-sm font-semibold text-gray-900">Format Performance Comparison</h2>
+        </div>
+        <div className="card-v2-body grid gap-6 md:grid-cols-4">
           <FormatHeatmapCard
             format="Banner"
             icon="📱"
@@ -299,12 +301,12 @@ export default function PlacementsPage() {
 
       {/* Placements List */}
       <div className="space-y-4">
-        <h2 className="text-primary-blue font-bold uppercase text-lg">
+        <h2 className="text-sm font-semibold text-gray-900">
           {selectedFormat === 'all' ? 'All Placements' : `${selectedFormat} Placements`}
           <span className="text-gray-500 text-sm ml-2">({total})</span>
         </h2>
         {loading ? (
-          <div className="space-y-3" aria-hidden="true">
+          <div className="space-y-3 minh-table" aria-hidden="true">
             {[...Array(5)].map((_, i) => (
               <div key={i} className="h-20 bg-gray-100 animate-pulse rounded" />
             ))}

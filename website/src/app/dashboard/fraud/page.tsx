@@ -44,6 +44,22 @@ const typeLabels: Record<string, string> = {
   vpn_abuse: 'VPN Abuse',
 };
 
+// Map fraud type to a semantic color used by FraudTypeBar
+function typeColor(t: string): 'red' | 'yellow' | 'blue' | 'gray' {
+  switch (t as FraudType) {
+    case 'click_fraud':
+      return 'red';
+    case 'install_fraud':
+      return 'yellow';
+    case 'bot_traffic':
+      return 'blue';
+    case 'vpn_abuse':
+      return 'gray';
+    default:
+      return 'gray';
+  }
+}
+
 export default function FraudPage() {
   const [timeRange, setTimeRange] = useState<'today' | 'week' | 'month'>('today');
 
@@ -79,7 +95,7 @@ export default function FraudPage() {
       }
       const alerts = alertsRes.success && Array.isArray(alertsRes.data) ? alertsRes.data : [];
       const start = (page - 1) * pageSize;
-      const paged = alerts.slice(start, start + pageSize).map((row) => ({
+      const paged = alerts.slice(start, start + pageSize).map((row: { id: string; type: string; severity: string; details?: string; detectedAt: string }) => ({
         id: row.id,
         ts: row.detectedAt,
         type: (row.type as FraudType) || 'bot_traffic',

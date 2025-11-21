@@ -235,18 +235,21 @@ class TelemetryCollector(
     /**
      * Adapter span start (observability). Uses sampling; no secrets allowed.
      */
-    fun recordAdapterSpanStart(traceId: String, placement: String, adapter: String) {
+    fun recordAdapterSpanStart(traceId: String, placement: String, adapter: String, metadata: Map<String, Any> = emptyMap()) {
         if (!config.observabilityEnabled) return
         if (!shouldSample()) return
+        val safeMeta = HashMap<String, Any>()
+        safeMeta["trace_id"] = traceId
+        safeMeta["phase"] = "start"
+        for ((k, v) in metadata) {
+            if (k.length <= 40) safeMeta[k] = v
+        }
         recordEvent(
             TelemetryEvent(
                 eventType = EventType.ADAPTER_SPAN_START,
                 placement = placement,
                 networkName = adapter,
-                metadata = mapOf(
-                    "trace_id" to traceId,
-                    "phase" to "start"
-                )
+                metadata = safeMeta
             )
         )
     }
@@ -329,8 +332,9 @@ class TelemetryCollector(
             return
         }
         
+        val safeEvent = TelemetryRedactor.sanitize(event)
         synchronized(queueLock) {
-            eventQueue.add(event)
+            eventQueue.add(safeEvent)
             
             // Auto-flush if batch size reached
             if (eventQueue.size >= batchSize) {

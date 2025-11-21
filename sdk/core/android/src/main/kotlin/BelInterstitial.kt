@@ -28,6 +28,9 @@ object BelInterstitial {
         val placement = lastPlacement ?: return false
         val sdk = MediationSDK.getInstance()
         val ad: Ad = sdk.consumeCachedAd(placement) ?: return false
+        if (sdk.renderAd(ad, activity)) {
+            return true
+        }
         // Start OM display session (no-op by default)
         try {
             com.rivalapexmediation.sdk.measurement.OmSdkRegistry.controller.startDisplaySession(

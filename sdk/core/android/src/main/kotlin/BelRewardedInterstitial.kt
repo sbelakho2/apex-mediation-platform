@@ -24,6 +24,9 @@ object BelRewardedInterstitial {
         val placement = lastPlacement ?: return false
         val sdk = MediationSDK.getInstance()
         val ad: Ad = sdk.consumeCachedAd(placement) ?: return false
+        if (sdk.renderAd(ad, activity)) {
+            return true
+        }
         // Start OM video session for rewarded interstitials
         try {
             com.rivalapexmediation.sdk.measurement.OmSdkRegistry.controller.startVideoSession(
