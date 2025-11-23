@@ -54,7 +54,7 @@ export function inspectAgainstRules(lines: string[], rules: VendorRule[] = DEFAU
     const missing: string[] = []
     const suggested: string[] = []
     rule.requiredLines.forEach(tpl => {
-      const found = Array.from(lcSet).some(line => line.includes(rule.vendor) && fuzzyMatch(line, tpl))
+      const found = Array.from(lcSet).some(line => fuzzyMatch(line, tpl))
       if (!found) {
         missing.push(tpl)
         suggested.push(tpl)
@@ -66,14 +66,14 @@ export function inspectAgainstRules(lines: string[], rules: VendorRule[] = DEFAU
 
 function fuzzyMatch(line: string, template: string): boolean {
   // Very light heuristic: compare token count and ensure first token matches domain segment from template
-  const lt = line.split(',').map(s => s.trim())
+  const lt = line.toLowerCase().split(',').map(s => s.trim())
   const tt = template.toLowerCase().split(',').map(s => s.trim())
   if (lt.length < 2 || tt.length < 2) return false
   if (!lt[0].includes(tt[0])) return false
   // allow publisher/account id to vary; accept partial when seller type matches if present
   if (tt.length >= 3 && lt.length >= 3) {
     const typeT = tt[2]
-    const typeL = lt[2].toLowerCase()
+    const typeL = lt[2]
     if (typeT && !typeL.includes(typeT)) return false
   }
   return true

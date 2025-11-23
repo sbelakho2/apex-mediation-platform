@@ -176,58 +176,58 @@
   .minh-chart { min-height: 320px; }
   .minh-table { min-height: 280px; }
 
-  /* Buttons */
+  /* Buttons (legacy aliases mapped to WEBSITE_FIX tokens) */
   .btn-primary-yellow {
-    @apply inline-flex items-center justify-center rounded-full border border-transparent bg-sunshine-yellow px-8 py-3 font-bold uppercase text-primary-blue shadow-hero transition-transform duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-blue hover:-translate-y-0.5 hover:shadow-lg;
+    @apply inline-flex items-center justify-center rounded-full px-8 py-3 font-bold uppercase transition-transform duration-200 hover:-translate-y-0.5 hover:shadow-lg;
+    background: var(--brand-500);
+    color: #fff;
     letter-spacing: 0.2em;
   }
 
   .btn-secondary-blue {
-    @apply inline-flex items-center justify-center rounded-full border border-sunshine-yellow/40 bg-primary-blue px-8 py-3 font-bold uppercase text-white shadow-hero transition-transform duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sunshine-yellow hover:-translate-y-0.5 hover:shadow-lg;
-    letter-spacing: 0.2em;
+    @apply inline-flex items-center justify-center rounded-full px-8 py-3 font-bold uppercase transition-transform duration-200 hover:-translate-y-0.5 hover:shadow-lg;
+    background: var(--gray-100);
+    color: var(--gray-800);
+    border: 1px solid var(--gray-300);
   }
 
   .btn-success {
-    @apply inline-flex items-center justify-center rounded-full bg-success-green px-6 py-3 font-bold uppercase text-white transition-transform duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-success-green hover:-translate-y-0.5 hover:shadow-lg;
+    @apply inline-flex items-center justify-center rounded-full px-6 py-3 font-bold uppercase transition-transform duration-200 hover:-translate-y-0.5 hover:shadow-lg;
+    background: var(--success);
+    color: #fff;
     letter-spacing: 0.18em;
   }
 
   .btn-danger {
-    @apply inline-flex items-center justify-center rounded-full bg-accent-red px-6 py-3 font-bold uppercase text-white transition-transform duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-red hover:-translate-y-0.5 hover:shadow-lg;
+    @apply inline-flex items-center justify-center rounded-full px-6 py-3 font-bold uppercase transition-transform duration-200 hover:-translate-y-0.5 hover:shadow-lg;
+    background: var(--danger);
+    color: #fff;
     letter-spacing: 0.18em;
   }
 
   .btn-outline {
-    @apply inline-flex items-center justify-center rounded-full border-2 border-primary-blue bg-white px-6 py-3 font-bold uppercase text-primary-blue transition-transform duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-blue hover:-translate-y-0.5 hover:bg-pale-yellow hover:border-sunshine-yellow;
-    letter-spacing: 0.18em;
+    @apply inline-flex items-center justify-center rounded-full border-2 px-6 py-3 font-bold uppercase transition-transform duration-200 hover:-translate-y-0.5;
+    border-color: var(--brand-500);
+    color: var(--brand-600);
   }
 
   /* Cards */
   .card {
-    @apply rounded-3xl border-2 border-primary-blue bg-white/95 p-8 shadow-xl shadow-primary-blue/10 transition-shadow duration-200 hover:shadow-hero;
+    @apply rounded-3xl border bg-white p-8 shadow-md transition-shadow duration-200 hover:shadow-hero;
+    border-color: var(--gray-200);
   }
 
-  .card-yellow {
-    @apply border-2 border-primary-blue bg-pale-yellow;
-  }
+  .card-yellow { @apply border bg-brand-50; border-color: var(--brand-500); }
 
-  .card-blue {
-    @apply border-2 border-sunshine-yellow bg-primary-blue text-white;
-  }
+  .card-blue { @apply border text-white; border-color: var(--brand-500); background: var(--brand-600); }
 
   /* Forms */
-  .input {
-    @apply w-full rounded-full border-2 border-primary-blue bg-white px-4 py-3 transition-all duration-200 focus:outline-none focus:ring-4 focus:ring-sunshine-yellow/50;
-  }
+  .input { @apply w-full rounded border bg-white px-4 py-3 transition-all duration-200; border-color: var(--gray-300); }
+  .input:focus { @apply outline-none; box-shadow: 0 0 0 2px var(--focus); border-color: var(--brand-500); }
 
-  .input-blue {
-    @apply border-2 border-sunshine-yellow bg-primary-blue text-white placeholder:text-pale-yellow;
-  }
+  .input-blue { @apply text-gray-900 placeholder:text-gray-400; border-color: var(--gray-300); }
 
-  .label {
-    @apply mb-2 block text-sm font-bold uppercase text-primary-blue;
-    letter-spacing: 0.18em;
-  }
+  .label { @apply mb-2 block text-sm font-semibold text-gray-900; }
 
   /* Badges */
   .badge {
@@ -239,17 +239,13 @@
     @apply bg-success-green text-white;
   }
 
-  .badge-warning {
-    @apply bg-sunshine-yellow text-primary-blue;
-  }
+  .badge-warning { @apply text-[color:var(--warning)]; background: color-mix(in srgb, var(--warning) 12%, white); }
 
   .badge-danger {
     @apply bg-accent-red text-white;
   }
 
-  .badge-info {
-    @apply bg-primary-blue text-white;
-  }
+  .badge-info { background: var(--info); color: #fff; }
 
   /* Wave Divider */
   .wave-divider {
@@ -271,17 +267,14 @@
     max-width: 1200px;
   }
 
-  .section-eyebrow {
-    @apply text-xs font-semibold uppercase text-sunshine-yellow md:text-sm;
-    letter-spacing: 0.22em;
-  }
+  .section-eyebrow { @apply text-xs font-semibold uppercase md:text-sm; color: var(--gray-600); letter-spacing: 0.22em; }
 
-  .section-heading {
-    @apply text-h2-sm text-center text-primary-blue md:text-h2-md md:text-left lg:text-h2;
-  }
+  .section-heading { @apply text-h2-sm text-center md:text-h2-md md:text-left lg:text-h2; color: var(--gray-900); }
 
   .icon-badge {
-    @apply inline-flex h-12 w-12 items-center justify-center rounded-full bg-sunshine-yellow text-2xl font-bold text-primary-blue;
+    @apply inline-flex h-12 w-12 items-center justify-center rounded-full text-2xl font-bold;
+    background: var(--brand-100);
+    color: var(--brand-700);
   }
 
   /* Animations */

@@ -6,10 +6,12 @@ import { AlertCircle, TrendingUp, Database, Zap, HardDrive } from 'lucide-react'
 import { formatNumber, formatCurrency, formatDate } from '@/lib/utils'
 import { Button } from '@/ui-v2/components/Button'
 import { Select } from '@/ui-v2/components/Select'
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useCallback, type ChangeEvent } from 'react'
+
+type RangeOption = '7d' | '30d' | '90d' | 'all'
 
 export default function BillingUsagePage() {
-  const [range, setRange] = useState<'7d' | '30d' | '90d' | 'all'>('30d')
+  const [range, setRange] = useState<RangeOption>('30d')
   const [product, setProduct] = useState<string>('all')
   const [page, setPage] = useState<number>(1)
   const PAGE_SIZE = 25
@@ -55,16 +57,30 @@ export default function BillingUsagePage() {
     return [header, ...rows].map((cols) => cols.map(escapeCsv).join(','))
   }, [usage, filteredItems])
 
-  function onExportCsv() {
+  const handleRangeChange = useCallback((event: ChangeEvent<HTMLSelectElement>) => {
+    setRange(event.target.value as RangeOption)
+    setPage(1)
+  }, [])
+
+  const handleProductChange = useCallback((event: ChangeEvent<HTMLSelectElement>) => {
+    setProduct(event.target.value)
+    setPage(1)
+  }, [])
+
+  const handleRefresh = useCallback(() => {
+    void refetch()
+  }, [refetch])
+
+  const handleExportCsv = useCallback(() => {
     if (!csvRows.length) return
     const blob = new Blob([csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `usage-${range}-${new Date().toISOString().slice(0, 10)}.csv`
-    a.click()
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = `usage-${range}-${new Date().toISOString().slice(0, 10)}.csv`
+    anchor.click()
     URL.revokeObjectURL(url)
-  }
+  }, [csvRows, range])
 
   if (loading) {
     return (
@@ -93,7 +109,7 @@ export default function BillingUsagePage() {
               <h3 className="font-semibold text-red-900">Error Loading Usage</h3>
               <p className="text-sm text-red-700 mt-1">{(error as Error).message}</p>
               <button
-                onClick={() => void refetch()}
+                onClick={handleRefresh}
                 className="mt-3 text-sm font-medium text-red-700 hover:text-red-800"
               >
                 Try Again
@@ -112,13 +128,13 @@ export default function BillingUsagePage() {
           <div className="text-center py-12">
             <p className="text-gray-600">No usage data available</p>
             <div className="mt-4 inline-flex items-center gap-3">
-              <Select aria-label="Date range" value={range} onChange={(e) => setRange(e.target.value as any)}>
+              <Select aria-label="Date range" value={range} onChange={handleRangeChange}>
                 <option value="7d">Last 7 days</option>
                 <option value="30d">Last 30 days</option>
                 <option value="90d">Last 90 days</option>
                 <option value="all">All time</option>
               </Select>
-              <Button variant="secondary" onClick={() => void refetch()}>Refresh</Button>
+              <Button variant="secondary" onClick={handleRefresh}>Refresh</Button>
             </div>
           </div>
         </div>
@@ -159,14 +175,14 @@ export default function BillingUsagePage() {
           <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex flex-wrap items-center gap-2">
               <label className="text-sm text-gray-600" htmlFor="usage-range">Date range</label>
-              <Select id="usage-range" aria-label="Date range" value={range} onChange={(e) => { setRange(e.target.value as any); setPage(1) }}>
+              <Select id="usage-range" aria-label="Date range" value={range} onChange={handleRangeChange}>
                 <option value="7d">Last 7 days</option>
                 <option value="30d">Last 30 days</option>
                 <option value="90d">Last 90 days</option>
                 <option value="all">All time</option>
               </Select>
               <label className="ml-2 text-sm text-gray-600" htmlFor="usage-product">Product</label>
-              <Select id="usage-product" aria-label="Product filter" value={product} onChange={(e) => { setProduct(e.target.value); setPage(1) }}>
+              <Select id="usage-product" aria-label="Product filter" value={product} onChange={handleProductChange}>
                 <option value="all">All products</option>
                 {productOptions.map((p) => (
                   <option key={p} value={p}>{p}</option>
@@ -174,8 +190,8 @@ export default function BillingUsagePage() {
               </Select>
             </div>
             <div className="flex items-center gap-2">
-              <Button variant="secondary" onClick={() => void refetch()}>Refresh</Button>
-              <Button onClick={onExportCsv}>Export CSV</Button>
+              <Button variant="secondary" onClick={handleRefresh}>Refresh</Button>
+              <Button onClick={handleExportCsv}>Export CSV</Button>
             </div>
           </div>
         </div>
@@ -485,15 +501,17 @@ export default function BillingUsagePage() {
                     </td>
                   </tr>
                 ) : (
-                  pagedItems.map((it, idx) => (
-                    <tr key={`${it.date}-${it.product}-${idx}`}>
+                  pagedItems.map((it) => {
+                    const rowKey = [it.date, it.product ?? '—', it.quantity ?? 0, it.unit_price ?? 0].join('-')
+                    return (
+                    <tr key={rowKey}>
                       <td className="px-4 py-2 text-sm text-gray-700">{formatDate(it.date)}</td>
                       <td className="px-4 py-2 text-sm text-gray-700">{it.product ?? '—'}</td>
                       <td className="px-4 py-2 text-right text-sm text-gray-700">{formatNumber(it.quantity ?? 0)}</td>
                       <td className="px-4 py-2 text-right text-sm text-gray-700">{formatCurrency(it.unit_price ?? 0)}</td>
                       <td className="px-4 py-2 text-right text-sm text-gray-700">{formatCurrency((it.quantity ?? 0) * (it.unit_price ?? 0))}</td>
                     </tr>
-                  ))
+                  )})
                 )}
               </tbody>
             </table>

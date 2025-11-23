@@ -200,19 +200,35 @@ data class FeatureFlags(
 
 /**
  * Result of credential/config validation for an adapter.
+ * Details are automatically sanitized so secrets never leave the device/logs.
  */
-data class ValidationResult(
+data class ValidationResult private constructor(
     val success: Boolean,
-    val code: String = if (success) "ok" else "error",
-    val message: String? = null,
-    val details: Map<String, Any?> = emptyMap()
+    val code: String,
+    val message: String?,
+    val details: Map<String, Any?>
 ) {
     companion object {
+        private val SECRET_KEY_REGEX = Regex("(key|token|secret|signature|app_id|account|placement)", RegexOption.IGNORE_CASE)
+        private const val MAX_DETAIL_ENTRIES = 12
+
         fun ok(message: String? = null, details: Map<String, Any?> = emptyMap()) =
-            ValidationResult(true, "ok", message, details)
+            ValidationResult(true, "ok", message, sanitize(details))
+
         fun error(code: String, message: String? = null, details: Map<String, Any?> = emptyMap()) =
-            ValidationResult(false, code, message, details)
-        fun unsupported() = ValidationResult(false, "unsupported", "Adapter does not support validation")
+            ValidationResult(false, code, message, sanitize(details))
+
+        fun unsupported() = ValidationResult(false, "unsupported", "Adapter does not support validation", emptyMap())
+
+        private fun sanitize(details: Map<String, Any?>): Map<String, Any?> {
+            if (details.isEmpty()) return emptyMap()
+            val sanitized = linkedMapOf<String, Any?>()
+            details.entries.take(MAX_DETAIL_ENTRIES).forEach { (key, value) ->
+                val needsRedaction = SECRET_KEY_REGEX.containsMatchIn(key) || (value is String && SECRET_KEY_REGEX.containsMatchIn(value))
+                sanitized[key] = if (needsRedaction) "***" else value
+            }
+            return sanitized
+        }
     }
 }
 

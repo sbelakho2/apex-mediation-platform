@@ -108,6 +108,12 @@ jest.mock('../../controllers/billing.controller', () => ({
       discrepancies: []
     });
   }),
+  calculateRevenueShare: jest.fn((req, res) => {
+    res.json({ success: true, data: { gross_revenue_cents: req.body?.gross_revenue_cents ?? 0 } });
+  }),
+  getTiers: jest.fn((req, res) => {
+    res.json({ success: true, data: { tiers: [] } });
+  }),
 }));
 
 import billingRoutes from '../billing.routes';

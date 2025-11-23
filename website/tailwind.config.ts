@@ -55,13 +55,7 @@ const config: Config = {
         warning: 'var(--warning)',
         danger: 'var(--danger)',
         info: 'var(--info)',
-        // Legacy aliases mapped to WEBSITE_FIX tokens (safe to keep until full removal)
-        'primary-blue': 'var(--brand-600)',
-        'sunshine-yellow': 'var(--brand-100)',
-        'pale-yellow': 'var(--brand-50)',
-        cream: 'var(--gray-50)',
-        'accent-red': 'var(--danger)',
-        'success-green': 'var(--success)',
+        // Legacy aliases removed after final sweep; use brand/gray/semantic tokens directly
       },
       fontFamily: {
         sans: ['Inter', 'system-ui', 'sans-serif'],

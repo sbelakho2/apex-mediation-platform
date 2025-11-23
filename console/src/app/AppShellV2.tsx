@@ -43,12 +43,16 @@ export function AppShellV2({ children }: { children: ReactNode }) {
     []
   )
   const { features } = useFeatures({ fallback: featureFallbacks })
-  const resolved = {
-    transparency: featureFallbacks.transparency,
-    billing: featureFallbacks.billing,
-    migrationStudio: featureFallbacks.migrationStudio,
-    ...(features || {}),
-  } as Record<string, boolean>
+  const resolved = useMemo(
+    () =>
+      ({
+        transparency: featureFallbacks.transparency,
+        billing: featureFallbacks.billing,
+        migrationStudio: featureFallbacks.migrationStudio,
+        ...(features || {}),
+      }) as Record<string, boolean>,
+    [featureFallbacks, features]
+  )
 
   const isAdmin = (user?.role as string | undefined) === 'admin'
 

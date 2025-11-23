@@ -255,6 +255,12 @@ export class SKAdNetworkService {
         didWin: attribution.didWin,
       });
 
+      // Track recent postbacks in-memory for analytics/tests (bounded to prevent leaks)
+      this.postbacks.push({ ...postback });
+      if (this.postbacks.length > 2000) {
+        this.postbacks.shift();
+      }
+
       return {
         success: true,
         attribution,

@@ -19,6 +19,7 @@ import {
   getFraudStatistics,
   listFraudAlerts,
   getFraudByType,
+  resetFraudCache,
 } from '../fraudDetection';
 
 const publisherId = 'publisher-1';
@@ -29,6 +30,7 @@ const breakdownMock = jest.mocked(fetchFraudTypeBreakdown);
 describe('fraudDetection service', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    resetFraudCache();
   });
 
   it('aggregates statistics with breakdown-derived percentages', async () => {

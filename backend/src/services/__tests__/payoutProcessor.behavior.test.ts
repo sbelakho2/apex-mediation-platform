@@ -48,16 +48,20 @@ describe('PaymentProcessor behavior', () => {
   test('wraps ledger + payout status in a single transaction and rolls back on failure', async () => {
     const calls: string[] = [];
     // First insert ok, second insert throws to trigger ROLLBACK
-    (client.query as jest.Mock).mockImplementation(async (sql: string) => {
+    (client.query as jest.Mock).mockImplementation(async (sql: string, params?: unknown[]) => {
       calls.push(sql);
-      if (sql === 'BEGIN') return;
-      if (/INSERT INTO payout_ledger(.+)'debit'/.test(sql)) return { rows: [] };
-      if (/INSERT INTO payout_ledger(.+)'credit'/.test(sql)) {
-        throw new Error('Simulated insert error');
+      if (sql === 'BEGIN' || sql === 'COMMIT' || sql === 'ROLLBACK') {
+        return { rows: [] };
       }
-      if (/ROLLBACK/.test(sql)) return;
-      if (/COMMIT/.test(sql)) return;
-      if (/SELECT SUM\(/i.test(sql)) return { rows: [{ balance: 0 }] };
+      if (/INSERT INTO payout_ledger/i.test(sql)) {
+        if (Array.isArray(params) && params.includes('credit')) {
+          throw new Error('Simulated insert error');
+        }
+        return { rows: [] };
+      }
+      if (/SELECT SUM\(/i.test(sql)) {
+        return { rows: [{ balance: 0 }] };
+      }
       return { rows: [] };
     });
 

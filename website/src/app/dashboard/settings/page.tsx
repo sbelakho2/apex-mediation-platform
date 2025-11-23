@@ -289,7 +289,7 @@ function PaymentTab() {
             </p>
           </div>
           <div>
-            <label className="block text-sm font-bold text-primary-blue mb-2">Currency</label>
+            <label className="block text-sm font-semibold text-gray-900 mb-2">Currency</label>
             <select className="input-v2 w-full">
               <option>USD - US Dollar</option>
               <option>EUR - Euro</option>

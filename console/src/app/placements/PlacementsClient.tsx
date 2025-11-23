@@ -21,12 +21,6 @@ export default function PlacementsClient() {
   const pageSize = 20
   const loadMoreRef = useRef<HTMLDivElement | null>(null)
 
-  useEffect(() => {
-    if (process.env.NODE_ENV !== 'production') {
-      console.info('[placements.client] mounted')
-    }
-  }, [])
-
   const {
     data: placementsPages,
     isLoading,
@@ -37,9 +31,6 @@ export default function PlacementsClient() {
     queryKey: ['placements', pageSize],
     initialPageParam: 1,
     queryFn: async ({ pageParam }) => {
-      if (process.env.NODE_ENV !== 'production') {
-        console.info('[placements.client] fetching page', pageParam)
-      }
       const { data } = await placementApi.list({ page: pageParam, pageSize })
       return data
     },

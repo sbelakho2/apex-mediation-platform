@@ -26,6 +26,20 @@ const mockLogger = {
 (logger.error as jest.Mock) = mockLogger.error;
 (logger.debug as jest.Mock) = mockLogger.debug;
 
+const originalMin = process.env.THOMPSON_UPDATE_MIN_MS;
+
+beforeAll(() => {
+  process.env.THOMPSON_UPDATE_MIN_MS = '0';
+});
+
+afterAll(() => {
+  if (originalMin === undefined) {
+    delete process.env.THOMPSON_UPDATE_MIN_MS;
+  } else {
+    process.env.THOMPSON_UPDATE_MIN_MS = originalMin;
+  }
+});
+
 describe('ThompsonSamplingService', () => {
   let service: ThompsonSamplingService;
 

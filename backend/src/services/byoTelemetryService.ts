@@ -145,3 +145,7 @@ export function queryTraces(params: {
   if (params.limit && params.limit > 0) list = list.slice(0, params.limit)
   return list
 }
+
+export function __resetTelemetryStore() {
+  spans.length = 0
+}

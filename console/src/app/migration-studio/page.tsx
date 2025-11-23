@@ -206,9 +206,10 @@ export default function MigrationStudioPage() {
   }
 
   useEffect(() => {
+    const timersSnapshot = guardrailCooldownTimers.current
     return () => {
       if (typeof window === 'undefined') return
-      Object.values(guardrailCooldownTimers.current).forEach((timerId) => {
+      Object.values(timersSnapshot).forEach((timerId) => {
         window.clearTimeout(timerId)
       })
     }

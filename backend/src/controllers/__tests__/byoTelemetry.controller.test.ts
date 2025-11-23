@@ -7,7 +7,7 @@ function mockReqRes(init?: Partial<Request & { user?: any }>) {
     query: {},
     headers: {},
     ...init,
-  } as unknown) as Request
+  } as unknown as Request)
   const json = jest.fn()
   const status = jest.fn(() => ({ json }))
   const res = ({ json, status } as unknown) as Response
@@ -38,8 +38,7 @@ describe('byoTelemetry.controller', () => {
   it('ingests spans then returns metrics and traces', async () => {
     const { req: ingestReq, res: ingestRes } = mockReqRes({
       headers: { 'x-app-id': 'app-xyz' },
-      // @ts-expect-error partial
-      user: { publisherId: 'pub-1' },
+      user: { publisherId: 'pub-1' } as any,
       body: [
         { eventType: 'ADAPTER_SPAN_FINISH', timestamp: Date.now(), placement: 'p', networkName: 'admob', latency: 123, metadata: { trace_id: 't1', phase: 'finish', outcome: 'fill' } },
       ],
@@ -47,8 +46,7 @@ describe('byoTelemetry.controller', () => {
     await ingestByoSpans(ingestReq, ingestRes)
 
     const { req: mReq, res: mRes, json: mJson } = mockReqRes({
-      // @ts-expect-error partial
-      user: { publisherId: 'pub-1' },
+      user: { publisherId: 'pub-1' } as any,
       query: { appId: 'app-xyz' },
     })
     await getByoAdapterMetrics(mReq, mRes)
@@ -56,8 +54,7 @@ describe('byoTelemetry.controller', () => {
     expect(metrics.summary.total).toBeGreaterThan(0)
 
     const { req: tReq, res: tRes, json: tJson } = mockReqRes({
-      // @ts-expect-error partial
-      user: { publisherId: 'pub-1' },
+      user: { publisherId: 'pub-1' } as any,
       query: { appId: 'app-xyz', limit: '5' },
     })
     await getByoTraces(tReq, tRes)

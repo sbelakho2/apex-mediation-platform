@@ -18,16 +18,20 @@ function SuggestedLines({ vendor }: { vendor: AppAdsInspectorVendorResult }) {
     try {
       await navigator.clipboard.writeText(line)
     } catch (e) {
-      // no-op; clipboard not available
-      console.warn('[tools] clipboard not available', e)
+      // Clipboard access may fail in some browsers; expose only in dev for diagnostics
+      if (process.env.NODE_ENV !== 'production') {
+        console.warn('[tools] clipboard not available', e)
+      }
     }
   }, [])
 
   if (vendor.pass) return null
   return (
     <div className="space-y-1">
-      {vendor.suggested.map((line, idx) => (
-        <div key={idx} className="flex items-center gap-2">
+      {vendor.suggested.map((line) => {
+        const suggestionKey = `${vendor.vendor}-${line}`
+        return (
+        <div key={suggestionKey} className="flex items-center gap-2">
           <code className="text-xs bg-gray-50 border border-gray-200 rounded px-2 py-1 overflow-x-auto whitespace-pre">{line}</code>
           <button
             type="button"
@@ -36,7 +40,7 @@ function SuggestedLines({ vendor }: { vendor: AppAdsInspectorVendorResult }) {
             aria-label={`Copy suggested line for ${vendor.vendor}`}
           >Copy</button>
         </div>
-      ))}
+      )})}
     </div>
   )
 }
@@ -139,7 +143,10 @@ export default function AppAdsInspectorPage() {
                       <td className="p-2 border-b text-xs text-gray-700">
                         {v.pass ? <span className="text-gray-500">—</span> : (
                           <ul className="list-disc list-inside space-y-1">
-                            {v.missing.map((m, idx) => <li key={idx}><code>{m}</code></li>)}
+                            {v.missing.map((m) => {
+                              const missingKey = `${v.vendor}-missing-${m}`
+                              return <li key={missingKey}><code>{m}</code></li>
+                            })}
                           </ul>
                         )}
                       </td>

@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState, useId } from 'react'
 import { analyticsByo } from '@/lib/api'
 
 type Summary = { p50: number; p95: number; p99: number; fills: number; noFills: number; timeouts: number; errors: number; total: number }
@@ -37,6 +37,9 @@ export default function MediationDebuggerPage() {
   const [error, setError] = useState<string | null>(null)
   const [summary, setSummary] = useState<Summary | null>(null)
   const [traces, setTraces] = useState<Trace[]>([])
+  const appIdFieldId = useId()
+  const placementFieldId = useId()
+  const adapterFieldId = useId()
 
   const canRun = useMemo(() => appId.trim().length > 0, [appId])
 
@@ -71,16 +74,16 @@ export default function MediationDebuggerPage() {
 
       <div className="grid grid-cols-1 md:grid-cols-5 gap-3 items-end">
         <div className="md:col-span-2">
-          <label className="block text-sm font-medium text-gray-700">App ID</label>
-          <input value={appId} onChange={e => setAppId(e.target.value)} className="mt-1 w-full rounded border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="your-app-id" />
+          <label htmlFor={appIdFieldId} className="block text-sm font-medium text-gray-700">App ID</label>
+          <input id={appIdFieldId} value={appId} onChange={e => setAppId(e.target.value)} className="mt-1 w-full rounded border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="your-app-id" />
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700">Placement (optional)</label>
-          <input value={placement} onChange={e => setPlacement(e.target.value)} className="mt-1 w-full rounded border border-gray-300 px-3 py-2" placeholder="interstitial_home" />
+          <label htmlFor={placementFieldId} className="block text-sm font-medium text-gray-700">Placement (optional)</label>
+          <input id={placementFieldId} value={placement} onChange={e => setPlacement(e.target.value)} className="mt-1 w-full rounded border border-gray-300 px-3 py-2" placeholder="interstitial_home" />
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700">Adapter (optional)</label>
-          <input value={adapter} onChange={e => setAdapter(e.target.value)} className="mt-1 w-full rounded border border-gray-300 px-3 py-2" placeholder="admob" />
+          <label htmlFor={adapterFieldId} className="block text-sm font-medium text-gray-700">Adapter (optional)</label>
+          <input id={adapterFieldId} value={adapter} onChange={e => setAdapter(e.target.value)} className="mt-1 w-full rounded border border-gray-300 px-3 py-2" placeholder="admob" />
         </div>
         <div className="flex gap-2">
           <button className="h-10 px-4 rounded bg-indigo-600 text-white disabled:opacity-60" disabled={!canRun || loading} onClick={refresh}>{loading ? 'Loading…' : (summary ? 'Refresh' : 'Run')}</button>
@@ -117,13 +120,15 @@ export default function MediationDebuggerPage() {
                   <td className="p-2 border-b text-sm">{t.placement}</td>
                   <td className="p-2 border-b text-xs">
                     <div className="flex flex-wrap gap-2">
-                      {t.spans.map((s, idx) => (
-                        <div key={idx} className="flex items-center gap-2 rounded border border-gray-200 px-2 py-1 bg-white">
+                      {t.spans.map((s) => {
+                        const spanKey = `${t.trace_id}-${s.adapter}-${s.t0 ?? s.t1 ?? s.latency_ms ?? s.outcome ?? 'span'}`
+                        return (
+                        <div key={spanKey} className="flex items-center gap-2 rounded border border-gray-200 px-2 py-1 bg-white">
                           <span className="font-medium">{s.adapter}</span>
                           <OutcomePill outcome={s.outcome} />
                           {typeof s.latency_ms === 'number' && <span className="text-gray-600">{s.latency_ms}ms</span>}
                         </div>
-                      ))}
+                      )})}
                     </div>
                   </td>
                 </tr>

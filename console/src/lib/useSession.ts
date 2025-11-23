@@ -30,13 +30,8 @@ let MOCK_SESSION: SessionUser | null = null
 if (process.env.NEXT_PUBLIC_E2E_SESSION) {
   try {
     MOCK_SESSION = JSON.parse(process.env.NEXT_PUBLIC_E2E_SESSION) as SessionUser
-  } catch (error) {
-    console.warn('[useSession] Failed to parse NEXT_PUBLIC_E2E_SESSION', error)
+  } catch {
     MOCK_SESSION = null
-  }
-
-  if (process.env.NODE_ENV !== 'production') {
-    console.info('[useSession] Using mocked session for E2E flows')
   }
 }
 
@@ -94,7 +89,7 @@ export function useSession(options?: UseSessionOptions) {
 
     window.addEventListener(AUTH_UNAUTHORIZED_EVENT, handleUnauthorized)
     return () => window.removeEventListener(AUTH_UNAUTHORIZED_EVENT, handleUnauthorized)
-  }, [loginPath, queryClient, redirectOnUnauthorized, router, sessionQueryKey])
+  }, [isMockedSession, loginPath, queryClient, redirectOnUnauthorized, router, sessionQueryKey])
 
   const logout = useMutation({
     mutationKey: ['session', 'logout', sessionScope],

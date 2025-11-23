@@ -62,17 +62,28 @@ const createMockResponse = (): MockResponse => {
   return res as MockResponse;
 };
 
-const createMockRequest = (): Partial<Request> => ({
-  params: {},
-  query: {},
-  headers: {},
-  body: {},
-  user: {
-    userId: 'user-123',
-    publisherId: 'publisher-123',
-    email: 'billing@example.com',
-  } as any,
-});
+const createMockRequest = (): Partial<Request> & { header: Request['header'] } => {
+  const headers: Record<string, string> = {};
+  const headerMock = jest.fn((name: string) => {
+    const key = name?.toLowerCase?.() ?? name;
+    if (key === 'set-cookie') {
+      return undefined;
+    }
+    return headers[key];
+  });
+  return {
+    params: {},
+    query: {},
+    headers,
+    body: {},
+    header: headerMock as unknown as Request['header'],
+    user: {
+      userId: 'user-123',
+      publisherId: 'publisher-123',
+      email: 'billing@example.com',
+    } as any,
+  };
+};
 
 const mockedUsageMetering = jest.mocked(usageMeteringService);
 const mockedInvoiceService = jest.mocked(invoiceService);
@@ -301,7 +312,7 @@ describe('billing.controller', () => {
       mockedReconciliationService.checkIdempotencyKey.mockResolvedValue(null);
       mockedReconciliationService.reconcile.mockResolvedValue(baseResult as any);
 
-      req.body = { idempotencyKey: 'reconcile-1234567890' };
+      (req.headers as any)['idempotency-key'] = 'reconcile-1234567890';
 
       await reconcileBilling(req as Request, res, next);
 
@@ -319,7 +330,7 @@ describe('billing.controller', () => {
     it('returns cached result when key already processed', async () => {
       mockedReconciliationService.checkIdempotencyKey.mockResolvedValue(baseResult as any);
 
-      req.body = { idempotencyKey: 'reconcile-1234567890' };
+      (req.headers as any)['idempotency-key'] = 'reconcile-1234567890';
 
       await reconcileBilling(req as Request, res, next);
 
@@ -334,8 +345,6 @@ describe('billing.controller', () => {
     });
 
     it('rejects requests without idempotency key', async () => {
-      req.body = {};
-
       await reconcileBilling(req as Request, res, next);
 
       expect(next).toHaveBeenCalledWith(expect.any(AppError));

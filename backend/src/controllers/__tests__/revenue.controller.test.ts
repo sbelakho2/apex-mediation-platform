@@ -1,13 +1,38 @@
 import request from 'supertest';
 import { Application } from 'express';
+
+jest.mock('../../services/reportingService', () => ({
+  __esModule: true,
+  default: {
+    getRevenueStats: jest.fn(),
+    getTimeSeriesData: jest.fn(),
+  },
+}));
+
+import reportingService from '../../services/reportingService';
 import { createTestApp } from '../../__tests__/helpers/testApp';
 
 describe('Revenue Controller', () => {
   let app: Application;
+  const mockedReporting = jest.mocked(reportingService);
 
   beforeAll(() => {
     process.env.NODE_ENV = 'test';
     app = createTestApp();
+  });
+
+  beforeEach(() => {
+    mockedReporting.getRevenueStats.mockResolvedValue({
+      totalRevenue: 1000,
+      totalImpressions: 5000,
+      totalClicks: 50,
+      ecpm: 20,
+      ctr: 1,
+      fillRate: 0,
+    });
+    mockedReporting.getTimeSeriesData.mockResolvedValue([
+      { timestamp: '2025-01-01T00:00:00Z', revenue: 10, impressions: 100, clicks: 1, ecpm: 10 },
+    ]);
   });
 
   test('prefers Idempotency-Key header over body/query', async () => {

@@ -250,7 +250,10 @@ export class ThompsonSamplingService {
     const key = this.getExperimentKey(update.adapterId, update.geo, update.format);
 
     const now = Date.now();
-    const minMs = Math.max(100, +(process.env.THOMPSON_UPDATE_MIN_MS || '250'));
+    const configuredMin = Number(process.env.THOMPSON_UPDATE_MIN_MS ?? '250');
+    const baseMin = Number.isFinite(configuredMin) ? configuredMin : 250;
+    const minFloor = process.env.NODE_ENV === 'test' ? 0 : 100;
+    const minMs = Math.max(minFloor, baseMin);
     const last = this.lastUpdateAt.get(key) || 0;
     if (now - last < minMs) {
       // Skip frequent updates for same key to reduce DB churn

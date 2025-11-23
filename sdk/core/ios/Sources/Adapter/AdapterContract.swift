@@ -2,6 +2,7 @@ import Foundation
 
 // MARK: - Data Contracts
 
+/// Publisher-supplied vendor credentials injected at runtime. Keep on-device.
 public struct AdapterCredentials: Codable, Equatable, Sendable {
     public let key: String
     public let secret: String?
@@ -9,6 +10,7 @@ public struct AdapterCredentials: Codable, Equatable, Sendable {
     public let accountIds: [String: String]?
 }
 
+/// Optional knobs the controller can hand to adapters per placement.
 public struct AdapterOptions: Codable, Equatable, Sendable {
     public let startMuted: Bool?
     public let testMode: Bool?
@@ -19,6 +21,7 @@ public enum PartnerRegion: String, Codable, Sendable {
     case us, eu, apac, cn, global
 }
 
+/// Normalized privacy metadata forwarded to vendors.
 public struct ConsentState: Codable, Equatable, Sendable {
     public let iabTCFv2: String?
     public let iabUSGPP: String?
@@ -31,6 +34,7 @@ public enum ATTStatus: String, Codable, Sendable {
     case authorized, denied, notDetermined, restricted
 }
 
+/// Canonical init payload mirrored across Android, iOS, and Unity.
 public struct PartnerAdapterConfig: Codable, Equatable, Sendable {
     public let partner: String
     public let credentials: AdapterCredentials
@@ -76,6 +80,7 @@ public struct AuctionMeta: Codable, Equatable, Sendable {
     public let sellersJsonOk: Bool?
 }
 
+/// Per-request context (device, user, auction) supplied to adapters.
 public struct RequestMeta: Codable, Equatable, Sendable {
     public let requestId: String
     public let device: DeviceMeta
@@ -85,6 +90,7 @@ public struct RequestMeta: Codable, Equatable, Sendable {
     public let auction: AuctionMeta
 }
 
+/// Token referencing a single-use creative returned by an adapter.
 public struct AdHandle: Codable, Equatable, Sendable {
     public let id: String
     public let adType: AdType
@@ -99,6 +105,7 @@ public struct AdHandle: Codable, Equatable, Sendable {
     }
 }
 
+/// Successful load response; ttlMs governs cache freshness.
 public struct LoadResult: Codable, Sendable {
     public let handle: AdHandle
     public let ttlMs: Int
@@ -107,6 +114,7 @@ public struct LoadResult: Codable, Sendable {
     public let partnerMeta: [String: AnyCodable]
 }
 
+/// Outcome of adapter initialization.
 public struct InitResult: Codable, Sendable {
     public let success: Bool
     public let error: AdapterError?
@@ -131,6 +139,7 @@ public enum AdapterErrorCode: String, Codable, Sendable {
     case noFill, timeout, networkError, belowFloor, error, circuitOpen, config, noAdReady
 }
 
+/// Normalized failure mapped from vendor-specific errors.
 public struct AdapterError: Error, Codable, Equatable, Sendable {
     public let code: AdapterErrorCode
     public let detail: String
@@ -167,6 +176,7 @@ public struct AdSize: Codable, Equatable, Sendable {
 
 // MARK: - Core Adapter Protocol
 
+/// Shared adapter surface enforced across all ApexMediation platforms.
 public protocol AdNetworkAdapterV2 {
     func initAdapter(config: PartnerAdapterConfig, timeoutMs: Int) -> InitResult
     func loadInterstitial(placementId: String, meta: RequestMeta, timeoutMs: Int) -> LoadResult

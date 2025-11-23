@@ -7,10 +7,26 @@ import {
   SKAdNetworkPostback,
 } from '../skadnetworkService';
 
+const repoCreate = jest.fn((entity) => entity);
+const repoSave = jest.fn(async () => undefined);
+const mockRepo = {
+  create: repoCreate,
+  save: repoSave,
+};
+
+jest.mock('../../database', () => ({
+  AppDataSource: {
+    getRepository: jest.fn(() => mockRepo),
+  },
+}));
+const { AppDataSource } = jest.requireMock('../../database');
+
 describe('SKAdNetworkService', () => {
   let service: SKAdNetworkService;
 
   beforeEach(() => {
+    jest.clearAllMocks();
+    (AppDataSource.getRepository as jest.Mock).mockReturnValue(mockRepo);
     service = new SKAdNetworkService();
   });
 

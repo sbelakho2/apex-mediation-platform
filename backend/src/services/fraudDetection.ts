@@ -36,6 +36,12 @@ const putCache = <T>(key: string, value: T): T => {
 
 export const fraudCacheStats = () => ({ size: cache.size, ttlMs, hits, misses });
 
+export const resetFraudCache = (): void => {
+  cache.clear();
+  hits = 0;
+  misses = 0;
+};
+
 export const getFraudStatistics = async (publisherId: string): Promise<ReturnType<typeof shapeStats>> => {
   const key = cacheKey('stats', { publisherId });
   const cached = fromCache<ReturnType<typeof shapeStats>>(key);

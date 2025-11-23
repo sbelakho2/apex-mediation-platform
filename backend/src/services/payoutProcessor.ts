@@ -468,6 +468,7 @@ export class PaymentProcessor {
               error: e,
             });
             // Continue to next provider on failure
+            continue;
           } finally {
             client.release();
           }

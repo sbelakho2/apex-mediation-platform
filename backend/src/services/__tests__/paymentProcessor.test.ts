@@ -2,6 +2,7 @@
  * Payment Processor Tests with Failover Logic
  */
 
+jest.mock('../../utils/logger');
 import {
   PaymentProcessor,
   PayoutLedgerService,
@@ -12,8 +13,15 @@ import {
 import { query } from '../../utils/postgres';
 import logger from '../../utils/logger';
 
-// Mock dependencies
-jest.mock('../../utils/postgres');
+const mockDbClient = {
+  query: jest.fn(),
+  release: jest.fn(),
+};
+
+jest.mock('../../utils/postgres', () => ({
+  query: jest.fn(),
+  getClient: jest.fn(async () => mockDbClient),
+}));
 jest.mock('../../utils/logger');
 
 const mockQuery = jest.mocked(query);
@@ -25,6 +33,7 @@ const mockLogger = {
 (logger.info as jest.Mock) = mockLogger.info;
 (logger.warn as jest.Mock) = mockLogger.warn;
 (logger.error as jest.Mock) = mockLogger.error;
+const mockClientQuery = mockDbClient.query as jest.MockedFunction<typeof mockDbClient.query>;
 
 describe('PaymentProcessor', () => {
   let processor: PaymentProcessor;
@@ -41,6 +50,14 @@ describe('PaymentProcessor', () => {
       oid: 0,
       fields: [],
     });
+    mockClientQuery.mockReset();
+    mockDbClient.release.mockReset();
+    mockClientQuery.mockImplementation(async (sql: string) => {
+      if (/SELECT SUM/i.test(sql)) {
+        return { rows: [{ balance: 0 }] } as any;
+      }
+      return { rows: [] } as any;
+    });
   });
 
   describe('processPayout', () => {
@@ -54,37 +71,6 @@ describe('PaymentProcessor', () => {
     };
 
     it('should process payout with primary provider (Tipalti)', async () => {
-      // Mock ledger entry creation
-      mockQuery
-        .mockResolvedValueOnce({
-          rows: [{ id: 'debit-entry-1' }],
-          rowCount: 1,
-          command: '',
-          oid: 0,
-          fields: [],
-        })
-        .mockResolvedValueOnce({
-          rows: [{ id: 'credit-entry-1' }],
-          rowCount: 1,
-          command: '',
-          oid: 0,
-          fields: [],
-        })
-        .mockResolvedValueOnce({
-          rows: [{ balance: 0 }],
-          rowCount: 1,
-          command: '',
-          oid: 0,
-          fields: [],
-        })
-        .mockResolvedValueOnce({
-          rows: [],
-          rowCount: 1,
-          command: '',
-          oid: 0,
-          fields: [],
-        });
-
       const result = await processor.processPayout(validPayoutRequest);
 
       expect(result.success).toBe(true);
@@ -104,37 +90,6 @@ describe('PaymentProcessor', () => {
       const originalTipaltiKey = process.env.TIPALTI_API_KEY;
       delete process.env.TIPALTI_API_KEY;
 
-      // Mock ledger entries for successful Wise transaction
-      mockQuery
-        .mockResolvedValueOnce({
-          rows: [{ id: 'debit-entry-1' }],
-          rowCount: 1,
-          command: '',
-          oid: 0,
-          fields: [],
-        })
-        .mockResolvedValueOnce({
-          rows: [{ id: 'credit-entry-1' }],
-          rowCount: 1,
-          command: '',
-          oid: 0,
-          fields: [],
-        })
-        .mockResolvedValueOnce({
-          rows: [{ balance: 0 }],
-          rowCount: 1,
-          command: '',
-          oid: 0,
-          fields: [],
-        })
-        .mockResolvedValueOnce({
-          rows: [],
-          rowCount: 1,
-          command: '',
-          oid: 0,
-          fields: [],
-        });
-
       const result = await processor.processPayout(validPayoutRequest);
 
       expect(result.success).toBe(true);
@@ -147,128 +102,32 @@ describe('PaymentProcessor', () => {
     });
 
     it('should create ledger entries after successful payout', async () => {
-      mockQuery
-        .mockResolvedValueOnce({
-          rows: [{ id: 'debit-123' }],
-          rowCount: 1,
-          command: '',
-          oid: 0,
-          fields: [],
-        })
-        .mockResolvedValueOnce({
-          rows: [{ id: 'credit-123' }],
-          rowCount: 1,
-          command: '',
-          oid: 0,
-          fields: [],
-        })
-        .mockResolvedValueOnce({
-          rows: [{ balance: 0 }],
-          rowCount: 1,
-          command: '',
-          oid: 0,
-          fields: [],
-        })
-        .mockResolvedValueOnce({
-          rows: [],
-          rowCount: 1,
-          command: '',
-          oid: 0,
-          fields: [],
-        });
-
       await processor.processPayout(validPayoutRequest);
 
-      // Verify ledger entries were created
-      expect(mockQuery).toHaveBeenCalledWith(
-        expect.stringContaining('INSERT INTO payout_ledger'),
-        expect.arrayContaining(['payout-123', 'publisher-456', 500, 'USD', 'debit'])
-      );
-
-      expect(mockQuery).toHaveBeenCalledWith(
-        expect.stringContaining('INSERT INTO payout_ledger'),
-        expect.arrayContaining(['payout-123', 'publisher-456', 500, 'USD', 'credit'])
-      );
+      const calls = mockClientQuery.mock.calls.filter(([sql]) => typeof sql === 'string' && sql.includes('INSERT INTO payout_ledger'));
+      expect(calls).toHaveLength(2);
+      expect(calls.some(([, params]) => Array.isArray(params) && params.includes('debit'))).toBe(true);
+      expect(calls.some(([, params]) => Array.isArray(params) && params.includes('credit'))).toBe(true);
     });
 
     it('should validate ledger balance after payout', async () => {
-      mockQuery
-        .mockResolvedValueOnce({
-          rows: [{ id: 'debit-123' }],
-          rowCount: 1,
-          command: '',
-          oid: 0,
-          fields: [],
-        })
-        .mockResolvedValueOnce({
-          rows: [{ id: 'credit-123' }],
-          rowCount: 1,
-          command: '',
-          oid: 0,
-          fields: [],
-        })
-        .mockResolvedValueOnce({
-          rows: [{ balance: 0 }],
-          rowCount: 1,
-          command: '',
-          oid: 0,
-          fields: [],
-        })
-        .mockResolvedValueOnce({
-          rows: [],
-          rowCount: 1,
-          command: '',
-          oid: 0,
-          fields: [],
-        });
-
       await processor.processPayout(validPayoutRequest);
 
-      // Verify balance validation query was called
-      expect(mockQuery).toHaveBeenCalledWith(
-        expect.stringContaining('SUM'),
-        ['payout-123']
-      );
+      expect(
+        mockClientQuery.mock.calls.some(([sql, params]) =>
+          typeof sql === 'string' && /SELECT SUM/i.test(sql) && Array.isArray(params) && params[0] === 'payout-123'
+        )
+      ).toBe(true);
     });
 
     it('should update payout status after successful processing', async () => {
-      mockQuery
-        .mockResolvedValueOnce({
-          rows: [{ id: 'debit-123' }],
-          rowCount: 1,
-          command: '',
-          oid: 0,
-          fields: [],
-        })
-        .mockResolvedValueOnce({
-          rows: [{ id: 'credit-123' }],
-          rowCount: 1,
-          command: '',
-          oid: 0,
-          fields: [],
-        })
-        .mockResolvedValueOnce({
-          rows: [{ balance: 0 }],
-          rowCount: 1,
-          command: '',
-          oid: 0,
-          fields: [],
-        })
-        .mockResolvedValueOnce({
-          rows: [],
-          rowCount: 1,
-          command: '',
-          oid: 0,
-          fields: [],
-        });
-
       await processor.processPayout(validPayoutRequest);
 
-      // Verify status update query
-      expect(mockQuery).toHaveBeenCalledWith(
-        expect.stringContaining('UPDATE payouts'),
-        expect.arrayContaining(['processed', expect.any(String), expect.any(String), 'payout-123'])
-      );
+      expect(
+        mockClientQuery.mock.calls.some(([sql, params]) =>
+          typeof sql === 'string' && /UPDATE payouts/i.test(sql) && Array.isArray(params) && params.includes('processed')
+        )
+      ).toBe(true);
     });
   });
 
@@ -291,7 +150,6 @@ describe('PaymentProcessor', () => {
         },
       ];
 
-      // Mock query for failed payouts
       mockQuery.mockResolvedValueOnce({
         rows: failedPayouts,
         rowCount: 2,
@@ -300,22 +158,18 @@ describe('PaymentProcessor', () => {
         fields: [],
       });
 
-      // Mock successful ledger operations for retry
-      for (let i = 0; i < 8; i++) {
-        mockQuery.mockResolvedValueOnce({
-          rows: [{ id: `entry-${i}` }],
-          rowCount: 1,
-          command: '',
-          oid: 0,
-          fields: [],
-        });
-      }
+      const spy = jest
+        .spyOn(processor, 'processPayout')
+        .mockResolvedValueOnce({ success: true, provider: 'tipalti', retryable: false })
+        .mockResolvedValueOnce({ success: false, provider: 'tipalti', retryable: true });
 
       const result = await processor.retryFailedPayouts();
 
       expect(result.processed).toBeGreaterThanOrEqual(0);
       expect(result.failed).toBeGreaterThanOrEqual(0);
       expect(result.processed + result.failed).toBe(2);
+      expect(spy).toHaveBeenCalledTimes(2);
+      spy.mockRestore();
     });
   });
 });

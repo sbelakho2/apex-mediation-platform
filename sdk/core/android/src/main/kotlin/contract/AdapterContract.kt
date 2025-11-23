@@ -10,6 +10,10 @@ import com.rivalapexmediation.sdk.models.AdType
 
 // ----- Data Contracts -----
 
+/**
+ * Publisher-supplied vendor credentials injected at runtime.
+ * All fields are BYO secrets and must stay on-device.
+ */
 data class AdapterCredentials(
     val key: String,
     val secret: String? = null,
@@ -17,6 +21,7 @@ data class AdapterCredentials(
     val accountIds: Map<String, String>? = null
 )
 
+/** Adapter tuning knobs supplied by the controller per placement. */
 data class AdapterOptions(
     val startMuted: Boolean? = null,
     val testMode: Boolean? = null,
@@ -25,6 +30,7 @@ data class AdapterOptions(
 
 enum class PartnerRegion { US, EU, APAC, CN, GLOBAL }
 
+/** Normalized privacy metadata forwarded to every adapter request. */
 data class ConsentState(
     val iabTcfV2: String? = null,
     val iabUsPrivacy: String? = null,
@@ -35,6 +41,7 @@ data class ConsentState(
 
 enum class AttStatus { AUTHORIZED, DENIED, NOT_DETERMINED, RESTRICTED }
 
+/** Canonical init payload passed to each adapter implementation. */
 data class AdapterConfig(
     val partner: String,
     val credentials: AdapterCredentials,
@@ -76,6 +83,7 @@ data class AuctionMeta(
     val sellersJsonOk: Boolean? = null
 )
 
+/** Per-request context (device, user, auction) shared with adapters. */
 data class RequestMeta(
     val requestId: String,
     val device: DeviceMeta,
@@ -85,6 +93,7 @@ data class RequestMeta(
     val auction: AuctionMeta
 )
 
+/** Successful load response returned by an adapter. */
 data class LoadResult(
     val handle: AdHandle,
     val ttlMs: Int,
@@ -99,6 +108,7 @@ data class InitResult(
     val partnerMeta: Map<String, Any?> = emptyMap()
 )
 
+/** Token representing a single-render creative. Single-use by design. */
 data class AdHandle(
     val id: String,
     val adType: AdType,
@@ -131,6 +141,7 @@ enum class ErrorCode {
     NO_AD_READY
 }
 
+/** Normalized error returned by adapters; maps vendor failures to the taxonomy. */
 sealed class AdapterError(open val code: ErrorCode, open val detail: String, open val vendorCode: String? = null) : Exception("[$code] $detail") {
     data class Fatal(override val code: ErrorCode, override val detail: String, override val vendorCode: String? = null): AdapterError(code, detail, vendorCode)
     data class Recoverable(override val code: ErrorCode, override val detail: String, override val vendorCode: String? = null): AdapterError(code, detail, vendorCode)
@@ -159,6 +170,10 @@ enum class CloseReason { COMPLETED, SKIPPED, DISMISSED }
 
 // ----- Core adapter interface (v2) -----
 
+/**
+ * Shared adapter surface enforced on Android/iOS/Unity.
+ * Implementations must obey threading, timeout, and single-use handle rules.
+ */
 interface AdNetworkAdapterV2 {
     fun init(config: AdapterConfig, timeoutMs: Int): InitResult
     fun loadInterstitial(placementId: String, meta: RequestMeta, timeoutMs: Int): LoadResult

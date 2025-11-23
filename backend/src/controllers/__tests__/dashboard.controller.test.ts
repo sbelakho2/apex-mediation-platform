@@ -2,12 +2,52 @@ import request from 'supertest';
 import { Application } from 'express';
 import { createTestApp } from '../../__tests__/helpers/testApp';
 
+jest.mock('../../utils/postgres', () => {
+  const query = jest.fn();
+  return {
+    __esModule: true,
+    default: { query },
+    query,
+    getClient: jest.fn(),
+  };
+});
+
+const postgresMock = jest.requireMock('../../utils/postgres');
+const mockPoolQuery = postgresMock.default.query as jest.Mock;
+
 describe('Dashboard Controller', () => {
   let app: Application;
 
   beforeAll(() => {
     process.env.NODE_ENV = 'test';
     app = createTestApp();
+  });
+
+  beforeEach(() => {
+    mockPoolQuery.mockReset();
+    mockPoolQuery.mockImplementation(async (sql: string) => {
+      if (/GROUP BY ts/i.test(sql)) {
+        return {
+          rows: [
+            {
+              ts: new Date('2025-01-01T00:00:00Z'),
+              revenue: 0,
+              impressions: 0,
+              clicks: 0,
+            },
+          ],
+        } as any;
+      }
+      return {
+        rows: [
+          {
+            total_revenue: 0,
+            total_impressions: 0,
+            total_clicks: 0,
+          },
+        ],
+      } as any;
+    });
   });
 
   test('overview rejects invalid dates', async () => {
