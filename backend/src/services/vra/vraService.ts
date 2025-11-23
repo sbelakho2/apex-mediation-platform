@@ -1,0 +1,165 @@
+import { executeQuery } from '../../utils/clickhouse';
+import logger from '../../utils/logger';
+import { ReconOverviewParams, ReconOverviewResult, ReconDeltaQuery, ReconDeltaItem, ProofsMonthlyDigest } from './vraTypes';
+import { vraClickhouseFallbackTotal, vraEmptyResultsTotal, vraQueryDurationSeconds } from '../../utils/prometheus';
+
+// Helper to time and safely execute CH queries returning empty arrays on failure (shadow-safe)
+async function safeQuery<T = any>(
+  op: 'overview' | 'deltas_count' | 'deltas_list' | 'monthly_digest',
+  query: string,
+  params?: Record<string, unknown>
+): Promise<T[]> {
+  const end = vraQueryDurationSeconds.startTimer({ op });
+  try {
+    const result = await executeQuery<T>(query, params);
+    end({ success: 'true' });
+    if (Array.isArray(result) && result.length === 0) {
+      vraEmptyResultsTotal.inc({ op });
+    }
+    return result;
+  } catch (err) {
+    end({ success: 'false' });
+    vraClickhouseFallbackTotal.inc({ op });
+    logger.warn('VRA safeQuery fallback (ClickHouse unavailable or query failed)', { error: (err as Error)?.message, op });
+    return [] as T[];
+  }
+}
+
+export class VraService {
+  // Overview aggregates derived from revenue_events table (normalized to USD)
+  async getOverview(params: ReconOverviewParams): Promise<ReconOverviewResult> {
+    const from = params.from ?? new Date(Date.now() - 7 * 86400000).toISOString();
+    const to = params.to ?? new Date().toISOString();
+
+    const rows = await safeQuery<{
+      network: string;
+      format: string;
+      country: string;
+      impressions: string;
+      paid: string;
+    }>(
+      'overview',
+      `
+      SELECT
+        adapter_name AS network,
+        toString(ad_format) AS format,
+        country_code AS country,
+        sumIf(1, revenue_type = 'impression') AS impressions,
+        round(sum(revenue_usd), 6) AS paid
+      FROM revenue_events
+      WHERE timestamp >= parseDateTimeBestEffortOrZero({from:String})
+        AND timestamp < parseDateTimeBestEffortOrZero({to:String})
+      GROUP BY network, format, country
+      ORDER BY paid DESC
+      `,
+      { from, to }
+    );
+
+    const byBreakdown = rows.map((r) => ({
+      network: r.network,
+      format: r.format,
+      country: r.country,
+      impressions: Number(r.impressions) || 0,
+      paid: Number(r.paid) || 0,
+      expected: undefined,
+    }));
+
+    const totals = byBreakdown.reduce(
+      (acc, r) => {
+        acc.impressions += r.impressions;
+        acc.paid += r.paid;
+        return acc;
+      },
+      { impressions: 0, paid: 0, expected: 0 }
+    );
+
+    // Until recon_expected is populated, we approximate expected == paid for conservative variance (0%)
+    totals.expected = totals.paid;
+    const variancePercent = totals.expected > 0 ? 0 : 0;
+
+    // Coverage: ratio of rows with any paid data (proxy for matched coverage)
+    const coveragePercent = byBreakdown.length > 0 ? 100 : 0;
+
+    return {
+      coveragePercent,
+      variancePercent,
+      totals,
+      byBreakdown,
+    };
+  }
+
+  async getDeltas(query: ReconDeltaQuery): Promise<{ items: ReconDeltaItem[]; page: number; pageSize: number; total: number }> {
+    const page = Math.max(1, query.page || 1);
+    const pageSize = Math.min(500, Math.max(1, query.pageSize || 100));
+    const from = query.from ?? new Date(Date.now() - 7 * 86400000).toISOString();
+    const to = query.to ?? new Date().toISOString();
+
+    const whereClauses = [`window_start >= parseDateTimeBestEffortOrZero({from:String})`, `window_end < parseDateTimeBestEffortOrZero({to:String})`];
+    const params: Record<string, unknown> = { from, to };
+    if (query.kind) { whereClauses.push(`kind = {kind:String}`); params.kind = query.kind; }
+    if (query.minConf != null) { whereClauses.push(`confidence >= {minConf:Float32}`); params.minConf = query.minConf; }
+
+    const whereSql = whereClauses.length ? `WHERE ${whereClauses.join(' AND ')}` : '';
+
+    const countRows = await safeQuery<{ total: string }>('deltas_count', `SELECT count() AS total FROM recon_deltas ${whereSql}`, params);
+    const total = Number(countRows[0]?.total || 0);
+
+    const items = await safeQuery<{
+      kind: string;
+      amount: string;
+      currency: string;
+      reason_code: string;
+      window_start: string;
+      window_end: string;
+      evidence_id: string;
+      confidence: string;
+    }>(
+      'deltas_list',
+      `
+      SELECT kind, amount, currency, reason_code, toString(window_start) AS window_start, toString(window_end) AS window_end, evidence_id, confidence
+      FROM recon_deltas
+      ${whereSql}
+      ORDER BY window_start DESC
+      LIMIT {limit:UInt32} OFFSET {offset:UInt32}
+      `,
+      { ...params, limit: pageSize, offset: (page - 1) * pageSize }
+    );
+
+    const mapped: ReconDeltaItem[] = items.map((r) => ({
+      kind: r.kind as ReconDeltaItem['kind'],
+      amount: Number(r.amount) || 0,
+      currency: r.currency,
+      reasonCode: r.reason_code,
+      windowStart: r.window_start,
+      windowEnd: r.window_end,
+      evidenceId: r.evidence_id,
+      confidence: Number(r.confidence) || 0,
+    }));
+
+    return { items: mapped, page, pageSize, total };
+  }
+
+  async getMonthlyDigest(month: string): Promise<ProofsMonthlyDigest | null> {
+    const rows = await safeQuery<{
+      month: string;
+      digest: string;
+      sig: string;
+      coverage_pct: string;
+      notes: string;
+    }>(
+      'monthly_digest',
+      `SELECT month, digest, sig, toString(coverage_pct) AS coverage_pct, notes FROM proofs_monthly_digest WHERE month = {month:String} LIMIT 1`,
+      { month }
+    );
+    if (rows.length === 0) return null;
+    return {
+      month: rows[0].month,
+      digest: rows[0].digest,
+      signature: rows[0].sig,
+      coveragePct: Number(rows[0].coverage_pct) || 0,
+      notes: rows[0].notes,
+    };
+  }
+}
+
+export const vraService = new VraService();

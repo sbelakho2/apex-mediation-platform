@@ -180,7 +180,9 @@ data class AdapterConfig(
     val name: String,
     val enabled: Boolean,
     val priority: Int,
-    val params: Map<String, String>
+    val params: Map<String, String>,
+    val supportsS2S: Boolean = false,
+    val requiredCredentialKeys: List<String> = emptyList()
 )
 
 data class FeatureFlags(

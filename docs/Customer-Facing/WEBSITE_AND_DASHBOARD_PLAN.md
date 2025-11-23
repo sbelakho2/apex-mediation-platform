@@ -1,60 +1,42 @@
-# Website & Customer Dashboard Platform — Pre-FT Build Plan
+# Website & Customer Dashboard Overview
 
-Last updated: 2025-11-06
-Owner: Product & Platform Engineering
-Status: Plan v1 (coding-first, offline fixtures)
+Last updated: 2025-11-23
 
-Purpose
-- Deliver a full customer-facing website and multi-tenant dashboard/control hub BEFORE any external sandbox certification.
-- Adhere strictly to our existing design docs and design system while enforcing industry-best UI/UX and accessibility standards.
+The ApexMediation website and dashboard give publishers a single place to manage monetization, review analytics, and keep billing in sync. This document summarizes the current experience so you can quickly find the tools you need.
 
-Authoritative Design Inputs
-- Website.docx (root)
-- DESIGN_SYSTEM_IMPLEMENTATION_STATUS.md (root)
-- docs/Customer-Facing/* (this folder)
-- COMPONENT_REFERENCE_GUIDE.md (root)
+## Key Areas
 
-Information Architecture (IA)
-- Auth & Onboarding: Sign-in/Sign-up, 2FA, Tenant switcher.
-- Overview (Home): Revenue, eCPM, Fill, Win-rate, Alerts (CB events, deadline overruns), Quick actions.
-- Placements & Ad Units: CRUD, status, preview, test impressions, change history.
-- Networks & Adapters: Enable/disable, credentials (masked), status, fill/error/latency metrics.
-- Optimization: Floors (global/per-geo/device), Pacing/Capping, A/B/n Experiments.
-- Fraud & Quality: Fraud stats, type breakdown, shadow-mode distributions, appeals workflow (stub).
-- Analytics: Cohort/LTV, ARPDAU, retention overlays, breakdowns by country/device.
-- Mediation Debugger: Recent auction traces with redacted payloads, timeline view.
-- Billing & Reconciliation: Invoices (mock), revenue reports, discrepancy center (stub).
-- Settings & Access: API keys (masked), Webhooks, RBAC roles, audit logs.
+- **Authentication & Onboarding** — Secure sign-in with optional two-factor authentication, tenant switching for multi-app publishers, and guided onboarding tasks for new accounts.
+- **Overview (Home)** — Real-time revenue, eCPM, fill, win-rate, and alert cards for circuit breaker events or SLA breaches. Quick actions jump directly to placement edits or credential updates.
+- **Placements & Ad Units** — Create, edit, pause, or archive placements. Preview unit metadata, trigger test impressions, and review change history for compliance audits.
+- **Networks & Adapters** — Enable or disable adapters, manage masked credentials, and inspect fill/error/latency metrics with filters for geo, device, and format.
+- **Optimization** — Configure global or geo/device-specific floors, pacing, frequency caps, and controlled A/B/n experiments. Each change records responsible users and rollback notes.
+- **Fraud & Quality** — Monitor invalid traffic trends, investigate shadow-mode decisions, and submit appeals when traffic is incorrectly flagged.
+- **Analytics** — Break down LTV, ARPDAU, retention, country/device mixes, and cohort performance with exportable CSVs.
+- **Mediation Debugger** — View sanitized auction traces, timelines, and transparency receipts aligned with SDK logs.
+- **Billing & Reconciliation** — Download invoices, compare revenue reports, and open discrepancy tickets when network statements diverge.
+- **Settings & Access** — Rotate API keys, configure webhooks, manage RBAC roles, and review audit logs.
 
-Design System & Components
-- Use our design tokens and components per DESIGN_SYSTEM_IMPLEMENTATION_STATUS.md.
-- Components: AppShell (Header/Sidebar/Content/Toasts), DataTable (virtualized), Charts (timeseries, bar, pie), Form controls, Empty/Loading/Skeleton states, Modal/Drawer, Stepper, Tabs.
-- Theming: Light/Dark with WCAG-compliant contrast; High-contrast mode.
-- i18n: English baseline; extraction pipeline ready.
+## Design & Accessibility
 
-UI/UX Excellence Guidelines (Must-pass)
-- Accessibility: WCAG 2.2 AA or better; keyboard navigation; focus ring; aria labels; skip links; prefers-reduced-motion; color contrast ≥ 4.5:1.
-- Usability: Nielsen heuristics, clear affordances, consistent controls, undo/rollback where possible.
-- Performance Budgets (desktop on modest hardware): LCP < 2.5s, TTI < 3s, CLS < 0.1; JS < 300KB gzip per route (excluding charts when necessary).
-- Responsiveness: Mobile, tablet, desktop breakpoints; touch targets ≥ 44px.
-- State Design: Empty, loading, error, partial data, and success states for every page; optimistic updates where safe.
-- Content: Plain language; tooltip helpers; inline docs and links.
-- Security: CSRF protection, CSP headers (no unsafe-inline), rate limiting, audit logs; mask secrets by default.
+- Light and dark themes maintain WCAG 2.2 AA contrast, high-contrast mode, and prefers-reduced-motion support.
+- Full keyboard navigation, focus rings, skip links, aria labels, and descriptive tooltips help every team member stay productive.
+- Responsive layouts keep features usable on laptops, tablets, and phones; touch targets remain at least 44px.
 
-Engineering Approach (coding-first, offline)
-- Framework: Use existing website/src (React/TS) with routing, code-splitting, and component library.
-- Data: Mock API layer with deterministic fixtures and MSW/Express stubs; no external creds.
-- Testing: Unit tests for components; integration tests for major flows; Lighthouse CI for perf/a11y.
-- Redaction: Mediation debugger views redact PII, tokens, and sensitive payload fields using a shared redaction util.
+## Performance & Reliability
 
-Acceptance Criteria (to complete Pre-FT Website stage)
-- End-to-end clickable flows for: Placements CRUD, Adapter toggles, Floors setup, A/B experiment creation, Fraud dashboard view, Mediation debugger view (sanitized traces), Billing mock.
-- Lighthouse scores (desktop): Performance ≥ 90, Accessibility ≥ 95, Best Practices ≥ 95, SEO ≥ 90.
-- Automated a11y tests pass (axe-core) with zero critical violations.
-- Screenshots and short walkthrough recorded and linked from docs.
+- Core web vitals target LCP < 2.5s, TTI < 3s, CLS < 0.1 on mainstream hardware.
+- All critical views implement loading, empty, partial, and error states with actionable guidance.
+- Telemetry and logs automatically redact credentials, consent strings, and user identifiers before leaving the browser.
 
-Deliverables
-- Implemented routes and pages under website/src with mocks and tests.
-- Redaction utilities and fixtures.
-- CI job for Lighthouse and a11y on key routes.
-- Documentation: this plan + a Usage Guide with screenshots.
+## Getting Started
+
+1. Sign in at https://console.apexmediation.com with your organization credentials and enable 2FA when prompted.
+2. Complete the onboarding checklist on the Overview page (placements, credentials, consent, billing).
+3. Invite teammates via Settings → Access Control and assign roles (Admin, Finance, Analyst, Read-only).
+4. Use the Mediation Debugger and Transparency sections to verify SDK integrations before promoting to production.
+
+## Support & Feedback
+
+- Need help? Use the in-app support widget or email support@apexmediation.com with your organization ID.
+- Feature ideas are welcome—submit them through Settings → Feedback so the product team can review them with you.

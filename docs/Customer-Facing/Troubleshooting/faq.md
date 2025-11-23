@@ -33,10 +33,10 @@ Common questions about the ApexMediation Platform. Can't find your answer? [Cont
 - ✅ **iOS** (Swift, Objective-C)
 - ✅ **Android** (Kotlin, Java)
 - ✅ **Web** (JavaScript)
-- ✅ **React Native** (beta)
-- ✅ **Flutter** (beta)
+- ✅ **React Native** (official bridge — contact support to enable)
+- ✅ **Flutter** (official bridge — contact support to enable)
 
-**Coming Soon**: Unreal Engine, Godot
+For other engines (Unreal, Godot, custom C++), reach out to support so we can share the latest integration options.
 
 ---
 

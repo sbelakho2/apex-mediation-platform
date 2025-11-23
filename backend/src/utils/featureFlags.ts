@@ -12,6 +12,10 @@ export interface FeatureFlags {
   mlCanaryEnabled: boolean;
   mlCanaryModelVersion: string;
   mlCanaryTrafficPercent: number;
+  // Verifiable Revenue Auditor (VRA)
+  vraEnabled: boolean; // Master flag — when false, all /recon/* and /proofs/* routes are hidden
+  vraShadowOnly: boolean; // When true, VRA runs in shadow mode (no side‑effects like dispute submission)
+  vraAllowedNetworks: string; // CSV allowlist for networks eligible for VRA processing
 }
 
 /**
@@ -27,6 +31,10 @@ export const getFeatureFlags = (): FeatureFlags => {
     mlCanaryEnabled: process.env.ML_CANARY_ENABLED === 'true',
     mlCanaryModelVersion: process.env.ML_CANARY_MODEL_VERSION || 'stable',
     mlCanaryTrafficPercent: parseInt(process.env.ML_CANARY_TRAFFIC_PERCENT || '0', 10),
+    // VRA flags default safe: disabled + shadow_only true
+    vraEnabled: process.env.VRA_ENABLED === 'true',
+    vraShadowOnly: (process.env.VRA_SHADOW_ONLY || 'true').toLowerCase() === 'true',
+    vraAllowedNetworks: process.env.VRA_ALLOWED_NETWORKS || '',
   };
 };
 

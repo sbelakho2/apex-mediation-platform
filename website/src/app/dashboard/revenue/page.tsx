@@ -14,19 +14,20 @@ import { api } from '@/lib/api';
 import Container from '@/components/ui/Container';
 import Section from '@/components/ui/Section';
 
-type RevenueSeriesResponse = {
-  data: Array<{ timestamp: string; revenue: number; impressions: number; ecpm: number }>;
-  meta?: { currency?: string };
+type ReportingSeriesResponse = {
+  series: Array<{ timestamp: string; revenue: number; impressions: number; ecpm: number }>;
+  period?: { startDate: string; endDate: string };
+  granularity?: string;
 };
 
-type RevenueSummaryResponse = {
+type ReportingOverviewResponse = {
   totalRevenue: number;
   totalImpressions: number;
   totalClicks: number;
-  averageEcpm: number;
-  averageFillRate: number;
-  periodStart: string;
-  periodEnd: string;
+  ecpm: number;
+  ctr: number;
+  fillRate: number;
+  period?: { startDate: string; endDate: string };
 };
 
 type RangeKey = 'today' | 'week' | 'month' | 'year';
@@ -40,12 +41,15 @@ type RevenueSeries = {
 type TopApp = { name: string; revenue: number; impressions: number; percent: number };
 type TopNetwork = { name: string; revenue: number; ecpm: number; percent: number };
 
+type TopAppRow = { appId: string; appName?: string | null; revenue: number; impressions: number; ecpm: number };
+type AdapterPerformanceRow = { adapterId: string; adapterName?: string | null; revenue: number; impressions: number; clicks: number; ecpm: number; ctr: number; avgLatency: number };
+
 export default function RevenuePage() {
   const [timeRange, setTimeRange] = useState<RangeKey>('week');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [series, setSeries] = useState<RevenueSeries>({ points: [] });
-  const [summary, setSummary] = useState<RevenueSummaryResponse | null>(null);
+  const [summary, setSummary] = useState<ReportingOverviewResponse | null>(null);
   const [topApps, setTopApps] = useState<TopApp[]>([]);
   const [topNetworks, setTopNetworks] = useState<TopNetwork[]>([]);
 
@@ -88,11 +92,11 @@ export default function RevenuePage() {
       const { startDate, endDate } = toApiRange(timeRange);
       const query = `startDate=${startDate}&endDate=${endDate}`;
       // Fetch in parallel; tolerate missing routes by handling { success:false }
-      const [seriesRes, summaryRes, apps, nets] = await Promise.all([
-        api.get<RevenueSeriesResponse>(`/revenue/timeseries?${query}`, { signal: controller?.signal }),
-        api.get<RevenueSummaryResponse>(`/revenue/summary?${query}`, { signal: controller?.signal }),
-        api.get<{ items: TopApp[] }>(`/revenue/top-apps?${query}`, { signal: controller?.signal }),
-        api.get<{ items: TopNetwork[] }>(`/revenue/top-networks?${query}`, { signal: controller?.signal }),
+      const [seriesRes, summaryRes, appsRes, adaptersRes] = await Promise.all([
+        api.get<ReportingSeriesResponse>(`/reporting/timeseries?${query}`, { signal: controller?.signal }),
+        api.get<ReportingOverviewResponse>(`/reporting/overview?${query}`, { signal: controller?.signal }),
+        api.get<{ apps: TopAppRow[] }>(`/reporting/top-apps?${query}`, { signal: controller?.signal }),
+        api.get<{ adapters: AdapterPerformanceRow[] }>(`/reporting/adapters?${query}`, { signal: controller?.signal }),
       ]);
 
       if (!alive) return;
@@ -102,7 +106,7 @@ export default function RevenuePage() {
         return;
       }
       setSeries({
-        points: (seriesRes.data.data || []).map((point: any) => ({
+        points: (seriesRes.data.series || []).map((point: any) => ({
           ts: point.timestamp,
           revenue: point.revenue,
           impressions: point.impressions,
@@ -110,8 +114,34 @@ export default function RevenuePage() {
         })),
       });
       setSummary(summaryRes.success && summaryRes.data ? summaryRes.data : null);
-      setTopApps((apps.success && apps.data?.items) ? apps.data.items : []);
-      setTopNetworks((nets.success && nets.data?.items) ? nets.data.items : []);
+
+      const appRows = appsRes.success && appsRes.data?.apps ? appsRes.data.apps : [];
+      const totalAppRevenue = appRows.reduce((sum, row) => sum + Math.max(0, row.revenue || 0), 0);
+      setTopApps(
+        appRows.map((row) => {
+          const revenue = Math.max(0, row.revenue || 0);
+          return {
+            name: row.appName || row.appId || 'App',
+            revenue,
+            impressions: Math.max(0, row.impressions || 0),
+            percent: totalAppRevenue > 0 ? (revenue / totalAppRevenue) * 100 : 0,
+          };
+        })
+      );
+
+      const adapterRows = adaptersRes.success && adaptersRes.data?.adapters ? adaptersRes.data.adapters : [];
+      const totalAdapterRevenue = adapterRows.reduce((sum, row) => sum + Math.max(0, row.revenue || 0), 0);
+      setTopNetworks(
+        adapterRows.map((row) => {
+          const revenue = Math.max(0, row.revenue || 0);
+          return {
+            name: row.adapterName || row.adapterId || 'Network',
+            revenue,
+            ecpm: Math.max(0, row.ecpm || 0),
+            percent: totalAdapterRevenue > 0 ? (revenue / totalAdapterRevenue) * 100 : 0,
+          };
+        })
+      );
       setLoading(false);
     })().catch((e) => {
       if (!alive) return;
@@ -208,7 +238,7 @@ export default function RevenuePage() {
             />
             <StatCard
               title="eCPM"
-              value={curFmt.format(Math.max(0, summary?.averageEcpm ?? totals.ecpm))}
+              value={curFmt.format(Math.max(0, summary?.ecpm ?? totals.ecpm))}
               change={undefined}
               icon={ArrowTrendingUpIcon}
               color="yellow"

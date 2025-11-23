@@ -334,14 +334,32 @@ class MediationSDK private constructor(
         if (isTestRuntime()) task.run() else backgroundExecutor.execute(task)
     }
 
-    private fun shouldUseS2SForPlacement(@Suppress("UNUSED_PARAMETER") placement: String): Boolean {
-        // BYO mode: disable S2S entirely.
-        if (config.sdkMode == SdkMode.BYO) return false
-        // In HYBRID/MANAGED, only if explicitly enabled and we have API key.
+    private fun shouldUseS2SForPlacement(placementConfig: PlacementConfig): Boolean {
         if (!config.enableS2SWhenCapable) return false
         if (auctionApiKey.isBlank()) return false
-        // Optionally, require that all enabled adapters are S2S-capable and that credentials exist.
-        // TODO: consult registry/capabilities when available.
+        return if (config.sdkMode == SdkMode.BYO) {
+            placementHasS2SReadyAdapters(placementConfig)
+        } else {
+            true
+        }
+    }
+
+    // BYO mode only runs auctions when every enabled adapter opts-in and credentials are present.
+    private fun placementHasS2SReadyAdapters(placementConfig: PlacementConfig): Boolean {
+        val provider = adapterConfigProvider ?: return false
+        val networks = placementConfig.enabledNetworks
+        if (networks.isEmpty()) return false
+        networks.forEach { network ->
+            val adapterCfg = configManager.getAdapterConfig(network) ?: return false
+            if (!adapterCfg.supportsS2S) return false
+            val credentials = provider.getCredentials(network) ?: return false
+            val hasCreds = if (adapterCfg.requiredCredentialKeys.isEmpty()) {
+                credentials.values.any { it.isNotBlank() }
+            } else {
+                adapterCfg.requiredCredentialKeys.all { key -> !credentials[key].isNullOrBlank() }
+            }
+            if (!hasCreds) return false
+        }
         return true
     }
 
@@ -473,7 +491,7 @@ class MediationSDK private constructor(
                 }
 
                 // 1) Try S2S auction first if enabled for this mode; fallback to adapters on no_fill.
-                if (shouldUseS2SForPlacement(placement)) {
+                if (shouldUseS2SForPlacement(placementConfig)) {
                     try {
                         telemetry.recordAdapterSpanStart(
                             traceId,

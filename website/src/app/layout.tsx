@@ -7,6 +7,7 @@ import { ThemeProvider } from '@/components/ui/ThemeProvider';
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
+  metadataBase: new URL('https://apexmediation.bel-consulting.ee'),
   title: 'ApexMediation - Enterprise Ad Mediation Platform',
   description: 'Maximize your ad revenue with transparent mediation, fraud protection, and developer-first tools.',
   keywords: ['ad mediation', 'mobile ads', 'Unity ads', 'iOS ads', 'Android ads', 'ad monetization'],

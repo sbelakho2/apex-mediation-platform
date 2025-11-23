@@ -52,11 +52,11 @@ Purpose: Provide an operator-friendly checklist to verify Android and iOS SDKs a
 - Command: `cd sdks/ios && swift test`
 - Pass criteria: Taxonomy tests (429, 5xx) pass; main-queue callback assertions pass.
 
-2) Demo target (to be added)
-- Pending: Mocked endpoints and UI smoke to prove main-queue callbacks and graceful no_fill behavior.
+2) Demo target validation
+- Provide mocked endpoints and a UI smoke test that proves main-queue callbacks and graceful no_fill behavior.
 
 3) Debug Panel
-- Pending: Enriched with redacted consent snapshot and SDK/version info; Quickstart updated.
+- Ensure the panel surfaces a redacted consent snapshot plus SDK/version info, and keep the Quickstart instructions in sync.
 
 ---
 
@@ -68,7 +68,7 @@ Purpose: Provide an operator-friendly checklist to verify Android and iOS SDKs a
 - Record artifact paths:
   - Android AAR: `sdk\core\android\build\outputs\aar\*.aar`
   - iOS: N/A (Swift Package)
-- Link run logs in DEVELOPMENT_TODO_CHECKLIST.md weekly section.
+- Store run logs alongside your release artifacts so they can be shared during certification reviews.
 
 ---
 
@@ -81,6 +81,6 @@ Purpose: Provide an operator-friendly checklist to verify Android and iOS SDKs a
 ---
 
 ## Completion criteria
-- All required Android checks pass (build, tests, validator, docs) and pending items planned with dates.
-- iOS unit tests pass; demo target/Debug Panel work scheduled; checklist updated.
-- DEVELOPMENT_TODO_CHECKLIST.md updated with evidence links and run commands for the week.
+- All required Android checks pass (build, tests, validator, docs) and any follow-up items are tracked with owners and dates.
+- iOS unit tests pass; demo target and Debug Panel evidence captured; checklist updated.
+- Evidence links and run commands are cataloged with the weekly release artifacts.

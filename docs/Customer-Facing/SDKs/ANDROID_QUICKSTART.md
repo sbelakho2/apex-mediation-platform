@@ -97,7 +97,7 @@ When the API key is omitted (BYO default), S2S is disabled and `Bel*` facades re
 Placements and network config are delivered by remote config. In dev, you can point the backend auction to http://localhost:8081 and use mocked responses.
 
 ## 5) Request an interstitial
-The SDK first tries a server-to-server (S2S) auction with normalized error taxonomy and falls back to local adapters on no fill.
+Depending on your `SdkMode` the SDK routes each request through the configured server-to-server (S2S) endpoint or the on-device adapter bridge, always honoring the same normalized error taxonomy.
 
 Using the simple facade API:
 ```kotlin
@@ -119,7 +119,7 @@ if (com.rivalapexmediation.sdk.BelInterstitial.isReady()) {
     com.rivalapexmediation.sdk.BelInterstitial.show(this)
 }
 
-Ads loaded through the runtime adapter bridge carry opaque handles. `BelInterstitial.show()` first asks `MediationSDK.renderAd(...)` to forward the handle back to the adapter runtime; if the ad originated from S2S it gracefully falls back to the placeholder renderer.
+Ads loaded through the runtime adapter bridge carry opaque handles. `BelInterstitial.show()` asks `MediationSDK.renderAd(...)` to forward the handle back to the adapter runtime or render the supplied creative when needed.
 ```
 
 ## 6) Error taxonomy
@@ -149,12 +149,7 @@ Ads loaded through the runtime adapter bridge carry opaque handles. `BelIntersti
 - For local auction: export NEXT_PUBLIC_AUCTION_URL=http://localhost:8081 (website) and run the Go auction service.
 - Enable debug logs and StrictMode in debug builds to catch misconfigurations.
 
-## 11) Roadmap
-- Interstitial lifecycle controller with TTL caching and sample app.
-- Integration validator Gradle task to verify manifest/ProGuard/network security configuration.
-
-
-## 12) Request a rewarded ad
+## 11) Request a rewarded ad
 The API mirrors interstitials via a tiny facade:
 
 ```kotlin
@@ -179,7 +174,7 @@ if (com.rivalapexmediation.sdk.BelRewarded.isReady()) {
 
 Rewarded and rewarded interstitial placements reuse the same runtime bridge. When an adapter runtime returns a handle, `BelRewarded.show()` routes the call through `MediationSDK.renderAd(...)` so the adapter’s own video controller is invoked before OM measurement hooks fire.
 
-## 13) Banners: attach to a container
+## 12) Banners: attach to a container
 For banners, attach to a container ViewGroup (e.g., FrameLayout). If a banner creative is cached, it will render. In test mode, a safe placeholder appears if no creative is cached.
 
 ```kotlin
@@ -191,21 +186,21 @@ com.rivalapexmediation.sdk.BelBanner.detach(container)
 ```
 
 Notes:
-- This MVP banner render uses an off-main-thread load and main-thread WebView render without JavaScript. Production banners will add auto-refresh and lifecycle handling.
+- The banner APIs load off main thread, render on the UI thread, and respect attach/detach so you can manage lifecycle explicitly.
 
-## 14) OM SDK (Open Measurement) — optional hooks
+## 13) OM SDK (Open Measurement) — optional hooks
 If you include the IAB OM SDK in your app and want to start measurement sessions when ads show, provide an OmSdkController implementation and inject it:
 
 ```kotlin
 class MyOmController : com.rivalapexmediation.sdk.measurement.OmSdkController {
     override fun startDisplaySession(activity: Activity, placementId: String, networkName: String, creativeType: String?) {
-        // TODO: start OMID display session
+        // Start your OMID display session for the provided placement/adapter here
     }
     override fun startVideoSession(activity: Activity, placementId: String, networkName: String, durationSec: Int?) {
-        // TODO: start OMID video session
+        // Start the OMID video session and wire duration metadata if available
     }
     override fun endSession(placementId: String) {
-        // TODO: end OMID session
+        // End whichever OMID session you opened for this placement
     }
 }
 
@@ -217,7 +212,7 @@ Notes:
 - The default controller is a safe no-op; integrating OM is optional.
 - Our public show() paths for Interstitial, Rewarded, and App Open will call start/end session.
 
-## 15) In-app Debug Panel
+## 14) In-app Debug Panel
 Use the built-in debug panel to inspect SDK state (app id, placements, consent, test mode) and recent actions.
 
 ```kotlin
@@ -228,7 +223,7 @@ This is safe for debug builds and redacts sensitive fields.
 
 
 
-## 16) Optional: Read consent from IAB storage (opt-in)
+## 15) Optional: Read consent from IAB storage (opt-in)
 If you use a CMP that writes standard IAB keys to SharedPreferences, you can read them explicitly and pass them to the SDK:
 
 ```kotlin
@@ -240,7 +235,7 @@ com.rivalapexmediation.sdk.BelAds.setConsent(
 )
 ```
 
-## 17) Additional ad formats (facade APIs)
+## 16) Additional ad formats (facade APIs)
 - Rewarded Interstitial:
 ```kotlin
 com.rivalapexmediation.sdk.BelRewardedInterstitial.load(appContext, "rewarded_interstitial", listener)

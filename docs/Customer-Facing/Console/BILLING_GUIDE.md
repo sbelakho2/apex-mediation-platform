@@ -15,13 +15,6 @@ Sections
 - Billing → Settings: update billing contacts, view Customer Portal, and manage payment methods via Stripe Portal.
 
 Troubleshooting
-- If invoices do not load: check feature flags on the Admin → Health page; verify network errors in DevTools.
-- PDF link not working: ensure you are logged in and that the invoice exists; try again after a few minutes.
+- If invoices do not load: refresh the page, confirm your account has Billing access, and check DevTools for network errors.
+- PDF link not working: verify you are logged in and that the invoice exists; try again after a few minutes.
 - For billing issues, contact support with your organization ID and the invoice number.
-
-Screenshots
-- Include representative screenshots in PRs affecting Billing UI. (Screenshots can be captured via Playwright during CI failures and stored under console/playwright-report.)
-
-References
-- Backend API: docs/Backend/BILLING_API.md
-- E2E smoke: quality/e2e/billing/usage-to-invoice.spec.ts

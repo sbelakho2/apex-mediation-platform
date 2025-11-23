@@ -166,3 +166,60 @@ export const twofaEventsTotal = new Counter({
   help: 'Total number of 2FA events',
   labelNames: ['event', 'outcome'] as const, // event: enroll|verify|login2fa|regen|disable
 });
+
+// --- VRA (Verifiable Revenue Auditor) metrics ---
+
+// Duration of VRA ClickHouse queries by operation (seconds)
+export const vraQueryDurationSeconds = new Histogram({
+  name: 'vra_query_duration_seconds',
+  help: 'Duration of VRA ClickHouse queries in seconds by operation',
+  labelNames: ['op', 'success'] as const, // op: overview|deltas_count|deltas_list|monthly_digest
+  buckets: [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10],
+});
+
+// Times when VRA fell back to empty/0 results due to CH failure
+export const vraClickhouseFallbackTotal = new Counter({
+  name: 'vra_clickhouse_fallback_total',
+  help: 'Total number of VRA fallbacks to safe empty results due to ClickHouse errors',
+  labelNames: ['op'] as const,
+});
+
+// Count of empty results returned (helps monitor coverage/fill without errors)
+export const vraEmptyResultsTotal = new Counter({
+  name: 'vra_empty_results_total',
+  help: 'Total number of VRA queries returning empty results (by operation)',
+  labelNames: ['op'] as const,
+});
+
+// Dispute acknowledgements in shadow mode
+export const vraDisputeShadowAcksTotal = new Counter({
+  name: 'vra_dispute_shadow_acks_total',
+  help: 'Total number of shadow-mode dispute acknowledgements',
+  labelNames: ['network'] as const,
+});
+
+// Disputes actually created (non-shadow)
+export const vraDisputesCreatedTotal = new Counter({
+  name: 'vra_disputes_created_total',
+  help: 'Total number of disputes created when shadow mode is disabled',
+  labelNames: ['network'] as const,
+});
+
+// Ingestion: parsed rows and loads
+export const vraStatementsRowsParsedTotal = new Counter({
+  name: 'vra_statements_rows_parsed_total',
+  help: 'Total number of statement rows parsed from network reports',
+  labelNames: ['network', 'schema_ver'] as const,
+});
+
+export const vraStatementsLoadsTotal = new Counter({
+  name: 'vra_statements_loads_total',
+  help: 'Total number of successful statement loads (raw and normalized)',
+  labelNames: ['network', 'phase'] as const, // phase: raw|norm
+});
+
+export const vraStatementsLoadFailuresTotal = new Counter({
+  name: 'vra_statements_load_failures_total',
+  help: 'Total number of failed statement loads',
+  labelNames: ['network', 'phase', 'reason'] as const,
+});

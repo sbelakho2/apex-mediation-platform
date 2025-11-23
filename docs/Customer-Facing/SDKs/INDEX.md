@@ -17,11 +17,6 @@ Debugging and Tools
 - In‑App Debug Panel
   - Android: BelAds.showDebugPanel(activity)
   - iOS: DebugPanel.show(from: UIViewController)
-- Admin Observability (for backend developers)
-  - Adapter Metrics: GET /v1/metrics/adapters
-  - Time‑series: GET /v1/metrics/adapters/timeseries?days=7
-  - SLO status: GET /v1/metrics/slo
-  - Mediation Debugger events: GET /v1/debug/mediation?placement_id=&n=
 
 Sandbox Readiness — SDKs
 - See the full checklist: docs/Customer-Facing/SDKs/SANDBOX_READINESS.md
@@ -35,4 +30,3 @@ Support and Troubleshooting
 
 Notes
 - The SDKs are designed to operate without client‑side secrets. OTA configuration is signed (Ed25519) and schema‑validated.
-- The platform enforces a global operating budget ≤ $500/month; no external services are required for local testing.

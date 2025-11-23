@@ -177,19 +177,7 @@
   .minh-table { min-height: 280px; }
 
   /* Buttons (legacy aliases mapped to WEBSITE_FIX tokens) */
-  .btn-primary-yellow {
-    @apply inline-flex items-center justify-center rounded-full px-8 py-3 font-bold uppercase transition-transform duration-200 hover:-translate-y-0.5 hover:shadow-lg;
-    background: var(--brand-500);
-    color: #fff;
-    letter-spacing: 0.2em;
-  }
-
-  .btn-secondary-blue {
-    @apply inline-flex items-center justify-center rounded-full px-8 py-3 font-bold uppercase transition-transform duration-200 hover:-translate-y-0.5 hover:shadow-lg;
-    background: var(--gray-100);
-    color: var(--gray-800);
-    border: 1px solid var(--gray-300);
-  }
+  /* legacy alias stubs removed: .btn-primary-yellow, .btn-secondary-blue */
 
   .btn-success {
     @apply inline-flex items-center justify-center rounded-full px-6 py-3 font-bold uppercase transition-transform duration-200 hover:-translate-y-0.5 hover:shadow-lg;
@@ -218,14 +206,10 @@
   }
 
   .card-yellow { @apply border bg-brand-50; border-color: var(--brand-500); }
-
-  .card-blue { @apply border text-white; border-color: var(--brand-500); background: var(--brand-600); }
+  /* legacy alias stub removed: .card-blue */
 
   /* Forms */
-  .input { @apply w-full rounded border bg-white px-4 py-3 transition-all duration-200; border-color: var(--gray-300); }
-  .input:focus { @apply outline-none; box-shadow: 0 0 0 2px var(--focus); border-color: var(--brand-500); }
-
-  .input-blue { @apply text-gray-900 placeholder:text-gray-400; border-color: var(--gray-300); }
+  /* legacy alias stubs removed: .input, .input-blue */
 
   .label { @apply mb-2 block text-sm font-semibold text-gray-900; }
 
@@ -236,13 +220,15 @@
   }
 
   .badge-success {
-    @apply bg-success-green text-white;
+    background: var(--success);
+    color: #fff;
   }
 
   .badge-warning { @apply text-[color:var(--warning)]; background: color-mix(in srgb, var(--warning) 12%, white); }
 
   .badge-danger {
-    @apply bg-accent-red text-white;
+    background: var(--danger);
+    color: #fff;
   }
 
   .badge-info { background: var(--info); color: #fff; }

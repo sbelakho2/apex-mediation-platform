@@ -1,4 +1,4 @@
-# Transparency API (MVP)
+# Transparency API
 
 Expose verifiable, queryable auction truth to publishers. All responses are scoped to the authenticated publisher.
 
@@ -8,7 +8,7 @@ Authentication: Bearer JWT (publisher-scoped)
 
 ---
 
-## Data Model (stored in ClickHouse)
+## Data Model
 
 - auctions (append-only)
 - auction_candidates (append-only, child records)
@@ -85,14 +85,10 @@ Response:
 
 ## Integrity & Verification
 - Each auction row stores integrity fields: {algo, key_id, signature}.
-- Public verification keys are listed internally and exposed upon request by support.
-- A CLI guide for ed25519 signature verification will be added.
+- Public verification keys are available from support along with CLI instructions for ed25519 verification.
 
 ## Sampling
-- Sampling is configurable per publisher (0.0–1.0) and applied on the write path. Default may be set by ops.
+- Sampling is configurable per publisher (0.0–1.0) and applied on the write path. Contact support to adjust your sampling level.
 
 ## No Self-Preference
-- If platform-owned demand is added, identical treatment is enforced in the auction code and auditable via this API.
-
-## Status
-- MVP endpoints deployed. Write path/signing is feature-flagged and will be enabled per environment.
+- Platform-owned demand (when present) follows the same auction policy and is auditable via this API.

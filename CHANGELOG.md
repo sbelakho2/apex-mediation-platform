@@ -1,3 +1,88 @@
+Changelog — Verifiable Revenue Auditor (VRA) — Additive Read‑Only Module (2025-11-23)
+
+Summary
+- Introduces the VRA module as a read‑only, additive service that provides cryptographically verifiable reconciliation across BYO networks without touching serving, auctions, or SDK paths.
+- Default‑safe rollout with feature flags: VRA disabled by default, shadow‑only behavior when enabled (no side‑effects), and strict route guarding. No impact on existing APIs or data flows.
+
+What changed (highlights)
+- Feature flags (env)
+  - VRA_ENABLED=false (default)
+  - VRA_SHADOW_ONLY=true (default)
+  - VRA_ALLOWED_NETWORKS="" (optional CSV allowlist)
+- Backend
+  - New VRA routes under /api/v1 guarded by feature flag and auth:
+    - GET /api/v1/recon/overview — Coverage %, variance %, totals by network/format/country
+    - GET /api/v1/recon/deltas — Paginated classified deltas with evidence links (data when available)
+    - POST /api/v1/recon/disputes — Draft disputes creator; returns 202 in shadow mode
+    - GET /api/v1/proofs/revenue_digest?month=YYYY-MM — Signed monthly digest (if present)
+  - Router wiring: routes mounted with read‑only rate limiting; kill‑switch integration preserved.
+  - Services: VRA shadow‑safe service stubs wired to ClickHouse; returns conservative values when data not yet populated (expected == paid → variance 0%), ensuring non‑disruptive enablement.
+- Storage (ClickHouse migrations)
+  - recon_statements_raw, recon_statements_norm
+  - recon_expected, recon_match, recon_deltas, recon_disputes
+  - proofs_daily_roots, proofs_monthly_digest
+  - Up/Down migration pair: backend/migrations/clickhouse/20251123_181800_vra_tables.(up|down).sql
+
+Guarantees & safety
+- Isolation: new schemas/tables; no existing tables or routes modified.
+- Read‑only inputs: joins will consume transparency receipts (PG) and revenue_events (CH) only.
+- Shadow‑first: createDispute acknowledges with 202 and no writes when VRA_SHADOW_ONLY=true.
+- Availability: routes short‑circuit to empty/0 responses if ClickHouse not available (no errors surface to callers), maintaining a “no insights” degradation mode.
+
+Operator notes
+- Apply ClickHouse migrations: node backend/scripts/runClickHouseMigrations.js
+- Enable canary via env: VRA_ENABLED=true with VRA_SHADOW_ONLY=true for safe validation.
+- See docs/Internal/VRA/IMPLEMENTATION_SUMMARY.md for full technical details and acceptance gates.
+
+Validation and QA
+- Added unit tests covering route guarding (404 when disabled), 200 responses with feature enabled, shadow‑mode behavior, and input validation for the proofs digest.
+- Full test suite remains green; no regressions in existing billing, transparency, reporting, or dashboard tests.
+
+---
+
+Changelog — Android SdkMode Gating & Adapter Metadata (2025-11-23)
+
+Summary
+- Adds placement-aware S2S gating for BYO installs so auctions only execute when every enabled adapter is explicitly S2S-capable and has live credentials on device.
+- Extends the Android remote config schema with capability metadata (`supportsS2S`, `requiredCredentialKeys`) so backend payloads can describe which adapters qualify for auctions.
+- Documents the new guardrail in the BYO production checklist and SDK fixes log so audits know the requirement is satisfied on Android.
+
+What changed (highlights)
+- MediationSDK
+  - `sdk/core/android/src/main/kotlin/MediationSDK.kt` now evaluates `shouldUseS2SForPlacement(...)` with the placement config, refusing auctions whenever BYO mode lacks adapter opt-ins or missing secrets. HYBRID/MANAGED still respect `enableS2SWhenCapable` plus the auction API key.
+  - New helper `placementHasS2SReadyAdapters(...)` consults `AdapterConfigProvider` credentials per network and only succeeds when all required keys are present and non-blank.
+- Models
+  - `sdk/core/android/src/main/kotlin/Models.kt` adds `supportsS2S` and `requiredCredentialKeys` to `AdapterConfig`, defaulting to false/empty so legacy configs stay valid until backend emits the new fields.
+- Documentation
+  - `docs/Internal/Development/BYO_SDK_PRODUCTION_CHECKLIST.md` and `SDK_FIXES.md` call out the metadata requirement and the enforcement path so BYO audits and release notes can reference a canonical status update.
+
+Validation and QA
+- Android SDK: not re-run (logic-only change; run `./gradlew testDebugUnitTest` when convenient).
+
+---
+
+Changelog — SwiftProtobuf Plugin Hardening + BYO Checklist Migration (2025-11-23)
+
+Summary
+- Removes the strict-concurrency warnings emitted by the upstream SwiftProtobuf build plugin by adopting the latest PackagePlugin URL APIs and annotating the plugin import with `@preconcurrency`.
+- Establishes `docs/Internal/Development/BYO_SDK_PRODUCTION_CHECKLIST.md` as the single source of truth for SDK production readiness while slimming `SDK_FIXES.md` down to changelog notes.
+- Ensures future contributors can point audits and release documentation at one canonical checklist instead of duplicating requirements.
+
+What changed (highlights)
+- SwiftProtobuf Plugin
+  - Vendored copy now lives under `sdk/core/ios/Packages/swift-protobuf/` via `swift package edit` so we can safely patch plugin sources.
+  - `Plugins/SwiftProtobufPlugin/plugin.swift` replaces deprecated `Path` helpers with URLs, feeds `Command.buildCommand(...)` the correct `URL` arguments, and adds a `fileSystemPath` helper for pre-macOS 13 support.
+  - Error enums store only textual descriptions instead of raw `Target` references; importing `PackagePlugin` with `@preconcurrency` keeps Sendable diagnostics at bay under `StrictConcurrency`.
+- Documentation hierarchy
+  - New `docs/Internal/Development/BYO_SDK_PRODUCTION_CHECKLIST.md` captures every P0/P1/P2 requirement (mode gating, consent, OMSDK, tooling, Unity parity, acceptance gates, test plans).
+  - `SDK_FIXES.md` now defers to that checklist and focuses on dated implementation notes so there is one canonical reference for auditors and release planning.
+
+Validation and QA
+- iOS SDK: `swift test`
+- iOS SDK (strict concurrency): `SWIFT_STRICT_CONCURRENCY=complete swift test`
+
+---
+
 Changelog — iOS BYO Facade Lifecycle & Consent Plumbing (2025-11-23)
 
 Summary

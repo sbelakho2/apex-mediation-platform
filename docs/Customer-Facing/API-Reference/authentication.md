@@ -343,9 +343,9 @@ export default api;
 3. Monitor for errors for 24 hours
 4. Revoke the old API key
 
-### IP Whitelisting (Coming Soon)
+### IP Allowlisting
 
-For enhanced security, you can restrict API keys to specific IP addresses:
+Restrict API keys to specific IP addresses:
 1. Go to **Settings → API Keys**
 2. Click on an API key
 3. Add allowed IP addresses (e.g., `203.0.113.1, 203.0.113.2`)

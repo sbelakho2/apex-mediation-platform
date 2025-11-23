@@ -2,8 +2,6 @@
 
 _Last updated: 2025-11-18 16:40 UTC_
 
-> **FIX-10 governance:** This index explains where customer-facing docs live. It does **not** assert product completion. Always cross-check `docs/Internal/Deployment/PROJECT_STATUS.md` for readiness and `docs/Internal/Development/FIXES.md` for the prioritized backlog before promising features externally.
-
 This directory contains all customer-facing documentation for the ApexMediation Platform.
 
 ## Documentation Categories
@@ -146,18 +144,8 @@ docs/Customer-Facing/
 
 ## Contribution
 
-Internal team members can contribute to documentation:
-1. Create a feature branch
-2. Write/update documentation in markdown
-3. Test all code examples
-4. Submit PR for review
-5. Documentation team reviews within 2 business days
+To request edits or provide feedback, contact your ApexMediation account team or open a support ticket. The documentation team will route changes to the appropriate subject-matter experts.
 
 ---
 
 **Next Steps**: See individual documentation files in subdirectories.
-
-## Change Log
-| Date | Change |
-| --- | --- |
-| 2025-11-18 | Added FIX-10 governance notice, updated folder structure, and aligned guidance with `PROJECT_STATUS.md`/`FIXES.md`. |

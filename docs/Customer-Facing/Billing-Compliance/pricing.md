@@ -5,7 +5,7 @@ _Owner: Business / Finance Team_
 _Review Cycle: Quarterly or when pricing changes (next review: 2026-02-18)_  
 _Status: Active_
 
-> **FIX-10 governance:** Pricing information must stay consistent with actual billing implementation. For billing system status, see `docs/Internal/Deployment/PROJECT_STATUS.md` and `docs/Internal/Development/FIXES.md` (FIX-02). Customers will be notified 30 days before pricing changes.
+> **Pricing notice:** Rates shown here are current and subject to change with 30 days’ advance notice. Your monthly invoice reflects the authoritative amount owed.
 
 Transparent pricing with no hidden fees. Pay only for what you earn.
 

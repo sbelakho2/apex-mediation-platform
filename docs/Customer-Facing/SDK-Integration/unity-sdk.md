@@ -122,7 +122,7 @@ API snapshot:
 - `LoadInterstitial/ShowInterstitial`, `LoadRewarded/ShowRewarded`, `LoadBanner/AttachBanner/DestroyBanner` -- format-specific helpers.
 - `GetTelemetryTraces()` and `GetTransparencyProofs()` -- backing collections for debugger overlays or custom diagnostics.
 
-> **Paid events:** BYO integrations rely on the publisher's own network payouts, so Unity exposes only the sanitized `OnAdEvent` stream today. Managed demand will re-enable standardized paid events in a future release.
+> **Paid events:** BYO integrations rely on the publisher's own network payouts, so Unity exposes only the sanitized `OnAdEvent` stream. Contact support if you need standardized paid event exports.
 
 ---
 

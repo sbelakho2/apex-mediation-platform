@@ -95,7 +95,7 @@ class SampleApp : Application() {
 | --- | --- | --- |
 | `SdkMode.BYO` | Client adapters only. Runtime bridge enforces single-use cached ads. | Default for all BYO tenants |
 | `SdkMode.HYBRID` | S2S first (if enabled) with BYO fallback. Requires API key. | When you have managed demand + BYO credentials |
-| `SdkMode.MANAGED` | Managed demand only (not yet GA). | Internal testing |
+| `SdkMode.MANAGED` | Managed demand only (invite-only). | Contact support for availability |
 
 To enable S2S in HYBRID/MANAGED:
 

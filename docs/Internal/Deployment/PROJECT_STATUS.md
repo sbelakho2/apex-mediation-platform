@@ -22,7 +22,7 @@ _Owner: Platform Engineering_
 | --- | --- | --- | --- | --- |
 | Backend platform | "All services production-ready" | `backend/Dockerfile` is broken, several controllers lack auth/rate limits, transparency and billing APIs still under active remediation. | FIX-01 | In Progress |
 | Console + Admin UI | "Connected to live APIs with full RBAC" | Dozens of mock flows remain (login, billing, migration studio); navigation exposes disabled routes by default. | FIX-03 | In Progress |
-| Website | "Data-backed dashboards" | Pages still render static metrics and demo funnels; compliance copy needs audit. | FIX-04 | In Progress |
+| Website | "Data-backed dashboards" | Revenue widgets now hit `/api/v1/reporting/*`, but the site still runs in mock-auth test mode so backend calls require manual tokens; compliance copy needs audit. | FIX-04 | In Progress |
 | SDKs | "Android/iOS/Unity shipped" | iOS/Android parity work is mid-stream, Unity lacks device validation, consent persistence unfinished. | FIX-05 | In Progress |
 | Docs / Runbooks | "Comprehensive & current" | Canonical sources now established (FIX-10 complete); legal/PCI docs still missing ownership + review dates. | FIX-10 | ✅ FIX-10 Complete |
 | Quality & Testing | "Unit/integration coverage" | Test structure created, test harness tooling added, validation scripts operational. | FIX-07 | ✅ Complete |

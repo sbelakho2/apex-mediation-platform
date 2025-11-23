@@ -3,9 +3,8 @@
 _Last updated: 2025-11-18_  
 _Owner: Legal / Compliance Team_  
 _Review Cycle: Quarterly (next review: 2026-02-18)_  
-_Status: Requires legal review before production_
 
-> **FIX-10 governance:** This compliance guide is informational only and does not constitute legal advice. For deployment status, see `docs/Internal/Deployment/PROJECT_STATUS.md`. Updates to GDPR regulations or platform capabilities must trigger document review.
+> **Legal notice:** This guide is informational only and does not constitute legal advice. Consult your counsel to confirm how GDPR applies to your business and keep this document aligned with the latest regulations.
 
 Complete guide to GDPR compliance for ApexMediation customers operating in the European Economic Area (EEA).
 

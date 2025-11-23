@@ -2,6 +2,9 @@ import { getSession } from '@/lib/auth';
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 
+// Force dynamic to silence dynamic server usage warning for cookies/session
+export const dynamic = 'force-dynamic';
+
 function cacheHeaders() {
   return { 'Cache-Control': 'private, max-age=60' };
 }

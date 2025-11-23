@@ -1,6 +1,6 @@
 ApexMediation — Verifiable Revenue Auditor (VRA)
 
-Full Technical Sheet (BYO-only, Additive Module)
+Full Technical Sheet (BYO-only for now, but extensible for managed demand later, Additive Module)
 
 0) Purpose & Positioning
 
