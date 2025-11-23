@@ -112,12 +112,12 @@ function renderContent(slugKey: string, breadcrumbs: Breadcrumb[]): React.ReactN
             <aside>
               <nav className="sticky top-24 space-y-3 rounded-3xl bg-gray-50 p-6 text-sm font-semibold tracking-wide text-gray-700">
                 <span className="block text-gray-500">Contents</span>
-                <a href="#getting-started" className="block hover:text-brand-600">Getting started</a>
-                <a href="#real-time-bidding" className="block hover:text-brand-600">Real-time bidding</a>
-                <a href="#ml-fraud-detection" className="block hover:text-brand-600">ML fraud detection</a>
-                <a href="#ab-testing-platform" className="block hover:text-brand-600">A/B testing</a>
-                <a href="#integration-checklist" className="block hover:text-brand-600">Integration checklist</a>
-                <a href="#sdk-reference" className="block hover:text-brand-600">SDK reference</a>
+                <a href="#getting-started" className="block hover:text-brand-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus)]">Getting started</a>
+                <a href="#real-time-bidding" className="block hover:text-brand-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus)]">Real-time bidding</a>
+                <a href="#ml-fraud-detection" className="block hover:text-brand-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus)]">ML fraud detection</a>
+                <a href="#ab-testing-platform" className="block hover:text-brand-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus)]">A/B testing</a>
+                <a href="#integration-checklist" className="block hover:text-brand-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus)]">Integration checklist</a>
+                <a href="#sdk-reference" className="block hover:text-brand-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus)]">SDK reference</a>
               </nav>
             </aside>
             <div className="space-y-8">
@@ -210,13 +210,13 @@ Body: {
                 </div>
               </section>
 
-              <section id="ab-testing-platform" className="rounded-3xl bg-white p-8 shadow-xl ring-1 ring-primary-blue/10">
-                <h2 className="text-h3 font-bold uppercase text-primary-blue">4. A/B Testing Platform</h2>
+              <section id="ab-testing-platform" className="rounded-3xl bg-white p-8 shadow-xl ring-1 ring-gray-200">
+                <h2 className="text-h3 font-semibold text-gray-900">4. A/B Testing Platform</h2>
                 <p className="mt-4 text-body text-gray-700 leading-relaxed">
                   Launch Bayesian experiments with Thompson Sampling and get directional insights within hours. Experiments can target creative, placement layout, or mediation partner mix.
                 </p>
                 <div className="mt-6 grid gap-4 md:grid-cols-2">
-                  <div className="rounded-2xl bg-primary-blue/90 p-6 text-white">
+                  <div className="rounded-2xl bg-brand-600 p-6 text-white">
                     <h3 className="text-sm font-bold uppercase">Primary metrics</h3>
                     <ul className="mt-3 space-y-2 text-sm">
                       <li>Revenue per daily active user</li>
@@ -225,8 +225,8 @@ Body: {
                       <li>Average session length</li>
                     </ul>
                   </div>
-                  <div className="rounded-2xl border border-primary-blue/10 bg-white p-6">
-                    <h3 className="text-sm font-bold uppercase text-primary-blue">Rollout guardrails</h3>
+                  <div className="rounded-2xl border border-gray-200 bg-white p-6">
+                    <h3 className="text-sm font-semibold text-gray-900">Rollout guardrails</h3>
                     <p className="mt-3 text-sm text-gray-700">
                       Set minimum win probability thresholds, cap daily risk at the inventory level, and auto-promote winners when results clear 95% significance.
                     </p>
@@ -234,8 +234,8 @@ Body: {
                 </div>
               </section>
 
-              <section id="integration-checklist" className="rounded-3xl bg-white p-8 shadow-xl ring-1 ring-primary-blue/10">
-                <h2 className="text-h3 font-bold uppercase text-primary-blue">5. Integration Checklist</h2>
+              <section id="integration-checklist" className="rounded-3xl bg-white p-8 shadow-xl ring-1 ring-gray-200">
+                <h2 className="text-h3 font-semibold text-gray-900">5. Integration Checklist</h2>
                 <ul className="mt-4 space-y-3 text-body text-gray-700">
                   <li>✅ Add the SDK to your project and confirm no build errors.</li>
                   <li>✅ Verify GDPR/CCPA consent flow for European and Californian users.</li>
@@ -245,23 +245,23 @@ Body: {
                 </ul>
               </section>
 
-              <section id="sdk-reference" className="rounded-3xl bg-white p-8 shadow-xl ring-1 ring-primary-blue/10">
-                <h2 className="text-h3 font-bold uppercase text-primary-blue">6. SDK Reference</h2>
+              <section id="sdk-reference" className="rounded-3xl bg-white p-8 shadow-xl ring-1 ring-gray-200">
+                <h2 className="text-h3 font-semibold text-gray-900">6. SDK Reference</h2>
                 <table className="mt-4 w-full table-auto text-left text-sm text-gray-700">
                   <thead>
-                    <tr className="text-primary-blue">
-                      <th className="border-b-2 border-primary-blue/20 py-3">Method</th>
-                      <th className="border-b-2 border-primary-blue/20 py-3">Description</th>
-                      <th className="border-b-2 border-primary-blue/20 py-3">Usage</th>
+                    <tr className="text-gray-900">
+                      <th className="border-b-2 border-gray-200 py-3">Method</th>
+                      <th className="border-b-2 border-gray-200 py-3">Description</th>
+                      <th className="border-b-2 border-gray-200 py-3">Usage</th>
                     </tr>
                   </thead>
                   <tbody>
-                    <tr className="odd:bg-cream/40">
+                    <tr className="odd:bg-gray-50">
                       <td className="py-3 font-bold">configure()</td>
                       <td>Bootstraps the SDK with your credentials.</td>
                       <td><code className="text-xs">ApexMediation.configure({`{ appId, apiKey }`})</code></td>
                     </tr>
-                    <tr className="odd:bg-cream/40">
+                    <tr className="odd:bg-gray-50">
                       <td className="py-3 font-bold">loadInterstitial()</td>
                       <td>Preloads an interstitial ad for a placement.</td>
                       <td><code className="text-xs">ApexMediation.loadInterstitial({`{ placementId }`})</code></td>
@@ -311,12 +311,12 @@ Body: {
             ].map((plan) => (
               <section
                 key={plan.name}
-                className={`rounded-3xl border-2 border-sunshine-yellow/30 bg-white p-8 text-primary-blue shadow-xl transition hover:-translate-y-1 hover:shadow-2xl ${
-                  plan.highlight ? 'ring-2 ring-sunshine-yellow' : ''
+                className={`rounded-3xl border bg-white p-8 text-gray-900 shadow-xl ring-1 ring-gray-200 transition hover:-translate-y-1 hover:shadow-2xl ${
+                  plan.highlight ? 'ring-2 ring-brand-200' : ''
                 }`}
               >
                 {plan.highlight && (
-                  <span className="mb-4 inline-flex items-center rounded-full bg-sunshine-yellow px-3 py-1 text-xs font-bold uppercase text-primary-blue">
+                  <span className="mb-4 inline-flex items-center rounded-full bg-brand-100 px-3 py-1 text-xs font-semibold tracking-wide text-brand-700">
                     {plan.highlight}
                   </span>
                 )}
@@ -326,14 +326,14 @@ Body: {
                 <ul className="mt-6 space-y-3 text-sm text-gray-700">
                   {plan.bullets.map((item) => (
                     <li key={item} className="flex items-start gap-3">
-                      <span className="mt-1 h-2 w-2 rounded-full bg-primary-blue" aria-hidden="true" />
+                      <span className="mt-1 h-2 w-2 rounded-full bg-brand-500" aria-hidden="true" />
                       {item}
                     </li>
                   ))}
                 </ul>
                 <a
                   href="/signup"
-                  className="mt-8 inline-flex w-full justify-center rounded-full bg-primary-blue px-6 py-3 font-bold uppercase text-white transition hover:bg-primary-blue/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-blue"
+                  className="mt-8 inline-flex w-full justify-center btn-primary"
                 >
                   Choose Plan →
                 </a>
@@ -341,7 +341,7 @@ Body: {
             ))}
           </div>
           <section className="mt-12 rounded-3xl bg-white/10 p-8 text-sm leading-relaxed text-white/80">
-            <h2 className="text-sm font-bold uppercase text-sunshine-yellow">Billing Basics</h2>
+            <h2 className="text-sm font-bold uppercase text-brand-100">Billing Basics</h2>
             <p className="mt-3">
               Revenue share is collected monthly from payouts. Premium plan fees are invoiced at the start of each billing cycle. We support wire transfer, card, and invoice financing.
             </p>
@@ -361,7 +361,7 @@ Body: {
           breadcrumbs={breadcrumbs}
         >
           <div className="grid gap-6 md:grid-cols-2">
-            <section className="rounded-3xl bg-white p-8 text-primary-blue shadow-xl ring-1 ring-primary-blue/10" id="account-access">
+            <section className="rounded-3xl bg-white p-8 text-gray-900 shadow-xl ring-1 ring-gray-200" id="account-access">
               <h2 className="text-h3 font-bold uppercase">Account & Access</h2>
               <ul className="mt-4 space-y-3 text-sm text-gray-700">
                 <li>Reset your password via <Link href="/signin?redirect=%2Fdashboard" className="font-bold underline">Sign In</Link> → “Forgot password”.</li>
@@ -369,26 +369,26 @@ Body: {
                 <li>Contact us at <a href="mailto:support@apexmediation.com" className="underline">support@apexmediation.com</a> for account merges.</li>
               </ul>
             </section>
-            <section className="rounded-3xl bg-white p-8 text-primary-blue shadow-xl ring-1 ring-primary-blue/10">
+            <section className="rounded-3xl bg-white p-8 text-gray-900 shadow-xl ring-1 ring-gray-200">
               <h2 className="text-h3 font-bold uppercase">Monetisation Help</h2>
               <p className="mt-4 text-sm text-gray-700">
                 Troubleshoot low fill, enable new demand sources, or schedule a mediation audit. Include app ID, platform, and SDK version for the fastest response.
               </p>
               <a
                 href="mailto:support@apexmediation.com?subject=Monetisation%20support"
-                className="mt-6 inline-flex items-center gap-2 rounded-full bg-sunshine-yellow px-6 py-3 text-sm font-bold uppercase text-primary-blue"
+                className="mt-6 inline-flex items-center gap-2 btn-primary text-sm"
               >
                 Email Monetisation Team →
               </a>
             </section>
-            <section className="rounded-3xl bg-white p-8 text-primary-blue shadow-xl ring-1 ring-primary-blue/10">
+            <section className="rounded-3xl bg-white p-8 text-gray-900 shadow-xl ring-1 ring-gray-200">
               <h2 className="text-h3 font-bold uppercase">Billing & Payouts</h2>
               <p className="mt-4 text-sm text-gray-700">
                 Monthly payouts with NET 30 terms - invoiced on the 1st of each month, payment processed 30 days later. Bank transfers can take 2-5 business days. View invoices and remittance files in <Link href="/dashboard/settings?tab=payment" className="font-bold underline">Settings → Payment Methods</Link>.
               </p>
               <p className="mt-4 text-sm text-gray-700">To update banking info, submit a signed W-9/W-8BEN to <a href="mailto:billing@apexmediation.com" className="underline">billing@apexmediation.com</a>.</p>
             </section>
-            <section className="rounded-3xl bg-white p-8 text-primary-blue shadow-xl ring-1 ring-primary-blue/10">
+            <section className="rounded-3xl bg-white p-8 text-gray-900 shadow-xl ring-1 ring-gray-200">
               <h2 className="text-h3 font-bold uppercase">Live chat & SLA</h2>
               <p className="mt-4 text-sm text-gray-700">
                 Chat is available 09:00–23:00 CET, Monday to Saturday. Enterprise customers receive a dedicated Slack channel with 15-minute first-response guarantees.
@@ -399,7 +399,7 @@ Body: {
             </section>
           </div>
           <section className="mt-10 rounded-3xl bg-white/10 p-8 text-sm text-white/80">
-            <h2 className="text-sm font-bold uppercase text-sunshine-yellow">Status Dashboard</h2>
+            <h2 className="text-sm font-bold uppercase text-brand-100">Status Dashboard</h2>
             <p className="mt-3">
               Subscribe to incident updates at <a href="https://status.apexmediation.com" className="underline">status.apexmediation.com</a>. We publish RCA documents within 48 hours of every incident.
             </p>
@@ -416,7 +416,7 @@ Body: {
           breadcrumbs={breadcrumbs}
         >
           <section className="space-y-8">
-            <div className="rounded-3xl bg-white p-8 text-primary-blue shadow-xl ring-1 ring-primary-blue/10">
+            <div className="rounded-3xl bg-white p-8 text-gray-900 shadow-xl ring-1 ring-gray-200">
               <h2 className="text-h3 font-bold uppercase">Our Mission</h2>
               <p className="mt-4 text-body text-gray-700 leading-relaxed">
                 We help game studios and app developers regain control over their monetisation stack. No black boxes, no slow payouts, no invasive SDKs—just clean APIs, clear reporting, and a partner you can trust.
@@ -428,8 +428,8 @@ Body: {
                 { label: 'Team', value: '38 people across EU & US' },
                 { label: 'Payouts processed', value: '$48M in 2024' },
               ].map((stat) => (
-                <div key={stat.label} className="rounded-3xl bg-white p-6 text-primary-blue shadow ring-1 ring-primary-blue/10">
-                  <p className="text-xs font-bold uppercase text-sunshine-yellow">{stat.label}</p>
+                <div key={stat.label} className="rounded-3xl bg-white p-6 text-gray-900 shadow ring-1 ring-gray-200">
+                  <p className="text-xs font-bold uppercase text-brand-700">{stat.label}</p>
                   <p className="mt-2 text-2xl font-extrabold">{stat.value}</p>
                 </div>
               ))}
@@ -453,9 +453,9 @@ Body: {
               { name: 'Amelia Ortiz', role: 'VP of Product', bio: 'Former Unity Product Manager. Champion of developer-first tooling.' },
               { name: 'Priya Nair', role: 'Head of Machine Learning', bio: 'Scaled fraud detection at Adyen. Focused on explainable AI.' },
             ].map((person) => (
-              <article key={person.name} className="rounded-3xl bg-white p-6 text-primary-blue shadow-xl ring-1 ring-primary-blue/10">
+              <article key={person.name} className="rounded-3xl bg-white p-6 text-gray-900 shadow-xl ring-1 ring-gray-200">
                 <h2 className="text-h3 font-bold uppercase">{person.name}</h2>
-                <p className="mt-2 text-sm font-semibold text-primary-blue/80">{person.role}</p>
+                <p className="mt-2 text-sm font-semibold text-gray-700">{person.role}</p>
                 <p className="mt-4 text-sm text-gray-700 leading-relaxed">{person.bio}</p>
               </article>
             ))}
@@ -489,13 +489,13 @@ Body: {
                 description: 'Partner with top-grossing studios to improve retention and ongoing insights.',
               },
             ].map((role) => (
-              <article key={role.title} className="rounded-3xl border border-primary-blue/20 bg-white p-6 text-primary-blue shadow">
+              <article key={role.title} className="rounded-3xl border border-gray-200 bg-white p-6 text-gray-900 shadow">
                 <h2 className="text-h3 font-bold uppercase">{role.title}</h2>
-                <p className="mt-1 text-xs font-bold uppercase tracking-wide text-sunshine-yellow">{role.location}</p>
+                <p className="mt-1 text-xs font-bold uppercase tracking-wide text-brand-700">{role.location}</p>
                 <p className="mt-4 text-sm text-gray-700">{role.description}</p>
                 <a
                   href="mailto:careers@apexmediation.com"
-                  className="mt-6 inline-flex items-center gap-2 rounded-full bg-primary-blue px-6 py-3 text-sm font-bold uppercase text-white"
+                  className="mt-6 inline-flex items-center gap-2 btn-primary text-sm"
                 >
                   Apply via Email →
                 </a>
@@ -514,7 +514,7 @@ Body: {
           breadcrumbs={breadcrumbs}
         >
           <div className="grid gap-6 md:grid-cols-2">
-            <section className="rounded-3xl bg-white p-6 text-primary-blue shadow-xl ring-1 ring-primary-blue/10">
+            <section className="rounded-3xl bg-white p-6 text-gray-900 shadow-xl ring-1 ring-gray-200">
               <h2 className="text-h3 font-bold uppercase">Media Resources</h2>
               <ul className="mt-4 space-y-3 text-sm text-gray-700">
                 <li><a href="/press/apexmediation-media-kit.zip" className="underline">Media kit (logos, product shots)</a></li>
@@ -522,7 +522,7 @@ Body: {
                 <li><a href="mailto:press@apexmediation.com" className="underline">press@apexmediation.com</a></li>
               </ul>
             </section>
-            <section className="rounded-3xl bg-white p-6 text-primary-blue shadow-xl ring-1 ring-primary-blue/10">
+            <section className="rounded-3xl bg-white p-6 text-gray-900 shadow-xl ring-1 ring-gray-200">
               <h2 className="text-h3 font-bold uppercase">Latest Headlines</h2>
               <ul className="mt-4 space-y-3 text-sm text-gray-700">
                 <li>ApexMediation launches ML-driven fraud firewall across 5M daily impressions.</li>
@@ -560,10 +560,10 @@ Body: {
                 href: '/blog/monetization-trends-2025',
               },
             ].map((guide) => (
-              <article key={guide.title} className="rounded-3xl bg-white p-6 text-primary-blue shadow-xl ring-1 ring-primary-blue/10">
+              <article key={guide.title} className="rounded-3xl bg-white p-6 text-gray-900 shadow-xl ring-1 ring-gray-200">
                 <h2 className="text-h3 font-bold uppercase">{guide.title}</h2>
                 <p className="mt-3 text-sm text-gray-700">{guide.summary}</p>
-                <a href={guide.href} className="mt-4 inline-flex items-center gap-2 text-sm font-bold uppercase text-primary-blue underline">
+                <a href={guide.href} className="mt-4 inline-flex items-center gap-2 text-sm font-bold uppercase text-brand-700 underline">
                   Continue reading →
                 </a>
               </article>
@@ -593,8 +593,8 @@ Body: {
                 summary: 'Implemented automated quarantines and network-level throttling. Saved $120k per month in invalid spend.',
               },
             ].map((study) => (
-              <article key={study.title} className="rounded-3xl bg-white p-6 text-primary-blue shadow-xl ring-1 ring-primary-blue/10">
-                <p className="text-xs font-bold uppercase text-sunshine-yellow">{study.stat}</p>
+              <article key={study.title} className="rounded-3xl bg-white p-6 text-gray-900 shadow-xl ring-1 ring-gray-200">
+                <p className="text-xs font-bold uppercase text-brand-700">{study.stat}</p>
                 <h2 className="mt-2 text-h3 font-bold uppercase">{study.title}</h2>
                 <p className="mt-4 text-sm text-gray-700">{study.summary}</p>
               </article>
@@ -629,8 +629,8 @@ Body: {
                 items: ['Upload tax forms directly in Settings', 'Real-time payout timeline widget', 'Webhook for payout status changes'],
               },
             ].map((entry) => (
-              <li key={entry.date} className="rounded-3xl bg-white p-6 text-primary-blue shadow-xl ring-1 ring-primary-blue/10">
-                <p className="text-xs font-bold uppercase text-sunshine-yellow">{entry.date}</p>
+              <li key={entry.date} className="rounded-3xl bg-white p-6 text-gray-900 shadow-xl ring-1 ring-gray-200">
+                <p className="text-xs font-bold uppercase text-brand-700">{entry.date}</p>
                 <h2 className="mt-2 text-h3 font-bold uppercase">{entry.title}</h2>
                 <ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-gray-700">
                   {entry.items.map((item) => (
@@ -664,10 +664,10 @@ Body: {
                 href: '/guides',
               },
             ].map((post) => (
-              <article key={post.title} className="rounded-3xl bg-white p-6 text-primary-blue shadow-xl ring-1 ring-primary-blue/10">
+              <article key={post.title} className="rounded-3xl bg-white p-6 text-gray-900 shadow-xl ring-1 ring-gray-200">
                 <h2 className="text-h3 font-bold uppercase">{post.title}</h2>
                 <p className="mt-3 text-sm text-gray-700">{post.excerpt}</p>
-                <a href={post.href} className="mt-4 inline-flex items-center gap-2 text-sm font-bold uppercase text-primary-blue underline">
+                <a href={post.href} className="mt-4 inline-flex items-center gap-2 text-sm font-bold uppercase text-brand-700 underline">
                   Continue reading →
                 </a>
               </article>
@@ -684,7 +684,7 @@ Body: {
           heroTag="Blog"
           breadcrumbs={breadcrumbs}
         >
-          <article className="prose prose-lg max-w-none rounded-3xl bg-white p-10 text-primary-blue shadow-xl ring-1 ring-primary-blue/10">
+          <article className="prose prose-lg max-w-none rounded-3xl bg-white p-10 text-gray-900 shadow-xl ring-1 ring-gray-200">
             <h2>Key themes</h2>
             <ul>
               <li>Hybrid monetisation models pair IAP bundles with rewarded funnels.</li>
@@ -714,7 +714,7 @@ Body: {
           heroTag="Legal"
           breadcrumbs={breadcrumbs}
         >
-          <section className="rounded-3xl bg-white p-8 text-primary-blue shadow-xl ring-1 ring-primary-blue/10">
+          <section className="rounded-3xl bg-white p-8 text-gray-900 shadow-xl ring-1 ring-gray-200">
             <h2 className="text-h3 font-bold uppercase">Highlights</h2>
             <ul className="mt-4 list-disc space-y-3 pl-6 text-sm text-gray-700">
               <li>We only collect data necessary to fulfil ad requests and process payouts.</li>
@@ -733,12 +733,12 @@ Body: {
           heroTag="Legal"
           breadcrumbs={breadcrumbs}
         >
-          <section className="rounded-3xl bg-white p-8 text-primary-blue shadow-xl ring-1 ring-primary-blue/10">
+          <section className="rounded-3xl bg-white p-8 text-gray-900 shadow-xl ring-1 ring-gray-200">
             <ol className="space-y-4 text-sm text-gray-700">
-              <li><span className="font-bold text-primary-blue">1. Accounts.</span> You are responsible for credential security and ensuring authorised access only.</li>
-              <li><span className="font-bold text-primary-blue">2. Payments.</span> Revenue share fees are deducted from payouts; invoices due within 30 days.</li>
-              <li><span className="font-bold text-primary-blue">3. Acceptable Use.</span> No prohibited content, bot traffic, or tampering with auctions.</li>
-              <li><span className="font-bold text-primary-blue">4. Liability.</span> Platform provided “as is”; liability capped at fees paid in the last 12 months.</li>
+              <li><span className="font-bold text-gray-900">1. Accounts.</span> You are responsible for credential security and ensuring authorised access only.</li>
+              <li><span className="font-bold text-gray-900">2. Payments.</span> Revenue share fees are deducted from payouts; invoices due within 30 days.</li>
+              <li><span className="font-bold text-gray-900">3. Acceptable Use.</span> No prohibited content, bot traffic, or tampering with auctions.</li>
+              <li><span className="font-bold text-gray-900">4. Liability.</span> Platform provided “as is”; liability capped at fees paid in the last 12 months.</li>
             </ol>
           </section>
         </PageLayout>
@@ -752,7 +752,7 @@ Body: {
           heroTag="Compliance"
           breadcrumbs={breadcrumbs}
         >
-          <section className="rounded-3xl bg-white p-8 text-primary-blue shadow-xl ring-1 ring-primary-blue/10">
+          <section className="rounded-3xl bg-white p-8 text-gray-900 shadow-xl ring-1 ring-gray-200">
             <p className="text-sm text-gray-700">
               Sign a Data Processing Agreement inside <Link href="/dashboard/settings?tab=security" className="font-bold underline">Settings → Security</Link>. Consent strings follow the IAB TCF framework and are stored for 13 months.
             </p>
@@ -769,7 +769,7 @@ Body: {
           breadcrumbs={breadcrumbs}
         >
           <div className="space-y-6">
-            <section className="rounded-3xl bg-white p-6 text-primary-blue shadow-xl ring-1 ring-primary-blue/10">
+            <section className="rounded-3xl bg-white p-6 text-gray-900 shadow-xl ring-1 ring-gray-200">
               <h2 className="text-h3 font-bold uppercase">Controls</h2>
               <ul className="mt-4 list-disc space-y-2 pl-6 text-sm text-gray-700">
                 <li>Encryption at rest (AES-256) and in transit (TLS 1.3).</li>
@@ -777,7 +777,7 @@ Body: {
                 <li>Background checks for production-access staff.</li>
               </ul>
             </section>
-            <section className="rounded-3xl bg-white p-6 text-primary-blue shadow-xl ring-1 ring-primary-blue/10">
+            <section className="rounded-3xl bg-white p-6 text-gray-900 shadow-xl ring-1 ring-gray-200">
               <h2 className="text-h3 font-bold uppercase">Report an Issue</h2>
               <p className="mt-3 text-sm text-gray-700">
                 Email <a href="mailto:security@apexmediation.com" className="underline">security@apexmediation.com</a> for vulnerabilities. We operate a responsible disclosure program with cash rewards.
@@ -795,7 +795,7 @@ Body: {
           heroTag="Legal"
           breadcrumbs={breadcrumbs}
         >
-          <section className="rounded-3xl bg-white p-8 text-primary-blue shadow-xl ring-1 ring-primary-blue/10">
+          <section className="rounded-3xl bg-white p-8 text-gray-900 shadow-xl ring-1 ring-gray-200">
             <h2 className="text-h3 font-bold uppercase">Operational cookies</h2>
             <p className="mt-3 text-sm text-gray-700">
               Essential cookies store authentication tokens and localisation preferences. Analytics cookies are opt-in and anonymised. Update settings anytime via the cookie banner.
@@ -818,7 +818,7 @@ function renderFallback(breadcrumbs: Breadcrumb[]) {
       heroTag="Coming Soon"
       breadcrumbs={breadcrumbs}
     >
-      <section className="rounded-3xl bg-white p-8 text-primary-blue shadow-xl ring-1 ring-primary-blue/10">
+      <section className="rounded-3xl bg-white p-8 text-gray-900 shadow-xl ring-1 ring-gray-200">
         <p className="text-body text-gray-700 leading-relaxed">
           In the meantime you can browse our <Link href="/documentation" className="font-bold underline">documentation</Link>, read the latest <Link href="/blog" className="font-bold underline">blog posts</Link>, or reach out via <Link href="/support" className="font-bold underline">support</Link>.
         </p>

@@ -1,5 +1,4 @@
 import Foundation
-import AVFoundation
 
 // Lightweight telemetry hooks mirror the Android TV metrics recorder.
 // MetricsRecorder remains internal and only activates when remote config enables it.

@@ -1,5 +1,6 @@
-import Foundation
+#if canImport(AVKit) && canImport(UIKit)
 import AVKit
+import UIKit
 
 public final class InterstitialAd {
     private let placementId: String
@@ -72,3 +73,12 @@ public final class InterstitialAd {
         Beacon.fire(w.tracking.click, eventName: "click")
     }
 }
+#else
+public final class InterstitialAd {
+    public init(placementId: String) {}
+    public func load(floorCpm: Double = 0.0, completion: @escaping (_ error: String?) -> Void) { completion("unsupported_platform") }
+    public var isReady: Bool { false }
+    public func show(on viewController: AnyObject, completion: @escaping (_ error: String?) -> Void, closed: @escaping () -> Void) { completion("unsupported_platform") }
+    public func reportClick() {}
+}
+#endif

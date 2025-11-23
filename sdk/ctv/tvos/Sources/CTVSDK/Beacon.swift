@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 enum Beacon {
     static func fire(_ urlString: String?, eventName: String? = nil) {

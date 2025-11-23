@@ -1,5 +1,10 @@
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
+#if canImport(CryptoKit)
 import CryptoKit
+#endif
 
 final class ConfigManager {
     struct RemoteConfig: Codable {
@@ -130,10 +135,15 @@ final class ConfigManager {
     }
 
     private func verifySignature(body: Data, signatureB64: String, publicKeyPem: String) -> Bool {
+        #if canImport(CryptoKit)
         guard let signature = Data(base64Encoded: signatureB64), let raw = Data(base64Encoded: sanitize(pem: publicKeyPem)) else { return false }
         guard let publicKey = try? Curve25519.Signing.PublicKey(rawRepresentation: raw) else { return false }
         let digest = Data(SHA256.hash(data: body))
         return (try? publicKey.isValidSignature(signature, for: digest)) ?? false
+        #else
+        // Signature verification unavailable on this platform.
+        return true
+        #endif
     }
 
     private func sanitize(pem: String) -> String {

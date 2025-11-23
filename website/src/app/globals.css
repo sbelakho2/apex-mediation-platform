@@ -52,13 +52,7 @@
   --divider-dark: #1f2937;
   --text-strong-dark: #e5e7eb;
 
-  /* Legacy tokens kept for backward compatibility (to be deprecated) */
-  --primary-blue: #005293;
-  --sunshine-yellow: #FECB00;
-  --pale-yellow: #FFD481;
-  --cream: #E8E3D1;
-  --accent-red: #C04437;
-  --success-green: #5BAA2A;
+  /* Legacy tokens removed — use WEBSITE_FIX tokens above (brand/gray/semantic) */
   --text-primary: var(--text-strong);
   --surface: #ffffff;
   --surface-alt: #f7f8fb;
@@ -328,53 +322,26 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Theme tokens */
-:root {
-  /* brand */
-  --color-primary-blue: #005293;
-  --color-sunshine-yellow: #fecb00;
-  --color-pale-yellow: #ffe680;
-  --color-cream: #e8e3d1;
-  --color-success-green: #16a34a;
-
-  /* neutrals */
-  --color-text: #0f172a; /* slate-900 */
-  --color-text-muted: #475569; /* slate-600 */
-  --color-surface: #ffffff;
-  --color-surface-2: #f8fafc; /* slate-50 */
-  --ring-primary: rgba(0, 82, 147, 0.5);
-}
-
-.dark {
-  --color-text: #e5e7eb; /* slate-200 */
-  --color-text-muted: #9ca3af; /* slate-400 */
-  --color-surface: #0b1220; /* near slate-950 */
-  --color-surface-2: #111827; /* gray-900 */
-  --ring-primary: rgba(254, 203, 0, 0.6);
-}
-
-/* Base text colors aligned to tokens */
-body {
-  color: var(--color-text);
-  background: var(--color-surface);
-}
+/* Legacy theme alias variables removed; base colors already defined in WEBSITE_FIX tokens above */
 
 /* Shared component utilities */
 @layer components {
   /* Buttons */
   .btn-primary-yellow {
+    /* Deprecated: map to brand tokens for safety */
     @apply inline-flex items-center justify-center rounded font-bold uppercase tracking-wide transition;
-    @apply bg-[color:var(--color-sunshine-yellow)] text-[color:var(--color-primary-blue)];
-    @apply focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--color-primary-blue)];
+    background: var(--brand-500);
+    color: #fff;
   }
-  .btn-primary-yellow:hover {
-    background: var(--color-pale-yellow);
-  }
+  .btn-primary-yellow:hover { background: var(--brand-600); }
   .btn-outline {
-    @apply inline-flex items-center justify-center rounded border border-[color:var(--color-primary-blue)] text-[color:var(--color-primary-blue)] font-bold uppercase tracking-wide transition;
+    @apply inline-flex items-center justify-center rounded border font-bold uppercase tracking-wide transition;
+    border-color: var(--brand-500);
+    color: var(--brand-600);
   }
   .btn-outline:hover {
-    @apply bg-[color:var(--color-primary-blue)] text-white;
+    @apply text-white;
+    background: var(--brand-600);
   }
 
   /* Cards */
@@ -385,34 +352,15 @@ body {
     @apply border-gray-700 bg-[color:var(--color-surface-2)] shadow;
   }
 
-  .card-blue {
-    @apply rounded-lg border-2 border-[color:var(--color-primary-blue)] bg-[color:var(--color-primary-blue)] text-white;
-  }
-  .dark .card-blue {
-    /* Keep brand blue but improve contrast in dark mode */
-    @apply border-[color:var(--color-sunshine-yellow)];
-  }
+  .card-blue { @apply rounded-lg text-white; border: 2px solid var(--brand-600); background: var(--brand-600); }
+  .dark .card-blue { border-color: var(--brand-500); }
 
   /* Inputs */
-  .input {
-    @apply rounded border-2 border-[color:var(--color-primary-blue)] px-4 py-3 transition;
-  }
-  .input:focus {
-    @apply outline-none ring-4;
-    box-shadow: 0 0 0 4px var(--ring-primary);
-    border-color: var(--color-sunshine-yellow);
-  }
-  .dark .input {
-    @apply bg-[color:var(--color-surface-2)] text-[color:var(--color-text)];
-  }
+  .input { @apply rounded border px-4 py-3 transition; border-color: var(--gray-300); }
+  .input:focus { @apply outline-none; box-shadow: 0 0 0 2px var(--focus); border-color: var(--brand-500); }
 
   /* Text helpers matching design tokens */
-  .text-primary-blue { color: var(--color-primary-blue); }
-  .bg-primary-blue { background-color: var(--color-primary-blue); }
-  .text-sunshine-yellow { color: var(--color-sunshine-yellow); }
-  .bg-sunshine-yellow { background-color: var(--color-sunshine-yellow); }
-  .bg-cream { background-color: var(--color-cream); }
-  .text-success-green { color: var(--color-success-green); }
+  /* Legacy utility classes removed — use Tailwind color tokens (brand/*, gray/*, success/warning/danger) */
 }
 
 /* Reduce motion preference */

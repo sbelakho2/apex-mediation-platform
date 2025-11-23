@@ -1674,3 +1674,29 @@ Validation
 - Functional behavior remains unchanged for adapter loads; S2S path is gated by mode/flags.
 
 ---
+---
+Changelog — WEBSITE_FIX Final Sweep Completion (2025-11-21)
+
+Summary
+- Completed final WEBSITE_FIX migration across the Website: marketing, docs catch‑all, and dashboard surfaces now use tokenized v2 primitives and brand/gray semantic tokens. Legacy palette utilities have been removed or safely aliased.
+
+What changed (highlights)
+- Docs catch‑all (`website/src/app/[...slug]/page.tsx`): finished replacing legacy `primary-blue`/`sunshine-yellow` classes with tokenized equivalents; standardized cards, headings, and rings to neutral/brand tokens; ensured focus rings via global `--focus`.
+- Global tokens (`website/src/app/globals.css`): fixed `:root` selector earlier; removed raw legacy color CSS variables; kept deprecated utility class names mapping to brand tokens for safety (`.btn-primary-yellow`, `.card-blue`, `.input`) while primary usage has moved to `.btn-*`, `.card-v2`, `.input-v2`.
+- Tailwind mapping (`website/tailwind.config.ts`): legacy color aliases now point to WEBSITE_FIX tokens (e.g., `primary-blue` → `brand-600`, `sunshine-yellow` → `brand-100`) to prevent regressions during cleanup.
+- Dashboard pages: Overview, Placements, Networks, Settings, Revenue, Fraud, Analytics, Apps: verified usage of `.card-v2`, `.btn-*`, `.input-v2`; added/kept CLS guards where relevant.
+- Reconciliation (`/dashboard/reconciliation`): scaffolded with wizard/table skeletons; static step indicator added.
+- Transparency: Receipts bulk‑action placeholder; Config Rollouts danger semantics for Rollback.
+
+Verification
+- Website Jest suite (JS) passes: `website/src/__tests__/security.headers.test.js`.
+- Production build (Next.js 14) succeeds with minor non‑blocking warnings (unescaped quotes/unused vars; metadataBase notice; dynamic server usage warning for `/api/auth/me`).
+
+Next steps (non‑blocking)
+- Run Lighthouse/axe snapshots on Overview, Placements, Transparency (desktop + mobile emulation) and capture quick‑win fixes.
+- Optionally remove the remaining deprecated utility class stubs (`.btn-primary-yellow`, `.card-blue`, `.input`) once searches confirm zero references.
+
+Files:
+- `website/src/app/[...slug]/page.tsx`
+- `website/src/app/globals.css`
+- `website/tailwind.config.ts`

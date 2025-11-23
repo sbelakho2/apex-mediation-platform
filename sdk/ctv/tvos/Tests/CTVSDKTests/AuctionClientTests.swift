@@ -1,4 +1,7 @@
 import XCTest
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 @testable import CTVSDK
 
 final class AuctionClientTests: XCTestCase {
@@ -28,7 +31,7 @@ final class AuctionClientTests: XCTestCase {
         let exp = expectation(description: "no_fill")
         client.requestBid(placementId: "p1", adFormat: "interstitial", consent: nil) { result in
             XCTAssertTrue(result.noFill)
-            XCTAssertNil(result.error)
+            XCTAssertEqual(result.error, .noFill)
             exp.fulfill()
         }
         wait(for: [exp], timeout: 2.0)

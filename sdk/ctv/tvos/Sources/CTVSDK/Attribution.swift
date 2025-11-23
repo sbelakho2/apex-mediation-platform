@@ -1,4 +1,5 @@
 import Foundation
+#if canImport(StoreKit) && !os(Linux)
 import StoreKit
 #if canImport(AdAttributionKit)
 import AdAttributionKit
@@ -42,13 +43,24 @@ public final class AttributionManager {
     @available(tvOS 18.0, *)
     public func submitAdAttributionToken(_ token: Data) {
         #if canImport(AdAttributionKit)
-        if let tokenString = String(data: token, encoding: .utf8) {
-            postbackHandler?(tokenString)
-        }
+                if let tokenString = String(data: token, encoding: .utf8) {
+                    postbackHandler?(tokenString)
+                }
         #else
-        if let tokenString = String(data: token, encoding: .utf8) {
-            postbackHandler?(tokenString)
-        }
+                if let tokenString = String(data: token, encoding: .utf8) {
+                    postbackHandler?(tokenString)
+                }
         #endif
     }
 }
+#else
+public final class AttributionManager {
+    public static let shared = AttributionManager()
+    private init() {}
+    public func onPostback(_ handler: @escaping (String) -> Void) {}
+    public func handle(postback: Any) {}
+    public func handlePostbackPayload(_ data: Data) {}
+    public func updateConversionValue(_ value: Int, coarseValue: Any? = nil, lockWindow: Bool = false) {}
+    public func submitAdAttributionToken(_ token: Data) {}
+}
+#endif

@@ -55,13 +55,13 @@ const config: Config = {
         warning: 'var(--warning)',
         danger: 'var(--danger)',
         info: 'var(--info)',
-        // Legacy names (kept for compatibility, to be removed after migration)
-        'primary-blue': 'var(--primary-blue)',
-        'sunshine-yellow': 'var(--sunshine-yellow)',
-        'pale-yellow': 'var(--pale-yellow)',
-        cream: 'var(--cream)',
-        'accent-red': 'var(--accent-red)',
-        'success-green': 'var(--success-green)',
+        // Legacy aliases mapped to WEBSITE_FIX tokens (safe to keep until full removal)
+        'primary-blue': 'var(--brand-600)',
+        'sunshine-yellow': 'var(--brand-100)',
+        'pale-yellow': 'var(--brand-50)',
+        cream: 'var(--gray-50)',
+        'accent-red': 'var(--danger)',
+        'success-green': 'var(--success)',
       },
       fontFamily: {
         sans: ['Inter', 'system-ui', 'sans-serif'],

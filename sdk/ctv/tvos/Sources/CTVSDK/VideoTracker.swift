@@ -1,3 +1,4 @@
+#if canImport(AVFoundation)
 import Foundation
 import AVFoundation
 
@@ -103,3 +104,14 @@ final class VideoTracker {
         Beacon.fire(url, eventName: event.metricName)
     }
 }
+#else
+import Foundation
+
+final class VideoTracker {
+    init(tracking: AuctionWin.Tracking) {}
+    func attach(to player: AnyObject) {}
+    func markComplete() {}
+    func markClose() {}
+    func stop() {}
+}
+#endif

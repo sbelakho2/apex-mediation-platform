@@ -1,7 +1,19 @@
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 final class MetricsRecorder {
     static let shared = MetricsRecorder()
+
+    private static func makeDefaultSession() -> URLSession {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.timeoutIntervalForRequest = 5
+        configuration.timeoutIntervalForResource = 5
+        return URLSession(configuration: configuration)
+    }
+
+    private static let defaultToggleProvider: () -> Bool = { ApexMediation.shared.metricsEnabled }
 
     private let queue = DispatchQueue(label: "com.rivalapexmediation.ctv.metrics", qos: .background)
     private var counters: [String: Int] = [:]
@@ -10,19 +22,19 @@ final class MetricsRecorder {
     private var initialized = false
     private var config: SDKConfig?
     private let maxLatencySamples = 200
-    private let flushInterval: TimeInterval = 30
-    private let session: URLSession = {
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.timeoutIntervalForRequest = 5
-        configuration.timeoutIntervalForResource = 5
-        return URLSession(configuration: configuration)
-    }()
+    private var flushInterval: TimeInterval = 30
+    private var session: URLSession = MetricsRecorder.makeDefaultSession()
+    private var toggleProvider: () -> Bool = MetricsRecorder.defaultToggleProvider
 
     private init() {}
 
-    func initialize(config: SDKConfig) {
+    func initialize(config: SDKConfig, session: URLSession? = nil, flushInterval: TimeInterval = 30) {
         queue.async {
             self.config = config
+            self.session = session ?? MetricsRecorder.makeDefaultSession()
+            let envInterval = ProcessInfo.processInfo.environment["CTV_METRICS_FLUSH_SECONDS"].flatMap { Double($0) }
+            let resolvedInterval = envInterval ?? flushInterval
+            self.flushInterval = max(0.1, resolvedInterval)
             self.initialized = true
         }
     }
@@ -62,7 +74,7 @@ final class MetricsRecorder {
     }
 
     private var canCollect: Bool {
-        initialized && ApexMediation.shared.metricsEnabled
+        initialized && toggleProvider()
     }
 
     private func increment(_ key: String, delta: Int = 1) {
@@ -140,5 +152,31 @@ final class MetricsRecorder {
         let index = Int(Double(values.count - 1) * fraction)
         let clamped = max(0, min(values.count - 1, index))
         return Int(values[clamped])
+    }
+
+    func overrideToggleProvider(_ provider: (() -> Bool)?) {
+        queue.async {
+            self.toggleProvider = provider ?? MetricsRecorder.defaultToggleProvider
+        }
+    }
+
+    func flushNowForTesting() {
+        queue.async {
+            self.flushLocked()
+        }
+    }
+
+    func resetForTesting() {
+        queue.sync {
+            self.flushTimer?.cancel()
+            self.flushTimer = nil
+            self.counters.removeAll()
+            self.latencies.removeAll()
+            self.initialized = false
+            self.config = nil
+            self.flushInterval = 30
+            self.session = MetricsRecorder.makeDefaultSession()
+            self.toggleProvider = MetricsRecorder.defaultToggleProvider
+        }
     }
 }
