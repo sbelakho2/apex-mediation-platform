@@ -55,8 +55,9 @@ public class JavaInteropSmoke {
                 true,
                 "https://config.example.com",
                 "https://auction.example.com",
-                false,
-                null,
+                null,               // auctionApiKey (nullable String)
+                false,              // strictModePenaltyDeath
+                null,               // configPublicKeyBase64 (nullable String)
                 5,
                 60000L,
                 3

@@ -12,9 +12,9 @@ type SectionHeadingProps = {
  */
 export default function SectionHeading({ eyebrow, title, description, align = 'left', headingId, tone = 'dark' }: SectionHeadingProps) {
   const alignment = align === 'center' ? 'items-center text-center' : 'items-start text-left';
-  const titleClass = tone === 'light' ? 'text-white' : 'text-primary-blue';
-  const descriptionClass = tone === 'light' ? 'text-white/80' : 'text-primary-blue/75';
-  const eyebrowClass = tone === 'light' ? 'text-white/70' : 'text-primary-blue/70';
+  const titleClass = tone === 'light' ? 'text-white' : 'text-gray-900';
+  const descriptionClass = tone === 'light' ? 'text-white/80' : 'text-gray-700';
+  const eyebrowClass = tone === 'light' ? 'text-white/70' : 'text-gray-600';
 
   return (
     <div className={`flex flex-col gap-3 ${alignment}`}>

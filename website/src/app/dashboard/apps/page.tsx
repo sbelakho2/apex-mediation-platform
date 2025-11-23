@@ -226,12 +226,12 @@ export default function AppsPage() {
 
       {/* SDK Integration Guide */}
       <div className="card-v2 p-6">
-        <h2 className="text-primary-blue font-bold uppercase text-lg mb-4 border-b-2 border-sunshine-yellow pb-2">
+        <h2 className="text-gray-900 font-bold uppercase text-lg mb-4 border-b-2 border-gray-200 pb-2">
           SDK Integration Guide
         </h2>
         <div className="grid md:grid-cols-3 gap-6">
           <div>
-            <h3 className="font-bold text-primary-blue mb-3 flex items-center gap-2">
+            <h3 className="font-bold text-gray-900 mb-3 flex items-center gap-2">
               <span className="text-2xl">📱</span>
               iOS & Android
             </h3>
@@ -242,12 +242,12 @@ export default function AppsPage() {
               <li>4. Handle ad events</li>
               <li>5. Test with test mode enabled</li>
             </ol>
-            <a href="/documentation#sdk-reference" className="text-primary-blue font-bold text-sm underline mt-3 inline-block">
+            <a href="/documentation#sdk-reference" className="text-brand-700 font-bold text-sm underline mt-3 inline-block">
               View Mobile Docs →
             </a>
           </div>
           <div>
-            <h3 className="font-bold text-primary-blue mb-3 flex items-center gap-2">
+            <h3 className="font-bold text-gray-900 mb-3 flex items-center gap-2">
               <span className="text-2xl">🎮</span>
               Unity
             </h3>
@@ -258,12 +258,12 @@ export default function AppsPage() {
               <li>4. Script ad loading logic</li>
               <li>5. Build and test on device</li>
             </ol>
-            <a href="/documentation#sdk-reference" className="text-primary-blue font-bold text-sm underline mt-3 inline-block">
+            <a href="/documentation#sdk-reference" className="text-brand-700 font-bold text-sm underline mt-3 inline-block">
               View Unity Docs →
             </a>
           </div>
           <div>
-            <h3 className="font-bold text-primary-blue mb-3 flex items-center gap-2">
+            <h3 className="font-bold text-gray-900 mb-3 flex items-center gap-2">
               <span className="text-2xl">🌐</span>
               Web
             </h3>
@@ -274,7 +274,7 @@ export default function AppsPage() {
               <li>4. Call displayAd() method</li>
               <li>5. Handle ad callbacks</li>
             </ol>
-            <a href="/documentation#sdk-reference" className="text-primary-blue font-bold text-sm underline mt-3 inline-block">
+            <a href="/documentation#sdk-reference" className="text-brand-700 font-bold text-sm underline mt-3 inline-block">
               View Web Docs →
             </a>
           </div>
@@ -282,10 +282,10 @@ export default function AppsPage() {
       </div>
 
       {/* Latest SDK Version */}
-  <div className="card-blue p-6">
+      <div className="card-v2 p-6 bg-brand-600 text-white">
         <div className="flex items-start justify-between">
           <div>
-            <h2 className="text-sunshine-yellow font-bold uppercase text-lg mb-2">
+            <h2 className="text-brand-100 font-bold uppercase text-lg mb-2">
               Latest SDK Version: 4.2.1
             </h2>
             <p className="text-white text-body mb-4">
@@ -293,19 +293,19 @@ export default function AppsPage() {
             </p>
             <ul className="space-y-2 text-sm text-white">
               <li className="flex items-start gap-2">
-                <span className="text-sunshine-yellow">✓</span>
+                <span className="text-brand-100">✓</span>
                 <span>15% faster ad loading times</span>
               </li>
               <li className="flex items-start gap-2">
-                <span className="text-sunshine-yellow">✓</span>
+                <span className="text-brand-100">✓</span>
                 <span>Improved memory management</span>
               </li>
               <li className="flex items-start gap-2">
-                <span className="text-sunshine-yellow">✓</span>
+                <span className="text-brand-100">✓</span>
                 <span>Better error reporting</span>
               </li>
               <li className="flex items-start gap-2">
-                <span className="text-sunshine-yellow">✓</span>
+                <span className="text-brand-100">✓</span>
                 <span>New rewarded video callbacks</span>
               </li>
             </ul>
@@ -397,19 +397,19 @@ function AppCard({ app, onConfigure, onViewStats, onResume, onFixIntegration }: 
           <div className="grid grid-cols-2 gap-4 mb-4">
             <div>
               <p className="text-xs text-gray-600 uppercase">Daily Revenue</p>
-              <p className="text-lg font-bold text-primary-blue">${app.dailyRevenue.toLocaleString()}</p>
+              <p className="text-lg font-bold text-gray-900">${app.dailyRevenue.toLocaleString()}</p>
             </div>
             <div>
               <p className="text-xs text-gray-600 uppercase">Impressions</p>
-              <p className="text-lg font-bold text-primary-blue">{app.dailyImpressions.toLocaleString()}</p>
+              <p className="text-lg font-bold text-gray-900">{app.dailyImpressions.toLocaleString()}</p>
             </div>
             <div>
               <p className="text-xs text-gray-600 uppercase">eCPM</p>
-              <p className="text-lg font-bold text-primary-blue">${app.ecpm.toFixed(2)}</p>
+              <p className="text-lg font-bold text-gray-900">${app.ecpm.toFixed(2)}</p>
             </div>
             <div>
               <p className="text-xs text-gray-600 uppercase">DAU</p>
-              <p className="text-lg font-bold text-primary-blue">{app.users.toLocaleString()}</p>
+              <p className="text-lg font-bold text-gray-900">{app.users.toLocaleString()}</p>
             </div>
           </div>
 
@@ -439,13 +439,13 @@ function AppCard({ app, onConfigure, onViewStats, onResume, onFixIntegration }: 
             <>
               <button
                 onClick={onConfigure}
-                className="px-4 py-2 text-sm font-bold text-primary-blue border border-primary-blue rounded hover:bg-primary-blue hover:text-white transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-blue"
+                className="btn-outline px-4 py-2 text-sm"
               >
                 Configure
               </button>
               <button
                 onClick={onViewStats}
-                className="px-4 py-2 text-sm font-bold text-white bg-primary-blue rounded hover:bg-primary-blue/90 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sunshine-yellow"
+                className="btn-primary px-4 py-2 text-sm"
               >
                 View Stats
               </button>
@@ -526,7 +526,7 @@ function AppModal({ state, onClose }: { state: ModalState; onClose: () => void }
       }}
     >
       <div
-        className="w-full max-w-xl rounded-lg border-2 border-primary-blue bg-white shadow-xl"
+        className="w-full max-w-xl rounded-lg border-2 border-brand-500 bg-white shadow-xl"
         role="dialog"
         aria-modal="true"
         aria-labelledby={dialogId}
@@ -535,13 +535,13 @@ function AppModal({ state, onClose }: { state: ModalState; onClose: () => void }
           if (e.key === 'Escape') onClose();
         }}
       >
-        <div className="flex items-start justify-between border-b-2 border-sunshine-yellow p-6">
-          <h2 id={dialogId} className="text-primary-blue font-bold uppercase text-lg">
+        <div className="flex items-start justify-between border-b-2 border-gray-200 p-6">
+          <h2 id={dialogId} className="text-gray-900 font-bold uppercase text-lg">
             {title}
           </h2>
           <button
             onClick={onClose}
-            className="text-primary-blue text-2xl leading-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-blue"
+            className="text-gray-900 text-2xl leading-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus)]"
             aria-label="Close dialog"
           >
             ×
@@ -551,8 +551,8 @@ function AppModal({ state, onClose }: { state: ModalState; onClose: () => void }
           <p id={descId} className="text-sm text-gray-700 leading-relaxed">{description}</p>
 
           {sdkKey && (
-            <div className="bg-cream border-2 border-primary-blue rounded p-4">
-              <p className="text-xs uppercase text-primary-blue font-bold">SDK Key</p>
+            <div className="bg-gray-50 border-2 border-brand-500 rounded p-4">
+              <p className="text-xs uppercase text-brand-700 font-bold">SDK Key</p>
               <code className="text-sm text-gray-800 break-all">{sdkKey}</code>
             </div>
           )}

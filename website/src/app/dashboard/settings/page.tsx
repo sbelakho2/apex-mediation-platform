@@ -137,39 +137,39 @@ function ProfileTab() {
       <form className="card p-6" onSubmit={handleSubmit} aria-labelledby="account-information-heading">
         <h2
           id="account-information-heading"
-          className="text-primary-blue font-bold uppercase text-lg mb-6 border-b-2 border-sunshine-yellow pb-2"
+          className="text-gray-900 font-bold uppercase text-lg mb-6 border-b-2 border-gray-200 pb-2"
         >
           Account Information
         </h2>
         <div className="space-y-4 max-w-2xl">
           <div>
-            <label className="block text-sm font-bold text-primary-blue mb-2" htmlFor="profile-name">
+            <label className="block text-sm font-semibold text-gray-900 mb-2" htmlFor="profile-name">
               Full Name
             </label>
             <input
               id="profile-name"
               name="name"
               type="text"
-              className="input w-full"
+              className="input-v2 w-full"
               defaultValue="John Developer"
               required
             />
           </div>
           <div>
-            <label className="block text-sm font-bold text-primary-blue mb-2" htmlFor="profile-email">
+            <label className="block text-sm font-semibold text-gray-900 mb-2" htmlFor="profile-email">
               Email Address
             </label>
             <input
               id="profile-email"
               name="email"
               type="email"
-              className="input w-full"
+              className="input-v2 w-full"
               defaultValue="john@apexmediation.com"
               required
             />
           </div>
           <div>
-            <label className="block text-sm font-bold text-primary-blue mb-2" htmlFor="company-name">
+            <label className="block text-sm font-semibold text-gray-900 mb-2" htmlFor="company-name">
               Company Name
             </label>
             <input
@@ -181,7 +181,7 @@ function ProfileTab() {
             />
           </div>
           <div>
-            <label className="block text-sm font-bold text-primary-blue mb-2" htmlFor="time-zone">
+            <label className="block text-sm font-semibold text-gray-900 mb-2" htmlFor="time-zone">
               Time Zone
             </label>
             <select id="time-zone" name="timezone" className="input-v2 w-full" defaultValue="UTC-8 (Pacific Time)">
@@ -370,7 +370,7 @@ function NotificationsTab() {
   return (
     <div className="space-y-6">
       <div className="card p-6">
-        <h2 className="text-primary-blue font-bold uppercase text-lg mb-6 border-b-2 border-sunshine-yellow pb-2">
+        <h2 className="text-gray-900 font-bold uppercase text-lg mb-6 border-b-2 border-gray-200 pb-2">
           Email Notifications
         </h2>
         <div className="space-y-4">
@@ -407,16 +407,16 @@ function NotificationsTab() {
       </div>
 
       <div className="card p-6">
-        <h2 className="text-primary-blue font-bold uppercase text-lg mb-6 border-b-2 border-sunshine-yellow pb-2">
+        <h2 className="text-gray-900 font-bold uppercase text-lg mb-6 border-b-2 border-gray-200 pb-2">
           Slack Integration
         </h2>
-        <div className="bg-cream p-4 rounded mb-4">
+        <div className="bg-gray-50 p-4 rounded mb-4">
           <p className="text-sm text-gray-700 mb-3">
             Get real-time notifications in your Slack workspace for critical events like fraud detection, revenue milestones, and system alerts.
           </p>
           <div className="flex items-center gap-3">
             <button
-              className="px-6 py-2 text-sm font-bold text-white bg-primary-blue rounded hover:bg-primary-blue/90 disabled:opacity-60"
+              className="btn-primary px-6 py-2 text-sm disabled:opacity-60"
               onClick={onConnectSlack}
               disabled={slackLoading}
             >
@@ -571,26 +571,26 @@ function SecurityTab() {
   return (
     <div className="space-y-6">
       <div className="card p-6">
-        <h2 className="text-primary-blue font-bold uppercase text-lg mb-6 border-b-2 border-sunshine-yellow pb-2">
+        <h2 className="text-gray-900 font-bold uppercase text-lg mb-6 border-b-2 border-gray-200 pb-2">
           Change Password
         </h2>
         <div className="space-y-4 max-w-2xl">
           <div>
-            <label className="block text-sm font-bold text-primary-blue mb-2">Current Password</label>
+            <label className="block text-sm font-semibold text-gray-900 mb-2">Current Password</label>
             <input
               type="password"
               className="input-v2 w-full"
             />
           </div>
           <div>
-            <label className="block text-sm font-bold text-primary-blue mb-2">New Password</label>
+            <label className="block text-sm font-semibold text-gray-900 mb-2">New Password</label>
             <input
               type="password"
               className="input-v2 w-full"
             />
           </div>
           <div>
-            <label className="block text-sm font-bold text-primary-blue mb-2">Confirm New Password</label>
+            <label className="block text-sm font-semibold text-gray-900 mb-2">Confirm New Password</label>
             <input
               type="password"
               className="input-v2 w-full"
@@ -605,10 +605,10 @@ function SecurityTab() {
       </div>
 
       <div className="card p-6">
-        <h2 className="text-primary-blue font-bold uppercase text-lg mb-6 border-b-2 border-sunshine-yellow pb-2">
+        <h2 className="text-gray-900 font-bold uppercase text-lg mb-6 border-b-2 border-gray-200 pb-2">
           Two-Factor Authentication
         </h2>
-        <div className="bg-yellow-50 border border-yellow-300 rounded p-4 mb-4">
+        <div className="bg-warning/10 border border-warning rounded p-4 mb-4">
           <p className="text-sm text-gray-700 mb-3">
             Add an extra layer of security to your account. When enabled, you'll need to enter a code from your phone in addition to your password.
           </p>
@@ -616,11 +616,11 @@ function SecurityTab() {
             <button className="btn-primary px-6 py-2 text-sm disabled:opacity-60" onClick={handleEnroll2FA} disabled={loading2fa}>
               {loading2fa ? 'Please wait…' : 'Enable 2FA'}
             </button>
-            {twofaMsg && <span className="text-sm font-bold text-primary-blue">{twofaMsg}</span>}
+            {twofaMsg && <span className="text-sm font-bold text-gray-900">{twofaMsg}</span>}
           </div>
         </div>
         {enrollQR && (
-          <div className="bg-white border border-yellow-300 rounded p-4 mb-4">
+          <div className="bg-white border border-warning rounded p-4 mb-4">
             <p className="text-sm text-gray-700 mb-2">Scan this QR with your authenticator app and enter the 6‑digit code. Secret: <span className="font-mono">{maskedSecret}</span></p>
             <img src={enrollQR} alt="2FA QR" className="w-48 h-48 border" />
             <div className="mt-3 flex items-center gap-2">
@@ -651,18 +651,18 @@ function SecurityTab() {
       </div>
 
       <div className="card p-6">
-        <h2 className="text-primary-blue font-bold uppercase text-lg mb-6 border-b-2 border-sunshine-yellow pb-2">
+        <h2 className="text-gray-900 font-bold uppercase text-lg mb-6 border-b-2 border-gray-200 pb-2">
           API Keys
         </h2>
         <div className="space-y-3">
           {keysLoading && <p className="text-sm text-gray-600">Loading keys…</p>}
           {keysError && <p className="text-sm text-red-700">{keysError}</p>}
           {newKeySecret && (
-            <div className="bg-yellow-50 border border-yellow-300 rounded p-3">
+            <div className="bg-warning/10 border border-warning rounded p-3">
               <p className="text-sm text-gray-800 mb-1 font-bold">New API key (copy now, it will not be shown again):</p>
               <code className="text-xs bg-white border px-2 py-1 inline-block break-all">{newKeySecret}</code>
               <div>
-                <button className="mt-2 text-xs text-primary-blue underline" onClick={() => setNewKeySecret(null)}>Dismiss</button>
+                <button className="mt-2 text-xs text-brand-700 underline" onClick={() => setNewKeySecret(null)}>Dismiss</button>
               </div>
             </div>
           )}
@@ -670,11 +670,11 @@ function SecurityTab() {
             <div key={k.id} className="border-2 border-gray-300 rounded p-4">
               <div className="flex items-start justify-between mb-2">
                 <div>
-                  <p className="font-bold text-primary-blue">{k.prefix === 'sk_live' ? 'Production' : 'Test'} API Key</p>
+                  <p className="font-bold text-gray-900">{k.prefix === 'sk_live' ? 'Production' : 'Test'} API Key</p>
                   <p className="text-sm text-gray-600 font-mono">{k.prefix}_••••••••••••••••{k.last4}</p>
                 </div>
                 <div className="flex items-center gap-3">
-                  <button className="text-sm font-bold text-primary-blue" onClick={() => rotateKey(k.id)}>Rotate</button>
+                  <button className="text-sm font-bold text-brand-700" onClick={() => rotateKey(k.id)}>Rotate</button>
                   <button className="text-sm font-bold text-red-600 hover:text-red-700" onClick={() => revokeKey(k.id)}>Revoke</button>
                 </div>
               </div>
@@ -683,17 +683,17 @@ function SecurityTab() {
           ))}
         </div>
         <div className="mt-4 flex gap-3">
-          <button className="px-4 py-2 text-sm font-bold text-primary-blue border-2 border-primary-blue rounded hover:bg-primary-blue hover:text-white transition-colors" onClick={() => createKey(false)}>
+          <button className="btn-outline px-4 py-2 text-sm" onClick={() => createKey(false)}>
             + Generate Test Key
           </button>
-          <button className="px-4 py-2 text-sm font-bold text-primary-blue border-2 border-primary-blue rounded hover:bg-primary-blue hover:text-white transition-colors" onClick={() => createKey(true)}>
+          <button className="btn-outline px-4 py-2 text-sm" onClick={() => createKey(true)}>
             + Generate Production Key
           </button>
         </div>
       </div>
 
       <div className="card p-6">
-        <h2 className="text-primary-blue font-bold uppercase text-lg mb-6 border-b-2 border-sunshine-yellow pb-2">
+        <h2 className="text-gray-900 font-bold uppercase text-lg mb-6 border-b-2 border-gray-200 pb-2">
           Active Sessions
         </h2>
         <div className="space-y-3">
@@ -723,17 +723,17 @@ interface PaymentMethodCardProps {
 
 function PaymentMethodCard({ type, icon, details, primary }: PaymentMethodCardProps) {
   return (
-    <div className={`border-2 rounded p-4 ${primary ? 'border-sunshine-yellow bg-yellow-50' : 'border-gray-300'}`}>
+    <div className={`border-2 rounded p-4 ${primary ? 'border-brand-500 bg-brand-50' : 'border-gray-300'}`}>
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <span className="text-2xl">{icon}</span>
           <div>
-            <p className="font-bold text-primary-blue">{type}</p>
+            <p className="font-bold text-gray-900">{type}</p>
             <p className="text-sm text-gray-600">{details}</p>
           </div>
         </div>
         {primary && (
-          <div className="bg-sunshine-yellow text-primary-blue px-3 py-1 rounded text-xs font-bold">
+          <div className="bg-brand-100 text-brand-700 px-3 py-1 rounded text-xs font-bold border" style={{borderColor:'var(--brand-500)'}}>
             PRIMARY
           </div>
         )}
@@ -752,12 +752,12 @@ function NotificationToggle({ title, description, defaultChecked }: Notification
   return (
     <div className="flex items-start justify-between py-3 border-b border-gray-200 last:border-0">
       <div className="flex-1">
-        <p className="font-bold text-primary-blue">{title}</p>
+        <p className="font-bold text-gray-900">{title}</p>
         <p className="text-sm text-gray-600">{description}</p>
       </div>
       <label className="relative inline-block w-12 h-6 ml-4">
         <input type="checkbox" className="sr-only peer" defaultChecked={defaultChecked} />
-        <div className="w-12 h-6 bg-gray-300 rounded-full peer peer-checked:bg-sunshine-yellow transition-colors cursor-pointer"></div>
+        <div className="w-12 h-6 bg-gray-300 rounded-full peer peer-checked:bg-brand-500 transition-colors cursor-pointer"></div>
         <div className="absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform peer-checked:translate-x-6"></div>
       </label>
     </div>
@@ -775,7 +775,7 @@ function APIKeyCard({ name, key_value, lastUsed }: APIKeyCardProps) {
     <div className="border-2 border-gray-300 rounded p-4">
       <div className="flex items-start justify-between mb-2">
         <div>
-          <p className="font-bold text-primary-blue">{name}</p>
+          <p className="font-bold text-gray-900">{name}</p>
           <p className="text-sm text-gray-600 font-mono">{key_value}</p>
         </div>
         <button className="text-sm font-bold text-red-600 hover:text-red-700">
@@ -799,7 +799,7 @@ function SessionCard({ device, location, lastActive, current }: SessionCardProps
     <div className="border-2 border-gray-300 rounded p-4">
       <div className="flex items-start justify-between">
         <div>
-          <p className="font-bold text-primary-blue">{device}</p>
+          <p className="font-bold text-gray-900">{device}</p>
           <p className="text-sm text-gray-600">{location}</p>
           <p className="text-xs text-gray-500 mt-1">{lastActive}</p>
         </div>

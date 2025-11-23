@@ -27,17 +27,7 @@ final class MemoryManagementTests: XCTestCase {
     }
     
     func testConfigManagerDoesNotRetainCycles() async throws {
-        let config = SDKConfig(
-            appId: "test_app",
-            endpoints: SDKConfig.Endpoints(
-                configUrl: URL(string: "https://config.example.com")!,
-                auctionUrl: URL(string: "https://auction.example.com")!
-            ),
-            telemetryEnabled: false,
-            logLevel: .error,
-            testMode: true,
-            configSignaturePublicKey: nil
-        )
+        let config = makeConfig()
         
         weak var weakManager: ConfigManager?
         
@@ -61,13 +51,14 @@ final class MemoryManagementTests: XCTestCase {
         
         do {
             var registry: AdapterRegistry? = AdapterRegistry(sdkVersion: "1.0.0")
+            let initialCount = registry?.registeredCount ?? 0
             weakRegistry = registry
             
             // Register test adapter
             registry?.registerAdapter(networkName: "test_adapter", adapterClass: MockAdapter.self)
             
             XCTAssertNotNil(weakRegistry, "AdapterRegistry should be alive")
-            XCTAssertEqual(weakRegistry?.registeredCount, 2) // Built-ins + test adapter
+            XCTAssertEqual(weakRegistry?.registeredCount, initialCount + 1)
             
             // Release strong reference
             registry = nil
@@ -93,7 +84,11 @@ final class MemoryManagementTests: XCTestCase {
                 case .success:
                     XCTFail("MockAdapter should not return success")
                 case .failure(let error):
-                    XCTAssertEqual(error as? AdapterError, .noFill)
+                    if case .loadFailed(let message) = error {
+                        XCTAssertEqual(message, "no_fill")
+                    } else {
+                        XCTFail("Expected loadFailed no_fill, got \(error)")
+                    }
                 }
                 expectation.fulfill()
             }
@@ -111,17 +106,7 @@ final class MemoryManagementTests: XCTestCase {
     // MARK: - Graceful Cancellation Tests
     
     func testTaskCancellationDoesNotLeak() async throws {
-        let config = SDKConfig(
-            appId: "test_app",
-            endpoints: SDKConfig.Endpoints(
-                configUrl: URL(string: "https://config.example.com")!,
-                auctionUrl: URL(string: "https://auction.example.com")!
-            ),
-            telemetryEnabled: false,
-            logLevel: .error,
-            testMode: true,
-            configSignaturePublicKey: nil
-        )
+        let config = makeConfig()
         
         let verifier = SignatureVerifier(testMode: true, productionPublicKey: nil)
         let manager = ConfigManager(config: config, signatureVerifier: verifier)
@@ -147,17 +132,7 @@ final class MemoryManagementTests: XCTestCase {
     }
     
     func testMultipleConcurrentRequestsDoNotLeak() async throws {
-        let config = SDKConfig(
-            appId: "test_app",
-            endpoints: SDKConfig.Endpoints(
-                configUrl: URL(string: "https://config.example.com")!,
-                auctionUrl: URL(string: "https://auction.example.com")!
-            ),
-            telemetryEnabled: false,
-            logLevel: .error,
-            testMode: true,
-            configSignaturePublicKey: nil
-        )
+        let config = makeConfig()
         
         let verifier = SignatureVerifier(testMode: true, productionPublicKey: nil)
         let manager = ConfigManager(config: config, signatureVerifier: verifier)
@@ -186,12 +161,13 @@ final class MemoryManagementTests: XCTestCase {
     
     func testAdapterRegistryCleanupOnDeinit() {
         var registry: AdapterRegistry? = AdapterRegistry(sdkVersion: "1.0.0")
+        let initialCount = registry?.registeredCount ?? 0
         
         // Register multiple adapters
         registry?.registerAdapter(networkName: "adapter1", adapterClass: MockAdapter.self)
         registry?.registerAdapter(networkName: "adapter2", adapterClass: MockAdapter.self)
         
-        XCTAssertEqual(registry?.registeredCount, 4) // 2 built-ins + 2 custom
+        XCTAssertEqual(registry?.registeredCount, initialCount + 2)
         
         // Deinit should clean up internal state
         registry = nil
@@ -201,24 +177,14 @@ final class MemoryManagementTests: XCTestCase {
     }
     
     func testTelemetryCollectorStopsOnDeinit() {
-        let config = SDKConfig(
-            appId: "test_app",
-            endpoints: SDKConfig.Endpoints(
-                configUrl: URL(string: "https://config.example.com")!,
-                auctionUrl: URL(string: "https://auction.example.com")!
-            ),
-            telemetryEnabled: true,
-            logLevel: .info,
-            testMode: true,
-            configSignaturePublicKey: nil
-        )
+        let config = makeConfig(telemetryEnabled: true, logLevel: .info)
         
         var telemetry: TelemetryCollector? = TelemetryCollector(config: config)
         telemetry?.start()
         
         // Record some events
         telemetry?.recordInitialization()
-        telemetry?.recordAdLoad(success: true, placementId: "test", duration: 100)
+        telemetry?.recordAdLoad(placement: "test", adType: .interstitial, networkName: "mock", latency: 100, success: true)
         
         // Deinit should stop telemetry collection
         telemetry = nil
@@ -230,6 +196,9 @@ final class MemoryManagementTests: XCTestCase {
     // MARK: - Edge Cases
     
     func testSDKReinitializationAfterReset() async throws {
+#if os(Linux)
+        throw XCTSkip("Network-dependent SDK reinitialization test is skipped on Linux")
+#else
         let sdk = MediationSDK.shared
         
         // Note: SDK doesn't currently support reset/reinitialize
@@ -245,6 +214,7 @@ final class MemoryManagementTests: XCTestCase {
         } catch {
             XCTFail("Unexpected error: \(error)")
         }
+#endif
     }
     
     func testLoadAdAfterSDKDeinit() async throws {
@@ -261,40 +231,55 @@ final class MemoryManagementTests: XCTestCase {
             XCTFail("Unexpected error: \(error)")
         }
     }
+
+    // MARK: - Helpers
+
+    private func makeConfig(
+        telemetryEnabled: Bool = false,
+        logLevel: LogLevel = .error,
+        testMode: Bool = true
+    ) -> SDKConfig {
+        SDKConfig(
+            appId: "test_app",
+            configEndpoint: "https://config.example.com",
+            auctionEndpoint: "https://auction.example.com",
+            telemetryEnabled: telemetryEnabled,
+            logLevel: logLevel,
+            testMode: testMode,
+            configSignaturePublicKey: nil
+        )
+    }
 }
 
 // MARK: - Mock Adapter for Testing
 
-private class MockAdapter: AdNetworkAdapter {
+private final class MockAdapter: AdNetworkAdapter {
     var networkName: String { "MockNetwork" }
     var version: String { "1.0.0" }
     var minSDKVersion: String { "1.0.0" }
-    
+
+    required init() {}
+
     func initialize(config: [String : Any]) throws {
         // No-op
     }
-    
-    func loadAd(placement: String, adType: AdType, config: [String : Any], 
-                completion: @escaping (Result<Ad, AdapterError>) -> Void) {
-        // Simulate async work without retaining self
+
+    func loadAd(
+        placement: String,
+        adType: AdType,
+        config: [String : Any],
+        completion: @escaping (Result<Ad, AdapterRegistryError>) -> Void
+    ) {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            completion(.failure(.noFill))
+            completion(.failure(.loadFailed("no_fill")))
         }
     }
-    
+
     func supportsAdType(_ adType: AdType) -> Bool {
         return true
     }
-    
+
     func destroy() {
         // Cleanup
     }
-}
-
-// MARK: - AdapterError Enum (if not already defined)
-
-private enum AdapterError: Error, Equatable {
-    case noFill
-    case timeout
-    case networkError
 }

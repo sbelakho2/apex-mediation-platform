@@ -263,7 +263,7 @@ export default function RevenuePage() {
       <div className="grid md:grid-cols-2 gap-6">
         {/* Top Apps */}
         <div className="card p-6">
-          <h2 className="text-primary-blue font-bold uppercase text-lg mb-4 border-b-2 border-sunshine-yellow pb-2">
+          <h2 className="text-gray-900 font-bold uppercase text-lg mb-4 border-b-2 border-gray-200 pb-2">
             Top Performing Apps
           </h2>
           {loading ? (
@@ -292,7 +292,7 @@ export default function RevenuePage() {
 
         {/* Top Networks */}
         <div className="card p-6">
-          <h2 className="text-primary-blue font-bold uppercase text-lg mb-4 border-b-2 border-sunshine-yellow pb-2">
+          <h2 className="text-gray-900 font-bold uppercase text-lg mb-4 border-b-2 border-gray-200 pb-2">
             Top Ad Networks
           </h2>
           {loading ? (
@@ -364,15 +364,15 @@ interface StatCardProps {
 }
 
 function StatCard({ title, value, change, subtitle, icon: Icon, color }: StatCardProps) {
-  const bgColor = color === 'yellow' ? 'bg-sunshine-yellow' : 'bg-primary-blue';
-  const textColor = color === 'yellow' ? 'text-primary-blue' : 'text-sunshine-yellow';
+  const bgColor = color === 'yellow' ? 'bg-brand-50' : 'bg-brand-600';
+  const textColor = color === 'yellow' ? 'text-brand-700' : 'text-white';
 
   return (
     <div className="card p-6">
       <div className="flex items-start justify-between mb-4">
         <div>
           <p className="text-sm text-gray-600 font-medium uppercase">{title}</p>
-          <h3 className="text-2xl font-bold text-primary-blue mt-1">{value}</h3>
+          <h3 className="text-2xl font-bold text-gray-900 mt-1">{value}</h3>
           {subtitle && <p className="text-xs text-gray-500 mt-1">{subtitle}</p>}
         </div>
         <div className={`${bgColor} ${textColor} p-3 rounded`}>
@@ -402,11 +402,11 @@ function AppRevenueItem({ name, revenue, percentage, impressions, curFmt }: AppR
   return (
     <div className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
       <div className="flex-1">
-        <p className="font-bold text-primary-blue">{name}</p>
+        <p className="font-bold text-gray-900">{name}</p>
         <p className="text-xs text-gray-500">{impressions.toLocaleString()} impressions</p>
       </div>
       <div className="text-right">
-        <p className="font-bold text-primary-blue">{curFmt.format(revenue)}</p>
+        <p className="font-bold text-gray-900">{curFmt.format(revenue)}</p>
         <p className="text-xs text-gray-500">{percentage}%</p>
       </div>
     </div>
@@ -425,11 +425,11 @@ function NetworkRevenueItem({ name, revenue, percentage, ecpm, curFmt }: Network
   return (
     <div className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
       <div className="flex-1">
-        <p className="font-bold text-primary-blue">{name}</p>
+        <p className="font-bold text-gray-900">{name}</p>
         <p className="text-xs text-gray-500">eCPM: {curFmt.format(ecpm)}</p>
       </div>
       <div className="text-right">
-        <p className="font-bold text-primary-blue">{curFmt.format(revenue)}</p>
+        <p className="font-bold text-gray-900">{curFmt.format(revenue)}</p>
         <p className="text-xs text-gray-500">{percentage}%</p>
       </div>
     </div>

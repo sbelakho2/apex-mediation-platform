@@ -129,13 +129,13 @@ export default function QuizPage() {
   };
 
   return (
-    <main className="min-h-screen bg-primary-blue text-white">
+    <main className="min-h-screen bg-brand-600 text-white">
       <div className="container mx-auto max-w-3xl px-4 py-16 space-y-10">
         <header className="space-y-4 text-center">
-          <span className="inline-flex items-center rounded-full bg-sunshine-yellow px-3 py-1 text-xs font-bold uppercase tracking-[0.2em] text-primary-blue">
+          <span className="inline-flex items-center rounded-full bg-brand-100 px-3 py-1 text-xs font-bold uppercase tracking-[0.2em] text-brand-700">
             Interactive Quiz
           </span>
-          <h1 className="text-h2-sm md:text-h2-md font-bold uppercase text-sunshine-yellow">
+          <h1 className="text-h2-sm md:text-h2-md font-bold uppercase text-white">
             What is your Ad Monetisation IQ?
           </h1>
           <p className="text-body text-white/90">
@@ -143,30 +143,30 @@ export default function QuizPage() {
           </p>
         </header>
 
-        <section className="rounded-3xl bg-white p-8 text-primary-blue shadow-xl ring-1 ring-primary-blue/10">
-          <div className="mb-6 flex items-center justify-between text-sm font-bold uppercase text-primary-blue/70">
+        <section className="rounded-3xl bg-white p-8 text-gray-900 shadow-xl ring-1 ring-gray-200">
+          <div className="mb-6 flex items-center justify-between text-sm font-bold uppercase text-gray-600">
             <span>Question {complete ? QUESTIONS.length : currentIndex + 1} of {QUESTIONS.length}</span>
             <span>{Math.round(((complete ? QUESTIONS.length : currentIndex + 1) / QUESTIONS.length) * 100)}% complete</span>
           </div>
-          <div className="mb-6 h-2 w-full rounded-full bg-cream">
+          <div className="mb-6 h-2 w-full rounded-full bg-gray-200">
             <div
-              className="h-full rounded-full bg-sunshine-yellow transition-all"
+              className="h-full rounded-full bg-brand-500 transition-all"
               style={{ width: `${((complete ? QUESTIONS.length : currentIndex + 1) / QUESTIONS.length) * 100}%` }}
             />
           </div>
 
           {!complete && currentQuestion && (
             <div className="space-y-6">
-              <h2 className="text-h3 font-bold uppercase text-primary-blue">{currentQuestion.prompt}</h2>
+              <h2 className="text-h3 font-bold uppercase text-gray-900">{currentQuestion.prompt}</h2>
               <div className="space-y-4">
                 {currentQuestion.options.map((option) => (
                   <button
                     key={option.label}
                     type="button"
                     onClick={() => handleSelect(option)}
-                    className="w-full rounded-2xl border-2 border-primary-blue/20 bg-white px-5 py-4 text-left transition hover:border-sunshine-yellow hover:shadow-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-blue"
+                    className="w-full rounded-2xl border border-gray-300 bg-white px-5 py-4 text-left transition hover:border-brand-500 hover:shadow-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus)]"
                   >
-                    <span className="text-sm font-bold uppercase text-primary-blue">{option.label}</span>
+                    <span className="text-sm font-bold uppercase text-gray-900">{option.label}</span>
                     <p className="mt-1 text-sm text-gray-600">{option.helper}</p>
                   </button>
                 ))}
@@ -176,18 +176,18 @@ export default function QuizPage() {
 
           {complete && result && (
             <div className="space-y-5 text-center">
-              <h2 className="text-h2-sm font-bold uppercase text-primary-blue">{result.label}</h2>
+              <h2 className="text-h2-sm font-bold uppercase text-gray-900">{result.label}</h2>
               <p className="text-body text-gray-700 leading-relaxed">{result.summary}</p>
               <Link
                 href={result.cta.href}
-                className="inline-flex items-center justify-center rounded-full bg-primary-blue px-6 py-3 text-sm font-bold uppercase text-white transition hover:bg-primary-blue/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-blue"
+                className="inline-flex items-center justify-center btn-primary px-6 py-3 text-sm font-bold uppercase"
               >
                 {result.cta.label}
               </Link>
               <button
                 type="button"
                 onClick={handleRestart}
-                className="block w-full rounded-full border border-primary-blue/30 px-6 py-3 text-sm font-bold uppercase text-primary-blue transition hover:border-primary-blue focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-blue"
+                className="block w-full btn-outline px-6 py-3 text-sm font-bold uppercase"
               >
                 Retake quiz
               </button>

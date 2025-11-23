@@ -37,9 +37,34 @@ public final class MediationSDK {
     public var remoteConfigVersion: Int? {
         readSnapshot { $0.remoteConfigVersion }
     }
+
+    public var consentSummary: [String: Any] {
+        readSnapshot { $0.consentSummary }
+    }
     
     public var registeredAdapterCount: Int {
         readSnapshot { $0.registeredAdapters }
+    }
+
+    /// Update consent state shared across the SDK.
+    public func setConsent(_ consent: ConsentData) {
+        ConsentManager.shared.setConsent(consent)
+        updateConsentSummarySnapshot()
+    }
+
+    /// Returns the latest consent object.
+    public func currentConsent() -> ConsentData {
+        ConsentManager.shared.getConsent()
+    }
+
+    /// Metadata forwarded to network and S2S requests.
+    public func consentMetadata() -> [String: Any] {
+        ConsentManager.shared.toAdRequestMetadata()
+    }
+
+    /// Whether personalized ads are currently allowed.
+    public func canShowPersonalizedAds() -> Bool {
+        ConsentManager.shared.canShowPersonalizedAds()
     }
 
     /// Initialize the mediation SDK.
@@ -55,9 +80,23 @@ public final class MediationSDK {
         return ad
     }
 
-    /// Check if an ad is cached and ready. Placeholder implementation; caching is pending.
+    /// Check if an ad is cached and ready.
     public func isAdReady(placementId: String) -> Bool {
-        false
+        readSnapshot { snapshot in
+            snapshot.cacheCounts[placementId, default: 0] > 0
+        }
+    }
+
+    /// Claim and remove a cached ad for the placement.
+    public func claimAd(placementId: String) async -> Ad? {
+        let ad = await runtime.claimAd(placementId: placementId)
+        await refreshSnapshot()
+        return ad
+    }
+
+    /// Peek at the next cached ad without consuming it.
+    public func peekAd(placementId: String) async -> Ad? {
+        await runtime.peekAd(placementId: placementId)
     }
 
     /// Shutdown the SDK and release resources.
@@ -74,6 +113,13 @@ public final class MediationSDK {
     private func refreshSnapshot() async {
         let digest = await runtime.snapshot()
         updateSnapshot(digest)
+    }
+    
+    private func updateConsentSummarySnapshot() {
+        let summary = ConsentManager.shared.getRedactedConsentInfo()
+        snapshotLock.lock()
+        snapshot = snapshot.updatingConsentSummary(summary)
+        snapshotLock.unlock()
     }
 
     private func updateSnapshot(_ newSnapshot: SDKSnapshot) {
@@ -99,8 +145,34 @@ private struct SDKSnapshot {
     let registeredAdapters: Int
     let testMode: Bool
     let isInitialized: Bool
+    let cacheCounts: [String: Int]
+    let consentSummary: [String: Any]
 
-    static let empty = SDKSnapshot(appId: nil, placementIds: [], remoteConfigVersion: nil, registeredAdapters: 0, testMode: false, isInitialized: false)
+    static let empty = SDKSnapshot(
+        appId: nil,
+        placementIds: [],
+        remoteConfigVersion: nil,
+        registeredAdapters: 0,
+        testMode: false,
+        isInitialized: false,
+        cacheCounts: [:],
+        consentSummary: ConsentManager.shared.getRedactedConsentInfo()
+    )
+}
+
+private extension SDKSnapshot {
+    func updatingConsentSummary(_ summary: [String: Any]) -> SDKSnapshot {
+        SDKSnapshot(
+            appId: appId,
+            placementIds: placementIds,
+            remoteConfigVersion: remoteConfigVersion,
+            registeredAdapters: registeredAdapters,
+            testMode: testMode,
+            isInitialized: isInitialized,
+            cacheCounts: cacheCounts,
+            consentSummary: summary
+        )
+    }
 }
 
 private actor MediationRuntime {
@@ -113,6 +185,8 @@ private actor MediationRuntime {
     private var adapterRegistry: AdapterRegistry?
     private var signatureVerifier: SignatureVerifier?
     private var initialized = false
+    private var adCache: [String: [Ad]] = [:]
+    private let consentManager = ConsentManager.shared
 
     init(sdkVersion: String) {
         self.sdkVersion = sdkVersion
@@ -191,11 +265,12 @@ private actor MediationRuntime {
 
             ensureAdapterInitialized(networkName: networkName, adapterConfig: adapterConfig)
 
-            let settings = adapterConfig.settings.mapValues { $0.value }
+            let settings = adapterSettingsWithConsent(adapterConfig.settings.mapValues { $0.value })
             let start = Date()
 
             do {
                 let ad = try await loadAd(from: adapter, placement: placementId, adType: placement.adType, settings: settings)
+                storeAd(ad)
                 let latency = Int(Date().timeIntervalSince(start) * 1_000)
                 telemetry?.recordAdLoad(
                     placement: placementId,
@@ -250,13 +325,16 @@ private actor MediationRuntime {
     }
 
     func snapshot() -> SDKSnapshot {
-        SDKSnapshot(
+        pruneExpiredCache()
+        return SDKSnapshot(
             appId: config?.appId,
             placementIds: remoteConfig?.placements.map { $0.placementId } ?? [],
             remoteConfigVersion: remoteConfig?.version,
             registeredAdapters: adapterRegistry?.registeredCount ?? 0,
             testMode: config?.testMode ?? false,
-            isInitialized: initialized
+            isInitialized: initialized,
+            cacheCounts: adCache.mapValues { $0.count },
+            consentSummary: consentManager.getRedactedConsentInfo()
         )
     }
 
@@ -277,7 +355,7 @@ private actor MediationRuntime {
 
     private func configureAdapters(registry: AdapterRegistry, with config: SDKRemoteConfig) {
         for (networkName, adapterConfig) in config.adapters where adapterConfig.enabled {
-            let settings = adapterConfig.settings.mapValues { $0.value }
+            let settings = adapterSettingsWithConsent(adapterConfig.settings.mapValues { $0.value })
             registry.initializeAdapter(networkName: networkName, config: settings)
         }
     }
@@ -285,7 +363,7 @@ private actor MediationRuntime {
     private func ensureAdapterInitialized(networkName: String, adapterConfig: AdapterConfig) {
         guard let registry = adapterRegistry else { return }
         if !registry.isInitialized(networkName: networkName) {
-            let settings = adapterConfig.settings.mapValues { $0.value }
+            let settings = adapterSettingsWithConsent(adapterConfig.settings.mapValues { $0.value })
             registry.initializeAdapter(networkName: networkName, config: settings)
         }
     }
@@ -300,6 +378,63 @@ private actor MediationRuntime {
             adapter.loadAd(placement: placement, adType: adType, config: settings) { result in
                 continuation.resume(with: result)
             }
+        }
+    }
+
+    private func adapterSettingsWithConsent(_ base: [String: Any]) -> [String: Any] {
+        var enriched = base
+        let adapterConsent = consentManager.toAdapterConsentPayload()
+        if !adapterConsent.isEmpty {
+            enriched["apx_consent_state"] = adapterConsent
+        }
+        let requestMetadata = consentManager.toAdRequestMetadata()
+        if !requestMetadata.isEmpty {
+            enriched["apx_consent_metadata"] = requestMetadata
+        }
+        enriched["apx_can_personalize_ads"] = consentManager.canShowPersonalizedAds()
+        return enriched
+    }
+
+    func claimAd(placementId: String) -> Ad? {
+        pruneExpiredCache(for: placementId)
+        guard var ads = adCache[placementId], !ads.isEmpty else { return nil }
+        let ad = ads.removeFirst()
+        if ads.isEmpty {
+            adCache.removeValue(forKey: placementId)
+        } else {
+            adCache[placementId] = ads
+        }
+        return ad
+    }
+
+    func peekAd(placementId: String) -> Ad? {
+        pruneExpiredCache(for: placementId)
+        return adCache[placementId]?.first
+    }
+
+    private func storeAd(_ ad: Ad) {
+        guard ad.expiresAt > Date() else { return }
+        pruneExpiredCache(for: ad.placement)
+        var ads = adCache[ad.placement] ?? []
+        ads.append(ad)
+        adCache[ad.placement] = ads
+    }
+
+    private func pruneExpiredCache(for placementId: String? = nil) {
+        let now = Date()
+        if let placementId {
+            if var ads = adCache[placementId] {
+                ads.removeAll { $0.expiresAt <= now }
+                if ads.isEmpty {
+                    adCache.removeValue(forKey: placementId)
+                } else {
+                    adCache[placementId] = ads
+                }
+            }
+            return
+        }
+        for key in Array(adCache.keys) {
+            pruneExpiredCache(for: key)
         }
     }
 
@@ -324,6 +459,7 @@ public enum SDKError: Error, LocalizedError, Equatable {
     case alreadyInitialized
     case invalidPlacement(String)
     case noFill
+    case frequencyLimited
     case timeout
     case networkError(underlying: String?)
     case internalError(message: String?)
@@ -342,6 +478,8 @@ public enum SDKError: Error, LocalizedError, Equatable {
             return "Invalid placement: \(placement)"
         case .noFill:
             return "No ad available."
+        case .frequencyLimited:
+            return "Ad cannot be shown yet due to frequency capping."
         case .timeout:
             return "Request timed out."
         case .networkError(let underlying):
@@ -380,6 +518,7 @@ public enum SDKError: Error, LocalizedError, Equatable {
         switch (lhs, rhs) {
         case (.notInitialized, .notInitialized),
              (.alreadyInitialized, .alreadyInitialized),
+               (.frequencyLimited, .frequencyLimited),
              (.noFill, .noFill),
              (.timeout, .timeout):
             return true

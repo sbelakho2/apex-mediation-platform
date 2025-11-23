@@ -246,7 +246,7 @@ function SimpleBarChart({ series, currencyFormatter, numberFormatter }: { series
         const label = new Date(p.date).toLocaleDateString();
         return (
           <div key={i} className="flex-1 flex flex-col items-center gap-2" aria-label={`${label}: ${currencyFormatter.format(value)}`}>
-            <div className="w-full bg-sunshine-yellow rounded-t transition-all hover:opacity-80" style={{ height: `${height}%` }} title={`${label} — ${currencyFormatter.format(value)}`} />
+            <div className="w-full bg-brand-500 rounded-t transition-all hover:opacity-80" style={{ height: `${height}%` }} title={`${label} — ${currencyFormatter.format(value)}`} />
             <span className="text-xs text-gray-500 font-bold">{label}</span>
           </div>
         );

@@ -233,7 +233,7 @@ export default function FraudPage() {
       <div className="grid md:grid-cols-2 gap-6">
         {/* Fraud Types */}
         <div className="card p-6">
-          <h2 className="text-primary-blue font-bold uppercase text-lg mb-4 border-b-2 border-sunshine-yellow pb-2">
+          <h2 className="text-gray-900 font-bold uppercase text-lg mb-4 border-b-2 border-gray-200 pb-2">
             Fraud Type Breakdown
           </h2>
           <div className="space-y-4">
@@ -259,7 +259,7 @@ export default function FraudPage() {
 
         {/* Top Blocked Countries */}
         <div className="card p-6">
-          <h2 className="text-primary-blue font-bold uppercase text-lg mb-4 border-b-2 border-sunshine-yellow pb-2">
+          <h2 className="text-gray-900 font-bold uppercase text-lg mb-4 border-b-2 border-gray-200 pb-2">
             Top Blocked Countries
           </h2>
           <div className="space-y-3">
@@ -271,7 +271,7 @@ export default function FraudPage() {
 
       {/* Recent Fraud Events Timeline */}
       <div className="card p-6">
-        <h2 className="text-primary-blue font-bold uppercase text-lg mb-6 border-b-2 border-sunshine-yellow pb-2">
+        <h2 className="text-gray-900 font-bold uppercase text-lg mb-6 border-b-2 border-gray-200 pb-2">
           Recent Fraud Events
         </h2>
         {loading ? (
@@ -316,21 +316,21 @@ interface StatCardProps {
 
 function StatCard({ title, value, subtitle, color, icon: Icon }: StatCardProps) {
   const colorMap = {
-    red: 'bg-red-500',
-    yellow: 'bg-sunshine-yellow',
-    blue: 'bg-primary-blue',
-    green: 'bg-green-500',
-  };
+    red: 'bg-red-500 text-white',
+    yellow: 'bg-brand-50 text-brand-700',
+    blue: 'bg-brand-600 text-white',
+    green: 'bg-green-500 text-white',
+  } as const;
 
   return (
     <div className="card p-6">
       <div className="flex items-start justify-between mb-4">
         <div>
           <p className="text-sm text-gray-600 font-medium uppercase">{title}</p>
-          <h3 className="text-2xl font-bold text-primary-blue mt-1">{value}</h3>
+          <h3 className="text-2xl font-bold text-gray-900 mt-1">{value}</h3>
           <p className="text-xs text-gray-500 mt-1">{subtitle}</p>
         </div>
-        <div className={`${colorMap[color]} text-white p-3 rounded`}>
+        <div className={`${colorMap[color]} p-3 rounded`}>
           <Icon className="w-6 h-6" />
         </div>
       </div>
@@ -348,15 +348,15 @@ interface FraudTypeBarProps {
 function FraudTypeBar({ type, count, percentage, color }: FraudTypeBarProps) {
   const colorMap = {
     red: 'bg-red-500',
-    yellow: 'bg-sunshine-yellow',
-    blue: 'bg-primary-blue',
+    yellow: 'bg-warning',
+    blue: 'bg-brand-600',
     gray: 'bg-gray-400',
   };
 
   return (
     <div>
       <div className="flex items-center justify-between mb-2">
-        <span className="font-bold text-primary-blue">{type}</span>
+        <span className="font-bold text-gray-900">{type}</span>
         <span className="text-sm text-gray-600">{count} blocked</span>
       </div>
       <div className="w-full bg-gray-200 h-6 rounded overflow-hidden">
@@ -382,7 +382,7 @@ function CountryBlock({ country, blocked, percentage }: CountryBlockProps) {
   return (
     <div className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
       <div className="flex items-center gap-3">
-        <span className="font-bold text-primary-blue">{country}</span>
+        <span className="font-bold text-gray-900">{country}</span>
       </div>
       <div className="text-right">
         <p className="font-bold text-red-600">{blocked}</p>

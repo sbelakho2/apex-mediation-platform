@@ -96,7 +96,7 @@ export default function AdapterMetricsPage() {
     <Section>
       <Container className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-h2-sm font-bold uppercase text-primary-blue tracking-tight">Adapter Metrics</h1>
+        <h1 className="text-h2-sm font-bold uppercase text-gray-900 tracking-tight">Adapter Metrics</h1>
         <button
           onClick={() => {
             if (timeoutRef.current) {
@@ -109,7 +109,7 @@ export default function AdapterMetricsPage() {
               .then((ok) => { setLoading(false); scheduleNext(!!ok); })
               .catch(() => { setLoading(false); scheduleNext(false); });
           }}
-          className="px-3 py-2 text-sm font-bold uppercase rounded bg-sunshine-yellow text-primary-blue"
+          className="btn-secondary text-sm px-4"
         >
           Refresh
         </button>

@@ -127,7 +127,7 @@ export default function ABTestsPage() {
       {/* Page Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-h2-sm font-bold uppercase text-primary-blue tracking-tight">
+          <h1 className="text-h2-sm font-bold uppercase text-gray-900 tracking-tight">
             A/B Testing Platform
           </h1>
           <p className="text-sm text-gray-600 mt-1">
@@ -261,7 +261,7 @@ function ABTestCard({ test }: ABTestCardProps) {
       {/* Header */}
       <div className="flex items-start justify-between mb-6">
         <div className="flex-1">
-          <h3 className="text-xl font-bold text-primary-blue mb-2">{test.name}</h3>
+          <h3 className="text-xl font-bold text-gray-900 mb-2">{test.name}</h3>
           <div className="flex items-center gap-4 text-sm text-gray-600">
             <span>Started: {test.startDate}</span>
             {test.endDate && <span>• Ended: {test.endDate}</span>}
@@ -278,11 +278,11 @@ function ABTestCard({ test }: ABTestCardProps) {
       {/* Variants Comparison */}
       <div className="grid md:grid-cols-2 gap-6 mb-6">
         {/* Variant A */}
-        <div className={`border-2 rounded p-4 ${test.winner === 'A' ? 'border-sunshine-yellow bg-yellow-50' : 'border-gray-300'}`}>
+        <div className={`border-2 rounded p-4 ${test.winner === 'A' ? 'border-brand-500 bg-brand-50' : 'border-gray-300'}`}>
           <div className="flex items-center justify-between mb-4">
-            <h4 className="font-bold text-primary-blue">Variant A: {test.variantA.name}</h4>
+            <h4 className="font-bold text-gray-900">Variant A: {test.variantA.name}</h4>
             {test.winner === 'A' && (
-              <div className="bg-sunshine-yellow text-primary-blue px-3 py-1 rounded text-xs font-bold">
+              <div className="bg-brand-100 text-brand-700 px-3 py-1 rounded text-xs font-bold border" style={{borderColor:'var(--brand-500)'}}>
                 WINNER
               </div>
             )}
@@ -290,25 +290,25 @@ function ABTestCard({ test }: ABTestCardProps) {
           <div className="space-y-2 text-sm">
             <div className="flex justify-between">
               <span className="text-gray-600">Impressions:</span>
-              <span className="font-bold text-primary-blue">{test.variantA.impressions.toLocaleString()}</span>
+              <span className="font-bold text-gray-900">{test.variantA.impressions.toLocaleString()}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-gray-600">Revenue:</span>
-              <span className="font-bold text-primary-blue">${test.variantA.revenue.toFixed(2)}</span>
+              <span className="font-bold text-gray-900">${test.variantA.revenue.toFixed(2)}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-gray-600">eCPM:</span>
-              <span className="font-bold text-primary-blue">${test.variantA.ecpm.toFixed(2)}</span>
+              <span className="font-bold text-gray-900">${test.variantA.ecpm.toFixed(2)}</span>
             </div>
           </div>
         </div>
 
         {/* Variant B */}
-        <div className={`border-2 rounded p-4 ${test.winner === 'B' ? 'border-sunshine-yellow bg-yellow-50' : 'border-gray-300'}`}>
+        <div className={`border-2 rounded p-4 ${test.winner === 'B' ? 'border-brand-500 bg-brand-50' : 'border-gray-300'}`}>
           <div className="flex items-center justify-between mb-4">
-            <h4 className="font-bold text-primary-blue">Variant B: {test.variantB.name}</h4>
+            <h4 className="font-bold text-gray-900">Variant B: {test.variantB.name}</h4>
             {test.winner === 'B' && (
-              <div className="bg-sunshine-yellow text-primary-blue px-3 py-1 rounded text-xs font-bold">
+              <div className="bg-brand-100 text-brand-700 px-3 py-1 rounded text-xs font-bold border" style={{borderColor:'var(--brand-500)'}}>
                 WINNER
               </div>
             )}
@@ -316,26 +316,26 @@ function ABTestCard({ test }: ABTestCardProps) {
           <div className="space-y-2 text-sm">
             <div className="flex justify-between">
               <span className="text-gray-600">Impressions:</span>
-              <span className="font-bold text-primary-blue">{test.variantB.impressions.toLocaleString()}</span>
+              <span className="font-bold text-gray-900">{test.variantB.impressions.toLocaleString()}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-gray-600">Revenue:</span>
-              <span className="font-bold text-primary-blue">${test.variantB.revenue.toFixed(2)}</span>
+              <span className="font-bold text-gray-900">${test.variantB.revenue.toFixed(2)}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-gray-600">eCPM:</span>
-              <span className="font-bold text-primary-blue">${test.variantB.ecpm.toFixed(2)}</span>
+              <span className="font-bold text-gray-900">${test.variantB.ecpm.toFixed(2)}</span>
             </div>
           </div>
         </div>
       </div>
 
       {/* Statistical Results */}
-      <div className="bg-cream p-4 rounded">
+      <div className="bg-gray-50 p-4 rounded">
         <div className="flex items-center justify-between mb-3">
           <div>
             <p className="text-sm text-gray-600 mb-1">Statistical Confidence</p>
-            <p className="text-2xl font-bold text-primary-blue">{test.confidence}%</p>
+            <p className="text-2xl font-bold text-gray-900">{test.confidence}%</p>
           </div>
           <div className="text-right">
             <p className="text-sm text-gray-600 mb-1">Variant B Lift</p>
@@ -345,10 +345,7 @@ function ABTestCard({ test }: ABTestCardProps) {
           </div>
         </div>
         <div className="w-full bg-gray-300 h-3 rounded-full overflow-hidden">
-          <div
-            className="bg-primary-blue h-full"
-            style={{ width: `${test.confidence}%` }}
-          />
+          <div className="bg-brand-600 h-full" style={{ width: `${test.confidence}%` }} />
         </div>
         <p className="text-xs text-gray-600 mt-2">
           {test.confidence >= 95 ? '✓ Test has reached statistical significance' :
@@ -361,16 +358,16 @@ function ABTestCard({ test }: ABTestCardProps) {
       <div className="flex items-center justify-end gap-3 mt-4 pt-4 border-t border-gray-200">
         {test.status === 'running' && (
           <>
-            <button className="px-4 py-2 text-sm font-bold text-gray-600 border border-gray-300 rounded hover:bg-gray-50">
+            <button className="btn-secondary text-sm">
               Pause Test
             </button>
-            <button className="px-4 py-2 text-sm font-bold text-white bg-primary-blue rounded hover:bg-primary-blue/90">
+            <button className="btn-primary text-sm">
               Stop & Choose Winner
             </button>
           </>
         )}
         {test.status === 'completed' && (
-          <button className="px-4 py-2 text-sm font-bold text-primary-blue border border-primary-blue rounded hover:bg-primary-blue hover:text-white">
+          <button className="btn-outline px-4 py-2 text-sm">
             View Full Report
           </button>
         )}

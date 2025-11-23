@@ -68,6 +68,10 @@ final class BelAdsFacadeTests: XCTestCase {
         XCTAssertEqual(retrieved.gdprConsentString, "test-consent-string")
         XCTAssertEqual(retrieved.ccpaOptOut, false)
         XCTAssertEqual(retrieved.coppa, false)
+
+        let debugConsent = BelAds.getDebugInfo()["consent"] as? [String: Any]
+        XCTAssertEqual(debugConsent?["gdprApplies"] as? Bool, true)
+        XCTAssertEqual(debugConsent?["gdprConsentString"] as? String, "<redacted>")
     }
     
     func testDebugLogging() {

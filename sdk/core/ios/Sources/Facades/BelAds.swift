@@ -59,13 +59,13 @@ public enum BelAds {
     /// Set user consent for privacy regulations
     /// - Parameter consent: Consent data with GDPR/CCPA/COPPA flags
     public static func setConsent(_ consent: ConsentData) {
-        ConsentManager.shared.setConsent(consent)
+        MediationSDK.shared.setConsent(consent)
     }
     
     /// Get current consent settings
     /// - Returns: Current consent data
     public static func getConsent() -> ConsentData {
-        return ConsentManager.shared.getConsent()
+        return MediationSDK.shared.currentConsent()
     }
     
     /// Enable or disable test mode
@@ -95,7 +95,7 @@ public enum BelAds {
             "appId": sdk.currentAppId() ?? "none",
             "configVersion": sdk.remoteConfigVersion ?? 0,
             "adapterCount": sdk.registeredAdapterCount,
-            "consent": ConsentManager.shared.getRedactedConsentInfo()
+            "consent": sdk.consentSummary
         ]
     }
 }

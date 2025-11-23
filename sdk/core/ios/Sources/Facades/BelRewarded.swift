@@ -1,46 +1,84 @@
 #if canImport(UIKit)
 import Foundation
+import Dispatch
 import UIKit
 
-/// Tiny public facade for Rewarded ads, mirroring Android’s BelRewarded API.
+/// Rewarded facade that bridges to MediationSDK caching and BelAdEventListener callbacks.
+@MainActor
 public enum BelRewarded {
     private static var lastPlacement: String?
-    private static var cache: [String: Ad] = [:]
 
-    /// Load a rewarded ad for the placement. On success, the ad is cached and isReady() will return true.
-    public static func load(placementId: String, completion: @escaping (Result<Ad, Error>) -> Void) {
+    /// Load a rewarded ad for the placement. Success/failure events flow through the optional listener.
+    public static func load(placementId: String, listener: BelAdEventListener? = nil) {
         lastPlacement = placementId
         Task { @MainActor in
             do {
-                let ad = try await MediationSDK.shared.loadAd(placementId: placementId)
-                if let ad = ad {
-                    cache[placementId] = ad
-                    completion(.success(ad))
-                } else {
-                    completion(.failure(SDKError.noFill))
+                guard let ad = try await MediationSDK.shared.loadAd(placementId: placementId) else {
+                    throw SDKError.noFill
                 }
+                listener?.onAdLoaded(placementId: placementId)
+                debugPrint("[BelRewarded] Cached rewarded ad from \(ad.networkName) for placement \(placementId)")
             } catch {
-                completion(.failure(error))
+                listener?.onAdFailedToLoad(placementId: placementId, error: error)
             }
         }
     }
 
-    /// Attempts to show the last loaded rewarded ad. Returns true if an ad was shown.
+    /// Attempts to show a cached rewarded ad. Returns true if we scheduled a presentation.
     @discardableResult
-    public static func show(from viewController: UIViewController) -> Bool {
-        guard let placement = lastPlacement, let _ = cache.removeValue(forKey: placement) else { return false }
-        // TODO: hook video renderer and reward callback in future pass.
-        #if DEBUG
-        let alert = UIAlertController(title: "Rewarded (debug placeholder)", message: "Simulating rewarded show for placement: \(placement)", preferredStyle: .alert)
-        alert.addAction(UIAlertAction(title: "OK", style: .default, handler: nil))
-        viewController.present(alert, animated: true)
-        #endif
+    public static func show(from viewController: UIViewController, placementId: String? = nil, listener: BelAdEventListener? = nil) -> Bool {
+        let targetPlacement = placementId ?? lastPlacement
+        guard let placement = targetPlacement else {
+            listener?.onAdFailedToShow(placementId: "", error: SDKError.invalidPlacement("missing_placement"))
+            return false
+        }
+
+        guard MediationSDK.shared.isAdReady(placementId: placement) else {
+            listener?.onAdFailedToShow(placementId: placement, error: SDKError.noFill)
+            return false
+        }
+
+        Task { @MainActor in
+            guard let ad = await MediationSDK.shared.claimAd(placementId: placement) else {
+                listener?.onAdFailedToShow(placementId: placement, error: SDKError.noFill)
+                return
+            }
+            listener?.onAdShown(placementId: placement)
+            presentDebugRewarded(from: viewController, networkName: ad.networkName) { didEarnReward in
+                if didEarnReward {
+                    listener?.onUserEarnedReward(placementId: placement, reward: BelReward(label: "reward", amount: 1))
+                }
+                listener?.onAdClosed(placementId: placement)
+            }
+        }
         return true
     }
 
-    public static func isReady() -> Bool {
-        guard let placement = lastPlacement else { return false }
-        return cache[placement] != nil
+    /// Whether an ad is cached for the provided placement (defaults to last loaded placement).
+    public static func isReady(placementId: String? = nil) -> Bool {
+        guard let placement = placementId ?? lastPlacement else { return false }
+        return MediationSDK.shared.isAdReady(placementId: placement)
+    }
+
+    private static func presentDebugRewarded(from viewController: UIViewController, networkName: String, completion: @escaping (Bool) -> Void) {
+        #if DEBUG
+        let alert = UIAlertController(
+            title: "Rewarded (debug placeholder)",
+            message: "Simulating rewarded show for network: \(networkName)",
+            preferredStyle: .alert
+        )
+        alert.addAction(UIAlertAction(title: "Watch", style: .default) { _ in
+            completion(true)
+        })
+        alert.addAction(UIAlertAction(title: "Close", style: .cancel) { _ in
+            completion(false)
+        })
+        viewController.present(alert, animated: true)
+        #else
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+            completion(true)
+        }
+        #endif
     }
 }
 

@@ -46,11 +46,12 @@ final class ConsentManagerTests: XCTestCase {
             ccpaOptOut: false,
             coppa: false
         )
-        
-        ConsentManager.shared.setConsent(consent)
-        
-        // Create new instance (simulates app restart)
-        let newManager = ConsentManager()
+        let suiteName = "com.rival.apex.tests.consent"
+        let suite = UserDefaults(suiteName: suiteName) ?? .standard
+        suite.removePersistentDomain(forName: suiteName)
+        let manager = ConsentManager(storage: suite)
+        manager.setConsent(consent)
+        let newManager = ConsentManager(storage: suite)
         let retrieved = newManager.getConsent()
         
         XCTAssertEqual(retrieved.gdprApplies, true)
@@ -143,5 +144,19 @@ final class ConsentManagerTests: XCTestCase {
         XCTAssertEqual(redacted["gdprConsentString"] as? String, "<redacted>")
         XCTAssertEqual(redacted["ccpaOptOut"] as? Bool, true)
         XCTAssertEqual(redacted["coppa"] as? Bool, false)
+    }
+
+    func testAdapterConsentPayloadIncludesAttStatus() {
+        let consent = ConsentData(
+            gdprApplies: true,
+            gdprConsentString: "consent-string",
+            ccpaOptOut: false,
+            coppa: false
+        )
+        ConsentManager.shared.setConsent(consent)
+        let payload = ConsentManager.shared.toAdapterConsentPayload { .authorized }
+        XCTAssertEqual(payload["iab_tcf_v2"] as? String, "consent-string")
+        XCTAssertEqual(payload["att_status"] as? String, ATTStatus.authorized.rawValue)
+        XCTAssertEqual(payload["limit_ad_tracking"] as? Bool, false)
     }
 }

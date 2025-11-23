@@ -44,10 +44,10 @@ final class AuctionClientTests: XCTestCase {
             ccpaOptOut: false,
             coppa: false
         )
-        ConsentManager.shared.setConsent(consent)
+        MediationSDK.shared.setConsent(consent)
         
         // Verify consent metadata is generated
-        let metadata = ConsentManager.shared.toAdRequestMetadata()
+        let metadata = MediationSDK.shared.consentMetadata()
         XCTAssertEqual(metadata["gdpr"] as? Int, 1)
         XCTAssertEqual(metadata["gdpr_consent"] as? String, "test-consent")
         

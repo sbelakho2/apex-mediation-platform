@@ -32,15 +32,15 @@ public final class ConsentManager {
     public static let shared = ConsentManager()
     
     private let userDefaultsKey = "apex_consent_data"
+    private let storage: UserDefaults
     private var currentConsent: ConsentData
     
-    private init() {
-        // Load from persistent storage
-        if let data = UserDefaults.standard.data(forKey: userDefaultsKey),
+    init(storage: UserDefaults = .standard) {
+        self.storage = storage
+        if let data = storage.data(forKey: userDefaultsKey),
            let decoded = try? JSONDecoder().decode(ConsentData.self, from: data) {
             currentConsent = decoded
         } else {
-            // Default: no consent given
             currentConsent = ConsentData()
         }
     }
@@ -118,15 +118,38 @@ public final class ConsentManager {
         return metadata
     }
     
+    /// Convert consent to adapter-facing state payload
+    public func toAdapterConsentPayload(attStatusProvider: () -> ATTStatus = { .notDetermined }) -> [String: Any] {
+        let consentState = ConsentState(
+            iabTCFv2: currentConsent.gdprConsentString,
+            iabUSGPP: currentConsent.ccpaOptOut ? "1YNN" : "1YYN",
+            coppa: currentConsent.coppa,
+            attStatus: attStatusProvider(),
+            limitAdTracking: !canShowPersonalizedAds()
+        )
+        var payload: [String: Any] = [
+            "coppa": consentState.coppa,
+            "att_status": consentState.attStatus.rawValue,
+            "limit_ad_tracking": consentState.limitAdTracking
+        ]
+        if let tcf = consentState.iabTCFv2, !tcf.isEmpty {
+            payload["iab_tcf_v2"] = tcf
+        }
+        if let gpp = consentState.iabUSGPP, !gpp.isEmpty {
+            payload["iab_us_gpp"] = gpp
+        }
+        return payload
+    }
+    
     private func persist() {
         if let encoded = try? JSONEncoder().encode(currentConsent) {
-            UserDefaults.standard.set(encoded, forKey: userDefaultsKey)
+            storage.set(encoded, forKey: userDefaultsKey)
         }
     }
     
     /// Clear all consent data (for testing)
     public func clear() {
         currentConsent = ConsentData()
-        UserDefaults.standard.removeObject(forKey: userDefaultsKey)
+        storage.removeObject(forKey: userDefaultsKey)
     }
 }

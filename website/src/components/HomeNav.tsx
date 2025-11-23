@@ -26,7 +26,7 @@ export default function HomeNav() {
           <Link
             key={item.href}
             href={item.href}
-            className="text-sunshine-yellow font-bold uppercase text-sm tracking-wide hover:underline decoration-2 underline-offset-4 transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-sunshine-yellow"
+            className="text-brand-100 font-bold uppercase text-sm tracking-wide hover:underline decoration-2 underline-offset-4 transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white"
           >
             {item.label}
           </Link>
@@ -35,13 +35,13 @@ export default function HomeNav() {
         <div className="flex items-center gap-4 ml-4">
           <Link
             href="/signin"
-            className="text-sunshine-yellow font-bold uppercase text-sm hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-sunshine-yellow"
+            className="text-brand-100 font-bold uppercase text-sm hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white"
           >
             Sign In
           </Link>
           <Link
             href="/signup"
-            className="bg-sunshine-yellow text-primary-blue px-6 py-2 font-bold uppercase text-sm hover:shadow-lg transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary-blue"
+            className="btn-primary px-6 py-2 font-bold uppercase text-sm hover:shadow-lg transition-all"
           >
             Sign Up
           </Link>
@@ -50,10 +50,10 @@ export default function HomeNav() {
 
       {/* Mobile Navigation */}
       <div className="md:hidden flex items-center justify-between py-4">
-        <span className="text-sunshine-yellow font-bold uppercase text-lg">Menu</span>
+        <span className="text-brand-100 font-bold uppercase text-lg">Menu</span>
         <button
           onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-          className="text-sunshine-yellow focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sunshine-yellow"
+          className="text-brand-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
           aria-expanded={mobileMenuOpen}
           aria-controls="primary-navigation"
           aria-label="Toggle menu"
@@ -77,15 +77,15 @@ export default function HomeNav() {
           />
           <div
             id="primary-navigation"
-            className="fixed left-0 top-0 bottom-0 w-64 bg-primary-blue z-50 p-6 md:hidden"
+            className="fixed left-0 top-0 bottom-0 w-64 bg-brand-600 text-white z-50 p-6 md:hidden"
             role="dialog"
             aria-modal="true"
           >
-            <div className="flex justify-between items-center mb-8">
-              <span className="text-sunshine-yellow font-bold uppercase text-lg">Menu</span>
+          <div className="flex justify-between items-center mb-8">
+              <span className="text-brand-100 font-bold uppercase text-lg">Menu</span>
               <button
                 onClick={() => setMobileMenuOpen(false)}
-                className="text-sunshine-yellow focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sunshine-yellow"
+                className="text-brand-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
                 aria-label="Close menu"
               >
                 ×
@@ -97,23 +97,23 @@ export default function HomeNav() {
                   key={item.href}
                   href={item.href}
                   onClick={() => setMobileMenuOpen(false)}
-                  className="text-sunshine-yellow font-bold uppercase text-sm py-2 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sunshine-yellow"
+                  className="text-brand-100 font-bold uppercase text-sm py-2 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
                 >
                   {item.label}
                 </Link>
               ))}
-              <hr className="border-sunshine-yellow/30 my-2" />
+              <hr className="border-white/20 my-2" />
               <Link
                 href="/signin"
                 onClick={() => setMobileMenuOpen(false)}
-                className="text-sunshine-yellow font-bold uppercase text-sm py-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sunshine-yellow"
+                className="text-brand-100 font-bold uppercase text-sm py-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
               >
                 Sign In
               </Link>
               <Link
                 href="/signup"
                 onClick={() => setMobileMenuOpen(false)}
-                className="bg-sunshine-yellow text-primary-blue px-6 py-2 font-bold uppercase text-sm text-center focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-blue"
+                className="btn-primary px-6 py-2 font-bold uppercase text-sm text-center"
               >
                 Sign Up
               </Link>

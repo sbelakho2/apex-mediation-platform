@@ -87,7 +87,7 @@ public final class AuctionClient {
         ]
         
         // Add consent metadata
-        let consentMetadata = ConsentManager.shared.toAdRequestMetadata()
+        let consentMetadata = MediationSDK.shared.consentMetadata()
         if !consentMetadata.isEmpty {
             body["consent"] = consentMetadata
         }
@@ -111,7 +111,7 @@ public final class AuctionClient {
         info["screenScale"] = screen.scale
         
         // Add advertising identifier if available and consent allows
-        if ConsentManager.shared.canShowPersonalizedAds() {
+        if MediationSDK.shared.canShowPersonalizedAds() {
             // TODO: Implement IDFA retrieval with ATT framework
             // For now, omit until ATTrackingManager integration is added
         }

@@ -76,9 +76,11 @@ quality/**/results*.json
 xcuserdata/
 DerivedData/
 .build/
+sdk/core/ios/.build/
 .swiftpm/
 .xcresult/
 .gradle/
+sdk/core/android/.gradle/
 gradle/
 gradlew
 gradlew.bat

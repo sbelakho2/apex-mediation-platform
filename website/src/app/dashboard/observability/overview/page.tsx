@@ -137,24 +137,24 @@ export default function ObservabilityOverviewPage() {
     <Section>
       <Container className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-h2-sm font-bold uppercase text-primary-blue tracking-tight">Observability Overview</h1>
+        <h1 className="text-h2-sm font-bold uppercase text-gray-900 tracking-tight">Observability Overview</h1>
         <div className="flex items-center gap-2">
           <select
             value={days}
             onChange={(e) => setDays(Number(e.target.value))}
-            className="rounded border px-2 py-2 text-sm"
+            className="input-v2 w-auto text-sm px-3 py-2"
             aria-label="Time range (days)"
           >
             {[1, 3, 7, 14].map((d) => (
               <option key={d} value={d}>{d}d</option>
             ))}
           </select>
-          <button onClick={reload} className="px-3 py-2 text-sm font-bold uppercase rounded bg-sunshine-yellow text-primary-blue">Refresh</button>
+          <button onClick={reload} className="btn-secondary text-sm px-4">Refresh</button>
         </div>
       </div>
 
       {hasCritOrWarn && (
-        <div className="rounded border border-yellow-200 bg-yellow-50 p-3 text-yellow-900">
+        <div className="rounded border border-warning bg-warning/10 p-3 text-warning">
           One or more adapters are breaching SLOs. See badges below; investigate via the Mediation Debugger.
         </div>
       )}

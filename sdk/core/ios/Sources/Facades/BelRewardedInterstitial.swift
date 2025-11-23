@@ -1,93 +1,84 @@
 #if canImport(UIKit)
 import Foundation
+import Dispatch
 import UIKit
 
-/// Public facade for Rewarded Interstitial ads, mirroring Android's BelRewardedInterstitial API.
-/// Combines full-screen display with reward mechanics.
+/// Rewarded interstitial facade with shared cache integration and lifecycle listener support.
+@MainActor
 public enum BelRewardedInterstitial {
     private static var lastPlacement: String?
-    private static var cache: [String: Ad] = [:]
-    
-    /// Reward data returned on completion
-    public struct Reward {
-        public let type: String
-        public let amount: Int
-        
-        public init(type: String, amount: Int) {
-            self.type = type
-            self.amount = amount
-        }
-    }
-    
+
     /// Load a rewarded interstitial ad for the placement.
-    public static func load(placementId: String, completion: @escaping (Result<Ad, Error>) -> Void) {
+    public static func load(placementId: String, listener: BelAdEventListener? = nil) {
         lastPlacement = placementId
         Task { @MainActor in
             do {
-                let ad = try await MediationSDK.shared.loadAd(placementId: placementId)
-                if let ad = ad {
-                    cache[placementId] = ad
-                    completion(.success(ad))
-                } else {
-                    completion(.failure(SDKError.noFill))
+                guard let ad = try await MediationSDK.shared.loadAd(placementId: placementId) else {
+                    throw SDKError.noFill
                 }
+                listener?.onAdLoaded(placementId: placementId)
+                debugPrint("[BelRewardedInterstitial] Cached ad from \(ad.networkName) for placement \(placementId)")
             } catch {
-                completion(.failure(error))
+                listener?.onAdFailedToLoad(placementId: placementId, error: error)
             }
         }
     }
-    
-    /// Show the loaded rewarded interstitial with reward callback
-    /// - Parameters:
-    ///   - viewController: View controller to present from
-    ///   - onRewarded: Called when user earns reward (watched to completion)
-    ///   - onClosed: Called when ad is dismissed
-    /// - Returns: True if ad was shown, false if not ready
+
+    /// Show the loaded rewarded interstitial using the optional listener callbacks.
     @discardableResult
-    public static func show(
-        from viewController: UIViewController,
-        onRewarded: @escaping (Reward) -> Void,
-        onClosed: @escaping () -> Void
-    ) -> Bool {
-        guard let placement = lastPlacement, let ad = cache.removeValue(forKey: placement) else {
+    public static func show(from viewController: UIViewController, placementId: String? = nil, listener: BelAdEventListener? = nil) -> Bool {
+        let targetPlacement = placementId ?? lastPlacement
+        guard let placement = targetPlacement else {
+            listener?.onAdFailedToShow(placementId: "", error: SDKError.invalidPlacement("missing_placement"))
             return false
         }
-        
-        // TODO: Implement full video player with completion tracking
-        // For now, simulate rewarded flow in debug builds
+
+        guard MediationSDK.shared.isAdReady(placementId: placement) else {
+            listener?.onAdFailedToShow(placementId: placement, error: SDKError.noFill)
+            return false
+        }
+
+        Task { @MainActor in
+            guard let ad = await MediationSDK.shared.claimAd(placementId: placement) else {
+                listener?.onAdFailedToShow(placementId: placement, error: SDKError.noFill)
+                return
+            }
+            listener?.onAdShown(placementId: placement)
+            presentDebugRewardedInterstitial(from: viewController, networkName: ad.networkName) { didEarnReward in
+                if didEarnReward {
+                    listener?.onUserEarnedReward(placementId: placement, reward: BelReward(label: "reward", amount: 1))
+                }
+                listener?.onAdClosed(placementId: placement)
+            }
+        }
+        return true
+    }
+
+    /// Check if a rewarded interstitial is cached and ready.
+    public static func isReady(placementId: String? = nil) -> Bool {
+        guard let placement = placementId ?? lastPlacement else { return false }
+        return MediationSDK.shared.isAdReady(placementId: placement)
+    }
+
+    private static func presentDebugRewardedInterstitial(from viewController: UIViewController, networkName: String, completion: @escaping (Bool) -> Void) {
         #if DEBUG
         let alert = UIAlertController(
             title: "Rewarded Interstitial (debug)",
-            message: "Watch video to earn reward?\nNetwork: \(ad.networkName)",
+            message: "Watch video to earn reward?\nNetwork: \(networkName)",
             preferredStyle: .alert
         )
         alert.addAction(UIAlertAction(title: "Watch (Reward)", style: .default) { _ in
-            // Simulate successful completion
-            let reward = Reward(type: "coins", amount: 100)
-            onRewarded(reward)
-            onClosed()
+            completion(true)
         })
         alert.addAction(UIAlertAction(title: "Close (No Reward)", style: .cancel) { _ in
-            // User closed early, no reward
-            onClosed()
+            completion(false)
         })
         viewController.present(alert, animated: true)
         #else
-        // Production: simulate immediate reward for now
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-            let reward = Reward(type: "coins", amount: 100)
-            onRewarded(reward)
-            onClosed()
+            completion(true)
         }
         #endif
-        
-        return true
-    }
-    
-    /// Check if rewarded interstitial is loaded and ready
-    public static func isReady() -> Bool {
-        guard let placement = lastPlacement else { return false }
-        return cache[placement] != nil
     }
 }
 

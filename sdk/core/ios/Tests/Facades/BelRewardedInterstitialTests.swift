@@ -11,27 +11,24 @@ final class BelRewardedInterstitialTests: XCTestCase {
         XCTAssertFalse(BelRewardedInterstitial.isReady())
     }
     
-    func testRewardStructure() {
-        let reward = BelRewardedInterstitial.Reward(type: "coins", amount: 100)
-        
-        XCTAssertEqual(reward.type, "coins")
-        XCTAssertEqual(reward.amount, 100)
-    }
-    
     func testShowWithoutLoad() {
         let vc = UIViewController()
-        var rewardCalled = false
-        var closedCalled = false
+        let listener = CapturingListener()
         
-        let shown = BelRewardedInterstitial.show(
-            from: vc,
-            onRewarded: { _ in rewardCalled = true },
-            onClosed: { closedCalled = true }
-        )
+        let shown = BelRewardedInterstitial.show(from: vc, placementId: "rewarded_interstitial", listener: listener)
         
         XCTAssertFalse(shown, "Should not show when no ad is loaded")
-        XCTAssertFalse(rewardCalled, "Reward callback should not fire")
-        XCTAssertFalse(closedCalled, "Closed callback should not fire")
+        XCTAssertEqual(listener.failedToShowPlacement, "rewarded_interstitial")
+        XCTAssertEqual(listener.failedToShowError as? SDKError, SDKError.noFill)
+    }
+}
+
+private final class CapturingListener: BelAdEventListener {
+    var failedToShowPlacement: String?
+    var failedToShowError: Error?
+    func onAdFailedToShow(placementId: String, error: Error) {
+        failedToShowPlacement = placementId
+        failedToShowError = error
     }
 }
 

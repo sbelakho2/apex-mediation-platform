@@ -447,10 +447,10 @@ interface FormatHeatmapCardProps {
 
 function FormatHeatmapCard({ format, icon, avgEcpm, avgFillRate, avgCtr, count, inactive }: FormatHeatmapCardProps) {
   return (
-    <div className={`border-2 rounded p-4 ${inactive ? 'border-gray-300 bg-gray-50' : 'border-primary-blue'}`}>
+    <div className={`border-2 rounded p-4 ${inactive ? 'border-gray-300 bg-gray-50' : 'border-brand-500'}`}>
       <div className="flex items-center gap-2 mb-3">
         <span className="text-2xl">{icon}</span>
-        <h3 className="font-bold text-primary-blue">{format}</h3>
+        <h3 className="font-bold text-gray-900">{format}</h3>
       </div>
       {inactive ? (
         <p className="text-sm text-gray-600">No active placements</p>
@@ -458,19 +458,19 @@ function FormatHeatmapCard({ format, icon, avgEcpm, avgFillRate, avgCtr, count, 
         <div className="space-y-2 text-sm">
           <div className="flex justify-between">
             <span className="text-gray-600">Avg eCPM:</span>
-            <span className="font-bold text-primary-blue">${avgEcpm.toFixed(2)}</span>
+            <span className="font-bold text-gray-900">${avgEcpm.toFixed(2)}</span>
           </div>
           <div className="flex justify-between">
             <span className="text-gray-600">Fill Rate:</span>
-            <span className="font-bold text-primary-blue">{avgFillRate.toFixed(1)}%</span>
+            <span className="font-bold text-gray-900">{avgFillRate.toFixed(1)}%</span>
           </div>
           <div className="flex justify-between">
             <span className="text-gray-600">Avg CTR:</span>
-            <span className="font-bold text-primary-blue">{avgCtr.toFixed(2)}%</span>
+            <span className="font-bold text-gray-900">{avgCtr.toFixed(2)}%</span>
           </div>
           <div className="flex justify-between">
             <span className="text-gray-600">Count:</span>
-            <span className="font-bold text-primary-blue">{count}</span>
+            <span className="font-bold text-gray-900">{count}</span>
           </div>
         </div>
       )}
@@ -490,7 +490,7 @@ function PlacementCard({ placement, onConfigure, onViewDetails, onActivate }: Pl
     <div className="card p-6">
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-lg font-bold text-primary-blue">{placement.name}</h3>
+          <h3 className="text-lg font-bold text-gray-900">{placement.name}</h3>
           <p className="text-sm text-gray-600">{placement.app} • {placement.format.toUpperCase()}</p>
         </div>
         <div className={`text-sm font-bold ${placement.status === 'active' ? 'text-green-600' : 'text-gray-600'}`}>
@@ -500,19 +500,19 @@ function PlacementCard({ placement, onConfigure, onViewDetails, onActivate }: Pl
       <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-4">
         <div>
           <p className="text-xs text-gray-600 uppercase">Impressions</p>
-          <p className="text-lg font-bold text-primary-blue">{placement.impressions.toLocaleString()}</p>
+          <p className="text-lg font-bold text-gray-900">{placement.impressions.toLocaleString()}</p>
         </div>
         <div>
           <p className="text-xs text-gray-600 uppercase">Revenue</p>
-          <p className="text-lg font-bold text-primary-blue">${placement.revenue.toFixed(2)}</p>
+          <p className="text-lg font-bold text-gray-900">${placement.revenue.toFixed(2)}</p>
         </div>
         <div>
           <p className="text-xs text-gray-600 uppercase">eCPM</p>
-          <p className="text-lg font-bold text-primary-blue">${placement.ecpm.toFixed(2)}</p>
+          <p className="text-lg font-bold text-gray-900">${placement.ecpm.toFixed(2)}</p>
         </div>
         <div>
           <p className="text-xs text-gray-600 uppercase">Fill Rate</p>
-          <p className="text-lg font-bold text-primary-blue">{placement.fillRate}%</p>
+          <p className="text-lg font-bold text-gray-900">{placement.fillRate}%</p>
         </div>
       </div>
       {placement.status !== 'active' && (
@@ -521,8 +521,8 @@ function PlacementCard({ placement, onConfigure, onViewDetails, onActivate }: Pl
         </div>
       )}
       <div className="flex items-center justify-end gap-3 mt-4 pt-4 border-t border-gray-200">
-        <button onClick={onConfigure} className="px-4 py-2 text-sm font-bold text-primary-blue border border-primary-blue rounded">Configure</button>
-        <button onClick={onViewDetails} className="px-4 py-2 text-sm font-bold text-white bg-primary-blue rounded">View Details</button>
+        <button onClick={onConfigure} className="btn-outline px-4 py-2 text-sm">Configure</button>
+        <button onClick={onViewDetails} className="btn-primary px-4 py-2 text-sm">View Details</button>
       </div>
     </div>
   );
@@ -622,7 +622,7 @@ function PlacementModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4" role="dialog" aria-modal="true" aria-labelledby="placement-modal-title" onKeyDown={(e) => { if (e.key === 'Escape') onClose(); }}>
       <div className="w-full max-w-3xl rounded-lg border bg-white shadow-xl" tabIndex={-1}>
         <div className="flex items-start justify-between border-b p-6">
-          <h2 id="placement-modal-title" className="text-primary-blue font-bold uppercase text-lg">{title}</h2>
+          <h2 id="placement-modal-title" className="text-gray-900 font-bold uppercase text-lg">{title}</h2>
           <button onClick={onClose} aria-label="Close dialog" className="text-gray-500 hover:text-gray-900">×</button>
         </div>
 
@@ -824,7 +824,7 @@ function Metric({ label, value }: { label: string; value: string | number }) {
   return (
     <div className="p-3 rounded border">
       <p className="text-xs uppercase text-gray-500 tracking-wide">{label}</p>
-      <p className="text-lg font-bold text-primary-blue">{value}</p>
+      <p className="text-lg font-bold text-gray-900">{value}</p>
     </div>
   );
 }

@@ -1,22 +1,33 @@
 import XCTest
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 @testable import RivalApexMediationSDK
 
 /// Section 3.2: XCTest UI smoke tests with deterministic URLProtocol fixtures
 /// Tests all ad load scenarios with main-queue callback assertions
-final class UISmoke Tests: XCTestCase {
+final class UISmokeTests: XCTestCase {
     
     var sdk: MediationSDK!
     
     override func setUp() async throws {
+    #if os(Linux)
+        throw XCTSkip("UISmokeTests require Apple's networking stack")
+    #else
         // Register MockURLProtocol for deterministic responses
         URLProtocol.registerClass(MockURLProtocolFixture.self)
         
         sdk = MediationSDK.shared
+    #endif
     }
     
     override func tearDown() {
+    #if os(Linux)
+        return
+    #else
         MockURLProtocolFixture.reset()
         URLProtocol.unregisterClass(MockURLProtocolFixture.self)
+    #endif
     }
     
     // MARK: - Interstitial Success Tests
@@ -194,9 +205,8 @@ final class UISmoke Tests: XCTestCase {
         MockURLProtocolFixture.scenario = .timeout
         
         // When: Load ad with short timeout
-        var config = testConfig()
-        config.testMode = true
-        
+        let config = testConfig(testMode: true)
+
         try await sdk.initialize(appId: "test_app", configuration: config)
         
         do {
@@ -273,16 +283,14 @@ final class UISmoke Tests: XCTestCase {
     
     // MARK: - Helpers
     
-    private func testConfig() -> SDKConfig {
+    private func testConfig(testMode: Bool = true) -> SDKConfig {
         return SDKConfig(
             appId: "test_app",
-            endpoints: SDKConfig.Endpoints(
-                configUrl: URL(string: "https://mock-config.test/v1/config")!,
-                auctionUrl: URL(string: "https://mock-auction.test/v1/auction")!
-            ),
+            configEndpoint: "https://mock-config.test/v1/config",
+            auctionEndpoint: "https://mock-auction.test/v1/auction",
             telemetryEnabled: false,
             logLevel: .error,
-            testMode: true,
+            testMode: testMode,
             configSignaturePublicKey: nil
         )
     }

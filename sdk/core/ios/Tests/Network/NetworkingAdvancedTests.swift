@@ -1,5 +1,8 @@
 import XCTest
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 @testable import RivalApexMediationSDK
 
 /// Tests for networking layer with custom URLProtocol mocks
@@ -121,9 +124,17 @@ class MockURLProtocol: URLProtocol {
         
         // Check for mock delay
         let delay = Self.mockDelays[url] ?? 0
+        let timeoutInterval = request.timeoutInterval
+        let shouldTimeout = timeoutInterval > 0 && delay > timeoutInterval
+        let dispatchDelay = shouldTimeout ? timeoutInterval : delay
         
-        DispatchQueue.global().asyncAfter(deadline: .now() + delay) { [weak self] in
+        DispatchQueue.global().asyncAfter(deadline: .now() + dispatchDelay) { [weak self] in
             guard let self = self else { return }
+            
+            if shouldTimeout {
+                self.client?.urlProtocol(self, didFailWithError: URLError(.timedOut))
+                return
+            }
             
             // Check for mock response
             if let mock = Self.mockResponses[url] {

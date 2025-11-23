@@ -76,51 +76,59 @@ let currentConsent = BelAds.getConsent()
 - `ccpaOptOut`: CCPA "Do Not Sell" flag (California users)
 - `coppa`: Children's Online Privacy Protection Act compliance
 
-### 3. Interstitial Ads
+### 3. Listen for Ad Lifecycle Callbacks
+Facades share a cross-format listener so you can react to load/show/reward events without juggling multiple protocols:
+
+```swift
+final class SampleAdListener: BelAdEventListener {
+  func onAdLoaded(placementId: String) {
+    print("Ad ready for \(placementId)")
+  }
+
+  func onAdFailedToShow(placementId: String, error: Error) {
+    print("Failed to show: \(error)")
+  }
+
+  func onUserEarnedReward(placementId: String, reward: BelReward?) {
+    guard let reward else { return }
+    print("User earned \(reward.amount) \(reward.label)")
+  }
+}
+```
+
+Create one listener per placement (or per format) and pass it into the load/show helpers for lifecycle coverage.
+
+### 4. Interstitial Ads
 Full-screen ads shown at natural breaks in your app:
 
 ```swift
 import RivalApexMediationSDK
 
-// Load an interstitial
-BelInterstitial.load(placementId: "interstitial_placement") { result in
-  switch result {
-  case .success(let ad):
-    print("Loaded interstitial from \(ad.networkName)")
-  case .failure(let error):
-    print("Load failed: \(error)")
-  }
-}
+let listener = SampleAdListener()
 
-// Show when ready (typically from a UIViewController)
-if BelInterstitial.isReady() {
-  _ = BelInterstitial.show(from: self)
+BelInterstitial.load(placementId: "interstitial_placement", listener: listener)
+
+if BelInterstitial.isReady(placementId: "interstitial_placement") {
+  _ = BelInterstitial.show(from: self, placementId: "interstitial_placement", listener: listener)
 }
 ```
 
-### 4. Rewarded Ads
+### 5. Rewarded Ads
 Video ads that reward users upon completion:
 
 ```swift
 import RivalApexMediationSDK
 
-// Load a rewarded ad
-BelRewarded.load(placementId: "rewarded_placement") { result in
-  switch result {
-  case .success:
-    print("Rewarded ad loaded")
-  case .failure(let error):
-    print("Load failed: \(error)")
-  }
-}
+let listener = SampleAdListener()
 
-// Show when ready
-if BelRewarded.isReady() {
-  _ = BelRewarded.show(from: self)
+BelRewarded.load(placementId: "rewarded_placement", listener: listener)
+
+if BelRewarded.isReady(placementId: "rewarded_placement") {
+  _ = BelRewarded.show(from: self, placementId: "rewarded_placement", listener: listener)
 }
 ```
 
-### 5. Banner Ads
+### 6. Banner Ads
 Persistent ads anchored to screen positions:
 
 ```swift
@@ -150,54 +158,39 @@ BelBanner.show(placementId: "banner_placement")
 BelBanner.destroy(placementId: "banner_placement")
 ```
 
-### 6. Rewarded Interstitial Ads
+### 7. Rewarded Interstitial Ads
 Full-screen ads with optional rewards:
 
 ```swift
 import RivalApexMediationSDK
 
-// Load rewarded interstitial
-BelRewardedInterstitial.load(placementId: "rewarded_interstitial_placement") { result in
-  // handle success/error
-}
+let listener = SampleAdListener()
 
-// Show with reward callback
-if BelRewardedInterstitial.isReady() {
-  _ = BelRewardedInterstitial.show(
-    from: self,
-    onRewarded: { reward in
-      print("User earned \(reward.amount) \(reward.type)")
-      // Grant reward in your app
-    },
-    onClosed: {
-      print("Ad closed")
-    }
-  )
+BelRewardedInterstitial.load(placementId: "rewarded_interstitial_placement", listener: listener)
+
+if BelRewardedInterstitial.isReady(placementId: "rewarded_interstitial_placement") {
+  _ = BelRewardedInterstitial.show(from: self, placementId: "rewarded_interstitial_placement", listener: listener)
 }
 ```
 
-### 7. App Open Ads
+### 8. App Open Ads
 Ads shown when app returns from background:
 
 ```swift
 import RivalApexMediationSDK
 
-// Load app open ad
-BelAppOpen.load(placementId: "app_open_placement") { result in
-  // handle success/error
-}
+let listener = SampleAdListener()
 
-// Show on app foregrounding (in SceneDelegate or AppDelegate)
-if BelAppOpen.isReady() {
-  _ = BelAppOpen.show(from: rootViewController) {
-    print("App open ad closed")
-  }
+BelAppOpen.load(placementId: "app_open_placement", listener: listener)
+
+if BelAppOpen.isReady(placementId: "app_open_placement") {
+  _ = BelAppOpen.show(from: rootViewController, placementId: "app_open_placement", listener: listener)
 }
 ```
 
 **Note**: App open ads have built-in rate limiting (4 hours between shows).
 
-### 8. Debug Panel
+### 9. Debug Panel
 Access SDK diagnostics and status information:
 
 ```swift
@@ -224,26 +217,23 @@ The SDK uses a comprehensive error taxonomy:
 - **Invalid placement** → `SDKError.invalidPlacement`
 
 ```swift
-BelInterstitial.load(placementId: "test") { result in
-  switch result {
-  case .success:
-    // Ad loaded successfully
-    break
-  case .failure(let error):
-    if let sdkError = error as? SDKError {
-      switch sdkError {
-      case .noFill:
-        print("No ad available - try again later")
-      case .timeout:
-        print("Request timed out - check network")
-      case .status_429:
-        print("Rate limited - wait before retry")
-      default:
-        print("Error: \(sdkError.localizedDescription)")
-      }
+final class LoggingListener: BelAdEventListener {
+  func onAdFailedToLoad(placementId: String, error: Error) {
+    guard let sdkError = error as? SDKError else { return }
+    switch sdkError {
+    case .noFill:
+      print("No ad for \(placementId)")
+    case .timeout:
+      print("Request timed out")
+    case .status_429:
+      print("Rate limited — retry later")
+    default:
+      print("Other error: \(sdkError)")
     }
   }
 }
+
+BelInterstitial.load(placementId: "test", listener: LoggingListener())
 ```
 
 ## Testing

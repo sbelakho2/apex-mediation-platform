@@ -1,66 +1,87 @@
 #if canImport(UIKit)
 import Foundation
+import Dispatch
 import UIKit
 
 /// Public facade for App Open ads, mirroring Android's BelAppOpen API.
 /// Displayed when app transitions from background to foreground.
+@MainActor
 public enum BelAppOpen {
     private static var lastPlacement: String?
-    private static var cache: [String: Ad] = [:]
     private static var lastShowTime: Date?
     private static let minimumHoursBetweenShows: TimeInterval = 4 * 3600 // 4 hours
     
     /// Load an app open ad for the placement.
-    public static func load(placementId: String, completion: @escaping (Result<Ad, Error>) -> Void) {
+    public static func load(placementId: String, listener: BelAdEventListener? = nil) {
         lastPlacement = placementId
         Task { @MainActor in
             do {
-                let ad = try await MediationSDK.shared.loadAd(placementId: placementId)
-                if let ad = ad {
-                    cache[placementId] = ad
-                    completion(.success(ad))
-                } else {
-                    completion(.failure(SDKError.noFill))
+                guard let ad = try await MediationSDK.shared.loadAd(placementId: placementId) else {
+                    throw SDKError.noFill
                 }
+                listener?.onAdLoaded(placementId: placementId)
+                debugPrint("[BelAppOpen] Cached app open ad from \(ad.networkName) for placement \(placementId)")
             } catch {
-                completion(.failure(error))
+                listener?.onAdFailedToLoad(placementId: placementId, error: error)
             }
         }
     }
     
-    /// Show the loaded app open ad
-    /// - Parameters:
-    ///   - viewController: View controller to present from
-    ///   - onClosed: Called when ad is dismissed
-    /// - Returns: True if ad was shown, false if not ready or shown too recently
+    /// Show the loaded app open ad using the optional listener callbacks.
     @discardableResult
-    public static func show(
-        from viewController: UIViewController,
-        onClosed: @escaping () -> Void
-    ) -> Bool {
-        // Check if shown too recently (rate limiting)
+    public static func show(from viewController: UIViewController, placementId: String? = nil, listener: BelAdEventListener? = nil) -> Bool {
         if let lastShow = lastShowTime {
             let timeSinceLastShow = Date().timeIntervalSince(lastShow)
             if timeSinceLastShow < minimumHoursBetweenShows {
+                listener?.onAdFailedToShow(placementId: placementId ?? lastPlacement ?? "", error: SDKError.frequencyLimited)
                 return false
             }
         }
         
-        guard let placement = lastPlacement, let ad = cache.removeValue(forKey: placement) else {
+        let targetPlacement = placementId ?? lastPlacement
+        guard let placement = targetPlacement else {
+            listener?.onAdFailedToShow(placementId: "", error: SDKError.invalidPlacement("missing_placement"))
             return false
         }
         
-        lastShowTime = Date()
+        guard MediationSDK.shared.isAdReady(placementId: placement) else {
+            listener?.onAdFailedToShow(placementId: placement, error: SDKError.noFill)
+            return false
+        }
         
-        // TODO: Implement full-screen app open creative rendering
-        // For now, simulate in debug builds
+        Task { @MainActor in
+            guard let ad = await MediationSDK.shared.claimAd(placementId: placement) else {
+                listener?.onAdFailedToShow(placementId: placement, error: SDKError.noFill)
+                return
+            }
+            lastShowTime = Date()
+            listener?.onAdShown(placementId: placement)
+            presentDebugAppOpen(from: viewController, networkName: ad.networkName) {
+                listener?.onAdClosed(placementId: placement)
+            }
+        }
+        return true
+    }
+    
+    /// Check if app open ad is loaded and ready
+    public static func isReady(placementId: String? = nil) -> Bool {
+        guard let placement = placementId ?? lastPlacement else { return false }
+        return MediationSDK.shared.isAdReady(placementId: placement)
+    }
+    
+    /// Reset the show time limit (for testing purposes)
+    public static func resetShowTimeLimit() {
+        lastShowTime = nil
+    }
+    
+    private static func presentDebugAppOpen(from viewController: UIViewController, networkName: String, completion: @escaping () -> Void) {
         #if DEBUG
         let vc = UIViewController()
         vc.view.backgroundColor = .systemBackground
         vc.modalPresentationStyle = .fullScreen
         
         let label = UILabel(frame: .zero)
-        label.text = "App Open Ad (debug)\n\(ad.networkName)"
+        label.text = "App Open Ad (debug)\n\(networkName)"
         label.textAlignment = .center
         label.numberOfLines = 0
         label.translatesAutoresizingMaskIntoConstraints = false
@@ -75,30 +96,12 @@ public enum BelAppOpen {
         
         viewController.present(vc, animated: true) {
             DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-                vc.dismiss(animated: true) {
-                    onClosed()
-                }
+                vc.dismiss(animated: true, completion: completion)
             }
         }
         #else
-        // Production: simulate immediate close
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            onClosed()
-        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: completion)
         #endif
-        
-        return true
-    }
-    
-    /// Check if app open ad is loaded and ready
-    public static func isReady() -> Bool {
-        guard let placement = lastPlacement else { return false }
-        return cache[placement] != nil
-    }
-    
-    /// Reset the show time limit (for testing purposes)
-    public static func resetShowTimeLimit() {
-        lastShowTime = nil
     }
 }
 

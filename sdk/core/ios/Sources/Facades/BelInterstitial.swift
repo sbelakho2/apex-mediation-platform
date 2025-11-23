@@ -1,43 +1,68 @@
 #if canImport(UIKit)
 import Foundation
+import Dispatch
 import UIKit
 
-/// Tiny public facade for Interstitial ads, mirroring Android’s BelInterstitial API.
-/// Keeps API surface stable and boring for integrators while delegating to MediationSDK.
+/// Public facade for interstitial ads with lifecycle callbacks routed through BelAdEventListener.
+@MainActor
 public enum BelInterstitial {
     private static var lastPlacement: String?
-    private static var cache: [String: Ad] = [:]
 
-    /// Load an interstitial for the placement. On success, the ad is cached and isReady() will return true.
-    public static func load(placementId: String, completion: @escaping (Result<Ad, Error>) -> Void) {
+    /// Load an interstitial for the placement. The result is cached inside MediationSDK.
+    public static func load(placementId: String, listener: BelAdEventListener? = nil) {
         lastPlacement = placementId
         Task { @MainActor in
             do {
-                let ad = try await MediationSDK.shared.loadAd(placementId: placementId)
-                if let ad = ad {
-                    cache[placementId] = ad
-                    completion(.success(ad))
-                } else {
-                    completion(.failure(SDKError.noFill))
+                guard let ad = try await MediationSDK.shared.loadAd(placementId: placementId) else {
+                    throw SDKError.noFill
                 }
+                listener?.onAdLoaded(placementId: placementId)
+                debugPrint("[BelInterstitial] Cached interstitial from \(ad.networkName) for placement \(placementId)")
             } catch {
-                completion(.failure(error))
+                listener?.onAdFailedToLoad(placementId: placementId, error: error)
             }
         }
     }
 
-    /// Attempts to show the last loaded interstitial. Returns true if an ad was shown.
-    /// Note: Real rendering will be added later; for now this returns whether an ad exists in cache.
+    /// Show a cached interstitial. Returns true if a cached ad was consumed.
     @discardableResult
-    public static func show(from viewController: UIViewController) -> Bool {
-        guard let placement = lastPlacement, let ad = cache.removeValue(forKey: placement) else { return false }
-        // TODO: hook OM SDK measurement and real renderer when ready.
-        // For now, simulate a show by presenting a lightweight placeholder view controller for a brief moment (debug builds only).
+    public static func show(from viewController: UIViewController, placementId: String? = nil, listener: BelAdEventListener? = nil) -> Bool {
+        let targetPlacement = placementId ?? lastPlacement
+        guard let placement = targetPlacement else {
+            listener?.onAdFailedToShow(placementId: "", error: SDKError.invalidPlacement("missing_placement"))
+            return false
+        }
+
+        guard MediationSDK.shared.isAdReady(placementId: placement) else {
+            listener?.onAdFailedToShow(placementId: placement, error: SDKError.noFill)
+            return false
+        }
+
+        Task { @MainActor in
+            guard let ad = await MediationSDK.shared.claimAd(placementId: placement) else {
+                listener?.onAdFailedToShow(placementId: placement, error: SDKError.noFill)
+                return
+            }
+            listener?.onAdShown(placementId: placement)
+            presentDebugPlaceholder(from: viewController, networkName: ad.networkName) {
+                listener?.onAdClosed(placementId: placement)
+            }
+        }
+        return true
+    }
+
+    /// Whether an ad is cached for the placement (defaults to last loaded placement when omitted).
+    public static func isReady(placementId: String? = nil) -> Bool {
+        guard let placement = placementId ?? lastPlacement else { return false }
+        return MediationSDK.shared.isAdReady(placementId: placement)
+    }
+
+    private static func presentDebugPlaceholder(from viewController: UIViewController, networkName: String, completion: @escaping () -> Void) {
         #if DEBUG
         let vc = UIViewController()
         vc.view.backgroundColor = .systemBackground
         let label = UILabel(frame: .zero)
-        label.text = "Showing interstitial (debug placeholder) — network=\(ad.networkName)"
+        label.text = "Showing interstitial placeholder — network=\(networkName)"
         label.textAlignment = .center
         label.numberOfLines = 0
         label.translatesAutoresizingMaskIntoConstraints = false
@@ -49,16 +74,13 @@ public enum BelInterstitial {
             label.trailingAnchor.constraint(lessThanOrEqualTo: vc.view.trailingAnchor, constant: -16)
         ])
         viewController.present(vc, animated: true) {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { vc.dismiss(animated: true) }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                vc.dismiss(animated: true, completion: completion)
+            }
         }
+        #else
+        completion()
         #endif
-        return true
-    }
-
-    /// Whether the last loaded interstitial is ready to be shown.
-    public static func isReady() -> Bool {
-        guard let placement = lastPlacement else { return false }
-        return cache[placement] != nil
     }
 }
 

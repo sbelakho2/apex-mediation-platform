@@ -128,25 +128,25 @@ export default function MediationDebuggerPage() {
     <Section>
       <Container className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-h2-sm font-bold uppercase text-primary-blue tracking-tight">Mediation Debugger</h1>
+        <h1 className="text-h2-sm font-bold uppercase text-gray-900 tracking-tight">Mediation Debugger</h1>
         <div className="flex items-center gap-2">
           <input
             type="text"
             value={placementId}
             onChange={(e) => setPlacementId(e.target.value)}
             placeholder="Placement ID (optional)"
-            className="w-64 rounded border px-3 py-2 text-sm"
+            className="input-v2 w-64 text-sm"
           />
           <select
             value={limit}
             onChange={(e) => setLimit(Number(e.target.value))}
-            className="rounded border px-2 py-2 text-sm"
+            className="input-v2 w-auto text-sm px-3 py-2"
           >
             {[25, 50, 100, 200].map((n) => (
               <option key={n} value={n}>{n}</option>
             ))}
           </select>
-          <button onClick={reload} className="px-3 py-2 text-sm font-bold uppercase rounded bg-sunshine-yellow text-primary-blue">Refresh</button>
+          <button onClick={reload} className="btn-secondary text-sm px-4">Refresh</button>
         </div>
       </div>
 

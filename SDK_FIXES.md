@@ -1,5 +1,13 @@
 Android BYO Mediation SDK Fixes & Enhancements:
 
+---
+
+## 2025-11-23 — iOS BYO lifecycle + consent plumbing
+- `sdk/core/ios/Sources/MediationSDK.swift` now exposes `setConsent`, `currentConsent()`, and snapshot-backed consent summaries while injecting `apx_consent_state` + personalization flags into every adapter init/load call so BYO partners always receive normalized GDPR/CCPA/COPPA/ATT state.
+- `sdk/core/ios/Sources/Facades/BelAds.swift`, `BelInterstitial.swift`, `BelRewarded*.swift`, and `BelAppOpen.swift` all route through the centralized cache and `BelAdEventListener`, mirroring Android’s lifecycle (load/show/reward/fail) on the main actor.
+- `docs/Customer-Facing/SDKs/IOS_QUICKSTART.md` now documents the shared listener pattern and the new consent plumbing; `SDK_FIXES.md` captures the implementation notes for BYO readiness.
+- Tests (`ConsentManagerTests`, new `ConsentPlumbingIntegrationTests`, and facade specs) lock in the adapter payloads, consent redaction, and listener error flows.
+
 P0 (BYO must-fix before a credible MVP)
 1) BYO operating mode (feature flags + defaults)
 

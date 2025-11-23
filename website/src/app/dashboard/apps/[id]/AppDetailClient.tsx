@@ -118,7 +118,7 @@ export default function AppDetailClient({ id }: { id: string }) {
     <Section>
       <Container className="space-y-6">
         <Breadcrumbs items={crumbs} />
-        <h1 className="text-h2-sm font-bold uppercase text-primary-blue tracking-tight">App Details</h1>
+        <h1 className="text-h2-sm font-bold uppercase text-gray-900 tracking-tight">App Details</h1>
 
       {loading ? (
         <div className="space-y-3" aria-busy="true">
@@ -142,19 +142,19 @@ export default function AppDetailClient({ id }: { id: string }) {
             <div className="flex items-start justify-between">
               <div>
                 <p className="text-sm text-gray-600">Name</p>
-                <h2 className="text-2xl font-bold text-primary-blue">{appConfig.name}</h2>
+                <h2 className="text-2xl font-bold text-gray-900">{appConfig.name}</h2>
                 <div className="mt-2 text-sm text-gray-600 flex gap-3">
                   <span>
-                    Platform: <strong className="text-primary-blue">{appConfig.platform.toUpperCase()}</strong>
+                    Platform: <strong className="text-gray-900">{appConfig.platform.toUpperCase()}</strong>
                   </span>
                   {appConfig.bundleId && (
                     <span>
-                      Bundle ID: <strong className="text-primary-blue">{appConfig.bundleId}</strong>
+                      Bundle ID: <strong className="text-gray-900">{appConfig.bundleId}</strong>
                     </span>
                   )}
                   {appConfig.packageName && (
                     <span>
-                      Package: <strong className="text-primary-blue">{appConfig.packageName}</strong>
+                      Package: <strong className="text-gray-900">{appConfig.packageName}</strong>
                     </span>
                   )}
                 </div>
@@ -163,14 +163,14 @@ export default function AppDetailClient({ id }: { id: string }) {
                 <button
                   onClick={toggleEnabled}
                   disabled={saving}
-                  className="px-4 py-2 text-sm border rounded hover:bg-gray-50 disabled:opacity-50"
+                  className="btn-secondary text-sm px-4 disabled:opacity-50"
                 >
                   {appConfig.enabled ? 'Disable' : 'Enable'}
                 </button>
                 <button
                   onClick={rotateKey}
                   disabled={saving}
-                  className="px-4 py-2 text-sm border-2 border-primary-blue text-primary-blue rounded hover:bg-primary-blue hover:text-white disabled:opacity-50"
+                  className="btn-outline px-4 py-2 text-sm disabled:opacity-50"
                 >
                   Rotate SDK Key
                 </button>
@@ -190,7 +190,7 @@ export default function AppDetailClient({ id }: { id: string }) {
           </div>
 
           <div className="card p-6">
-            <h3 className="text-primary-blue font-bold uppercase text-lg mb-4 border-b-2 border-sunshine-yellow pb-2">
+            <h3 className="text-gray-900 font-bold uppercase text-lg mb-4 border-b-2 border-gray-200 pb-2">
               Next steps
             </h3>
             <ul className="list-disc list-inside text-sm text-gray-700 space-y-2">

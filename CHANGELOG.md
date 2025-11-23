@@ -1,3 +1,26 @@
+Changelog — iOS BYO Facade Lifecycle & Consent Plumbing (2025-11-23)
+
+Summary
+- Centralizes consent APIs behind `MediationSDK.shared`, keeps snapshots redacted, and forwards standardized payloads (`apx_consent_state`, personalization flags) to every adapter init/load call.
+- Refactors the iOS Bel facades (interstitial, rewarded, rewarded interstitial, app open) to use the shared cache plus `BelAdEventListener`, mirroring Android’s lifecycle callbacks while staying on the main actor.
+- Refreshes the iOS quick start + SDK fixes doc so integrators see the new listener-based API and understand how consent propagates through the stack.
+
+What changed (highlights)
+- Mediation runtime
+  - `sdk/core/ios/Sources/MediationSDK.swift` now exposes `setConsent`, `currentConsent()`, `consentSummary`, and injects consent/ad-personalization metadata into adapter configuration. Runtime snapshots carry redacted consent info for `BelAds.getDebugInfo()`.
+  - `sdk/core/ios/Sources/Consent/ConsentManager.swift` accepts injectable `UserDefaults` for tests and adds `toAdapterConsentPayload(...)` so adapters receive normalized GDPR/CCPA/COPPA + ATT state.
+- Facades & networking
+  - `BelAds`, `BelInterstitial`, `BelRewarded`, `BelRewardedInterstitial`, and `BelAppOpen` now delegate consent access to `MediationSDK.shared`, rely on the central cache, and emit lifecycle events through `BelAdEventListener` (including reward callbacks).
+  - `sdk/core/ios/Sources/Network/AuctionClient.swift` sources consent metadata/personalization flags from MediationSDK to keep S2S payloads aligned with the runtime state.
+- Documentation & tests
+  - `docs/Customer-Facing/SDKs/IOS_QUICKSTART.md` and `SDK_FIXES.md` describe the listener pattern plus centralized consent surface so publishers know what changed.
+  - Added/updated tests (`ConsentManagerTests`, new `ConsentPlumbingIntegrationTests`, facade specs) to cover adapter payloads, consent redaction, and listener failure flows.
+
+Validation and QA
+- iOS SDK: `swift test --package-path sdk/core/ios`
+
+---
+
 Changelog — Android SDK Runtime Bridge + Docs Refresh (2025-11-21)
 
 Summary
@@ -1674,29 +1697,3 @@ Validation
 - Functional behavior remains unchanged for adapter loads; S2S path is gated by mode/flags.
 
 ---
----
-Changelog — WEBSITE_FIX Final Sweep Completion (2025-11-21)
-
-Summary
-- Completed final WEBSITE_FIX migration across the Website: marketing, docs catch‑all, and dashboard surfaces now use tokenized v2 primitives and brand/gray semantic tokens. Legacy palette utilities have been removed or safely aliased.
-
-What changed (highlights)
-- Docs catch‑all (`website/src/app/[...slug]/page.tsx`): finished replacing legacy `primary-blue`/`sunshine-yellow` classes with tokenized equivalents; standardized cards, headings, and rings to neutral/brand tokens; ensured focus rings via global `--focus`.
-- Global tokens (`website/src/app/globals.css`): fixed `:root` selector earlier; removed raw legacy color CSS variables; kept deprecated utility class names mapping to brand tokens for safety (`.btn-primary-yellow`, `.card-blue`, `.input`) while primary usage has moved to `.btn-*`, `.card-v2`, `.input-v2`.
-- Tailwind mapping (`website/tailwind.config.ts`): legacy color aliases now point to WEBSITE_FIX tokens (e.g., `primary-blue` → `brand-600`, `sunshine-yellow` → `brand-100`) to prevent regressions during cleanup.
-- Dashboard pages: Overview, Placements, Networks, Settings, Revenue, Fraud, Analytics, Apps: verified usage of `.card-v2`, `.btn-*`, `.input-v2`; added/kept CLS guards where relevant.
-- Reconciliation (`/dashboard/reconciliation`): scaffolded with wizard/table skeletons; static step indicator added.
-- Transparency: Receipts bulk‑action placeholder; Config Rollouts danger semantics for Rollback.
-
-Verification
-- Website Jest suite (JS) passes: `website/src/__tests__/security.headers.test.js`.
-- Production build (Next.js 14) succeeds with minor non‑blocking warnings (unescaped quotes/unused vars; metadataBase notice; dynamic server usage warning for `/api/auth/me`).
-
-Next steps (non‑blocking)
-- Run Lighthouse/axe snapshots on Overview, Placements, Transparency (desktop + mobile emulation) and capture quick‑win fixes.
-- Optionally remove the remaining deprecated utility class stubs (`.btn-primary-yellow`, `.card-blue`, `.input`) once searches confirm zero references.
-
-Files:
-- `website/src/app/[...slug]/page.tsx`
-- `website/src/app/globals.css`
-- `website/tailwind.config.ts`

@@ -110,7 +110,7 @@ export default function PlacementDetailClient({ id }: { id: string }) {
   return (
     <div className="p-6 space-y-6">
       <Breadcrumbs items={crumbs} />
-      <h1 className="text-h2-sm font-bold uppercase text-primary-blue tracking-tight">Placement Details</h1>
+      <h1 className="text-h2-sm font-bold uppercase text-gray-900 tracking-tight">Placement Details</h1>
       {loading ? (
         <div className="space-y-3" aria-busy="true">
           {[...Array(3)].map((_, i) => (
@@ -127,18 +127,18 @@ export default function PlacementDetailClient({ id }: { id: string }) {
             <div className="flex items-start justify-between">
               <div>
                 <p className="text-sm text-gray-600">Name</p>
-                <h2 className="text-2xl font-bold text-primary-blue">{placement.name}</h2>
+                <h2 className="text-2xl font-bold text-gray-900">{placement.name}</h2>
                 <div className="mt-2 text-sm text-gray-600 flex gap-3">
-                  <span>App: <strong className="text-primary-blue">{placement.app}</strong></span>
-                  <span>Format: <strong className="text-primary-blue">{placement.format.toUpperCase()}</strong></span>
+                  <span>App: <strong className="text-gray-900">{placement.app}</strong></span>
+                  <span>Format: <strong className="text-gray-900">{placement.format.toUpperCase()}</strong></span>
                   <span>Status: <strong className={placement.status === 'active' ? 'text-green-600' : 'text-gray-600'}>{placement.status}</strong></span>
                 </div>
               </div>
               <div className="flex items-center gap-3">
-                <button onClick={toggleActive} className="px-4 py-2 text-sm border rounded hover:bg-gray-50">
+                <button onClick={toggleActive} className="btn-secondary text-sm px-4">
                   {placement.status === 'active' ? 'Deactivate' : 'Activate'}
                 </button>
-                <button onClick={archive} className="px-4 py-2 text-sm border-2 border-red-500 text-red-600 rounded hover:bg-red-50">
+                <button onClick={archive} className="px-4 py-2 text-sm rounded text-white bg-[var(--danger)] hover:bg-[#b91c1c]">
                   Archive
                 </button>
               </div>
@@ -153,7 +153,7 @@ export default function PlacementDetailClient({ id }: { id: string }) {
           </div>
 
           <div className="card p-6">
-            <h3 className="text-primary-blue font-bold uppercase text-lg mb-4 border-b-2 border-sunshine-yellow pb-2">Next steps</h3>
+            <h3 className="text-gray-900 font-bold uppercase text-lg mb-4 border-b-2 border-gray-200 pb-2">Next steps</h3>
             <ul className="list-disc list-inside text-sm text-gray-700 space-y-2">
               <li>Review adapter configuration for this placement in Settings.</li>
               <li>Verify live traffic in Observability → Metrics and Debugger.</li>
@@ -170,7 +170,7 @@ function Metric({ label, value }: { label: string; value: string }) {
   return (
     <div className="card p-6">
       <p className="text-xs text-gray-600 uppercase">{label}</p>
-      <p className="text-lg font-bold text-primary-blue">{value}</p>
+      <p className="text-lg font-bold text-gray-900">{value}</p>
     </div>
   );
 }
