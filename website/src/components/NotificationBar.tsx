@@ -19,7 +19,7 @@ export default function NotificationBar() {
         </div>
 
         <p className="text-sm md:text-base text-white font-medium">
-          🎉 New: Real-time bidding with 5 premium networks now live!
+          🎉 Bring-your-own SDKs now ship 15 built-in adapters across Android, iOS, Unity, CTV, and Web.
         </p>
 
         <button

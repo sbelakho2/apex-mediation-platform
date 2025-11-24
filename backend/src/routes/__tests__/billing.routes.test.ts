@@ -108,11 +108,11 @@ jest.mock('../../controllers/billing.controller', () => ({
       discrepancies: []
     });
   }),
-  calculateRevenueShare: jest.fn((req, res) => {
-    res.json({ success: true, data: { gross_revenue_cents: req.body?.gross_revenue_cents ?? 0 } });
+  calculatePlatformFee: jest.fn((req, res) => {
+    res.json({ success: true, data: { gross_revenue_cents: req.body?.gross_revenue_cents ?? 0, tier: { id: 'starter' } } });
   }),
-  getTiers: jest.fn((req, res) => {
-    res.json({ success: true, data: { tiers: [] } });
+  getPlatformTiers: jest.fn((req, res) => {
+    res.json({ success: true, data: [{ id: 'starter', name: 'Tier 0 — Starter' }] });
   }),
 }));
 
@@ -186,6 +186,31 @@ describe('Billing Routes', () => {
 
       expect(response.body).toHaveProperty('status');
       expect(response.body.status).toBe('completed');
+    });
+  });
+
+  describe('POST /api/v1/billing/platform-fees/calculate', () => {
+    it('returns platform fee calculation payload', async () => {
+      const response = await request(app)
+        .post('/api/v1/billing/platform-fees/calculate')
+        .send({ gross_revenue_cents: 2500000 })
+        .expect(200);
+
+      expect(response.body).toHaveProperty('success', true);
+      expect(response.body.data).toHaveProperty('gross_revenue_cents', 2500000);
+      expect(response.body.data).toHaveProperty('tier');
+    });
+  });
+
+  describe('GET /api/v1/billing/platform-fees/tiers', () => {
+    it('returns tier metadata', async () => {
+      const response = await request(app)
+        .get('/api/v1/billing/platform-fees/tiers')
+        .expect(200);
+
+      expect(response.body).toHaveProperty('success', true);
+      expect(Array.isArray(response.body.data)).toBe(true);
+      expect(response.body.data[0]).toHaveProperty('id');
     });
   });
 });

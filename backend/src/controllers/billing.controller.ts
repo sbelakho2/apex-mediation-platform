@@ -6,7 +6,7 @@ import { usageMeteringService } from '../services/billing/UsageMeteringService';
 import { invoiceService } from '../services/invoiceService';
 import { reconciliationService } from '../services/reconciliationService';
 import { migrationAssistantService } from '../services/billing/migrationAssistantService';
-import { revenueShareService } from '../services/billing/revenueShareService';
+import { platformFeeService } from '../services/billing/platformFeeService';
 
 /**
  * GET /api/v1/billing/usage/current
@@ -297,59 +297,83 @@ export const reconcileBilling = async (
 };
 
 /**
- * POST /api/v1/billing/revenue-share/calculate
- * Calculate revenue share with marginal tier breakdown
+ * POST /api/v1/billing/platform-fees/calculate
+ * Calculate platform fee for BYO tiers
  */
-export const calculateRevenueShare = async (
+export const calculatePlatformFee = async (
   req: Request,
   res: Response,
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { gross_revenue_cents, is_ctv = false } = req.body;
+    const { gross_revenue_cents, custom_enterprise_rate_percent } = req.body || {};
 
     if (typeof gross_revenue_cents !== 'number' || gross_revenue_cents < 0) {
       throw new AppError('Invalid gross_revenue_cents (must be non-negative number)', 400);
     }
 
-    const calculation = revenueShareService.calculateRevenueShare(
-      gross_revenue_cents,
-      Boolean(is_ctv)
-    );
+    const calculation = platformFeeService.calculatePlatformFee(gross_revenue_cents, {
+      customEnterpriseRatePercent:
+        typeof custom_enterprise_rate_percent === 'number'
+          ? custom_enterprise_rate_percent
+          : undefined,
+    });
 
     res.json({
       success: true,
-      data: calculation,
+      data: {
+        ...calculation,
+        tier: {
+          id: calculation.tier.id,
+          name: calculation.tier.name,
+          description: calculation.tier.description,
+          min_revenue_cents: calculation.tier.min_revenue_cents,
+          max_revenue_cents: calculation.tier.max_revenue_cents,
+          rate: calculation.tier.rate,
+          min_rate: calculation.tier.min_rate,
+          max_rate: calculation.tier.max_rate,
+          example_fee_note: calculation.tier.example_fee_note,
+        },
+      },
     });
   } catch (error) {
-    logger.error('Error calculating revenue share', { error, body: req.body });
+    logger.error('Error calculating platform fee', { error, body: req.body });
     next(error);
   }
 };
 
 /**
- * GET /api/v1/billing/tiers
- * Get revenue share tier configuration
+ * GET /api/v1/billing/platform-fees/tiers
+ * Get platform fee tier configuration
  */
-export const getTiers = async (
-  req: Request,
+export const getPlatformTiers = async (
+  _req: Request,
   res: Response,
   next: NextFunction
 ): Promise<void> => {
   try {
-    const tiers = revenueShareService.getTiers();
-    const ctvPremium = revenueShareService.getCTVPremium();
+    const tiers = platformFeeService.getTiers();
 
     res.json({
       success: true,
-      data: {
-        tiers,
-        ctv_premium_points: ctvPremium,
-        note: 'CTV/web video adds +2pp to each tier rate',
+      data: tiers.map((tier) => ({
+        id: tier.id,
+        name: tier.name,
+        description: tier.description,
+        min_revenue_cents: tier.min_revenue_cents,
+        max_revenue_cents: tier.max_revenue_cents,
+        rate: tier.rate,
+        min_rate: tier.min_rate,
+        max_rate: tier.max_rate,
+        example_fee_note: tier.example_fee_note,
+      })),
+      metadata: {
+        currency: 'USD',
+        interpretation: 'Rates apply per app per month based on mediated revenue',
       },
     });
   } catch (error) {
-    logger.error('Error fetching tier configs', { error });
+    logger.error('Error fetching platform tier configs', { error });
     next(error);
   }
 };

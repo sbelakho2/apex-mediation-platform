@@ -1,0 +1,56 @@
+{
+  "$schema": "https://grafana.com/schemas/v0/dashboard.schema.json",
+  "title": "VRA — Reconcile & Deltas",
+  "uid": "vra-reconcile",
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "tags": ["vra", "recon", "reconcile", "deltas"],
+  "time": { "from": "now-24h", "to": "now" },
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "Reconcile runs (rate)",
+      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+      "targets": [
+        { "refId": "A", "expr": "sum(rate(vra_reconcile_duration_seconds_count[5m]))" }
+      ]
+    },
+    {
+      "type": "heatmap",
+      "title": "Reconcile duration p95",
+      "description": "Histogram quantile over reconcile duration buckets",
+      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+      "targets": [
+        { "refId": "A", "expr": "histogram_quantile(0.95, sum by (le)(rate(vra_reconcile_duration_seconds_bucket[5m])))" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Deltas by kind (rate)",
+      "gridPos": { "x": 0, "y": 8, "w": 24, "h": 8 },
+      "targets": [
+        { "refId": "A", "expr": "sum(rate(vra_reconcile_rows_total{kind=\"underpay\"}[5m]))", "legendFormat": "underpay" },
+        { "refId": "B", "expr": "sum(rate(vra_reconcile_rows_total{kind=\"timing_lag\"}[5m]))", "legendFormat": "timing_lag" },
+        { "refId": "C", "expr": "sum(rate(vra_reconcile_rows_total{kind=\"ivt_outlier\"}[5m]))", "legendFormat": "ivt_outlier" },
+        { "refId": "D", "expr": "sum(rate(vra_reconcile_rows_total{kind=\"fx_mismatch\"}[5m]))", "legendFormat": "fx_mismatch" },
+        { "refId": "E", "expr": "sum(rate(vra_reconcile_rows_total{kind=\"viewability_gap\"}[5m]))", "legendFormat": "viewability_gap" }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Deltas emitted (24h)",
+      "gridPos": { "x": 0, "y": 16, "w": 6, "h": 6 },
+      "targets": [ { "refId": "A", "expr": "sum(increase(vra_reconcile_rows_total[24h]))" } ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Empty results and CH fallbacks (rate)",
+      "gridPos": { "x": 6, "y": 16, "w": 18, "h": 6 },
+      "targets": [
+        { "refId": "A", "expr": "sum(rate(vra_empty_results_total{op=~\"overview|deltas_count|deltas_list|monthly_digest\"}[5m]))", "legendFormat": "empty_results" },
+        { "refId": "B", "expr": "sum(rate(vra_clickhouse_fallback_total[5m]))", "legendFormat": "ch_fallbacks" }
+      ]
+    }
+  ]
+}

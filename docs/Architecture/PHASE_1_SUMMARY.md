@@ -26,7 +26,7 @@
 **Components Created & Integrated:**
 
 1. **NotificationBar** - Golden yellow banner with scalloped SVG edge
-   _"🎉 New: Real-time bidding with 5 premium networks now live!"_
+   _"🎉 Bring-your-own SDKs now ship 15 built-in adapters across Android, iOS, Unity, CTV, and Web."_
 
 2. **HomeNav** - Horizontal menu + hamburger mobile overlay
    _Features, Pricing, Documentation, Blog | Sign In, Sign Up_

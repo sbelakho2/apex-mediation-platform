@@ -247,7 +247,7 @@
   ```
 - [ ] Configure event tracking:
   ```javascript
-  umami.track('signup', { plan: 'indie' });
+  umami.track('signup', { plan: 'starter' });
   umami.track('sdk_download', { platform: 'ios' });
   ```
 
@@ -471,8 +471,8 @@
     GROUP BY customer_id, plan_type
   ) subquery
   WHERE 
-    (plan_type = 'indie' AND avg_monthly_impressions > 800000) OR
-    (plan_type = 'studio' AND avg_monthly_impressions > 8000000);
+    (plan_type = 'starter' AND avg_monthly_impressions > 800000) OR
+    (plan_type = 'growth' AND avg_monthly_impressions > 8000000);
   ```
 - [ ] Send upsell emails:
   - Subject: "You're outgrowing your plan 🚀"

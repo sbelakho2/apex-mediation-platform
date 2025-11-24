@@ -45,3 +45,25 @@ groups:
         annotations:
           summary: "VRA proofs verification failures detected"
           description: "One or more proofs failed verification in the last 30m. Inspect proofs_daily_roots and monthly digest."
+
+      # Reconcile delta spike by kind (any kind emits continuously)
+      - alert: VRA_Reconcile_Deltas_Spike
+        expr: sum(rate(vra_reconcile_rows_total[5m])) > 50
+        for: 10m
+        labels:
+          severity: warning
+          service: vra
+        annotations:
+          summary: "VRA reconcile deltas spiking (>50/5m)"
+          description: "Reconcile is emitting more than 50 deltas per 5 minutes across kinds. Check the Reconcile & Deltas dashboard."
+
+      # ClickHouse fallbacks for VRA operations elevating
+      - alert: VRA_ClickHouse_Fallbacks
+        expr: sum(rate(vra_clickhouse_fallback_total[5m])) > 0
+        for: 15m
+        labels:
+          severity: warning
+          service: vra
+        annotations:
+          summary: "VRA ClickHouse fallbacks detected"
+          description: "VRA operations are falling back to empty results for >15m. Inspect ClickHouse availability and safeQuery logs."

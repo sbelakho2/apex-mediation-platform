@@ -39,10 +39,10 @@ Response (200):
     "total_overage_cost": 12.34
   },
   "subscription": {
-    "plan_type": "studio",
-    "included_impressions": 100000,
-    "included_api_calls": 100000,
-    "included_data_transfer_gb": 10
+    "plan_type": "growth",
+    "included_impressions": 10000000,
+    "included_api_calls": 1000000,
+    "included_data_transfer_gb": 500
   }
 }
 ```

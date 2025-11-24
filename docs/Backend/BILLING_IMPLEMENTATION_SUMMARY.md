@@ -87,10 +87,11 @@ Successfully implemented complete billing platform infrastructure covering:
 
 ### Service Enhancement
 ✅ **UsageMeteringService Extension** (`backend/services/billing/UsageMeteringService.ts`)
-- **getSubscriptionDetails(customerId)** - Returns plan limits from PLAN_LIMITS constant
-  - Indie: 5M impressions, 100K API calls, 500GB data
-  - Studio: 25M impressions, 500K API calls, 2TB data
-  - Enterprise: Unlimited
+- **getSubscriptionDetails(customerId)** - Returns plan limits from the canonical platform tier map
+  - Starter: 1M impressions, 100K API calls, 50GB data
+  - Growth: 10M impressions, 1M API calls, 500GB data
+  - Scale: 50M impressions, 5M API calls, 2.5TB data
+  - Enterprise: 100M impressions, 10M API calls, 5TB data
 - Integration with existing `calculateOverages()` method
 - Support for real-time usage tracking via ClickHouse
 

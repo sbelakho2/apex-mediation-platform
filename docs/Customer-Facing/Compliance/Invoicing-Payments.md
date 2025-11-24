@@ -475,7 +475,7 @@ curl "https://api.apexmediation.ee/v1/billing/exchange-rates?date=2025-11-04" \
    - We filter fraud/invalid clicks
    - Refunds from ad networks
    - Typically 1-3% of traffic
-   - Deducted before revenue share calculation
+  - Deducted before platform fee calculation
 
 2. **Currency Exchange**
    - Some networks pay in different currencies
@@ -494,10 +494,10 @@ curl "https://api.apexmediation.ee/v1/billing/exchange-rates?date=2025-11-04" \
    - Detailed in invoice notes
    - Negative adjustments carry forward
 
-5. **CTV/Video Premium**
-   - +2pp surcharge for CTV/OTT/web video traffic
-   - Itemized separately in invoice
-   - We track this automatically
+5. **Channel Mix Classification**
+  - Dashboard shows mobile vs. CTV/web video revenue
+  - Platform fee applies to total mediated revenue (no separate surcharge)
+  - Add-ons, if enabled, are itemized separately
 
 ### Adjustments
 
@@ -604,7 +604,7 @@ We'll investigate and resend if needed.
 
 ### Do you charge any fees?
 
-**No!** Our revenue share (8-15%) is all-inclusive. No setup fees, no monthly fees, no hidden fees.
+**No hidden fees.** You pay the platform fee for your tier (0–2.5% or negotiated enterprise rate). No setup fees, no monthly minimums, no surprises.
 
 Exception: PayPal transactions have PayPal's standard fees (2.9% + $0.30).
 

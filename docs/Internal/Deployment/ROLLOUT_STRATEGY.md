@@ -124,21 +124,23 @@ aws elasticache create-replication-group \
 # - Configure billing portal
 # - Set up webhooks
 
-# 2. Create Stripe Products & Prices
+# 2. Create Stripe Products & Usage-Based Prices
 stripe products create \
-  --name "ApexMediation Indie Plan" \
-  --description "1M impressions/month"
+  --name "ApexMediation Growth Tier" \
+  --description "2.5% BYO platform fee on $10k-$100k mediated revenue"
 
-INDIE_PRODUCT_ID=$(stripe products list --limit 1 | jq -r '.data[0].id')
+GROWTH_PRODUCT_ID=$(stripe products list --limit 1 | jq -r '.data[0].id')
 
 stripe prices create \
-  --product $INDIE_PRODUCT_ID \
-  --unit-amount 9900 \
+  --product $GROWTH_PRODUCT_ID \
   --currency usd \
   --recurring[interval]=month \
-  --nickname "indie-monthly"
+  --recurring[usage_type]=metered \
+  --billing_scheme=per_unit \
+  --unit_amount_decimal=0.025 \
+  --nickname "growth-platform-fee"
 
-# Repeat for Studio Plan ($499/mo, 10M impressions)
+# Repeat for Scale (0.02) and Enterprise (custom contract + minimum via subscriptions / invoices)
 
 # 3. Configure Stripe Webhooks
 # Endpoint: https://api.apexmediation.com/webhooks/stripe
@@ -1597,8 +1599,9 @@ interface DailyDigest {
   date: string;
   signups: {
     total: number;
-    indie: number;
-    studio: number;
+    starter: number;
+    growth: number;
+    scale: number;
     enterprise: number;
   };
   revenue: {
@@ -2288,25 +2291,27 @@ export class CustomerSuccessAutomation {
 // ROI: Infinite
 ```
 
-### Break-Even Analysis (Revised)
+### Break-Even Analysis (BYO)
 
 **Ultra-Lean Model:**
-- **Fixed Costs:** $175-300/month (avg $237.50)
-- **Variable Costs:** ~$5/customer/month (Stripe fees 2.9% + $0.30)
-- **Average Revenue per Customer:** $150/month (mix of Indie $99 + Studio $499)
-- **Contribution Margin:** $145/customer/month
-- **Break-Even:** 2 customers (vs 8-21 in expensive model)
-- **Profitability:** 3+ customers = profitable from month 1
+- **Fixed Costs:** $175–300/month (avg $237.50)
+- **Variable Costs:** ACH/SEPA fees (~0.15% of platform fee invoices)
+- **Average Platform Fee per Customer:**
+  - Growth: 2.5% on ~$50k/mo → $1,250
+  - Scale: 2.0% on ~$250k/mo → $5,000
+  - Enterprise: 1.25% on ~$900k/mo → $11,250 (with minimums)
+- **Contribution Margin:** >99% (collections costs negligible)
+- **Break-Even:** First Growth customer already covers fixed costs.
 
 **Growth Trajectory:**
 
-| Customers | MRR | Costs | Profit | Margin |
-|-----------|-----|-------|--------|--------|
-| 10 | $1,500 | $400 | $1,100 | 73% |
-| 25 | $3,750 | $450 | $3,300 | 88% |
-| 50 | $7,500 | $550 | $6,950 | 93% |
-| 100 | $15,000 | $750 | $14,250 | 95% |
-| 250 | $37,500 | $1,200 | $36,300 | 97% |
+| Customers | Platform Fees/mo | Costs | Profit | Margin |
+|-----------|------------------|-------|--------|--------|
+| 10 (8 Growth, 2 Scale) | $15,000 | $400 | $14,600 | 97% |
+| 25 (15 Growth, 8 Scale, 2 Ent) | $71,000 | $500 | $70,500 | 99% |
+| 50 (30 Growth, 15 Scale, 5 Ent) | $142,500 | $700 | $141,800 | 99% |
+| 100 (60 Growth, 30 Scale, 10 Ent) | $285,000 | $900 | $284,100 | 99% |
+| 250 (mixed) | $712,500 | $1,500 | $711,000 | 99% |
 
 **When to Upgrade Infrastructure:**
 

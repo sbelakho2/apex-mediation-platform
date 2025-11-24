@@ -49,6 +49,24 @@ Isolation: New schemas and endpoints; no edits to existing tables/APIs.
 
 Feature flag: vra.enabled (default OFF); vra.shadow_only=true (no operational side-effects).
 
+Dashboards and Alerts
+- Grafana dashboards (sample JSON shipped):
+  - monitoring/grafana/dashboards/vra-overview.json — high-level coverage, byNetwork cards.
+  - monitoring/grafana/dashboards/vra-matching.json — matching funnel (runs, p95 duration, candidates, auto/review/unmatched, exact matches).
+  - monitoring/grafana/dashboards/vra-reconcile.json — reconcile run rate, p95, deltas by kind, CH fallbacks and empty results.
+- Prometheus alert rules: monitoring/alerts/vra-alerts.yml (coverage drop, sustained variance, ingestion failures, proofs verify failures, reconcile delta spikes, ClickHouse fallbacks).
+
+Environment tunables (thresholds)
+- VRA_UNDERPAY_TOL (default 0.02 → 2%)
+- VRA_IVT_P95_BAND_PP (default 2 pp)
+- VRA_FX_BAND_PCT (default 0.5%)
+- VRA_VIEWABILITY_GAP_PP (default 15 pp)
+Exact-threshold equality is suppressed for all thresholded rules (strict > comparison) to reduce noise.
+
+Console UI wiring note
+- Overview page should consume ReconOverviewResult.byNetwork to render top‑N network cards sorted by paid desc and link to detailed tables.
+- Deltas view should mirror API filters (kind, min_conf, from, to) and CSV export should preserve current filters.
+
 3) Data Inputs & Contracts (Read-Only)
 3.1 Network Statements (per network)
 

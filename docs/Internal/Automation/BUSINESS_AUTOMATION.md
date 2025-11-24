@@ -23,8 +23,8 @@
 
 ### Business Model
 - **Target Market**: Mobile game developers seeking Unity alternatives
-- **Pricing**: $99/mo (Indie), $499/mo (Studio), Custom (Enterprise)
-- **Revenue Model**: Subscription + usage-based (per impression)
+- **Pricing**: BYO platform fee tiers — Starter 0%, Growth 2.5%, Scale 2.0%, Enterprise 1.0–1.5% (custom floor)
+- **Revenue Model**: Platform fee on gross mediated revenue plus optional add-ons (white-label console, extended retention, migration services)
 - **Operator**: Solo entrepreneur via Estonian e-Residency
 
 ### Automation Imperatives
@@ -586,7 +586,7 @@ await s3.putObject({
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  1. Landing Page → Choose Plan (Indie/Studio/Enterprise)    │
+│  1. Landing Page → Choose Plan (Starter/Growth/Scale/Enterprise) │
 └──────────────────────┬──────────────────────────────────────┘
                        │
                        ▼
@@ -611,62 +611,66 @@ await s3.putObject({
 
 ### Pricing Tiers
 
-| Tier | Price | Impressions | Support | Features |
-|------|-------|-------------|---------|----------|
-| Indie | $99/mo | 1M/month | Email (48h) | All SDKs, basic analytics |
-| Studio | $499/mo | 10M/month | Email (24h), Slack | All SDKs, advanced analytics, A/B testing |
-| Enterprise | Custom | Unlimited | Dedicated account manager, SLA | All features, custom contracts, priority support |
+| Tier | Gross Mediated Revenue (Monthly) | Platform Fee | Support | Core Inclusions |
+|------|----------------------------------|--------------|---------|-----------------|
+| Starter | $0 – $10k | 0% (free) | Community / email | All SDKs, core analytics, baseline debugger |
+| Growth | $10,001 – $100k | 2.5% | Email + shared Slack channel | Everything in Starter plus Migration Studio, adapter/SLO observability |
+| Scale | $100,001 – $500k | 2.0% | Priority Slack, named TAM | Everything in Growth plus custom exports, early fraud/ML features |
+| Enterprise | $500k+ | 1.0–1.5% + minimum | Dedicated channel, contractual SLA | Everything in Scale plus bespoke compliance and onboarding |
 
-### Usage-Based Billing
+### Platform-Fee Billing
 
 **Metering**:
-- Ad impressions tracked in real-time via SDK telemetry
-- ClickHouse aggregation for fast queries
-- Daily usage sync to Stripe for accurate billing
+- SDKs stream **mediated revenue** events (per network payout) into ClickHouse.
+- Usage service aggregates IVT-adjusted revenue per customer per day.
+- Nightly job syncs totals into billing so invoices apply the correct platform-fee percentage.
 
-**Overage Charges**:
-- Indie: $0.10 per 1,000 impressions over limit
-- Studio: $0.08 per 1,000 impressions over limit
+**Fee Calculation**:
+- `platform_fee = mediated_revenue * plan.platform_fee_percent` (Enterprise overrides via contract record).
+- Negative adjustments (clawbacks) roll forward before applying the fee to prevent gaming.
+- Add-ons (white-label console, extended data retention, premium support) show up as separate invoice lines—not bundled percentages.
 
 **Implementation**:
 ```typescript
-// backend/services/billing/UsageMeteringService.ts
-export class UsageMeteringService {
-  async recordImpression(customerId: string) {
-    // 1. Increment impression count in ClickHouse
-    await this.clickhouse.insert('INSERT INTO impressions (customer_id, timestamp) VALUES (?, NOW())', [customerId]);
-
-    // 2. Check if customer exceeded monthly limit
-    const usage = await this.getMonthlyUsage(customerId);
-    const customer = await db.customers.findById(customerId);
-    const limit = this.getPlanLimit(customer.plan);
-
-    if (usage > limit && !customer.overageNotified) {
-      await this.emailService.sendOverageAlert(customer.email, { usage, limit });
-      await db.customers.update(customerId, { overageNotified: true });
-    }
+// backend/services/billing/RevenueMeteringService.ts
+export class RevenueMeteringService {
+  async recordRevenue(event: RevenueEvent) {
+    await this.clickhouse.insert(
+      'INSERT INTO mediated_revenue (customer_id, usd_amount, source_network, ivt_adjusted, occurred_at) VALUES (?, ?, ?, ?, ?)',
+      [event.customerId, event.amountUsd, event.network, event.ivtAdjusted, event.occurredAt]
+    );
   }
 
-  async syncUsageToStripe() {
-    // Run daily via cron job
-    const customers = await db.customers.findAll({ plan: ['indie', 'studio'] });
+  async syncPlatformFees() {
+    const customers = await db.customers.findAll();
 
     for (const customer of customers) {
-      const usage = await this.getMonthlyUsage(customer.id);
-      const limit = this.getPlanLimit(customer.plan);
-      const overage = Math.max(0, usage - limit);
+      const revenue = await this.getCurrentMonthRevenue(customer.id);
+      if (!revenue) continue;
 
-      if (overage > 0) {
-        await this.stripe.subscriptionItems.createUsageRecord(
-          customer.stripeSubscriptionItemId,
-          { quantity: Math.ceil(overage / 1000), timestamp: Math.floor(Date.now() / 1000) }
-        );
-      }
+      const { feePercent, minimumFeeUsd } = this.resolvePlan(customer.planTier, customer.enterpriseOverrides);
+      const platformFee = Math.max(revenue * feePercent, minimumFeeUsd || 0);
+
+      await this.billingClient.upsertUsageRecord({
+        customerId: customer.id,
+        amountUsd: revenue,
+        platformFeeUsd: platformFee,
+        effectiveRate: platformFee / revenue,
+      });
     }
   }
 
-  getPlanLimit(plan: string): number {
-    return { indie: 1_000_000, studio: 10_000_000 }[plan] || 0;
+  private resolvePlan(tier: PlatformTier, overrides?: EnterpriseOverrides) {
+    if (overrides?.customRatePercent) {
+      return { feePercent: overrides.customRatePercent, minimumFeeUsd: overrides.minimumFeeUsd };
+    }
+
+    return {
+      starter: { feePercent: 0, minimumFeeUsd: 0 },
+      growth: { feePercent: 0.025, minimumFeeUsd: 0 },
+      scale: { feePercent: 0.02, minimumFeeUsd: 0 },
+      enterprise: { feePercent: 0.0125, minimumFeeUsd: 5000 },
+    }[tier];
   }
 }
 ```
@@ -988,13 +992,15 @@ jobs:
 ### Break-Even Analysis
 
 **Assumptions**:
-- Avg customer pays $150/mo (mix of Indie and Studio)
-- Stripe fees: ~3% = $4.50 per customer
-- Net revenue per customer: $145.50
+- Avg Growth-tier customer mediates ~$50k/mo → platform fee = $1,250 (2.5%).
+- Avg Scale-tier customer mediates ~$250k/mo → platform fee = $5,000 (2.0%).
+- Billing/collections overhead is ~0.2% of mediated revenue (bank + FX fees).
 
-**Break-even**: $950 / $145.50 ≈ **7 customers**
+**Effective net per Growth customer**: ~$1,150.  
+**Effective net per Scale customer**: ~$4,500.
 
-**Target**: 50 customers in Year 1 = $7,275/mo revenue - $950 costs = **$6,325/mo profit**
+**Break-even**: $950 / $1,150 ≈ **1 Growth customer** or **<1 Scale customer**.  
+**Target**: Blend of 10 Growth + 5 Scale customers ≈ $36k/mo platform fees → $35k/mo contribution after costs.
 
 ---
 

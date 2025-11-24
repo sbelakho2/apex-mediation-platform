@@ -26,8 +26,10 @@ const config: Config = {
     },
     extend: {
       colors: {
-        // WEBSITE_FIX token mapping via CSS variables
+        ink: '#0B1220',
+        inkMuted: '#475569',
         brand: {
+          DEFAULT: 'var(--brand-500)',
           50: 'var(--brand-50)',
           100: 'var(--brand-100)',
           200: 'var(--brand-200)',
@@ -55,10 +57,10 @@ const config: Config = {
         warning: 'var(--warning)',
         danger: 'var(--danger)',
         info: 'var(--info)',
-        // Legacy aliases removed after final sweep; use brand/gray/semantic tokens directly
       },
       fontFamily: {
-        sans: ['Inter', 'system-ui', 'sans-serif'],
+        sans: ['var(--font-inter)', 'system-ui', 'sans-serif'],
+        display: ['var(--font-pjs)', 'var(--font-inter)', 'system-ui', 'sans-serif'],
       },
       fontSize: {
         hero: ['5rem', { lineHeight: '1', letterSpacing: '-0.02em' }],
@@ -100,17 +102,17 @@ const config: Config = {
         },
       },
       boxShadow: {
-        // WEBSITE_FIX elevation tokens
         sm: '0 1px 2px rgba(15,23,42,.06)',
         md: '0 4px 16px rgba(15,23,42,.08)',
         lg: '0 10px 30px rgba(15,23,42,.12)',
         hero: '0 40px 80px rgba(0, 23, 51, 0.28)',
         inset: 'inset 0 1px 0 rgba(255, 255, 255, 0.2)',
+        card: '0 1px 2px rgba(16,24,40,.06), 0 10px 20px rgba(16,24,40,.06)',
       },
       borderRadius: {
-        DEFAULT: '10px',
-        xl: '12px',
-        '2xl': '16px',
+        DEFAULT: '16px',
+        xl: '16px',
+        '2xl': '20px',
       },
     },
   },

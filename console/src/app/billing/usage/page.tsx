@@ -2,6 +2,7 @@
 
 import { useQuery } from '@tanstack/react-query'
 import { getCurrentUsage, type UsageData } from '@/lib/billing'
+import { getPlatformTierDisplay } from '@/lib/platformTiers'
 import { AlertCircle, TrendingUp, Database, Zap, HardDrive } from 'lucide-react'
 import { formatNumber, formatCurrency, formatDate } from '@/lib/utils'
 import { Button } from '@/ui-v2/components/Button'
@@ -142,6 +143,8 @@ export default function BillingUsagePage() {
     )
   }
 
+  const subscriptionTier = getPlatformTierDisplay(usage.subscription.plan_type)
+
   const calculatePercentage = (used: number, limit: number) => {
     if (limit === 0) return 0
     return Math.min((used / limit) * 100, 100)
@@ -169,8 +172,9 @@ export default function BillingUsagePage() {
             Current period: {formatDate(usage.current_period.start)} - {formatDate(usage.current_period.end)}
           </p>
           <p className="text-sm text-gray-500 mt-1">
-            Plan: <span className="font-semibold">{usage.subscription.plan_type}</span>
+            Plan: <span className="font-semibold">{subscriptionTier.label}</span>
           </p>
+          <p className="text-xs text-gray-500">{subscriptionTier.summary}</p>
           {/* Toolbar */}
           <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex flex-wrap items-center gap-2">

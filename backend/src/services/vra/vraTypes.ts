@@ -22,6 +22,13 @@ export interface ReconOverviewResult {
     expected: number;
   };
   byBreakdown: ReconOverviewItem[];
+  // Aggregated per-network slices for UI overview and dashboards
+  byNetwork?: Array<{
+    network: string;
+    impressions: number;
+    paid: number;
+    expected: number;
+  }>;
 }
 
 export interface ReconDeltaItem {

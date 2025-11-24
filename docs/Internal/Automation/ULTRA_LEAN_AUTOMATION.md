@@ -435,7 +435,7 @@ export async function handleSupportEmail(email: Email) {
         
         Key facts:
         - 14-day free trial, no credit card required
-        - Plans: Indie $99/mo (1M impressions), Studio $499/mo (10M impressions)
+        - Plans: Starter (0% up to $10k/mo), Growth (2.5% on $10k-$100k), Scale (2.0% on $100k-$500k), Enterprise (1.0-1.5% custom)
         - Supported platforms: iOS, Android, Unity, Flutter
         - Integrated networks: AdMob, AppLovin, Meta Audience Network, IronSource
         
@@ -740,34 +740,32 @@ export class UpsellService {
     `);
     
     for (const customer of candidates.rows) {
-      // Calculate current monthly cost (base + overages)
-      const overageAmount = customer.avg_monthly_usage - customer.included_impressions;
-      const overagePrice = PRICING_PLANS[customer.plan_type].overage_price_cents / 100;
-      const currentMonthlySpend = customer.current_price + (overageAmount / 1000) * overagePrice;
-      
-      // Calculate next tier cost
+      const currentRevenue = customer.avg_monthly_revenue_usd;
+      if (currentRevenue < 10_000) continue; // still Starter
+
+      const currentFee = customer.avg_monthly_platform_fee_usd;
+      const currentEffectiveRate = currentFee / currentRevenue;
       const nextTier = this.getNextPlanTier(customer.plan_type);
-      const nextTierPrice = PRICING_PLANS[nextTier].base_price_cents / 100;
-      
-      // If upgrade saves money, send automated offer
-      if (currentMonthlySpend > nextTierPrice + 20) {
-        const savings = currentMonthlySpend - nextTierPrice;
-        
+      const nextTierRate = PLATFORM_FEE[nextTier];
+      const projectedFee = currentRevenue * nextTierRate;
+      const potentialSavings = currentFee - projectedFee;
+
+      if (potentialSavings > 250) {
         await emailService.send(customer.customer_id, 'upsell-cost-savings', {
           current_plan: customer.plan_type,
-          current_monthly_cost: `$${currentMonthlySpend.toFixed(2)}`,
+          current_effective_rate: `${(currentEffectiveRate * 100).toFixed(2)}%`,
           next_plan: nextTier,
-          next_plan_cost: `$${nextTierPrice}`,
-          monthly_savings: `$${savings.toFixed(2)}`,
-          annual_savings: `$${(savings * 12).toFixed(2)}`,
-          cta_url: `https://console.apexmediation.com/billing/upgrade?plan=${nextTier}&reason=cost_savings`,
+          next_rate: `${(nextTierRate * 100).toFixed(2)}%`,
+          monthly_savings: `$${potentialSavings.toFixed(0)}`,
+          annual_savings: `$${(potentialSavings * 12).toFixed(0)}`,
+          cta_url: `https://console.apexmediation.com/billing/upgrade?plan=${nextTier}&reason=rate_drop`,
         });
-        
+
         await db.upsell_offers.create({
           customer_id: customer.customer_id,
           from_plan: customer.plan_type,
           to_plan: nextTier,
-          projected_savings: savings,
+          projected_savings: potentialSavings,
           offered_at: new Date(),
         });
       }
@@ -776,9 +774,9 @@ export class UpsellService {
 }
 
 // Run daily
-// Conversion rate: 20-30% (industry standard for value-based upsells)
-// Avg upsell: $400/year ($99 → $499 plan)
-// 10 offers/month × 25% conversion = 2.5 upsells = $1,000 MRR increase
+// Conversion rate: 20-30% (publishers want lower effective fees)
+// Avg upsell: Growth → Scale saves ~0.5pp (e.g., $50k/mo → $250/mo saved)
+// 10 offers/month × 25% conversion = $750/mo additional value unlocked
 // Cost: $0, fully automated
 ```
 
@@ -789,44 +787,41 @@ export class UpsellService {
 ### Ultra-Lean Model
 
 **Fixed Costs:**
-- Infrastructure: $175-300/month
-- Average: $237.50/month
+- Infrastructure: $175–300/month (Fly.io, Supabase, monitoring stack)
+- Payment tooling + automation: $40/month (Resend, PostHog, etc.)
 
 **Variable Costs:**
-- Stripe fees: 2.9% + $0.30 per transaction
-- Example: $99 subscription = $3.17 fees
-- Average per customer: ~$5/month
+- Platform fee invoicing = ACH/SEPA wire fees only (~0.15% all-in because revenue already landed with publisher)
+- Example: $1,250 monthly platform fee → $1.88 bank fee + FX spread
 
-**Revenue:**
-- Indie Plan: $99/month (70% of customers)
-- Studio Plan: $499/month (25% of customers)
-- Enterprise: $1,500+/month (5% of customers)
-- Weighted average: $150/month per customer
+**Revenue Composition:**
+- Starter: discovery channel only (no revenue)
+- Growth: average customer mediates $50k/mo → $1,250 platform fee (2.5%)
+- Scale: average customer mediates $250k/mo → $5,000 platform fee (2.0%)
+- Enterprise: $900k+/mo → ~$11k/mo platform fee (1.25%) with minimums
+- Weighted plan mix assumption: 60% Growth, 30% Scale, 10% Enterprise → **$4,175 average monthly platform fee**
 
 **Contribution Margin:**
-- $150 revenue - $5 Stripe fees = $145/customer/month
+- Net of banking/collections (~0.15%) → **$4,109/month per blended customer**
 
 **Break-Even:**
-- Fixed costs ÷ Contribution margin = $237.50 ÷ $145 = **1.64 customers**
-- **Round up: 2 customers to break even**
+- $240 fixed costs ÷ $4,109 ≈ **0.06 customers** → effectively profitable as soon as the first Growth customer onboards.
 
 ### Growth Projections
 
-| Customers | Monthly Revenue | Variable Costs | Fixed Costs | Total Costs | Profit | Margin |
-|-----------|-----------------|----------------|-------------|-------------|--------|--------|
-| 2 | $300 | $10 | $240 | $250 | $50 | 17% |
-| 5 | $750 | $25 | $250 | $275 | $475 | 63% |
-| 10 | $1,500 | $50 | $270 | $320 | $1,180 | 79% |
-| 25 | $3,750 | $125 | $300 | $425 | $3,325 | 89% |
-| 50 | $7,500 | $250 | $350 | $600 | $6,900 | 92% |
-| 100 | $15,000 | $500 | $450 | $950 | $14,050 | 94% |
-| 250 | $37,500 | $1,250 | $700 | $1,950 | $35,550 | 95% |
-| 500 | $75,000 | $2,500 | $1,200 | $3,700 | $71,300 | 95% |
+| Customers | Avg Revenue/Customer | Platform Fees | Payment Costs (0.15%) | Fixed Costs | Profit | Margin |
+|-----------|---------------------|---------------|-----------------------|-------------|--------|--------|
+| 1 Growth | $50k | $1,250 | $1.88 | $240 | $1,008 | 80% |
+| 1 Scale | $250k | $5,000 | $7.50 | $240 | $4,753 | 95% |
+| 5 (3 Growth, 2 Scale) | — | $13,750 | $20.6 | $260 | $13,469 | 98% |
+| 10 (6 Growth, 3 Scale, 1 Ent) | — | $28,750 | $43.1 | $300 | $28,407 | 99% |
+| 25 (15 Growth, 8 Scale, 2 Ent) | — | $71,250 | $106.9 | $400 | $70,743 | 99% |
+| 50 (30 Growth, 15 Scale, 5 Ent) | — | $142,500 | $213.8 | $550 | $141,736 | 99% |
 
 **Key Insights:**
-- **Profitable from Customer #3** (vs Customer #9 in traditional model)
-- **94%+ margin at 100 customers** (vs 88-92% in traditional model)
-- **95% margin maintained even at 500 customers** (infrastructure scales efficiently)
+- Starter can stay free forever because Growth conversions carry the margin.
+- Operational load stays flat—billing + collections automation handles six figures of mediated revenue with near-zero marginal cost.
+- Priority is reducing time-to-value so every Growth conversion happens within the same month of onboarding.
 
 ### When to Upgrade Infrastructure
 

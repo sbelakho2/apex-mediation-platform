@@ -21,8 +21,11 @@ import { isFeatureEnabled } from '@/lib/featureFlags'
 interface BillingSettings {
   plan: {
     name: string
-    type: 'indie' | 'studio' | 'enterprise'
-    price: number
+    type: 'starter' | 'growth' | 'scale' | 'enterprise'
+    platform_fee_rate: number
+    platform_fee_label: string
+    revenue_band: string
+    sample_fee_note?: string
     currency: string
     included_impressions: number
     included_api_calls: number
@@ -270,7 +273,7 @@ export default function BillingSettingsPage() {
             <div>
               <h1 className="text-2xl font-bold text-gray-900">Billing Settings</h1>
               <p className="text-sm text-gray-600">
-                Manage your plan, payment method, and billing preferences
+                Manage your platform tier, payment method, and billing preferences
               </p>
             </div>
           </div>
@@ -305,23 +308,26 @@ export default function BillingSettingsPage() {
         )}
 
         <div className="space-y-6">
-          {/* Current Plan */}
+          {/* Current Platform Tier */}
           <section className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
             <div className="flex items-start justify-between">
               <div>
-                <h2 className="text-lg font-semibold text-gray-900 mb-1">Current Plan</h2>
+                <h2 className="text-lg font-semibold text-gray-900 mb-1">Current Platform Tier</h2>
                 <p className="text-sm text-gray-600 mb-4">
-                  Your subscription tier and included usage limits
+                  Your platform fee, revenue band, and included usage guardrails
                 </p>
                 {settings && (
                   <div className="space-y-3">
                     <div className="flex items-baseline gap-3">
-                      <span className="text-3xl font-bold text-gray-900">{settings.plan.name}</span>
-                      <span className="text-xl text-gray-600">
-                        ${(settings.plan.price / 100).toFixed(2)}
-                        <span className="text-sm text-gray-500">/month</span>
-                      </span>
+                      <div className="flex flex-col gap-1">
+                        <span className="text-3xl font-bold text-gray-900">{settings.plan.name}</span>
+                        <span className="text-xl text-gray-600">{settings.plan.platform_fee_label}</span>
+                      </div>
                     </div>
+                    <p className="text-sm text-gray-600">{settings.plan.revenue_band}</p>
+                    {settings.plan.sample_fee_note ? (
+                      <p className="text-xs text-gray-500">{settings.plan.sample_fee_note}</p>
+                    ) : null}
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-4 border-t border-gray-100">
                       <div>
                         <p className="text-xs font-medium text-gray-500 uppercase">Impressions</p>
@@ -360,7 +366,7 @@ export default function BillingSettingsPage() {
               <div>
                 <h2 className="text-lg font-semibold text-gray-900 mb-1">Payment Method</h2>
                 <p className="text-sm text-gray-600">
-                  Manage your payment method, billing address, and subscription settings via Stripe
+                  Manage payment methods, billing address, and invoicing preferences via Stripe
                 </p>
               </div>
               <CreditCard className="h-6 w-6 text-gray-400" aria-hidden="true" />
@@ -499,7 +505,7 @@ export default function BillingSettingsPage() {
                 />
                 <div>
                   <p className="text-sm font-medium text-gray-900">Usage Alerts</p>
-                  <p className="text-xs text-gray-600">Notify me when approaching or exceeding plan limits</p>
+                  <p className="text-xs text-gray-600">Notify me when approaching or exceeding tier guardrails</p>
                 </div>
               </label>
 
@@ -612,14 +618,14 @@ export default function BillingSettingsPage() {
             <div className="flex items-start gap-3">
               <AlertCircle className="h-5 w-5 text-blue-600 mt-0.5 flex-shrink-0" />
               <div className="text-sm text-blue-900">
-                <p className="font-medium mb-1">Need to upgrade or change your plan?</p>
-                <p>
-                  Use Stripe&apos;s billing portal to manage your subscription, or{' '}
-                  <a href="mailto:billing@apexmediation.com" className="underline font-medium">
-                    contact sales
-                  </a>{' '}
-                  for Enterprise options.
-                </p>
+                  <p className="font-medium mb-1">Need to adjust your platform tier?</p>
+                  <p>
+                    Contact our billing team at{' '}
+                    <a href="mailto:billing@apexmediation.com" className="underline font-medium">
+                      billing@apexmediation.com
+                    </a>{' '}
+                    to review usage, negotiate contracts, or request Enterprise onboarding support.
+                  </p>
               </div>
             </div>
           </div>

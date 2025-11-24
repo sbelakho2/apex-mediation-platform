@@ -342,7 +342,7 @@ router.post('/webhooks/stripe', async (req, res) => {
 // Test payment reconciliation
 const testPayment = {
   customerId: 'cus_test123',
-  amount: 9900, // $99
+  amount: 125000, // $1,250 platform fee (Growth tier @ $50k revenue)
   currency: 'USD',
   stripeChargeId: 'ch_test123',
   status: 'succeeded',
@@ -355,9 +355,9 @@ await reconciliationService.recordPayment(testPayment);
 const testInvoice = {
   customerId: 'cus_test123',
   items: [
-    { description: 'Indie Plan - November 2025', quantity: 1, unitPriceCents: 9900 }
+    { description: 'Growth Platform Fee - November 2025', quantity: 1, unitPriceCents: 125000 }
   ],
-  notes: 'Thank you for your business!',
+  notes: 'Thank you for trusting ApexMediation to run your control plane!',
 };
 
 await invoiceService.generateInvoice(testInvoice);

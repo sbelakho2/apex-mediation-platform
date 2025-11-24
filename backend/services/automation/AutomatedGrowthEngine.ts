@@ -4,6 +4,11 @@
 
 import { Pool } from 'pg';
 import OpenAI from 'openai';
+import {
+  PLATFORM_TIER_ORDER,
+  resolvePlatformTierId,
+  type PlatformTierId,
+} from '../../src/config/platformTiers';
 
 interface CustomerHealthScore {
   customer_id: string;
@@ -588,10 +593,12 @@ export class AutomatedGrowthEngine {
   /**
    * Helper: Get next plan tier
    */
-  private getNextPlanTier(currentPlan: string): string {
-    const tiers = ['indie', 'studio', 'enterprise'];
-    const currentIndex = tiers.indexOf(currentPlan.toLowerCase());
-    return currentIndex < tiers.length - 1 ? tiers[currentIndex + 1] : 'enterprise';
+  private getNextPlanTier(currentPlan: string): PlatformTierId {
+    const normalized = resolvePlatformTierId(currentPlan) ?? 'starter';
+    const currentIndex = PLATFORM_TIER_ORDER.indexOf(normalized);
+    return currentIndex < PLATFORM_TIER_ORDER.length - 1
+      ? PLATFORM_TIER_ORDER[currentIndex + 1]
+      : 'enterprise';
   }
 
   /**

@@ -52,7 +52,7 @@ describe('Billing API — usage endpoints (contract)', () => {
     })
 
     ;(usageMeteringService.getSubscriptionDetails as jest.Mock).mockResolvedValue({
-      plan_type: 'indie',
+      plan_type: 'starter',
       included_impressions: 1_000_000,
       included_api_calls: 100_000,
       included_data_transfer_gb: 50,

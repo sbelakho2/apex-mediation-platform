@@ -127,19 +127,20 @@ func trackImpressions(count: Int) {
 }
 ```
 
-### Overage Calculation
+### Platform Fee Reference
 
-**Plan Limits:**
-- **Indie**: 1M impressions/mo ($0.10 per 1K overage)
-- **Studio**: 10M impressions/mo ($0.08 per 1K overage)
-- **Enterprise**: 100M impressions/mo ($0.05 per 1K overage)
+**Tier bands:**
+- **Starter**: $0 – $10k mediated revenue → **0%** platform fee (free for launch).
+- **Growth**: $10,001 – $100k → **2.5%** platform fee.
+- **Scale**: $100,001 – $500k → **2.0%** platform fee.
+- **Enterprise**: $500k+ → **1.0–1.5%** platform fee (custom minimums allowed).
 
-**Example:**
+**Usage example:**
 ```
-Customer: Indie Plan ($99/mo)
-Usage: 1,500,000 impressions
-Overage: 500,000 impressions = 500 × $0.10 = $50
-Total: $99 + $50 = $149
+Customer: Growth tier (default 2.5%)
+Mediated revenue: $50,000 this month
+Platform fee: $50,000 × 2.5% = $1,250
+Invoice shows: $1,250 platform fee + any add-ons (e.g., white-label console)
 ```
 
 ### Manual Operations
@@ -312,7 +313,7 @@ await db.query(`
   to: 'test@example.com',
   customer_id: 'cus_test',
   api_key: 'rsk_test123',
-  plan_type: 'indie'
+  plan_type: 'starter'
 })]);
 
 // Process queue
@@ -531,7 +532,7 @@ Get plan limits and usage percentage.
 **Response:**
 ```json
 {
-  "plan_type": "indie",
+  "plan_type": "starter",
   "limits": {
     "impressions": 1000000
   },

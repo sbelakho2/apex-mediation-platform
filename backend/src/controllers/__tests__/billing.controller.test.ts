@@ -39,10 +39,18 @@ jest.mock('../../services/billing/migrationAssistantService', () => ({
   },
 }));
 
+jest.mock('../../services/billing/platformFeeService', () => ({
+  platformFeeService: {
+    calculatePlatformFee: jest.fn(),
+    getTiers: jest.fn(),
+  },
+}));
+
 import { usageMeteringService } from '../../services/billing/UsageMeteringService';
 import { invoiceService } from '../../services/invoiceService';
 import { reconciliationService } from '../../services/reconciliationService';
 import { migrationAssistantService } from '../../services/billing/migrationAssistantService';
+import { platformFeeService } from '../../services/billing/platformFeeService';
 
 type MockResponse = Response & {
   status: jest.MockedFunction<Response['status']>;
@@ -89,6 +97,7 @@ const mockedUsageMetering = jest.mocked(usageMeteringService);
 const mockedInvoiceService = jest.mocked(invoiceService);
 const mockedReconciliationService = jest.mocked(reconciliationService);
 const mockedMigrationService = jest.mocked(migrationAssistantService);
+const mockedPlatformFeeService = jest.mocked(platformFeeService);
 
 describe('billing.controller', () => {
   let req: Partial<Request>;
@@ -127,7 +136,7 @@ describe('billing.controller', () => {
       });
 
       mockedUsageMetering.getSubscriptionDetails.mockResolvedValue({
-        plan_type: 'studio',
+        plan_type: 'growth',
         included_impressions: 200_000,
         included_api_calls: 10_000,
         included_data_transfer_gb: 100,
@@ -144,7 +153,7 @@ describe('billing.controller', () => {
               start: usagePeriodStart,
               end: usagePeriodEnd,
             },
-            plan: 'studio',
+            plan: 'growth',
           }),
         })
       );
@@ -392,6 +401,69 @@ describe('billing.controller', () => {
 
       expect(mockedMigrationService.createRequest).not.toHaveBeenCalled();
       expect(next).toHaveBeenCalledWith(expect.any(AppError));
+    });
+  });
+
+  describe('calculatePlatformFee', () => {
+    beforeEach(() => {
+      req.body = { gross_revenue_cents: 5_000_000 };
+      mockedPlatformFeeService.calculatePlatformFee.mockReturnValue({
+        gross_revenue_cents: 5_000_000,
+        tier: {
+          id: 'growth',
+          name: 'Tier 1 — Growth',
+          description: 'mock tier',
+          min_revenue_cents: 0,
+          max_revenue_cents: null,
+          rate: 0.025,
+        },
+        applied_rate: 0.025,
+        fee_cents: 125_000,
+        net_revenue_cents: 4_875_000,
+        rate_source: 'standard',
+      } as any);
+    });
+
+    it('responds with calculation payload', async () => {
+      const { calculatePlatformFee } = await import('../billing.controller');
+
+      await calculatePlatformFee(req as Request, res, next);
+
+      expect(mockedPlatformFeeService.calculatePlatformFee).toHaveBeenCalledWith(5_000_000, {
+        customEnterpriseRatePercent: undefined,
+      });
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
+    });
+
+    it('validates gross_revenue_cents', async () => {
+      req.body = {};
+      const { calculatePlatformFee } = await import('../billing.controller');
+
+      await calculatePlatformFee(req as Request, res, next);
+
+      expect(next).toHaveBeenCalledWith(expect.any(AppError));
+      expect(res.json).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('getPlatformTiers', () => {
+    it('returns tier metadata', async () => {
+      mockedPlatformFeeService.getTiers.mockReturnValue([
+        {
+          id: 'starter',
+          name: 'Tier 0 — Starter',
+          description: 'mock',
+          min_revenue_cents: 0,
+          max_revenue_cents: 100000,
+          rate: 0,
+        },
+      ] as any);
+
+      const { getPlatformTiers } = await import('../billing.controller');
+      await getPlatformTiers(req as Request, res, next);
+
+      expect(mockedPlatformFeeService.getTiers).toHaveBeenCalled();
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
     });
   });
 });

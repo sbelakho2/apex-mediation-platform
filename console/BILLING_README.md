@@ -23,7 +23,7 @@ The billing module provides usage tracking, invoice management, and reconciliati
 - Real-time usage metrics (impressions, API calls, data transfer)
 - Visual progress bars showing plan limit consumption
 - Overage detection and cost calculation
-- Support for multiple plan types (indie, studio, enterprise)
+- Support for multiple plan types (Starter, Growth, Scale, Enterprise)
 
 ### 2. Invoice Management (`/billing/invoices`)
 - Paginated invoice list with filtering by status

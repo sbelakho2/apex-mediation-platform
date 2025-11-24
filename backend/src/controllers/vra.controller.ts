@@ -4,6 +4,49 @@ import { getFeatureFlags } from '../utils/featureFlags';
 import { executeQuery, insertBatch } from '../utils/clickhouse';
 import logger from '../utils/logger';
 import { vraDisputeShadowAcksTotal, vraDisputesCreatedTotal } from '../utils/prometheus';
+import { redactString as redactCsvField } from '../services/vra/redaction';
+
+function parseNumber(v: string | undefined): number | undefined {
+  if (v == null) return undefined;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : undefined;
+}
+
+function isIsoLike(v: string | undefined): boolean {
+  if (!v) return true; // optional
+  const t = Date.parse(v);
+  return Number.isFinite(t);
+}
+
+function validateDeltasQuery(q: Record<string, string | undefined>): { ok: true } | { ok: false; error: string } {
+  // Validate ISO-ish dates for from/to
+  if (!isIsoLike(q.from) || !isIsoLike(q.to)) {
+    return { ok: false, error: 'Invalid from/to timestamp' };
+  }
+  // Validate pagination
+  const page = parseNumber(q.page);
+  const pageSize = parseNumber(q.page_size);
+  if (page != null && (!Number.isInteger(page) || page < 1)) {
+    return { ok: false, error: 'Invalid page' };
+  }
+  if (pageSize != null && (!Number.isInteger(pageSize) || pageSize < 1 || pageSize > 500)) {
+    return { ok: false, error: 'Invalid page_size' };
+  }
+  // Validate min_conf 0..1
+  const mc = parseNumber(q.min_conf);
+  if (mc != null && (mc < 0 || mc > 1)) {
+    return { ok: false, error: 'min_conf must be between 0 and 1' };
+  }
+  // kind is optional; if present must be one of known kinds
+  if (q.kind) {
+    const allowed = new Set(['underpay', 'missing', 'viewability_gap', 'ivt_outlier', 'fx_mismatch', 'timing_lag']);
+    if (!allowed.has(q.kind)) {
+      return { ok: false, error: 'Invalid kind' };
+    }
+  }
+  return { ok: true };
+}
+import { buildDisputeKit, resolveDisputeStorageFromEnv } from '../services/vra/disputeKitService';
 
 export async function getReconOverview(req: Request, res: Response) {
   try {
@@ -19,6 +62,10 @@ export async function getReconOverview(req: Request, res: Response) {
 export async function getReconDeltas(req: Request, res: Response) {
   try {
     const q = req.query as Record<string, string | undefined>;
+    const v = validateDeltasQuery(q);
+    if (!v.ok) {
+      return res.status(400).json({ success: false, error: v.error });
+    }
     const data = await vraService.getDeltas({
       appId: q.app_id,
       from: q.from,
@@ -31,6 +78,61 @@ export async function getReconDeltas(req: Request, res: Response) {
     return res.json({ success: true, ...data });
   } catch (err) {
     logger.error('VRA getReconDeltas failed', { error: (err as Error)?.message });
+    return res.status(500).json({ success: false, error: 'Internal error' });
+  }
+}
+
+export async function getReconDeltasCsv(req: Request, res: Response) {
+  try {
+    const q = req.query as Record<string, string | undefined>;
+    const v = validateDeltasQuery(q);
+    if (!v.ok) {
+      return res.status(400).json({ success: false, error: v.error });
+    }
+    const data = await vraService.getDeltas({
+      appId: q.app_id,
+      from: q.from,
+      to: q.to,
+      kind: q.kind as any,
+      minConf: q.min_conf ? Number(q.min_conf) : undefined,
+      page: q.page ? Number(q.page) : undefined,
+      pageSize: q.page_size ? Number(q.page_size) : undefined,
+    });
+
+    // Set headers for CSV download (streamed)
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    // Build a helpful filename with optional window
+    const ts = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+    const fromSafe = (q.from || '').slice(0, 10);
+    const toSafe = (q.to || '').slice(0, 10);
+    const suffix = fromSafe && toSafe ? `_${fromSafe}_to_${toSafe}` : '';
+    res.setHeader('Content-Disposition', `attachment; filename="recon_deltas${suffix}_${ts}.csv"`);
+
+    // CSV header
+    const header = 'kind,amount,currency,reason_code,window_start,window_end,evidence_id,confidence\n';
+    res.write(header);
+    for (const r of data.items) {
+      // Redact any sensitive content from reason, then escape for CSV
+      const redacted = redactCsvField(String(r.reasonCode || ''));
+      const reason = redacted
+        .replace(/\r|\n/g, ' ')
+        .replace(/"/g, '""') // escape quotes if any
+        .replace(/,/g, ' ');
+      const line = [
+        r.kind,
+        String(Number(r.amount) || 0),
+        r.currency,
+        reason,
+        r.windowStart,
+        r.windowEnd,
+        r.evidenceId,
+        String(Number(r.confidence) || 0),
+      ].join(',') + '\n';
+      res.write(line);
+    }
+    res.end();
+  } catch (err) {
+    logger.error('VRA getReconDeltasCsv failed', { error: (err as Error)?.message });
     return res.status(500).json({ success: false, error: 'Internal error' });
   }
 }
@@ -81,7 +183,19 @@ export async function createDispute(req: Request, res: Response) {
     );
     const amount = Number(sumRows[0]?.amount || 0);
     const disputeId = `disp_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-    const evidenceUri = `vra://disputes/${disputeId}`;
+
+    // Attempt to build a Dispute Kit bundle and store it (shadow-first design; best-effort)
+    let evidenceUri = `vra://disputes/${disputeId}`;
+    try {
+      const storage = resolveDisputeStorageFromEnv();
+      const kit = await buildDisputeKit(ids, { network, dryRun: false, storage });
+      if (kit?.storageUri) {
+        evidenceUri = kit.storageUri;
+      }
+    } catch (e) {
+      // If kit building fails, fall back to placeholder URI. Do not fail the request.
+      logger.warn('VRA createDispute: kit build failed, using placeholder URI', { error: (e as Error)?.message });
+    }
 
     await insertBatch('recon_disputes', [
       {

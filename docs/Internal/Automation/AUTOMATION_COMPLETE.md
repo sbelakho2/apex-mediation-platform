@@ -130,22 +130,22 @@ Customer signs up from Brazil (first in country)
 
 **Features:**
 - ✅ Auto-detect upsell opportunities based on usage
-- ✅ Real-Time Analytics: Dashboard views >50/month → $50/month
-- ✅ Advanced Targeting: 10+ countries → $150/month
-- ✅ Priority Support: 50M+ impressions → $100/month
-- ✅ White Label: 3+ apps → $500/month
+- ✅ Real-Time Analytics: Dashboard views >50/month → +0.25pp platform fee uplift
+- ✅ Advanced Targeting: 10+ countries → +0.40pp uplift
+- ✅ Priority Support: 50M+ impressions → +0.30pp uplift
+- ✅ White Label: 3+ apps → +0.75pp uplift (or dedicated minimum)
 - ✅ Auto-send proposal emails with 14-day trial offers
 
 **Eligibility Detection:**
 ```typescript
 // Auto-detect customers viewing dashboard >50×/month
-→ Propose Real-Time Analytics ($50/month)
+→ Propose Real-Time Analytics (+0.25pp platform fee)
 
 // Auto-detect customers in 10+ countries
-→ Propose Advanced Targeting ($150/month)
+→ Propose Advanced Targeting (+0.40pp platform fee)
 
 // Auto-detect 50M+ monthly impressions
-→ Propose Priority Support ($100/month)
+→ Propose Priority Support (+0.30pp platform fee)
 ```
 
 ### 6. Case Study Program ✅

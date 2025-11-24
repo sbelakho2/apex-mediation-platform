@@ -31,12 +31,18 @@ const redactString = (val: string): string => {
   let s = val;
   // Email redaction
   s = s.replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, '[REDACTED_EMAIL]');
-  // Authorization headers / Bearer tokens
+  // Authorization headers / Bearer tokens (inline)
   s = s.replace(/(authorization"?\s*:\s*")Bearer\s+[^"\s]+/gi, '$1Bearer [REDACTED]');
   s = s.replace(/Bearer\s+[A-Za-z0-9._-]+/g, 'Bearer [REDACTED]');
+  // OAuth-style tokens in query/body
+  s = s.replace(/(token|access_token|id_token)=([A-Za-z0-9._-]+)/gi, (_m, k) => `${k}=[REDACTED]`);
+  // JWT-like strings (3 base64url segments)
+  s = s.replace(/eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/g, '[REDACTED_JWT]');
   // Stripe keys
   s = s.replace(/sk_live_[A-Za-z0-9]+/g, 'sk_live_[REDACTED]');
   s = s.replace(/sk_test_[A-Za-z0-9]+/g, 'sk_test_[REDACTED]');
+  // Long hex-like secrets (32+ hex chars)
+  s = s.replace(/\b[0-9a-f]{32,}\b/gi, '[REDACTED_HEX]');
   // Potential card-like sequences (very conservative): 13-19 digits
   s = s.replace(/\b\d{13,19}\b/g, '[REDACTED_NUMERIC]');
   return s;
@@ -56,28 +62,51 @@ const SENSITIVE_KEYS = new Set([
   'password',
   'secret',
   'cookie',
+  // Proofs/crypto-related common fields — mask entirely in structured logs
+  'signature',
+  'sig',
+  'digest',
+  'hash',
+  'prev_hash',
 ]);
 
+function redactDeep(value: unknown): unknown {
+  if (value == null) return value as unknown;
+  if (typeof value === 'string') return redactString(value);
+  if (Array.isArray(value)) return value.map((v) => redactDeep(v));
+  if (typeof value === 'object') {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      if (SENSITIVE_KEYS.has(k)) {
+        out[k] = '[REDACTED]';
+      } else if (typeof v === 'string') {
+        out[k] = redactString(v);
+      } else {
+        out[k] = redactDeep(v);
+      }
+    }
+    return out;
+  }
+  return value;
+}
+
 export const redactLogInfo = <T extends Record<string, unknown>>(info: T): T => {
-  const mutated = info;
+  const mutated = { ...info } as Record<string, unknown>;
 
   if (typeof mutated.message === 'string') {
-    (mutated as Record<string, unknown>).message = redactString(mutated.message);
+    mutated.message = redactString(mutated.message as string);
   }
 
   for (const [key, value] of Object.entries(mutated)) {
-    if (key === 'message') {
-      continue;
-    }
-
+    if (key === 'message') continue;
     if (SENSITIVE_KEYS.has(key)) {
-      (mutated as Record<string, unknown>)[key] = '[REDACTED]';
-    } else if (typeof value === 'string') {
-      (mutated as Record<string, unknown>)[key] = redactString(value);
+      mutated[key] = '[REDACTED]';
+    } else {
+      mutated[key] = redactDeep(value);
     }
   }
 
-  return mutated;
+  return mutated as T;
 };
 
 // Build transports dynamically based on env/config

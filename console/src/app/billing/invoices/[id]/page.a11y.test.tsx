@@ -16,7 +16,7 @@ jest.mock('@/lib/billing', () => ({
     created_at: '2025-11-01T00:00:00Z',
     line_items: [
       {
-        description: 'Indie Plan',
+        description: 'Starter Plan',
         quantity: 1,
         unit_amount: 9900,
         amount: 9900,

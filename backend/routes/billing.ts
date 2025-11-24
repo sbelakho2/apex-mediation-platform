@@ -2,6 +2,12 @@ import express, { Request, Response } from 'express';
 import Stripe from 'stripe';
 import { Pool } from 'pg';
 import crypto from 'crypto';
+import { platformFeeService } from '../services/billing/platformFeeService';
+import {
+  PLATFORM_TIER_ORDER,
+  type PlatformTierId,
+  resolvePlatformTierId,
+} from '../src/config/platformTiers';
 
 const router = express.Router();
 
@@ -19,55 +25,82 @@ const pool = new Pool({
   password: process.env.DB_PASSWORD,
 });
 
+type PricingPlan = {
+  name: string;
+  price_cents: number | null;
+  currency: string;
+  included_impressions: number | null;
+  overage_rate_cents: number | null;
+  stripe_price_id: string | null;
+  features: string[];
+};
+
+const CHECKOUT_ELIGIBLE_PLANS: PlatformTierId[] = ['starter', 'growth'];
+
 /**
  * Pricing Configuration
  */
-const PRICING_PLANS = {
-  indie: {
-    name: 'Indie Plan',
-    price_cents: 9900, // $99/month
+const PRICING_PLANS: Record<PlatformTierId, PricingPlan> = {
+  starter: {
+    name: 'Tier 0 — Starter',
+    price_cents: 9900,
     currency: 'usd',
     included_impressions: 1_000_000,
-    overage_rate_cents: 10, // $0.10 per 1,000 impressions
-    stripe_price_id: process.env.STRIPE_INDIE_PRICE_ID || 'price_indie_monthly',
+    overage_rate_cents: 10,
+    stripe_price_id:
+      process.env.STRIPE_STARTER_PRICE_ID ||
+      process.env.STRIPE_INDIE_PRICE_ID ||
+      'price_starter_monthly',
     features: [
-      '1M ad impressions/month',
-      'All SDK features',
-      'Email support',
-      'Community access',
-      'Basic analytics',
+      '0% platform fee up to $10k mediated revenue',
+      '1M ad impressions/month included',
+      'Baseline observability + SDK access',
+      'Email support and community office hours',
     ],
   },
-  studio: {
-    name: 'Studio Plan',
-    price_cents: 49900, // $499/month
+  growth: {
+    name: 'Tier 1 — Growth',
+    price_cents: 49900,
     currency: 'usd',
     included_impressions: 10_000_000,
-    overage_rate_cents: 8, // $0.08 per 1,000 impressions
-    stripe_price_id: process.env.STRIPE_STUDIO_PRICE_ID || 'price_studio_monthly',
+    overage_rate_cents: 8,
+    stripe_price_id:
+      process.env.STRIPE_GROWTH_PRICE_ID ||
+      process.env.STRIPE_STUDIO_PRICE_ID ||
+      'price_growth_monthly',
     features: [
-      '10M ad impressions/month',
-      'All SDK features',
-      'Priority support',
-      'Dedicated account manager',
-      'Advanced analytics',
-      'Custom integrations',
+      '2.5% platform fee across $10k–$100k revenue bands',
+      '10M ad impressions/month included',
+      'Priority support with migration assistants',
+      'Advanced analytics and automated workflows',
+    ],
+  },
+  scale: {
+    name: 'Tier 2 — Scale',
+    price_cents: null,
+    currency: 'usd',
+    included_impressions: 50_000_000,
+    overage_rate_cents: 6,
+    stripe_price_id: null,
+    features: [
+      '2.0% platform fee for $100k–$500k revenue bands',
+      'Named revenue engineering pod + custom exports',
+      '50M ad impressions/month included',
+      'Contracted migration + observability tooling',
     ],
   },
   enterprise: {
-    name: 'Enterprise Plan',
-    price_cents: null, // Custom pricing
+    name: 'Tier 3 — Enterprise',
+    price_cents: null,
     currency: 'usd',
     included_impressions: null,
     overage_rate_cents: null,
     stripe_price_id: null,
     features: [
-      'Unlimited impressions',
-      'White-label SDK',
-      '24/7 support',
-      'SLA guarantee',
-      'Custom development',
-      'Dedicated infrastructure',
+      'Custom 1.0–1.5% platform fee for $500k+ revenue bands',
+      'Unlimited ad impressions with contractual SLAs',
+      'Dedicated infra, compliance, and bespoke data residency',
+      'Executive alignment, war-room workflows, and on-site rev ops',
     ],
   },
 };
@@ -77,9 +110,10 @@ const PRICING_PLANS = {
  * 
  * Get all available pricing plans
  */
-router.get('/pricing', async (req: Request, res: Response) => {
+router.get('/pricing', async (_req: Request, res: Response) => {
   res.json({
-    plans: PRICING_PLANS,
+    platform_tiers: platformFeeService.getTiers(),
+    legacy_subscription_plans: PRICING_PLANS,
     currency: 'USD',
   });
 });
@@ -91,7 +125,7 @@ router.get('/pricing', async (req: Request, res: Response) => {
  * 
  * Body:
  * - email: string
- * - plan: 'indie' | 'studio'
+ * - plan: 'starter' | 'growth'
  * - company_name: string (optional)
  * - vat_id: string (optional, for EU customers)
  */
@@ -99,9 +133,11 @@ router.post('/signup', async (req: Request, res: Response) => {
   const { email, plan, company_name, vat_id, country } = req.body;
 
   // Validate plan
-  if (!['indie', 'studio'].includes(plan)) {
+  const normalizedPlan = resolvePlatformTierId(plan);
+
+  if (!normalizedPlan || !CHECKOUT_ELIGIBLE_PLANS.includes(normalizedPlan)) {
     return res.status(400).json({ 
-      error: 'Invalid plan. Choose "indie" or "studio". Contact sales for Enterprise.' 
+      error: 'Invalid plan. Choose Starter or Growth. Contact sales for Scale or Enterprise.',
     });
   }
 
@@ -110,7 +146,13 @@ router.post('/signup', async (req: Request, res: Response) => {
   }
 
   try {
-    const planConfig = PRICING_PLANS[plan as 'indie' | 'studio'];
+    const planConfig = PRICING_PLANS[normalizedPlan];
+
+    if (!planConfig?.stripe_price_id) {
+      return res.status(400).json({
+        error: 'Selected plan requires a sales-assisted contract. Please contact sales.',
+      });
+    }
 
     // Create Stripe Checkout session
     const session = await stripe.checkout.sessions.create({
@@ -125,14 +167,14 @@ router.post('/signup', async (req: Request, res: Response) => {
       customer_email: email,
       client_reference_id: crypto.randomUUID(), // Track this signup
       metadata: {
-        plan,
+        plan: normalizedPlan,
         company_name: company_name || '',
         vat_id: vat_id || '',
         country: country || '',
       },
       subscription_data: {
         metadata: {
-          plan,
+          plan: normalizedPlan,
           included_impressions: planConfig.included_impressions.toString(),
           overage_rate_cents: planConfig.overage_rate_cents.toString(),
         },
@@ -150,7 +192,7 @@ router.post('/signup', async (req: Request, res: Response) => {
       billing_address_collection: 'required',
     });
 
-    console.log(`[Billing] Created checkout session: ${session.id} for ${email} (${plan})`);
+    console.log(`[Billing] Created checkout session: ${session.id} for ${email} (${normalizedPlan})`);
 
     res.json({
       checkout_url: session.url,
@@ -227,8 +269,8 @@ router.get('/signup/status/:session_id', async (req: Request, res: Response) => 
       );
 
       // 2. Create subscription record
-      const planType = session.metadata?.plan || 'indie';
-      const planConfig = PRICING_PLANS[planType as 'indie' | 'studio'];
+      const planType = resolvePlatformTierId(session.metadata?.plan) ?? 'starter';
+      const planConfig = PRICING_PLANS[planType];
 
       await client.query(
         `INSERT INTO subscriptions (
@@ -347,7 +389,9 @@ router.get('/portal', async (req: Request, res: Response) => {
 router.post('/upgrade', async (req: Request, res: Response) => {
   const { user_id, new_plan } = req.body;
 
-  if (!['indie', 'studio'].includes(new_plan)) {
+  const normalizedPlan = resolvePlatformTierId(new_plan);
+
+  if (!normalizedPlan || !CHECKOUT_ELIGIBLE_PLANS.includes(normalizedPlan)) {
     return res.status(400).json({ error: 'Invalid plan' });
   }
 
@@ -367,15 +411,25 @@ router.post('/upgrade', async (req: Request, res: Response) => {
 
     const { stripe_subscription_id, plan_type, stripe_customer_id } = result.rows[0];
 
+    const currentPlan = resolvePlatformTierId(plan_type);
+
+    if (!currentPlan) {
+      return res.status(400).json({ error: 'Current subscription tier is unsupported. Contact support.' });
+    }
+
     // Check if it's actually an upgrade
-    const planHierarchy: { [key: string]: number } = { indie: 1, studio: 2, enterprise: 3 };
-    if (planHierarchy[new_plan] <= planHierarchy[plan_type]) {
+    const planHierarchy = PLATFORM_TIER_ORDER.reduce<Record<PlatformTierId, number>>((acc, tier, index) => {
+      acc[tier] = index;
+      return acc;
+    }, {} as Record<PlatformTierId, number>);
+
+    if (planHierarchy[normalizedPlan] <= planHierarchy[currentPlan]) {
       return res.status(400).json({ error: 'Not an upgrade. Use downgrade endpoint or customer portal.' });
     }
 
     // Update subscription in Stripe
     const subscription = await stripe.subscriptions.retrieve(stripe_subscription_id);
-    const newPlanConfig = PRICING_PLANS[new_plan as 'indie' | 'studio'];
+    const newPlanConfig = PRICING_PLANS[normalizedPlan];
 
     await stripe.subscriptions.update(stripe_subscription_id, {
       items: [
@@ -398,7 +452,7 @@ router.post('/upgrade', async (req: Request, res: Response) => {
            updated_at = NOW()
        WHERE customer_id = $6 AND status = 'active'`,
       [
-        new_plan,
+        normalizedPlan,
         newPlanConfig.name,
         newPlanConfig.price_cents,
         newPlanConfig.included_impressions,
@@ -407,12 +461,12 @@ router.post('/upgrade', async (req: Request, res: Response) => {
       ]
     );
 
-    console.log(`[Billing] Upgraded ${user_id} from ${plan_type} to ${new_plan}`);
+    console.log(`[Billing] Upgraded ${user_id} from ${currentPlan} to ${normalizedPlan}`);
 
     res.json({
       success: true,
       message: `Successfully upgraded to ${newPlanConfig.name}`,
-      new_plan,
+      new_plan: normalizedPlan,
     });
   } catch (error: any) {
     console.error('[Billing] Upgrade error:', error);
@@ -442,6 +496,7 @@ router.get('/usage/:user_id', async (req: Request, res: Response) => {
     }
 
     const subscription = subResult.rows[0];
+    const planType = resolvePlatformTierId(subscription.plan_type) ?? subscription.plan_type;
 
     // Get usage from usage_records table
     const usageResult = await pool.query(
@@ -473,7 +528,7 @@ router.get('/usage/:user_id', async (req: Request, res: Response) => {
         overage: overage,
         percent_used: percentUsed.toFixed(2),
       },
-      plan: subscription.plan_type,
+      plan: planType,
       alert: percentUsed > 80 ? 'approaching_limit' : percentUsed > 100 ? 'over_limit' : null,
     });
   } catch (error: any) {

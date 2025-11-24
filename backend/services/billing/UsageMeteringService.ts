@@ -5,6 +5,13 @@ import { Pool } from 'pg';
 import Stripe from 'stripe';
 import { createClient } from '@clickhouse/client';
 import logger from '../../src/utils/logger';
+import {
+  PLATFORM_TIER_ORDER,
+  PLATFORM_TIER_USAGE_LIMITS,
+  type PlatformTierId,
+  type PlatformTierUsageLimits,
+  resolvePlatformTierId,
+} from '../../src/config/platformTiers';
 
 let stripeClient: Stripe | null = null;
 
@@ -68,113 +75,98 @@ interface UsageMetrics {
   period_end: Date;
 }
 
-interface PlanLimits {
-  plan_type: string;
-  included_impressions: number;
-  included_api_calls: number;
-  included_data_transfer_gb: number;
-  overage_price_impressions_cents: number; // per 1000
-  overage_price_api_calls_cents: number; // per 1000
-  overage_price_data_transfer_cents: number; // per GB
+interface PlanLimits extends PlatformTierUsageLimits {
+  plan_type: PlatformTierId;
 }
 
-const DEFAULT_PLAN_LIMITS: Record<string, PlanLimits> = {
-  indie: {
-    plan_type: 'indie',
-    included_impressions: 1_000_000,
-    included_api_calls: 100_000,
-    included_data_transfer_gb: 50,
-    overage_price_impressions_cents: 10, // $0.10 per 1K
-    overage_price_api_calls_cents: 5, // $0.05 per 1K
-    overage_price_data_transfer_cents: 10, // $0.10 per GB
-  },
-  studio: {
-    plan_type: 'studio',
-    included_impressions: 10_000_000,
-    included_api_calls: 1_000_000,
-    included_data_transfer_gb: 500,
-    overage_price_impressions_cents: 8, // $0.08 per 1K
-    overage_price_api_calls_cents: 4, // $0.04 per 1K
-    overage_price_data_transfer_cents: 8, // $0.08 per GB
-  },
-  enterprise: {
-    plan_type: 'enterprise',
-    included_impressions: 100_000_000,
-    included_api_calls: 10_000_000,
-    included_data_transfer_gb: 5000,
-    overage_price_impressions_cents: 5, // $0.05 per 1K
-    overage_price_api_calls_cents: 2, // $0.02 per 1K
-    overage_price_data_transfer_cents: 5, // $0.05 per GB
-  },
+const buildPlanLimits = (
+  tier: PlatformTierId,
+  overrides?: Partial<PlatformTierUsageLimits>
+): PlanLimits => {
+  const defaults = PLATFORM_TIER_USAGE_LIMITS[tier];
+  const plan: PlanLimits = {
+    plan_type: tier,
+    included_impressions: Number(overrides?.included_impressions ?? defaults.included_impressions),
+    included_api_calls: Number(overrides?.included_api_calls ?? defaults.included_api_calls),
+    included_data_transfer_gb: Number(
+      overrides?.included_data_transfer_gb ?? defaults.included_data_transfer_gb
+    ),
+    overage_price_impressions_cents: Number(
+      overrides?.overage_price_impressions_cents ?? defaults.overage_price_impressions_cents
+    ),
+    overage_price_api_calls_cents: Number(
+      overrides?.overage_price_api_calls_cents ?? defaults.overage_price_api_calls_cents
+    ),
+    overage_price_data_transfer_cents: Number(
+      overrides?.overage_price_data_transfer_cents ?? defaults.overage_price_data_transfer_cents
+    ),
+  };
+
+  const hasInvalidValue = [
+    plan.included_impressions,
+    plan.included_api_calls,
+    plan.included_data_transfer_gb,
+    plan.overage_price_impressions_cents,
+    plan.overage_price_api_calls_cents,
+    plan.overage_price_data_transfer_cents,
+  ].some((value) => Number.isNaN(value) || value < 0);
+
+  if (hasInvalidValue) {
+    logger.warn('[UsageMetering] Invalid overrides detected for plan; reverting to defaults', {
+      tier,
+    });
+    return { plan_type: tier, ...defaults };
+  }
+
+  return plan;
 };
 
-function resolvePlanLimitsFromEnv(): Record<string, PlanLimits> {
+const createDefaultPlanLimits = (): Record<PlatformTierId, PlanLimits> =>
+  PLATFORM_TIER_ORDER.reduce<Record<PlatformTierId, PlanLimits>>((acc, tier) => {
+    acc[tier] = buildPlanLimits(tier);
+    return acc;
+  }, {} as Record<PlatformTierId, PlanLimits>);
+
+function resolvePlanLimitsFromEnv(): Record<PlatformTierId, PlanLimits> {
+  const base = createDefaultPlanLimits();
   const raw = process.env.BILLING_PLAN_LIMITS_JSON;
-  if (!raw) return DEFAULT_PLAN_LIMITS;
+  if (!raw) return base;
+
   try {
-    const parsed = JSON.parse(raw) as Record<string, Partial<PlanLimits>>;
-    const normalized: Record<string, PlanLimits> = {};
-    for (const [key, value] of Object.entries(parsed)) {
-      // Basic shape validation with sensible fallbacks to defaults when available
-      const def = DEFAULT_PLAN_LIMITS[key as keyof typeof DEFAULT_PLAN_LIMITS];
-      if (!def) {
-        // Skip unknown plan keys to avoid accidental activation
+    const parsed = JSON.parse(raw) as Record<string, Partial<PlatformTierUsageLimits>>;
+    for (const [key, overrides] of Object.entries(parsed)) {
+      const tier = resolvePlatformTierId(key);
+      if (!tier) {
         logger.warn('[UsageMetering] Unknown plan in BILLING_PLAN_LIMITS_JSON; skipping', {
           plan: key,
         });
         continue;
       }
-      const plan: PlanLimits = {
-        plan_type: String((value.plan_type ?? key) as string),
-        included_impressions: Number(
-          value.included_impressions ?? def.included_impressions
-        ),
-        included_api_calls: Number(value.included_api_calls ?? def.included_api_calls),
-        included_data_transfer_gb: Number(
-          value.included_data_transfer_gb ?? def.included_data_transfer_gb
-        ),
-        overage_price_impressions_cents: Number(
-          value.overage_price_impressions_cents ?? def.overage_price_impressions_cents
-        ),
-        overage_price_api_calls_cents: Number(
-          value.overage_price_api_calls_cents ?? def.overage_price_api_calls_cents
-        ),
-        overage_price_data_transfer_cents: Number(
-          value.overage_price_data_transfer_cents ?? def.overage_price_data_transfer_cents
-        ),
-      };
-      // Quick sanity checks
-      if (
-        plan.included_impressions < 0 ||
-        plan.included_api_calls < 0 ||
-        plan.included_data_transfer_gb < 0 ||
-        plan.overage_price_impressions_cents < 0 ||
-        plan.overage_price_api_calls_cents < 0 ||
-        plan.overage_price_data_transfer_cents < 0
-      ) {
-        logger.warn(
-          '[UsageMetering] Negative values detected in BILLING_PLAN_LIMITS_JSON; using defaults for plan',
-          { plan: key }
-        );
-        normalized[key] = def;
-      } else {
-        normalized[key] = plan;
-      }
+
+      base[tier] = buildPlanLimits(tier, overrides);
     }
-    // Merge with defaults to ensure all expected plans exist
-    return { ...DEFAULT_PLAN_LIMITS, ...normalized };
+
+    return base;
   } catch (e) {
     logger.warn('[UsageMetering] Failed to parse BILLING_PLAN_LIMITS_JSON; using defaults', {
       error: (e as Error).message,
     });
-    return DEFAULT_PLAN_LIMITS;
+    return base;
   }
 }
 
-export class UsageMeteringService {
-  private planLimits: Record<string, PlanLimits>;
+const coercePlanType = (value: string): PlatformTierId => {
+  const tier = resolvePlatformTierId(value);
+  if (!tier) {
+    throw new Error(`Unknown plan type: ${value}`);
+  }
+  return tier;
+};
 
-  constructor(planLimits?: Record<string, PlanLimits>) {
+export class UsageMeteringService {
+  private planLimits: Record<PlatformTierId, PlanLimits>;
+
+  constructor(planLimits?: Record<PlatformTierId, PlanLimits>) {
     this.planLimits = planLimits ?? resolvePlanLimitsFromEnv();
   }
 
@@ -283,7 +275,7 @@ export class UsageMeteringService {
       throw new Error(`No active subscription for customer ${customerId}`);
     }
 
-    const planType = subscription.rows[0].plan_type;
+    const planType = coercePlanType(subscription.rows[0].plan_type);
     const limits = this.planLimits[planType];
 
     if (!limits) {
@@ -435,7 +427,8 @@ export class UsageMeteringService {
     for (const sub of subscriptions.rows) {
       try {
         const usage = await this.getCurrentPeriodUsage(sub.customer_id);
-        const limits = this.planLimits[sub.plan_type];
+        const planType = coercePlanType(sub.plan_type);
+        const limits = this.planLimits[planType];
 
         if (!limits) continue;
 
@@ -536,7 +529,7 @@ export class UsageMeteringService {
       throw new Error(`No active subscription found for customer ${customerId}`);
     }
 
-    const planType = subscription.rows[0].plan_type;
+    const planType = coercePlanType(subscription.rows[0].plan_type);
     const limits = this.planLimits[planType];
 
     if (!limits) {

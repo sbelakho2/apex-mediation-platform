@@ -219,7 +219,7 @@ npm run test:automation-cycle
 
 | Metric | Without Automation | With Automation | Improvement |
 |--------|-------------------|-----------------|-------------|
-| **Revenue per Customer** (at 1000 customers) | $150/mo | $400/mo | +167% |
+| **Platform Fee per Customer** (at 1000 customers) | 2.5% (≈$1.2k/mo) | 2.0% (≈$4k/mo) | +233% |
 | **Churn Rate** | 10%/mo | 5%/mo | -50% |
 | **Solo Operator Time** | 20 hrs/week | <5 min/week | -99.6% |
 | **System Uptime** | 99.5% | 99.95% | +0.45% |
@@ -356,7 +356,7 @@ ApexMediation now operates as a **fully autonomous, self-improving platform**:
 - 20+ cron jobs running 24/7
 - 50+ metrics monitored continuously
 - 100+ automated actions per day
-- $400K/month revenue with 92% profit margin
+- $400K/month platform fees (~$16B mediated annually) with 92% profit margin
 
 **Next Steps**:
 1. Install OpenAI SDK: `npm install openai`

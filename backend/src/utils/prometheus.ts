@@ -1,4 +1,4 @@
-import { collectDefaultMetrics, register, Histogram, Counter } from 'prom-client';
+import { collectDefaultMetrics, register, Histogram, Counter, Gauge } from 'prom-client';
 
 const collectDefaults = process.env.PROMETHEUS_COLLECT_DEFAULTS !== '0';
 
@@ -222,4 +222,110 @@ export const vraStatementsLoadFailuresTotal = new Counter({
   name: 'vra_statements_load_failures_total',
   help: 'Total number of failed statement loads',
   labelNames: ['network', 'phase', 'reason'] as const,
+});
+
+// Expected Builder metrics
+export const vraExpectedSeenTotal = new Counter({
+  name: 'vra_expected_seen_total',
+  help: 'Total number of receipts seen by Expected Builder (rows read from PG transparency_receipts)',
+});
+
+export const vraExpectedWrittenTotal = new Counter({
+  name: 'vra_expected_written_total',
+  help: 'Total number of expected rows written (or would be written in dry-run) to recon_expected',
+});
+
+export const vraExpectedSkippedTotal = new Counter({
+  name: 'vra_expected_skipped_total',
+  help: 'Total number of receipts skipped (already existed or no matching paid event)',
+});
+
+export const vraExpectedBuildDurationSeconds = new Histogram({
+  name: 'vra_expected_build_duration_seconds',
+  help: 'Duration of Expected Builder run in seconds',
+  labelNames: ['outcome'] as const, // outcome: success|empty|dry_run|error
+  buckets: [0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 30, 60],
+});
+
+// Matching engine metrics
+export const vraMatchDurationSeconds = new Histogram({
+  name: 'vra_match_duration_seconds',
+  help: 'Duration of matching engine runs in seconds',
+  buckets: [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10],
+});
+
+export const vraMatchCandidatesTotal = new Counter({
+  name: 'vra_match_candidates_total',
+  help: 'Total number of candidate pairs evaluated by the matching engine',
+});
+
+export const vraMatchAutoTotal = new Counter({
+  name: 'vra_match_auto_total',
+  help: 'Total number of matches auto-accepted (confidence >= threshold)',
+});
+
+export const vraMatchReviewTotal = new Counter({
+  name: 'vra_match_review_total',
+  help: 'Total number of matches sent for review (min_conf <= confidence < auto threshold)',
+});
+
+export const vraMatchUnmatchedTotal = new Counter({
+  name: 'vra_match_unmatched_total',
+  help: 'Total number of statements that remained unmatched',
+});
+
+// Exact-key matches (confidence 1.0 via explicit identifiers)
+export const vraMatchExactTotal = new Counter({
+  name: 'vra_match_exact_total',
+  help: 'Total number of exact-key matches (confidence 1.0)',
+});
+
+// Review matches persisted to ClickHouse review table
+export const vraMatchReviewPersistedTotal = new Counter({
+  name: 'vra_match_review_persisted_total',
+  help: 'Total number of review matches persisted to recon_match_review',
+});
+
+// Reconcile & Delta Classification metrics
+export const vraReconcileDurationSeconds = new Histogram({
+  name: 'vra_reconcile_duration_seconds',
+  help: 'Duration of reconcile/delta classification runs in seconds',
+  buckets: [0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 30, 60],
+});
+
+export const vraReconcileRowsTotal = new Counter({
+  name: 'vra_reconcile_rows_total',
+  help: 'Total number of rows emitted into recon_deltas by kind',
+  labelNames: ['kind'] as const,
+});
+
+// Dispute kit builder metrics
+export const vraDisputeKitsBuiltTotal = new Counter({
+  name: 'vra_dispute_kits_built_total',
+  help: 'Total number of dispute kits built',
+  labelNames: ['network'] as const,
+});
+
+export const vraDisputeKitFailuresTotal = new Counter({
+  name: 'vra_dispute_kit_failures_total',
+  help: 'Total number of dispute kit build failures',
+  labelNames: ['reason'] as const,
+});
+
+// Proofs issuance metrics
+export const vraProofsIssuanceDurationSeconds = new Histogram({
+  name: 'vra_proofs_issuance_duration_seconds',
+  help: 'Duration of proofs issuance runs in seconds',
+  buckets: [0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 30, 60],
+});
+
+export const vraProofsVerifyFailuresTotal = new Counter({
+  name: 'vra_proofs_verify_failures_total',
+  help: 'Total number of verification failures for proofs',
+});
+
+export const vraProofsCoveragePct = new Gauge({
+  name: 'vra_proofs_coverage_pct',
+  help: 'Coverage percentage of receipts included in daily roots (0..100)',
+  labelNames: ['day'] as const,
 });

@@ -1,77 +1,70 @@
 # Pricing
 
-_Last updated: 2025-11-18_  
+_Last updated: 2025-11-24_  
 _Owner: Business / Finance Team_  
-_Review Cycle: Quarterly or when pricing changes (next review: 2026-02-18)_  
+_Review Cycle: Quarterly or when pricing changes (next review: 2026-02-28)_  
 _Status: Active_
 
 > **Pricing notice:** Rates shown here are current and subject to change with 30 days’ advance notice. Your monthly invoice reflects the authoritative amount owed.
 
-Transparent pricing with no hidden fees. Pay only for what you earn.
+> **Launch status:** ApexMediation is operating a Bring-Your-Own (BYO) control plane. You bring network credentials and accounts; we orchestrate auctions, observability, fraud tooling, and transparency. Managed demand will be announced separately.
+
+Transparent platform fees tied directly to the revenue you already earn.
 
 ---
 
-## Revenue Share Model
+## What You’re Paying For (BYO)
 
-We use **revenue share** - you only pay when you earn. No upfront costs, no monthly minimums.
+Because you own every network relationship, ApexMediation does **not** resell media or take custody of demand. The platform fee covers:
 
-### Revenue Base Definition
+1. **The mediation/auction brain** – unified waterfall + HB + pacing/floor guardrails and policy automation.
+2. **Observability & debugging** – metrics, SLO dashboards, mediation debugger, adapter-level traces.
+3. **Fraud & quality tooling** – shadow ML, anomaly alerts, and IVT guardrails tuned for BYO.
+4. **Migration & cryptographic transparency** – Migration Studio, signed logs, reproducible auctions, and transparency receipts.
+5. **Convenience & consolidation** – one SDK, one console, one integration instead of managing 10+ adapters per app.
 
-**"Your Monthly Revenue"** = Publisher-recognized, IVT-adjusted revenue after network clawbacks for the period, aggregated at the account level across all apps & platforms (mobile, web, CTV). Negative adjustments carry forward to prevent gaming.
-
-### Marginal Tier Pricing
-
-We use **marginal (banded) pricing** - each revenue slice is charged at its tier rate. This prevents cliff behavior and ensures you never lose money by earning more.
-
-| Revenue Band | Our Share | You Keep |
-|--------------|-----------|----------|
-| €0 - €10,000 | 15% | 85% |
-| €10,001 - €50,000 | 12% | 88% |
-| €50,001 - €100,000 | 10% | 90% |
-| €100,000+ | 8% | 92% |
-
-**Example Calculation at €120,000/month**:
-- First €10,000 @ 15% = **€1,500**
-- Next €40,000 (€10,001-€50,000) @ 12% = **€4,800**
-- Next €50,000 (€50,001-€100,000) @ 10% = **€5,000**
-- Remaining €20,000 (€100,000-€120,000) @ 8% = **€1,600**
-- **Total ApexMediation fee: €12,900** (10.75% effective rate)
-- **You receive: €107,100** (89.25%)
-
-**Why marginal tiers?** You never lose money by earning more. Each euro above a threshold is simply charged at the next tier rate - standard in financial services and fair for publishers.
+The fee is a **platform fee on gross mediated revenue**, not a margin on ad spend that we control.
 
 ---
 
-## CTV/Web Video Premium
+## BYO Platform Fee Tiers
 
-**CTV (Connected TV) and web video** drive higher eCPMs but also require additional infrastructure and support.
+All tiers are based on **gross mediated revenue per app portfolio per month** (what the networks pay you before our fee). Fees scale smoothly; there are no cliffs.
 
-**Premium:** Add **+2 percentage points** to each tier
+| Tier | Gross Mediated Revenue (Monthly) | Platform Fee | Key Inclusions |
+|------|----------------------------------|---------------|----------------|
+| **Tier 0 — Starter** | $0 – $10,000 | 0% (free) | Full SDKs (Android, iOS, Unity, Web, TV), up to 5 apps, core analytics, basic debugger. Goal: remove friction for small teams. |
+| **Tier 1 — Growth** | $10,001 – $100,000 | 2.5% of mediated revenue | Everything in Starter **plus** advanced observability (adapter metrics, SLO dashboards), Migration Studio, email/Slack support with baseline SLA. |
+| **Tier 2 — Scale** | $100,001 – $500,000 | 2.0% of mediated revenue | Everything in Growth **plus** priority support, custom dashboards & exports (BigQuery/S3), early access to fraud/ML features while they run in shadow mode. |
+| **Tier 3 — Enterprise** | $500,000+ | Custom (typically 1.0–1.5%) + minimum monthly fee | Everything in Scale **plus** contractual SLAs, custom onboarding/migration help, dedicated Slack channel, quarterly reviews, and bespoke compliance requirements. |
 
-| Revenue Band | Standard Rate | CTV/Web Rate |
-|--------------|---------------|--------------|
-| €0 - €10,000 | 15% | **17%** |
-| €10,001 - €50,000 | 12% | **14%** |
-| €50,001 - €100,000 | 10% | **12%** |
-| €100,000+ | 8% | **10%** |
+### Worked Examples
 
-**Example at €120,000 CTV revenue:**
-- First €10,000 @ 17% = €1,700
-- Next €40,000 @ 14% = €5,600
-- Next €50,000 @ 12% = €6,000
-- Remaining €20,000 @ 10% = €2,000
-- **Total fee: €15,300** (12.75% effective)
-- **You receive: €104,700** (87.25%)
+- **Starter example:** A small studio earns $8,000 this month. The platform fee is 0%. You pay $0 and keep the full $8,000.
+- **Growth example:** A studio earns $50,000. The fee is 2.5% of $50,000 = **$1,250**. You receive $48,750.
+- **Scale example:** A portfolio earns $250,000. The fee is 2.0% of $250,000 = **$5,000**. You receive $245,000.
+- **Enterprise example:** A publisher earns $900,000. The negotiated fee is 1.25% + a $5k minimum. Effective fee = max($11,250, $5,000) = **$11,250** plus any contracted minimum adjustments.
 
-**Applies to:**
-- CTV/OTT platforms (Roku, Fire TV, Apple TV, etc.)
-- Web video inventory
-- Premium video ad formats
+Fees are calculated on IVT-adjusted revenue after network clawbacks. Negative adjustments roll forward to prevent gaming.
 
-**Does NOT apply to:**
-- Mobile in-app display ads (standard rates)
-- Mobile banner/interstitial ads (standard rates)
-- Audio-only ads (standard rates)
+---
+
+## Optional Add-Ons (BYO-Compatible)
+
+These services never take custody of your demand; they layer on top of BYO:
+
+- **White-label console** – Flat monthly fee **or** +0.25% platform fee uplift per tenant.
+- **Extended data retention / premium analytics** – Per-month surcharge for additional lookback windows and advanced modeling.
+- **Hands-on migration services** – One-time consulting fee per studio for adapter mapping, QA, and on-site support.
+
+---
+
+## Why This Model Fits BYO
+
+- **No network credentials change hands.** SDK adapters use your accounts, so compliance and rev rec stay simple.
+- **Aligned incentives.** Our revenue is tied to how much value we mediate for you, not which networks you use.
+- **Simple message.** “We take 0–2.5% of the revenue you already earn, in exchange for better fill, fewer crashes, and full transparency.”
+- **Predictable scaling.** As your mediated revenue grows, the effective fee rate drops and unlocks more tooling/support.
 
 ---
 
@@ -114,65 +107,44 @@ Dec 2-5:         Payment received in your account
 
 ---
 
-## What's Included
+## What's Included By Tier
 
-### All Customers Get
-
-✅ **Full SDK Access**: Unity, iOS, Android, Web, CTV  
-✅ **20+ Ad Networks**: Google AdMob, Meta, Unity, AppLovin, etc.  
-✅ **Real-time Analytics**: Revenue, eCPM, fill rates, geo breakdown  
-✅ **Fraud Detection**: Basic IVT filtering included  
-✅ **Monthly Payouts**: NET 30 payment terms  
-✅ **Dashboard Access**: 24/7 self-service portal  
-✅ **Email Support**: Best effort, typically <48 hours  
-✅ **API Access**: Full REST API for automation  
-
-### Optional Add-Ons
-
-**Geographic Discount Optimizer**  
-**Price**: +2% revenue share  
-**Benefit**: Auto-adjusts CPM by user location for max eCPM  
-**ROI**: Typically +15-25% revenue increase  
-
-**Self-Evolving AI System**  
-**Price**: +3% revenue share  
-**Benefit**: AI continuously optimizes placements, formats, timing  
-**ROI**: Typically +20-40% revenue increase  
-
-**Premium Support**  
-**Price**: €500/month  
-**Benefit**: 1-hour response time, phone support, dedicated Slack  
+| Capability | Starter | Growth | Scale | Enterprise |
+|------------|---------|--------|-------|------------|
+| SDK coverage (Android, iOS, Unity, Web, TV) | ✅ | ✅ | ✅ | ✅ |
+| Apps per org | Up to 5 | Unlimited | Unlimited | Unlimited |
+| Core analytics & debugger | ✅ | ✅ | ✅ | ✅ |
+| Adapter/SLO observability | — | ✅ | ✅ | ✅ |
+| Migration Studio | — | ✅ | ✅ | ✅ |
+| Signed logs & reproducible auctions | ✅ | ✅ | ✅ | ✅ |
+| Fraud/quality ML (shadow) | — | — | ✅ (early access) | ✅ |
+| Support SLAs | Community/best effort | Email + Slack (business hours) | Priority (same-day) | Contractual 24/7 |
+| Custom dashboards/export | — | — | ✅ | ✅ |
+| Dedicated TAM / QBRs | — | — | — | ✅ |
 
 ---
 
 ## Getting Started
 
-**Ready to start earning?**
+1. [Sign up for free](https://apexmediation.bel-consulting.ee/signup) – no credit card required.
+2. [Integrate the SDK](/docs/getting-started/quickstart) – typically under 10 minutes per platform.
+3. Point your adapters at ApexMediation, verify Migration Studio mappings, and go live with full transparency.
 
-1. [Sign up for free](https://apexmediation.bel-consulting.ee/signup) (no credit card required)
-2. [Integrate the SDK](/docs/getting-started/quickstart) (< 10 minutes)
-3. Start earning within 24 hours
-
-**Questions?** Contact sales@bel-consulting.ee or [schedule a demo](https://apexmediation.bel-consulting.ee/demo).
+Questions? Email sales@bel-consulting.ee or [schedule a demo](https://apexmediation.bel-consulting.ee/demo).
 
 ---
 
-## Price Comparison
+## Comparison Snapshot
 
-How we compare to competitors:
+| Feature | ApexMediation (BYO) | Legacy Network A | Legacy Network B |
+|---------|---------------------|------------------|------------------|
+| Platform fee | 0–2.5% (banded) | ~30% opaque take | 25–35% cliff |
+| SDKs required | 1 (ours) + your BYO adapters | 5–10 | 5–10 |
+| Transparency | Signed logs, Migration Studio, debugger | Limited | Limited |
+| Support | Slack/email + dedicated channel on upper tiers | Ticket queues | Ticket queues |
+| Payment terms | NET 30 | NET 60 | NET 60 |
 
-| Feature | ApexMediation | AdMob | Unity Ads | ironSource |
-|---------|---------------|-------|-----------|------------|
-| **Revenue Share** | 8-15% (marginal) | ~30-40% (opaque) | ~30% (cliff) | ~25% (cliff) |
-| **Upfront Cost** | €0 | €0 | €0 | €0 |
-| **Monthly Minimum** | €0 | €0 | €0 | €0 |
-| **Minimum Payout** | €100 | €100 | €100 | €250 |
-| **Payment Terms** | NET 30 | NET 60 | NET 60 | NET 60 |
-| **Setup Time** | < 10 min | ~30 min | ~20 min | ~1 hour |
-| **CTV/Web Video** | ✅ +2pp | Limited | ✅ | ✅ |
-| **Transparent Pricing** | ✅ Fully documented | ❌ Opaque | Partial | Partial |
-
-**Bottom Line**: Our **marginal tier pricing** means you never lose money by earning more. Revenue share is **2-3x lower** than competitors at high volumes, with faster **NET 30 payment terms** compared to competitors' NET 60.
+Bottom line: we monetize the control plane—not your demand. You keep your accounts, pay only when you earn, and unlock better tooling as you scale.
 
 ---
 
@@ -180,13 +152,14 @@ How we compare to competitors:
 
 ### When do I start paying?
 
-You start paying our revenue share **immediately** when you earn revenue. We deduct our share and pay you the remainder monthly via NET 30 terms (30 days after month-end invoice).
+- Starter tier is free forever.
+- Growth, Scale, and Enterprise platform fees apply only once your mediated revenue crosses their thresholds. Charges show up on your monthly invoice (NET 30) alongside usage details.
 
 ### Are there any hidden fees?
 
 **No.** The only costs are:
-- Our revenue share (clearly stated above)
-- Optional add-on features (opt-in only)
+- The platform fee percentage for your tier (0–2.5% or your negotiated enterprise rate)
+- Optional add-ons you explicitly enable
 - Payment method fees (only if using PayPal)
 
 ### Can I test before committing?
@@ -195,16 +168,16 @@ You start paying our revenue share **immediately** when you earn revenue. We ded
 
 ### What if I have both mobile and CTV traffic?
 
-The CTV premium (+2pp) only applies to CTV/web video revenue. Your mobile display ad revenue uses standard rates. We track this automatically.
+All channels count toward the same tier. We break out CTV/web video vs. mobile revenue in the dashboard, but the platform fee is applied to the total mediated revenue for the month unless you enable a specific add-on.
 
 ### Do you offer discounts for non-profits?
 
-Yes! Non-profit organizations and educational institutions qualify for **50% off** our revenue share.
+Yes! Non-profit organizations and educational institutions qualify for **50% off** the platform fee.
 
 **Contact**: support@bel-consulting.ee with proof of non-profit status.
 
 ---
 
-**Last Updated**: 2025-11-18  
-**Pricing effective**: 2025-11-18  
+**Last Updated**: 2025-11-24  
+**Pricing effective**: 2025-11-24  
 **Subject to change**: We'll notify you 30 days before any price changes

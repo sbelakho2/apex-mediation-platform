@@ -12,8 +12,11 @@ function mockGetBillingSettings() {
     return existing as {
       plan: {
         name: string
-        type: 'indie'
-        price: number
+        type: 'starter'
+        platform_fee_rate: number
+        platform_fee_label: string
+        revenue_band: string
+        sample_fee_note?: string
         currency: string
         included_impressions: number
         included_api_calls: number
@@ -31,9 +34,12 @@ function mockGetBillingSettings() {
 
   const settings = Object.freeze({
     plan: {
-      name: 'Indie Plan',
-      type: 'indie' as const,
-      price: 9900,
+      name: 'Tier 0 — Starter',
+      type: 'starter' as const,
+      platform_fee_rate: 0,
+      platform_fee_label: '0% platform fee',
+      revenue_band: 'Covers up to $10k mediated revenue per app per month',
+      sample_fee_note: 'Upgrade automatically once you exceed $10k/mo for any app',
       currency: 'usd',
       included_impressions: 1000000,
       included_api_calls: 100000,

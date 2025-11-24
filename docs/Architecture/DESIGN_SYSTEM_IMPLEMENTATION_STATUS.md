@@ -15,7 +15,7 @@ All Design.md homepage components have been created and integrated:
   - Golden yellow background (#FECB00)
   - SVG scalloped bottom edge (wavy pattern)
   - Close button with state management
-  - Message: "🎉 New: Real-time bidding with 5 premium networks now live!"
+  - Message: "🎉 Bring-your-own SDKs now ship 15 built-in adapters across Android, iOS, Unity, CTV, and Web."
 - **References:** Design.md § "Top Notification Bar"
 - **Location:** `/src/components/NotificationBar.tsx`
 

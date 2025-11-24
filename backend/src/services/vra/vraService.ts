@@ -80,11 +80,24 @@ export class VraService {
     // Coverage: ratio of rows with any paid data (proxy for matched coverage)
     const coveragePercent = byBreakdown.length > 0 ? 100 : 0;
 
+    // Per-network slices for UI overview and dashboards
+    const byNetworkMap = new Map<string, { network: string; impressions: number; paid: number; expected: number }>();
+    for (const r of byBreakdown) {
+      const prev = byNetworkMap.get(r.network) || { network: r.network, impressions: 0, paid: 0, expected: 0 };
+      prev.impressions += r.impressions;
+      prev.paid += r.paid;
+      // expected currently mirrors paid until recon_expected is live
+      prev.expected += r.paid;
+      byNetworkMap.set(r.network, prev);
+    }
+    const byNetwork = Array.from(byNetworkMap.values()).sort((a, b) => b.paid - a.paid);
+
     return {
       coveragePercent,
       variancePercent,
       totals,
       byBreakdown,
+      byNetwork,
     };
   }
 
@@ -119,7 +132,7 @@ export class VraService {
       SELECT kind, amount, currency, reason_code, toString(window_start) AS window_start, toString(window_end) AS window_end, evidence_id, confidence
       FROM recon_deltas
       ${whereSql}
-      ORDER BY window_start DESC
+      ORDER BY window_start DESC, evidence_id ASC
       LIMIT {limit:UInt32} OFFSET {offset:UInt32}
       `,
       { ...params, limit: pageSize, offset: (page - 1) * pageSize }

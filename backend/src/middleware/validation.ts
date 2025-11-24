@@ -176,6 +176,8 @@ export const usageRecordSchema = z.object({
   }),
 });
 
+const planTierSchema = z.enum(['starter', 'growth', 'scale', 'enterprise']);
+
 // =====================================================================
 // CUSTOMER MANAGEMENT SCHEMAS
 // =====================================================================
@@ -188,7 +190,7 @@ export const updateCustomerSchema = z.object({
     email: emailSchema.optional(),
     name: z.string().min(1).max(255).optional(),
     company_name: z.string().min(1).max(255).optional(),
-    plan: z.enum(['indie', 'studio', 'enterprise']).optional(),
+    plan: planTierSchema.optional(),
     status: z.enum(['active', 'suspended', 'cancelled']).optional(),
   }).refine(data => Object.keys(data).length > 0, {
     message: 'At least one field must be provided',

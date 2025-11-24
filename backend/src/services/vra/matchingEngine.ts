@@ -115,6 +115,30 @@ export function matchStatementsToExpected(
   const review: MatchResult[] = [];
   const unmatched: StatementRowLite[] = [];
 
+  // Helper: derive a deterministic tie-break key for an expected row relative to a statement
+  const tieKey = (stmt: StatementRowLite, exp: ExpectedRowLite) => {
+    const paid = typeof stmt.paidUsd === 'number' && isFinite(stmt.paidUsd) ? stmt.paidUsd : Number.NaN;
+    const amtDelta = Number.isFinite(paid) ? Math.abs(paid - exp.expectedUsd) : Number.POSITIVE_INFINITY;
+    // Unit agreement count (higher is better) — invert to sort ascending
+    let agree = 0;
+    if (exp.appIdHint && exp.appIdHint === stmt.appId) agree++;
+    if (exp.adUnitIdHint && exp.adUnitIdHint === stmt.adUnitId) agree++;
+    if (exp.countryHint && exp.countryHint === stmt.country) agree++;
+    if (exp.formatHint && exp.formatHint === stmt.format) agree++;
+    const unitPenalty = 4 - agree; // fewer agreements → larger penalty
+    // Primary key order per plan: requestId → timestamp → amount delta → unit hints
+    return [exp.requestId || '', exp.ts || '', amtDelta, unitPenalty] as const;
+  };
+
+  const cmpTieKey = (a: ReturnType<typeof tieKey>, b: ReturnType<typeof tieKey>) => {
+    // Lexicographic compare where strings ascending, numbers ascending
+    if (a[0] < b[0]) return -1; if (a[0] > b[0]) return 1;
+    if (a[1] < b[1]) return -1; if (a[1] > b[1]) return 1;
+    if (a[2] < b[2]) return -1; if (a[2] > b[2]) return 1;
+    if (a[3] < b[3]) return -1; if (a[3] > b[3]) return 1;
+    return 0;
+  };
+
   for (const stmt of statements) {
     // 0) Exact-key path (requestId short-circuit)
     if (stmt.requestId) {
@@ -126,7 +150,7 @@ export function matchStatementsToExpected(
       }
     }
 
-    let best: { exp: ExpectedRowLite; score: number; reasons: { time: number; amount: number; unit: number } } | null = null;
+    let best: { exp: ExpectedRowLite; score: number; reasons: { time: number; amount: number; unit: number }; key: ReturnType<typeof tieKey> } | null = null;
 
     for (const exp of expected) {
       // Quick filter: ensure same day window heuristic (expected ts same calendar day as statement date)
@@ -140,7 +164,17 @@ export function matchStatementsToExpected(
       const sUnit = unitAgreementScore(stmt, exp);
       const score = cfg.wTime * sTime + cfg.wAmount * sAmt + cfg.wUnit * sUnit;
       vraMatchCandidatesTotal.inc();
-      if (!best || score > best.score) best = { exp, score, reasons: { time: sTime, amount: sAmt, unit: sUnit } };
+      if (!best) {
+        best = { exp, score, reasons: { time: sTime, amount: sAmt, unit: sUnit }, key: tieKey(stmt, exp) };
+      } else if (score > best.score) {
+        best = { exp, score, reasons: { time: sTime, amount: sAmt, unit: sUnit }, key: tieKey(stmt, exp) };
+      } else if (Math.abs(score - best.score) <= 1e-9) {
+        // Deterministic tie-breaker
+        const k = tieKey(stmt, exp);
+        if (cmpTieKey(k, best.key) < 0) {
+          best = { exp, score, reasons: { time: sTime, amount: sAmt, unit: sUnit }, key: k };
+        }
+      }
     }
 
     if (!best) {

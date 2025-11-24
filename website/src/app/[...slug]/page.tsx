@@ -124,7 +124,7 @@ function renderContent(slugKey: string, breadcrumbs: Breadcrumb[]): React.ReactN
               <section id="getting-started" className="rounded-3xl bg-white p-8 shadow-xl ring-1 ring-gray-200">
                 <h2 className="text-h3 font-semibold text-gray-900">1. Getting Started</h2>
                 <p className="mt-4 text-body text-gray-700 leading-relaxed">
-                  Create an account, add your first app, and invite collaborators. Once your app is connected you can enable premium demand with a single toggle.
+                  Create an account, add your first app, and invite collaborators. Once your app is connected you can enter your own network credentials and run the BYO control plane end to end.
                 </p>
                 <ol className="mt-6 space-y-3 text-body text-gray-700">
                   <li className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
@@ -153,7 +153,7 @@ ApexMediation.loadInterstitial({ placementId: 'level_complete' });`}
               <section id="real-time-bidding" className="rounded-3xl bg-white p-8 shadow-xl ring-1 ring-gray-200">
                 <h2 className="text-h3 font-semibold text-gray-900">2. Real-Time Bidding</h2>
                 <p className="mt-4 text-body text-gray-700 leading-relaxed">
-                  Every impression is auctioned across premium demand partners with transparent clearing pricing. Enable header bidding, waterfall mediation, or a hybrid approach from the control center.
+                  Every impression is auctioned across the demand sources you configure. Enable header bidding, waterfall mediation, or a hybrid approach from the control center—always using the BYO adapters tied to your accounts.
                 </p>
                 <ul className="mt-4 space-y-3 text-body text-gray-700">
                   <li className="flex items-start gap-3">
@@ -283,72 +283,81 @@ Body: {
       return (
         <PageLayout
           title="Pricing"
-          intro="Straightforward plans that scale with you. Start for free, unlock premium demand when you are ready, and never worry about hidden fees or surprise overages."
-          heroTag="Pricing"
+          intro="We are launching with a single Bring-Your-Own control plane. You plug in your own demand accounts while our SDKs, consent tooling, telemetry, and payout automation take a documented 15→8% marginal share."
+          heroTag="Billing"
           breadcrumbs={breadcrumbs}
         >
-          <div className="grid gap-6 lg:grid-cols-3">
-            {[
-              {
-                name: 'Foundation',
-                price: 'Free',
-                description: 'Perfect for indie developers and MVPs launching their first ad stack.',
-                bullets: ['Up to 50k monthly active users', 'Email support within 1 business day', 'Unlimited placements & networks', 'Real-time analytics dashboards'],
-              },
-              {
-                name: 'Growth',
-                price: '$499/mo + 5% revenue share',
-                description: 'Upgrade to premium demand partners, automation, and hands-on consulting.',
-                highlight: 'Most Popular',
-                bullets: ['Dedicated success manager', 'Bid landscape exports & API access', 'ML fraud detection with automation', 'Weekly strategy reviews'],
-              },
-              {
-                name: 'Enterprise',
-                price: 'Custom',
-                description: 'Designed for studios with millions of DAU, regulated workflows, and advanced requirements.',
-                bullets: ['Custom rev share', 'On-site enablement', 'Private bidder marketplace', '99.99% uptime SLA & 24/7 support'],
-              },
-            ].map((plan) => (
-              <section
-                key={plan.name}
-                className={`rounded-3xl border bg-white p-8 text-gray-900 shadow-xl ring-1 ring-gray-200 transition hover:-translate-y-1 hover:shadow-2xl ${
-                  plan.highlight ? 'ring-2 ring-brand-200' : ''
-                }`}
-              >
-                {plan.highlight && (
-                  <span className="mb-4 inline-flex items-center rounded-full bg-brand-100 px-3 py-1 text-xs font-semibold tracking-wide text-brand-700">
-                    {plan.highlight}
-                  </span>
-                )}
-                <h2 className="text-h3 font-bold uppercase">{plan.name}</h2>
-                <p className="mt-3 text-3xl font-extrabold">{plan.price}</p>
-                <p className="mt-4 text-sm text-gray-600 leading-relaxed">{plan.description}</p>
-                <ul className="mt-6 space-y-3 text-sm text-gray-700">
-                  {plan.bullets.map((item) => (
-                    <li key={item} className="flex items-start gap-3">
-                      <span className="mt-1 h-2 w-2 rounded-full bg-brand-500" aria-hidden="true" />
-                      {item}
-                    </li>
-                  ))}
-                </ul>
-                <a
-                  href="/signup"
-                  className="mt-8 inline-flex w-full justify-center btn-primary"
-                >
-                  Choose Plan →
-                </a>
-              </section>
-            ))}
+          <div className="space-y-6">
+            <section className="rounded-3xl bg-white p-8 text-gray-900 shadow-xl ring-1 ring-gray-200 space-y-4">
+              <h2 className="text-h3 font-bold uppercase">BYO marginal revenue share</h2>
+              <p className="text-sm text-gray-700">
+                Pay only for what you earn. Each revenue band is billed at its own rate so effective percentages fall as you scale, and nothing extra is charged for managed demand because that product has not launched yet.
+              </p>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm text-gray-700">
+                  <thead>
+                    <tr>
+                      <th className="py-2 font-semibold">Band</th>
+                      <th className="py-2 font-semibold">Apex share</th>
+                      <th className="py-2 font-semibold">Publisher share</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td className="py-2">€0 – €10,000</td>
+                      <td className="py-2">15%</td>
+                      <td className="py-2">85%</td>
+                    </tr>
+                    <tr>
+                      <td className="py-2">€10,001 – €50,000</td>
+                      <td className="py-2">12%</td>
+                      <td className="py-2">88%</td>
+                    </tr>
+                    <tr>
+                      <td className="py-2">€50,001 – €100,000</td>
+                      <td className="py-2">10%</td>
+                      <td className="py-2">90%</td>
+                    </tr>
+                    <tr>
+                      <td className="py-2">€100,000+</td>
+                      <td className="py-2">8%</td>
+                      <td className="py-2">92%</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <p className="text-sm text-gray-700">
+                Example from the docs: €120k in a month results in €12.9k fee (10.75% effective) and €107.1k paid to you.
+              </p>
+            </section>
+
+            <section className="rounded-3xl bg-white p-8 text-gray-900 shadow-xl ring-1 ring-gray-200 space-y-3">
+              <h2 className="text-h3 font-bold uppercase">What the BYO fee covers</h2>
+              <ul className="list-disc space-y-3 pl-6 text-sm text-gray-700">
+                <li>Credential vault, adapter orchestration, and Config-as-Code for every supported network.</li>
+                <li>Consent + compliance tooling (GDPR, COPPA, store policies) plus transparency receipts.</li>
+                <li>Telemetry, debugger replays, fraud monitoring, and verifiable reconciliation exports.</li>
+                <li>Finance automation: marginal billing, NET 30 payouts, €100 minimum, SEPA/SWIFT wiring.</li>
+              </ul>
+            </section>
+
+            <section className="rounded-3xl bg-white p-8 text-gray-900 shadow-xl ring-1 ring-gray-200 space-y-3">
+              <h2 className="text-h3 font-bold uppercase">Payment terms</h2>
+              <ul className="list-disc space-y-3 pl-6 text-sm text-gray-700">
+                <li>Invoices issued on the 1st of each month for the prior period; payment NET 30.</li>
+                <li>€100 payout minimum applies to BYO earnings. Balances roll over until the threshold is hit.</li>
+                <li>Payment methods: SEPA, SWIFT, and PayPal (2.9% + $0.30 fee).</li>
+                <li>Currency: EUR for settlements; dashboards show converted local currency for convenience.</li>
+              </ul>
+            </section>
+
+            <section className="rounded-3xl bg-brand-50 p-8 text-gray-900 shadow-xl ring-1 ring-brand-100 space-y-3">
+              <h2 className="text-h3 font-bold uppercase">Talk to us</h2>
+              <p className="text-sm text-gray-700">
+                Non-profits receive 50% off the BYO revenue share. Contact <a href="mailto:sales@bel-consulting.ee" className="underline">sales@bel-consulting.ee</a> or <Link href="/contact" className="font-bold underline">schedule a demo</Link> to lock in current rates (30 days’ notice before changes).
+              </p>
+            </section>
           </div>
-          <section className="mt-12 rounded-3xl bg-white/10 p-8 text-sm leading-relaxed text-white/80">
-            <h2 className="text-sm font-bold uppercase text-brand-100">Billing Basics</h2>
-            <p className="mt-3">
-              Revenue share is collected monthly from payouts. Premium plan fees are invoiced at the start of each billing cycle. We support wire transfer, card, and invoice financing.
-            </p>
-            <p className="mt-3">
-              Need procurement paperwork? Email <a href="mailto:billing@apexmediation.com" className="underline">billing@apexmediation.com</a> for vendor forms, SOC 2 Type II reports, and security questionnaires.
-            </p>
-          </section>
         </PageLayout>
       );
 
@@ -366,7 +375,7 @@ Body: {
               <ul className="mt-4 space-y-3 text-sm text-gray-700">
                 <li>Reset your password via <Link href="/signin?redirect=%2Fdashboard" className="font-bold underline">Sign In</Link> → “Forgot password”.</li>
                 <li>Invite teammates from <Link href="/dashboard/settings?tab=security" className="font-bold underline">Settings → Security</Link>.</li>
-                <li>Contact us at <a href="mailto:support@apexmediation.com" className="underline">support@apexmediation.com</a> for account merges.</li>
+                <li>Contact us at <a href="mailto:support@bel-consulting.ee" className="underline">support@bel-consulting.ee</a> for account merges.</li>
               </ul>
             </section>
             <section className="rounded-3xl bg-white p-8 text-gray-900 shadow-xl ring-1 ring-gray-200">
@@ -375,7 +384,7 @@ Body: {
                 Troubleshoot low fill, enable new demand sources, or schedule a mediation audit. Include app ID, platform, and SDK version for the fastest response.
               </p>
               <a
-                href="mailto:support@apexmediation.com?subject=Monetisation%20support"
+                href="mailto:support@bel-consulting.ee?subject=Monetisation%20support"
                 className="mt-6 inline-flex items-center gap-2 btn-primary text-sm"
               >
                 Email Monetisation Team →
@@ -386,7 +395,7 @@ Body: {
               <p className="mt-4 text-sm text-gray-700">
                 Monthly payouts with NET 30 terms - invoiced on the 1st of each month, payment processed 30 days later. Bank transfers can take 2-5 business days. View invoices and remittance files in <Link href="/dashboard/settings?tab=payment" className="font-bold underline">Settings → Payment Methods</Link>.
               </p>
-              <p className="mt-4 text-sm text-gray-700">To update banking info, submit a signed W-9/W-8BEN to <a href="mailto:billing@apexmediation.com" className="underline">billing@apexmediation.com</a>.</p>
+              <p className="mt-4 text-sm text-gray-700">To update banking info, submit a signed W-9/W-8BEN to <a href="mailto:billing@bel-consulting.ee" className="underline">billing@bel-consulting.ee</a>.</p>
             </section>
             <section className="rounded-3xl bg-white p-8 text-gray-900 shadow-xl ring-1 ring-gray-200">
               <h2 className="text-h3 font-bold uppercase">Live chat & SLA</h2>
@@ -494,7 +503,7 @@ Body: {
                 <p className="mt-1 text-xs font-bold uppercase tracking-wide text-brand-700">{role.location}</p>
                 <p className="mt-4 text-sm text-gray-700">{role.description}</p>
                 <a
-                  href="mailto:careers@apexmediation.com"
+                  href="mailto:careers@bel-consulting.ee"
                   className="mt-6 inline-flex items-center gap-2 btn-primary text-sm"
                 >
                   Apply via Email →
@@ -519,7 +528,7 @@ Body: {
               <ul className="mt-4 space-y-3 text-sm text-gray-700">
                 <li><a href="/press/apexmediation-media-kit.zip" className="underline">Media kit (logos, product shots)</a></li>
                 <li><a href="/press/fact-sheet.pdf" className="underline">Fact sheet</a></li>
-                <li><a href="mailto:press@apexmediation.com" className="underline">press@apexmediation.com</a></li>
+                <li><a href="mailto:press@bel-consulting.ee" className="underline">press@bel-consulting.ee</a></li>
               </ul>
             </section>
             <section className="rounded-3xl bg-white p-6 text-gray-900 shadow-xl ring-1 ring-gray-200">
@@ -710,18 +719,55 @@ Body: {
       return (
         <PageLayout
           title="Privacy Policy"
-          intro="We comply with GDPR, CCPA, and COPPA requirements. Transparency is non-negotiable."
+          intro="This summary mirrors the Customer-Facing Privacy, GDPR, and Troubleshooting guides so you can see exactly what data we process, why, and for how long."
           heroTag="Legal"
           breadcrumbs={breadcrumbs}
         >
-          <section className="rounded-3xl bg-white p-8 text-gray-900 shadow-xl ring-1 ring-gray-200">
-            <h2 className="text-h3 font-bold uppercase">Highlights</h2>
-            <ul className="mt-4 list-disc space-y-3 pl-6 text-sm text-gray-700">
-              <li>We only collect data necessary to fulfil ad requests and process payouts.</li>
-              <li>Publishers can request deletion of user data within 30 days via <a href="mailto:privacy@apexmediation.com" className="underline">privacy@apexmediation.com</a>.</li>
-              <li>Data is stored in EU-West (Frankfurt) and backed up in Dublin.</li>
-            </ul>
-          </section>
+          <div className="space-y-6">
+            <section className="rounded-3xl bg-white p-8 text-gray-900 shadow-xl ring-1 ring-gray-200">
+              <h2 className="text-h3 font-bold uppercase">Data we collect</h2>
+              <p className="mt-3 text-sm text-gray-700">
+                We act as your data processor and only collect the fields described in the GDPR Compliance guide:
+              </p>
+              <ul className="mt-4 list-disc space-y-3 pl-6 text-sm text-gray-700">
+                <li>Device identifiers (IDFA, GAID, advertising ID, hashed user IDs)</li>
+                <li>Device metadata (model, OS version, locale, screen size, timezone)</li>
+                <li>Approximate location derived from IP for geo targeting and fraud controls</li>
+                <li>Usage and ad interaction data (session duration, impressions, clicks, revenue)</li>
+                <li>Publisher account data necessary for invoicing (company name, billing contact, tax IDs)</li>
+              </ul>
+            </section>
+
+            <section className="rounded-3xl bg-white p-8 text-gray-900 shadow-xl ring-1 ring-gray-200">
+              <h2 className="text-h3 font-bold uppercase">How we use data</h2>
+              <ul className="mt-4 list-disc space-y-3 pl-6 text-sm text-gray-700">
+                <li>Deliver personalised or contextual ads when you obtain valid consent.</li>
+                <li>Run fraud detection (device, behavioural, timing, and network signals) with 99.7% precision.</li>
+                <li>Power analytics, pacing, and experimentation dashboards described in the Features docs.</li>
+                <li>Process payouts under the marginal revenue-share pricing tables (NET 30, €100 minimum).</li>
+              </ul>
+              <p className="mt-4 text-sm text-gray-700">
+                Legal bases include consent (personalised ads/analytics) and legitimate interest (fraud prevention, security, non-personalised ads). We never sell data or ingest special-category data.
+              </p>
+            </section>
+
+            <section className="rounded-3xl bg-white p-8 text-gray-900 shadow-xl ring-1 ring-gray-200">
+              <h2 className="text-h3 font-bold uppercase">Storage & retention</h2>
+              <p className="text-sm text-gray-700">
+                Data resides in EU-West (Frankfurt) with encrypted backups in Dublin. Active users are retained while your app remains installed. Inactive user records auto-delete 90 days after the last event, and account-level data is removed 30 days after closure unless finance or law requires longer retention. Aggregated, anonymised metrics may persist for benchmarking.
+              </p>
+            </section>
+
+            <section className="rounded-3xl bg-white p-8 text-gray-900 shadow-xl ring-1 ring-gray-200">
+              <h2 className="text-h3 font-bold uppercase">Your rights & contacts</h2>
+              <ul className="mt-4 list-disc space-y-3 pl-6 text-sm text-gray-700">
+                <li>Access, deletion, portability, rectification, and objection rights honoured within 30 days.</li>
+                <li>Use the documented `/v1/gdpr/access` and `/v1/gdpr/delete` endpoints or email <a href="mailto:privacy@bel-consulting.ee" className="underline">privacy@bel-consulting.ee</a>.</li>
+                <li>Our Data Protection Officer: <a href="mailto:dpo@apexmediation.ee" className="underline">dpo@apexmediation.ee</a>.</li>
+                <li>Sub-processors are limited to the ad networks you enable plus audited infrastructure vendors with SOC 2 Type II-aligned controls.</li>
+              </ul>
+            </section>
+          </div>
         </PageLayout>
       );
 
@@ -729,18 +775,55 @@ Body: {
       return (
         <PageLayout
           title="Terms of Service"
-          intro="These terms govern your access to ApexMediation. By creating an account you agree to the obligations below."
+          intro="These highlights mirror the contractual language used in the Billing & Compliance and Support documentation."
           heroTag="Legal"
           breadcrumbs={breadcrumbs}
         >
-          <section className="rounded-3xl bg-white p-8 text-gray-900 shadow-xl ring-1 ring-gray-200">
-            <ol className="space-y-4 text-sm text-gray-700">
-              <li><span className="font-bold text-gray-900">1. Accounts.</span> You are responsible for credential security and ensuring authorised access only.</li>
-              <li><span className="font-bold text-gray-900">2. Payments.</span> Revenue share fees are deducted from payouts; invoices due within 30 days.</li>
-              <li><span className="font-bold text-gray-900">3. Acceptable Use.</span> No prohibited content, bot traffic, or tampering with auctions.</li>
-              <li><span className="font-bold text-gray-900">4. Liability.</span> Platform provided “as is”; liability capped at fees paid in the last 12 months.</li>
-            </ol>
-          </section>
+          <div className="space-y-6">
+            <section className="rounded-3xl bg-white p-8 text-gray-900 shadow-xl ring-1 ring-gray-200">
+              <h2 className="text-h3 font-bold uppercase">Accounts & access</h2>
+              <p className="text-sm text-gray-700">
+                Keep credentials secure, enable 2FA, and grant least-privilege roles (Admin, Finance, Analyst, Read-only) as documented in the dashboard overview. You must notify us within 24 hours of suspected compromise.
+              </p>
+            </section>
+
+            <section className="rounded-3xl bg-white p-8 text-gray-900 shadow-xl ring-1 ring-gray-200 space-y-3">
+              <h2 className="text-h3 font-bold uppercase">Fees & payment terms</h2>
+              <ul className="list-disc space-y-3 pl-6 text-sm text-gray-700">
+                <li>Revenue share applies marginally per published bands (15%, 12%, 10%, 8%).</li>
+                <li>Invoices issue on the first business day each month and are payable NET 30.</li>
+                <li>We offset negative adjustments, clawbacks, or chargebacks against future payouts.</li>
+                <li>Minimum payout is €100; balances roll forward until the threshold is met.</li>
+              </ul>
+            </section>
+
+            <section className="rounded-3xl bg-white p-8 text-gray-900 shadow-xl ring-1 ring-gray-200 space-y-3">
+              <h2 className="text-h3 font-bold uppercase">Acceptable use & compliance</h2>
+              <ul className="list-disc space-y-3 pl-6 text-sm text-gray-700">
+                <li>No prohibited content, invalid traffic, ad stacking, or tampering with SDKs or auctions.</li>
+                <li>You must provide accurate consents (GDPR/TCF, COPPA, US-GPP) and honour opt-outs recorded via ApexMediation APIs.</li>
+                <li>We may suspend access for material breaches, fraud, or legal requirements after notifying your primary contact.</li>
+              </ul>
+            </section>
+
+            <section className="rounded-3xl bg-white p-8 text-gray-900 shadow-xl ring-1 ring-gray-200 space-y-3">
+              <h2 className="text-h3 font-bold uppercase">Service levels & support</h2>
+              <ul className="list-disc space-y-3 pl-6 text-sm text-gray-700">
+                <li>Dashboard availability target: 99.5% monthly; edge bidders are multi-region.</li>
+                <li>Support response: under 4 business hours (Mon–Fri, 09:00–17:00 EET) via email or in-app chat.</li>
+                <li>Planned maintenance communicated at least 48 hours in advance.</li>
+              </ul>
+            </section>
+
+            <section className="rounded-3xl bg-white p-8 text-gray-900 shadow-xl ring-1 ring-gray-200 space-y-3">
+              <h2 className="text-h3 font-bold uppercase">Liability & termination</h2>
+              <ul className="list-disc space-y-3 pl-6 text-sm text-gray-700">
+                <li>Liability capped at the fees paid to ApexMediation during the preceding 12 months.</li>
+                <li>Either party may terminate with 30 days’ notice; data deletion SLAs (30 days) continue to apply.</li>
+                <li>EU law governs; disputes handled in Tallinn, Estonia unless otherwise agreed.</li>
+              </ul>
+            </section>
+          </div>
         </PageLayout>
       );
 
@@ -748,15 +831,55 @@ Body: {
       return (
         <PageLayout
           title="GDPR"
-          intro="ApexMediation acts as a processor for publisher data. We offer DPAs, SCCs, and fully auditable consent tools."
+          intro="Directly summarised from the Customer-Facing GDPR Compliance Guide so your legal, product, and finance teams have a single source of truth."
           heroTag="Compliance"
           breadcrumbs={breadcrumbs}
         >
-          <section className="rounded-3xl bg-white p-8 text-gray-900 shadow-xl ring-1 ring-gray-200">
-            <p className="text-sm text-gray-700">
-              Sign a Data Processing Agreement inside <Link href="/dashboard/settings?tab=security" className="font-bold underline">Settings → Security</Link>. Consent strings follow the IAB TCF framework and are stored for 13 months.
-            </p>
-          </section>
+          <div className="space-y-6">
+            <section className="rounded-3xl bg-white p-8 text-gray-900 shadow-xl ring-1 ring-gray-200 space-y-4">
+              <h2 className="text-h3 font-bold uppercase">Roles & agreements</h2>
+              <ul className="list-disc space-y-3 pl-6 text-sm text-gray-700">
+                <li>You are the Data Controller; ApexMediation is the Data Processor.</li>
+                <li>Execute the Data Processing Agreement (Article 28 GDPR) plus Standard Contractual Clauses directly inside <Link href="/dashboard/settings?tab=security" className="font-bold underline">Settings → Security</Link>.</li>
+                <li>Sub-processors are limited to audited infrastructure vendors and the ad networks you explicitly enable.</li>
+              </ul>
+            </section>
+
+            <section className="rounded-3xl bg-white p-8 text-gray-900 shadow-xl ring-1 ring-gray-200 space-y-4">
+              <h2 className="text-h3 font-bold uppercase">Consent & lawful basis</h2>
+              <p className="text-sm text-gray-700">
+                The SDK exposes helpers to detect when consent is required (IAB TCF) and to store consent objects for up to 13 months. Personalised ads require consent; fraud detection, security, and non-personalised ads operate under legitimate interest. Provide clear privacy notices, separate toggles per purpose, and make opt-out as easy as opt-in.
+              </p>
+            </section>
+
+            <section className="rounded-3xl bg-white p-8 text-gray-900 shadow-xl ring-1 ring-gray-200 space-y-4">
+              <h2 className="text-h3 font-bold uppercase">Data subject requests</h2>
+              <p className="text-sm text-gray-700">
+                Fulfil Right of Access, Deletion, Rectification, Portability, and Objection within 30 days using the documented APIs:
+              </p>
+              <ul className="list-disc space-y-3 pl-6 text-sm text-gray-700">
+                <li><code className="rounded bg-gray-100 px-1 py-0.5">POST /v1/gdpr/access</code> – returns JSON or CSV bundles for a device/user identifier.</li>
+                <li><code className="rounded bg-gray-100 px-1 py-0.5">POST /v1/gdpr/delete</code> – queues deletion with confirmation when data is purged from hot and cold storage.</li>
+                <li>Automations ensure standard requests finish in minutes; complex batches complete well within the 30-day SLA.</li>
+              </ul>
+            </section>
+
+            <section className="rounded-3xl bg-white p-8 text-gray-900 shadow-xl ring-1 ring-gray-200 space-y-4">
+              <h2 className="text-h3 font-bold uppercase">Security & retention</h2>
+              <ul className="list-disc space-y-3 pl-6 text-sm text-gray-700">
+                <li>Encryption in transit (TLS 1.3) and at rest (AES-256) with SOC 2 Type II-aligned controls.</li>
+                <li>Inactive user data automatically deletes after 90 days; account-level data deletes 30 days post-closure.</li>
+                <li>Breaches are reported to you within 24 hours and to authorities within 72 hours when required.</li>
+              </ul>
+            </section>
+
+            <section className="rounded-3xl bg-white p-8 text-gray-900 shadow-xl ring-1 ring-gray-200 space-y-4">
+              <h2 className="text-h3 font-bold uppercase">Need help?</h2>
+              <p className="text-sm text-gray-700">
+                Contact <a href="mailto:dpo@apexmediation.ee" className="underline">dpo@apexmediation.ee</a> for privacy questions or <a href="mailto:support@bel-consulting.ee" className="underline">support@bel-consulting.ee</a> for integration help. Sample consent copy, DPIA templates, and audit checklists live inside the Customer-Facing GDPR guide.
+              </p>
+            </section>
+          </div>
         </PageLayout>
       );
 
@@ -764,7 +887,7 @@ Body: {
       return (
         <PageLayout
           title="Security"
-          intro="SOC 2 Type II, ISO 27001-aligned controls, and a security team that responds within hours."
+          intro="SOC 2 Type II-aligned controls, quarterly Cure53 penetration tests, and redaction-first telemetry—all documented in the Security playbooks."
           heroTag="Trust"
           breadcrumbs={breadcrumbs}
         >
@@ -772,15 +895,24 @@ Body: {
             <section className="rounded-3xl bg-white p-6 text-gray-900 shadow-xl ring-1 ring-gray-200">
               <h2 className="text-h3 font-bold uppercase">Controls</h2>
               <ul className="mt-4 list-disc space-y-2 pl-6 text-sm text-gray-700">
-                <li>Encryption at rest (AES-256) and in transit (TLS 1.3).</li>
-                <li>Quarterly penetration tests by Cure53.</li>
-                <li>Background checks for production-access staff.</li>
+                <li>Encryption at rest (AES-256) and in transit (TLS 1.3) across EU-West regions.</li>
+                <li>Quarterly penetration tests by Cure53 plus continuous dependency scanning.</li>
+                <li>Role-based access, hardware security keys, and background checks for production access.</li>
+                <li>Telemetry automatically redacts consent strings, credentials, and user identifiers before export.</li>
               </ul>
             </section>
             <section className="rounded-3xl bg-white p-6 text-gray-900 shadow-xl ring-1 ring-gray-200">
-              <h2 className="text-h3 font-bold uppercase">Report an Issue</h2>
+              <h2 className="text-h3 font-bold uppercase">Data handling</h2>
+              <ul className="mt-4 list-disc space-y-2 pl-6 text-sm text-gray-700">
+                <li>Inactive user data deleted after 90 days; account data deleted 30 days after closure.</li>
+                <li>SOC 2 Type II-aligned policies cover incident response, logging, and vendor reviews.</li>
+                <li>24-hour breach notification commitment to customers and 72-hour regulator timeline compliance.</li>
+              </ul>
+            </section>
+            <section className="rounded-3xl bg-white p-6 text-gray-900 shadow-xl ring-1 ring-gray-200">
+              <h2 className="text-h3 font-bold uppercase">Report an issue</h2>
               <p className="mt-3 text-sm text-gray-700">
-                Email <a href="mailto:security@apexmediation.com" className="underline">security@apexmediation.com</a> for vulnerabilities. We operate a responsible disclosure program with cash rewards.
+                Email <a href="mailto:security@bel-consulting.ee" className="underline">security@bel-consulting.ee</a> or open a ticket through the dashboard. We run a responsible disclosure program with cash rewards and publish RCAs within 48 hours of closing incidents.
               </p>
             </section>
           </div>
@@ -791,38 +923,36 @@ Body: {
       return (
         <PageLayout
           title="Cookie Policy"
-          intro="We use cookies solely to remember your consent choices and keep you signed in."
+          intro="Cookie usage mirrors the Privacy and GDPR guides—only essential auth/session cookies are required."
           heroTag="Legal"
           breadcrumbs={breadcrumbs}
         >
-          <section className="rounded-3xl bg-white p-8 text-gray-900 shadow-xl ring-1 ring-gray-200">
-            <h2 className="text-h3 font-bold uppercase">Operational cookies</h2>
-            <p className="mt-3 text-sm text-gray-700">
-              Essential cookies store authentication tokens and localisation preferences. Analytics cookies are opt-in and anonymised. Update settings anytime via the cookie banner.
-            </p>
-          </section>
+          <div className="space-y-6">
+            <section className="rounded-3xl bg-white p-8 text-gray-900 shadow-xl ring-1 ring-gray-200">
+              <h2 className="text-h3 font-bold uppercase">Essential cookies</h2>
+              <p className="mt-3 text-sm text-gray-700">
+                Required for sign-in sessions, CSRF protection, and consent storage. Names include <code className="rounded bg-gray-100 px-1 py-0.5">apex_session</code>, <code className="rounded bg-gray-100 px-1 py-0.5">apex_locale</code>, and <code className="rounded bg-gray-100 px-1 py-0.5">apex_consent</code>. Expire within 30 days or immediately when you sign out.
+              </p>
+            </section>
+            <section className="rounded-3xl bg-white p-8 text-gray-900 shadow-xl ring-1 ring-gray-200">
+              <h2 className="text-h3 font-bold uppercase">Optional analytics</h2>
+              <p className="mt-3 text-sm text-gray-700">
+                We offer anonymised product analytics to improve documentation and onboarding flows. These cookies are disabled by default in the EEA until you opt in through the consent banner. Opt-out at any time via the “Cookie settings” link in the footer.
+              </p>
+            </section>
+            <section className="rounded-3xl bg-white p-8 text-gray-900 shadow-xl ring-1 ring-gray-200">
+              <h2 className="text-h3 font-bold uppercase">Managing preferences</h2>
+              <ul className="mt-4 list-disc space-y-3 pl-6 text-sm text-gray-700">
+                <li>Update or withdraw consent from the banner or by visiting <Link href="/cookie-settings" className="font-bold underline">Cookie Settings</Link>.</li>
+                <li>Essential cookies can only be removed by clearing your browser storage or closing the account.</li>
+                <li>Contact <a href="mailto:privacy@bel-consulting.ee" className="underline">privacy@bel-consulting.ee</a> for detailed cookie inventories or vendor agreements.</li>
+              </ul>
+            </section>
+          </div>
         </PageLayout>
       );
 
     default:
       return null;
   }
-}
-
-function renderFallback(breadcrumbs: Breadcrumb[]) {
-  const title = breadcrumbs[breadcrumbs.length - 1]?.label ?? 'Information';
-  return (
-    <PageLayout
-      title={title}
-      intro="We are continuously expanding our knowledge base. Let us know what you would like to see here."
-      heroTag="Coming Soon"
-      breadcrumbs={breadcrumbs}
-    >
-      <section className="rounded-3xl bg-white p-8 text-gray-900 shadow-xl ring-1 ring-gray-200">
-        <p className="text-body text-gray-700 leading-relaxed">
-          In the meantime you can browse our <Link href="/documentation" className="font-bold underline">documentation</Link>, read the latest <Link href="/blog" className="font-bold underline">blog posts</Link>, or reach out via <Link href="/support" className="font-bold underline">support</Link>.
-        </p>
-      </section>
-    </PageLayout>
-  );
 }

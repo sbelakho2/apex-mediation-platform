@@ -40,4 +40,20 @@ describe('VRA Service — getOverview basics', () => {
     expect(params.from).toBe(from);
     expect(params.to).toBe(to);
   });
+
+  it('includes per-network slices sorted by paid desc', async () => {
+    // Adjust mock to return two networks
+    const { executeQuery } = jest.requireMock('../../../utils/clickhouse');
+    (executeQuery as jest.Mock).mockResolvedValueOnce([
+      { network: 'unity', format: 'video', country: 'US', impressions: '50', paid: '20.00' },
+      { network: 'admob', format: 'banner', country: 'US', impressions: '100', paid: '10.00' },
+    ]);
+    const out = await vraService.getOverview({ from: '2025-11-01T00:00:00Z', to: '2025-11-02T00:00:00Z' });
+    expect(Array.isArray(out.byNetwork)).toBe(true);
+    expect(out.byNetwork!.length).toBe(2);
+    // Sorted by paid desc: unity first
+    expect(out.byNetwork![0].network).toBe('unity');
+    expect(out.byNetwork![0].paid).toBeCloseTo(20.0, 5);
+    expect(out.byNetwork![1].network).toBe('admob');
+  });
 });

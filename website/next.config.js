@@ -5,7 +5,6 @@ const nextConfig = {
   
   // Use src directory for app and pages + other experimental flags
   experimental: {
-    appDir: true,
     optimizeCss: false,
     optimizePackageImports: ['react-icons', 'framer-motion'],
   },

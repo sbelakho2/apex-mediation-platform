@@ -46,7 +46,7 @@ This document provides a complete mapping of every UI component to its implement
 // Reference: Design.md § "Top Notification Bar"
 <div className="bg-sunshine-yellow py-3 px-4 relative">
   <p className="text-center text-primary-blue font-bold">
-    🎉 New: Real-time bidding with 5 premium networks now live!
+    🎉 Bring-your-own SDKs now ship 15 built-in adapters across Android, iOS, Unity, CTV, and Web.
   </p>
   <svg className="absolute bottom-0 left-0 w-full" ...>
     {/* Scalloped edge path */}

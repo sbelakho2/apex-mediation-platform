@@ -1,5 +1,6 @@
 import { apiClient, handleApiError, AUTH_UNAUTHORIZED_EVENT } from './api-client'
 import type { AxiosResponse, AxiosError } from 'axios'
+import type { PlatformTierId } from './platformTiers'
 
 export const INVOICE_PDF_CACHE_TTL_MS = 10 * 60 * 1000 // 10 minutes
 export const INVOICE_PDF_CACHE_MAX_ENTRIES = 25
@@ -107,7 +108,7 @@ export interface UsageData {
     total_overage_cost: number
   }
   subscription: {
-    plan_type: string
+    plan_type: PlatformTierId
     included_impressions: number
     included_api_calls: number
     included_data_transfer_gb: number

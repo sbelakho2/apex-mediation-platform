@@ -4,6 +4,7 @@
 import express from 'express';
 import { usageMeteringService } from '../services/billing/UsageMeteringService';
 import { authenticate } from '../middleware/auth';
+import { assertPlatformTierId } from '../src/config/platformTiers';
 
 const router = express.Router();
 
@@ -144,14 +145,15 @@ router.get('/limits', authenticate, async (req, res) => {
       return res.status(404).json({ error: 'No active subscription found' });
     }
 
-    const { plan_type, included_impressions } = subscription.rows[0];
+    const planType = assertPlatformTierId(subscription.rows[0].plan_type, 'Unknown platform tier on subscription');
+    const { included_impressions } = subscription.rows[0];
     const usage = await usageMeteringService.getCurrentPeriodUsage(customerId);
 
     const percentUsed = (usage.impressions / included_impressions) * 100;
     const remaining = Math.max(0, included_impressions - usage.impressions);
 
     res.json({
-      plan_type,
+      plan_type: planType,
       limits: {
         impressions: included_impressions,
       },

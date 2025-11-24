@@ -157,8 +157,9 @@ export class FirstCustomerExperienceService {
           s.plan_type,
           u.total_impressions,
           CASE 
-            WHEN s.plan_type = 'indie' THEN 1000000
-            WHEN s.plan_type = 'studio' THEN 10000000
+            WHEN s.plan_type = 'starter' THEN 1000000
+            WHEN s.plan_type = 'growth' THEN 10000000
+            WHEN s.plan_type = 'scale' THEN 50000000
             ELSE 100000000
           END as plan_limit
         FROM customers c
@@ -168,8 +169,9 @@ export class FirstCustomerExperienceService {
         WHERE s.status = 'active'
           AND u.total_impressions > (
             CASE 
-              WHEN s.plan_type = 'indie' THEN 800000    -- 80% of plan
-              WHEN s.plan_type = 'studio' THEN 8000000
+              WHEN s.plan_type = 'starter' THEN 800000    -- 80% of plan
+              WHEN s.plan_type = 'growth' THEN 8000000
+              WHEN s.plan_type = 'scale' THEN 40000000
               ELSE 80000000
             END
           )

@@ -1,10 +1,11 @@
 import type { Metadata } from 'next';
-import { Inter } from 'next/font/google';
+import { Inter, Plus_Jakarta_Sans } from 'next/font/google';
 import './globals.css';
 import SkipToContent from '@/components/SkipToContent';
 import { ThemeProvider } from '@/components/ui/ThemeProvider';
 
-const inter = Inter({ subsets: ['latin'] });
+export const inter = Inter({ subsets: ['latin'], variable: '--font-inter', display: 'swap' });
+export const pjs = Plus_Jakarta_Sans({ subsets: ['latin'], variable: '--font-pjs', display: 'swap' });
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://apexmediation.bel-consulting.ee'),
@@ -45,13 +46,13 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
+    <html lang="en" className={`${inter.variable} ${pjs.variable}`}>
       <head>
         <link rel="icon" href="/favicon.ico" />
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
         <meta name="theme-color" content="#356eff" />
       </head>
-      <body className={inter.className}>
+      <body>
         <SkipToContent />
         <ThemeProvider>
           <main id="main-content" tabIndex={-1}>

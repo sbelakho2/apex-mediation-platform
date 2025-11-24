@@ -22,7 +22,7 @@ Common questions about the ApexMediation Platform. Can't find your answer? [Cont
 
 ### Do I need a credit card to sign up?
 
-**Answer**: **No**. Sign up is completely free with no credit card required. You only start paying our revenue share after you receive your first payout.
+**Answer**: **No**. Sign up is completely free with no credit card required. You only start paying a platform fee once your mediated revenue moves beyond the Starter tier (>$10k/month).
 
 ---
 
@@ -67,15 +67,15 @@ You can use us exclusively or as part of your existing stack.
 
 ---
 
-### What is your revenue share?
+### What is your platform fee?
 
-**Answer**: **8-15%** depending on your monthly revenue volume:
-- €0 - €10,000/month: **15%**
-- €10,001 - €50,000/month: **12%**
-- €50,001 - €100,000/month: **10%**
-- €100,000+/month: **8%**
+**Answer**: Our BYO tiers charge a percentage of **gross mediated revenue** each month:
+- **Starter**: $0 – $10k → **0%** (free)
+- **Growth**: $10,001 – $100k → **2.5%**
+- **Scale**: $100,001 – $500k → **2.0%**
+- **Enterprise**: $500k+ → **1.0–1.5%** with a custom minimum
 
-This is **2-3x lower** than industry standard (AdMob: ~30-40%, Unity Ads: ~30%).
+Because you bring your own demand, these fees simply cover the control plane, observability, and Migration Studio – not a resale margin.
 
 ---
 
@@ -101,11 +101,11 @@ Set up your payment method in **Dashboard → Settings → Payments**.
 ### Are there any hidden fees?
 
 **Answer**: **No**. The only costs are:
-- Our revenue share (8-15%)
-- Optional add-on features (opt-in only)
+- The platform fee for your tier (0–2.5% or negotiated enterprise rate)
+- Optional add-ons (white-label console, extended retention, etc.)
 - Payment method fees (PayPal: 2%, Crypto: 1%)
 
-No setup fees, no monthly fees, no transaction fees.
+No setup fees, no monthly minimums, no surprise surcharges.
 
 ---
 
@@ -221,7 +221,7 @@ To cancel: **Dashboard → Billing → Cancel Account**
 
 ### Do you offer refunds?
 
-**Answer**: Since we use a **revenue share model** (you only pay when you earn), there are no upfront payments to refund.
+**Answer**: Since we use a **platform fee on the revenue you already earn**, there are no upfront payments to refund.
 
 **However**, if you believe we incorrectly calculated our share:
 1. Contact billing@bel-consulting.ee within 30 days
@@ -336,7 +336,7 @@ To cancel: **Dashboard → Billing → Cancel Account**
 
 **Results**: Typically **20-40% revenue increase** within 30 days.
 
-**Cost**: +3% revenue share add-on
+**Cost**: Included in Scale & Enterprise. Growth customers can enable it for a **+0.5% platform fee uplift** while it runs in shadow mode.
 
 **See**: [Self-Evolving AI Guide](/docs/advanced/self-evolving-ai)
 

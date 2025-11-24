@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { authenticate } from '../middleware/auth';
 import { requireFeature } from '../utils/featureFlags';
 import { readOnlyRateLimit } from '../middleware/rateLimiting';
-import { getReconOverview, getReconDeltas, createDispute, getMonthlyRevenueDigest } from '../controllers/vra.controller';
+import { getReconOverview, getReconDeltas, getReconDeltasCsv, createDispute, getMonthlyRevenueDigest } from '../controllers/vra.controller';
 
 const router = Router();
 
@@ -16,6 +16,9 @@ router.get('/recon/overview', getReconOverview);
 
 // GET /api/v1/recon/deltas
 router.get('/recon/deltas', getReconDeltas);
+
+// GET /api/v1/recon/deltas.csv (streamed CSV)
+router.get('/recon/deltas.csv', getReconDeltasCsv);
 
 // POST /api/v1/recon/disputes
 router.post('/recon/disputes', createDispute);

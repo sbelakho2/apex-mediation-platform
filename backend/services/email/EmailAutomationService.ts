@@ -804,7 +804,7 @@ ${
         
         <h2>What We're Looking For</h2>
         <ul>
-          <li>Your role and company (or "indie developer" if solo)</li>
+          <li>Your role and company (or "solo developer" if solo)</li>
           <li>What problem ApexMediation solved for you</li>
           <li>Results you've seen (revenue, time saved, etc.)</li>
           <li>Why you chose us over alternatives</li>

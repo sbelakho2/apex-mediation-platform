@@ -362,8 +362,8 @@ _Last touched: 2025-11-18 during FIX-10 documentation alignment._
 ## 💰 Business Model
 
 ### Pricing
-- **Revenue Share:** 10% (vs Unity's 12%)
-- **Minimum:** No minimum revenue
+- **Platform Fee:** Starter 0%, Growth 2.5%, Scale 2.0%, Enterprise 1.0–1.5% (custom floor)
+- **Basis:** Fee applies to gross mediated revenue you already earn (BYO demand)
 - **Contract:** Month-to-month (no lock-in)
 
 ### Revenue Guarantee
@@ -372,9 +372,9 @@ _Last touched: 2025-11-18 during FIX-10 documentation alignment._
 - Automatic compensation if below target
 
 ### Support Tiers
-- **Standard:** Email, 24h response (FREE)
-- **Premium:** Slack + phone, 4h response ($499/mo)
-- **Enterprise:** Dedicated engineer, 1h SLA (custom)
+- **Standard:** Email, 24h response (included with Starter/Growth)
+- **Premium:** Slack + phone, 4h response (+0.3pp platform-fee uplift or equivalent minimum)
+- **Enterprise:** Dedicated engineer, 1h SLA (custom contract + minimum)
 
 ## 🚀 Go-to-Market Strategy
 

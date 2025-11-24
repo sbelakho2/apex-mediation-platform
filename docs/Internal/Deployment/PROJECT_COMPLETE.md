@@ -27,37 +27,34 @@ The authoritative delivery status now lives in `docs/Internal/Deployment/PROJECT
 ---
 
 _Last touched: 2025-11-18 during FIX-10 documentation alignment._
-### Break-Even Analysis
+### Break-Even Analysis (BYO Platform Fee Model)
 
 **Traditional Stack:**
-- Fixed costs: $1,100-3,050/month
-- Variable costs: ~$5/customer (Stripe fees)
-- Average revenue: $150/customer (Indie $99 + Studio $499 mix)
-- Contribution margin: $145/customer
-- **Break-even: 8-21 customers**
+- Fixed costs: $1,100–3,050/month
+- Revenue tied to flat subscriptions → $150/customer ARPU (obsolete)
+- Break-even required 8–21 paying customers.
 
-**Ultra-Lean Stack:**
-- Fixed costs: $175-300/month (avg $237.50)
-- Variable costs: ~$5/customer (Stripe fees)
-- Average revenue: $150/customer
-- Contribution margin: $145/customer
-- **Break-even: 2 customers** ✅
+**Ultra-Lean Stack (Current):**
+- Fixed costs: $175–300/month (avg $237.50)
+- Revenue: platform fee on mediated revenue (Starter 0%, Growth 2.5%, Scale 2.0%, Enterprise 1.0–1.5%).
+- A single Growth customer ($50k/mo) generates ~$1,250 fee; once live the stack is profitable immediately.
+- **Break-even: <1 Growth customer** ✅
 
-**Improvement:** 91% reduction in customers needed to break even
+**Improvement:** Effectively 100% reduction in the customers required to cover costs because value is indexed to revenue mix, not seat count.
 
 ### Profitability at Scale
 
-**At 100 customers:**
-- Revenue: $15,000/month
-- Fixed costs: $238/month
-- Variable costs: $500/month (100 × $5)
-- **Profit: $14,262/month ($171,144/year)**
-- **Profit margin: 95%** ✅
+**At 100 customers (mix: 60% Growth, 30% Scale, 10% Enterprise):**
+- Mediated revenue: ~$8M/month
+- Platform fees: ~$185k/month
+- Fixed + variable costs: <$5k/month
+- **Profit: ~$180k/month (~$2.1M/year)**
+- **Profit margin: 97%** ✅
 
-**At 500 customers:**
-- Revenue: $75,000/month
-- Fixed costs: $300/month (scaled infrastructure)
-- Variable costs: $2,500/month (500 × $5)
+**At 500 customers (mix skews Scale/Enterprise):**
+- Mediated revenue: ~$40M/month
+- Platform fees: ~$925k/month
+- Fixed + variable costs: ~$25k/month
 - **Profit: $72,200/month ($866,400/year)**
 - **Profit margin: 96%** ✅
 

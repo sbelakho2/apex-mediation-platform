@@ -1,3 +1,207 @@
+Changelog — Backend Platform Tier Alignment (2025-11-24)
+
+Summary
+- Introduces canonical Starter/Growth/Scale/Enterprise tiers across backend services so subscription data, pricing routes, and usage metering all agree with the platform-fee policy while preserving backwards-compatible aliases.
+
+What changed (highlights)
+- Tier config & limits
+  - Added `backend/src/config/platformTiers.ts` defining platform tier IDs, order, alias mapping (indie→starter, studio→growth), and shared usage/overage defaults so controllers, services, and future tooling source one canonical map.
+  - `backend/services/billing/UsageMeteringService.ts` now normalizes plan types via the shared helper, honors the new tier limits (adds Scale), and exposes consistent plan labels in usage + alert payloads.
+- Billing API & validation
+  - `backend/routes/billing.ts` rewires signup/upgrade flows to accept only Starter/Growth (Scale/Enterprise gated to sales), propagates canonical plan slugs to stored subscriptions, and exposes refreshed plan copy for `/billing/pricing`.
+  - `backend/routes/usage.ts` and `backend/src/controllers/__tests__/billing.controller.test.ts`/`routes/__tests__/billing.usage.test.ts` now assert `starter|growth|scale|enterprise` labels.
+  - `backend/src/middleware/validation.ts` constrains admin plan updates to the new enum, ensuring downstream writes cannot resurrect legacy plan IDs.
+- Data migration & tests
+  - New migration `backend/migrations/028_platform_tier_alignment.sql` upgrades existing subscription rows (indie→starter, studio→growth) and expands the check constraint to include Scale. Jest suites for billing controllers + usage routes run green with the new tiers.
+
+Validation & notes
+- `npm run test -- --runTestsByPath src/controllers/__tests__/billing.controller.test.ts routes/__tests__/billing.usage.test.ts`
+- `npm run build` still fails (pre-existing issues: missing `pool` import in `scripts/cron-jobs.ts`, absent `utils/redis` module, outdated queue manager types, metrics middleware label mismatch, etc.). Logged for follow-up once the queue/analytics refactor lands.
+- Up next: propagate the same tier metadata through console billing/usage screens plus monitoring/service docs so UI + ops dashboards surface the new policy end-to-end.
+
+Changelog — Marketing Site Typography + Card System Refresh (2025-11-23)
+
+Summary
+- Aligns the entire marketing website (hero, popular, features, learn, principles, pricing) on a single typography + card system backed by Plus Jakarta Sans/Inter, Lucide icons, and shared Tailwind tokens. Adds gentle framer-motion scroll reveals so every surface feels cohesive without custom per-page styles.
+
+What changed (highlights)
+- Fonts & tokens
+  - `website/src/app/layout.tsx` wires `next/font` Inter + Plus Jakarta Sans as CSS variables so Tailwind can reference them globally.
+  - `website/tailwind.config.ts` + `website/src/app/globals.css` define common `--card-radius`, `.icon-pill`, `.feature-card`, `.eyebrow`, and button styles; body copy now uses 17px/1.6 rhythm with shared ink/inkMuted colors.
+- Component system
+  - `website/src/app/page.tsx` renders hero stats, popular cards, platform pillars, learn cards, principles grid, and pricing tiers from shared data objects that all reuse the `.card` class and Lucide icons (no more emoji or ad-hoc markup).
+  - Introduced reusable `PrincipleCard`, `PricingCard`, and `getRevealProps` helpers so future sections inherit the same structure/motion without duplicating code.
+- Motion & polish
+  - Added `framer-motion` to stage cards into view with consistent y/opacity reveals and delay staggering.
+  - Pricing now uses three cards (Launch, Scale, Enterprise) with shared CTAs instead of a separate banner, preserving the new card hierarchy.
+- Tooling
+  - Removed the deprecated `experimental.appDir` flag from `website/next.config.js` to silence the dev-server warning.
+
+Validation
+- `npm --prefix website run lint` (Next.js lint) — unchanged warnings limited to dashboard files and the known TypeScript version notice.
+
+Changelog — Website Content Realignment with Customer Docs (2025-11-24)
+
+Summary
+- Syncs every marketing surface (hero, feature grids, learn, pricing, legal pages) with the latest Customer-Facing documentation so product, finance, legal, and security teams see one story.
+
+What changed (highlights)
+- Homepage alignment
+  - `website/src/app/page.tsx` now anchors hero stats, feature cards, learn content, and pricing blurbs to concrete data from the Quick Start, A/B Testing, Fraud Prevention, Pricing, and GDPR guides. CTA copy leans on reciprocity (free audits) and authority (SOC 2 / ISO) per Cialdini.
+  - Replaced legacy pricing “plans” with the documented marginal revenue-share tiers, CTV premium, and add-ons; hero pills and stats cite the 13-minute onboarding, <50ms bidder runtime, and 99.7% fraud precision called out in docs.
+- Legal & compliance stubs
+  - `website/src/app/[...slug]/page.tsx` now fleshes out Privacy, Terms, GDPR, Security, Cookie Policy, and the Pricing page with the same content structure as `docs/Customer-Facing/**` (data collected, lawful bases, DPAs/SCCs, NET 30 terms, consent APIs, etc.).
+  - Updated contact mailboxes (`support@bel-consulting.ee`, `billing@bel-consulting.ee`, `security@bel-consulting.ee`, `sales@bel-consulting.ee`) to match the documentation, and added detailed GDPR/DPA instructions plus data subject request endpoints.
+
+Validation
+- `npm --prefix website run lint` (not rerun; marketing copy-only changes)
+
+---
+
+Changelog — BYO-First Launch Copy + Pricing Cleanup (2025-11-24)
+
+Summary
+- Repositions the marketing site and pricing documentation around the Bring-Your-Own (BYO) launch so visitors only see the plan that actually ships today.
+
+What changed (highlights)
+- Homepage & hero
+  - `website/src/app/page.tsx` drops the premium-network notification bar, rewrites the hero headline/pills to call out BYO-only availability, and removes the unsubstantiated +13.4% uplift and ISO claims.
+  - Consolidates the pricing grid into a single “BYO control plane” card with updated copy that explains what the marginal 15→8% fee covers.
+- Informational pages & quiz
+  - `website/src/app/[...slug]/page.tsx` updates the documentation/pricing slugs to describe BYO credential management, removes references to premium demand/add-ons, and strips ISO 27001 from the security content.
+  - `website/src/app/quiz/page.tsx` now recommends BYO onboarding tracks instead of tiered plans that do not exist yet.
+- Billing docs
+  - `docs/Customer-Facing/Billing-Compliance/pricing.md` adds a BYO-only notice, removes the CTV premium/add-on sections, and clarifies that adapter coverage is BYO (publishers bring their own credentials).
+
+Validation
+- Not rerun (text-only updates)
+
+---
+
+Changelog — SDK Adapter Audit + Network Coverage Messaging (2025-11-24)
+
+Summary
+- Verifies adapter parity across Android, iOS/tvOS, Unity, Android TV, and Web SDKs (15 networks) and surfaces that fact throughout the marketing site.
+
+What changed (highlights)
+- SDKs
+  - `sdk/core/unity/Runtime/Adapters/AdapterCatalog.cs` now enumerates the same 15 adapters as the other SDKs (AdMob through Amazon Publisher Services) while retaining the mock test adapter.
+- Homepage updates
+  - `website/src/app/page.tsx` reintroduces the notification bar, reworks the hero copy/pills/stats around the 15-adapter registry, adds a dedicated Adapters section that lists every network, and updates feature copy to call out SDK coverage.
+  - `website/src/components/NotificationBar.tsx` promotes the 15-adapter launch instead of the deprecated “5 premium networks” message.
+- Docs
+  - Architecture references now mention the new notification text so design specs stay consistent.
+
+Validation
+- Not rerun (content & metadata updates only)
+
+---
+
+Changelog — VRA CSV Export + Input Validation Hardening (2025-11-23)
+
+Summary
+- Adds streamed CSV export for reconciliation deltas and hardens input validation for both JSON and CSV endpoints. All changes are additive, feature‑gated, and behind read‑only rate limits.
+
+What changed
+- API
+  - New: `GET /api/v1/recon/deltas.csv` (feature‑gated by `VRA_ENABLED`, auth required, read‑only rate limited).
+  - Hardened validation shared by JSON and CSV handlers:
+    - `from`/`to` must be ISO‑ish timestamps (or omitted).
+    - `page` ≥ 1; `page_size` ∈ [1..500].
+    - `min_conf` ∈ [0..1].
+    - `kind` ∈ {underpay|missing|viewability_gap|ivt_outlier|fx_mismatch|timing_lag}.
+  - CSV uses safe escaping: quotes doubled, newlines stripped from `reason_code`, commas sanitized.
+- Tests
+  - Added route tests for CSV header/content‑type, invalid param → 400, and basic rate‑limit behavior.
+
+Safety & flags
+- Routes remain guarded by `VRA_ENABLED=false` (default) and read‑only rate limits. No serving/SDK paths touched.
+
+---
+
+Changelog — VRA Backfill Orchestrator, Redaction, Dashboards & Alerts (2025-11-23)
+
+Summary
+- Wires a resumable backfill orchestrator to stage CLIs, adds robust redaction for CSV exports (and Dispute Kits), introduces Grafana dashboard stubs and Prometheus alert samples, and expands tests for safety and validation.
+
+What changed
+- Orchestrator
+  - `backend/scripts/vraBackfill.js` runs `expected → matching → reconcile → proofs` with checkpoints; supports `--dry-run` and tolerates WARNINGS exit code from stages.
+  - Tests: `backend/scripts/__tests__/vraBackfill.test.ts` (success path), `backend/scripts/__tests__/vraBackfill.failure.test.ts` (failure path).
+- Redaction
+  - Utility: `backend/src/services/vra/redaction.ts` (emails, bearer tokens, Stripe keys, 13–19 digits).
+  - Applied in `getReconDeltasCsv` to sanitize `reason_code` prior to streaming.
+  - Tests: `backend/src/services/vra/__tests__/redaction.test.ts`, route E2E `backend/src/routes/__tests__/vra.routes.csv.redaction.e2e.test.ts`.
+  - Dispute Kits redaction test: `backend/src/services/vra/__tests__/disputeKitRedaction.test.ts`.
+- Dashboards & Alerts
+  - Grafana: `monitoring/grafana/dashboards/vra-overview.json` — query durations, matching auto/review/unmatched, reconcile rows by kind, proofs coverage %, ingest volumes, plus p50/p95/p99 latency panels for Expected/Matching/Reconcile/Proofs.
+  - Prometheus alert samples: `monitoring/alerts/vra-alerts.yml` — coverage drop (placeholder metric), unexplained variance sustained, ingestion failures spike, proofs verify failures.
+- Proofs verification test
+  - Added “happy path” verification with generated Ed25519 keys: `backend/src/services/vra/__tests__/proofsIssuer.test.ts`.
+- Route/validation tests
+  - CSV escaping, invalid params, 404/200 proofs digest paths, rate-limit checks, shadow‑mode no‑write assertion, non‑shadow dispute create writes to `recon_disputes`.
+
+Safety & flags
+- All changes are additive; `VRA_ENABLED=false` by default, `VRA_SHADOW_ONLY=true` in canary; read‑only limits enforced. No serving/SDK code paths touched.
+
+---
+
+Changelog — VRA Matching Engine Enhancements & Reconcile IVT Rule (2025-11-23)
+
+Summary
+- Extends the VRA pipeline with exact‑key matching, a persisted review queue for mid‑confidence matches, and an initial IVT outlier classification rule in the reconciler — all additive and gated by the same feature flags.
+
+What changed (highlights)
+- Matching Engine
+  - Exact‑key short‑circuit: when `requestId` is present on a statement row and exists in `recon_expected`, it matches with `confidence=1.0` and `keys_used='exact'`.
+  - Mid‑confidence review persistence: 0.5–0.8 confidence matches can be optionally persisted to a new ClickHouse table `recon_match_review` for analyst triage.
+  - CLI flags added to `backend/scripts/vraMatch.js`:
+    - `--autoThreshold` to set auto‑accept threshold (default 0.8)
+    - `--minConf` to set review minimum threshold (default 0.5)
+    - `--persistReview` to write review matches to `recon_match_review`
+  - Metrics added:
+    - `vra_match_exact_total` — exact matches (confidence 1.0)
+    - `vra_match_review_persisted_total` — review matches persisted to CH
+- Reconcile & Delta Classification
+  - Added `ivt_outlier` rule: flags windows where IVT% exceeds 30‑day p95 plus band.
+  - Tunable env: `VRA_IVT_P95_BAND_PP` (default `2`) — band in percentage points.
+  - Preserves existing `timing_lag` and `underpay` logic and metrics.
+- Migrations (ClickHouse)
+  - New pair: `backend/migrations/clickhouse/20251123_212500_vra_match_review.(up|down).sql` creating `recon_match_review`.
+
+Safety & flags
+- No serving/SDK/auction path changes; everything is additive and optional.
+- VRA remains behind `VRA_ENABLED=false` (default) and `VRA_SHADOW_ONLY=true` (default).
+
+Validation and QA
+- Matching tests updated: exact‑key path yields 1.0 confidence and `keys_used='exact'`.
+- Reconcile tests expanded: `ivt_outlier` emits when current IVT exceeds baseline p95 + band.
+
+---
+
+Changelog — VRA Dispute Kit Storage Adapters (FS/S3) + Controller Wiring (2025-11-23)
+
+Summary
+- Adds pluggable storage for VRA Dispute Kits with a development FileSystem adapter and an optional S3-compatible adapter (lazy-loaded). Controller now resolves storage from env and persists bundles when shadow is disabled.
+
+What changed
+- Storage adapters in `backend/src/services/vra/disputeKitService.ts`:
+  - `FileSystemDisputeStorage` — writes JSON bundles under a configured directory; returns `file://` URIs.
+  - `S3DisputeStorage` — uses `@aws-sdk/client-s3` (if present) and returns presigned URLs; falls back to `s3://` on presign failure.
+  - `resolveDisputeStorageFromEnv()` — selects storage via env: `VRA_DISPUTE_STORAGE=memory|fs|s3`, `VRA_DISPUTE_FS_DIR`, `VRA_DISPUTE_BUCKET`, `VRA_DISPUTE_PREFIX`, `VRA_DISPUTE_TTL_SEC`.
+- Controller wiring in `backend/src/controllers/vra.controller.ts`: uses env-resolved storage to build and persist kits (still 202 in shadow mode).
+- Metrics: Added proofs issuance metric shells and extended Prometheus with `vra_proofs_*` gauges/counters for the next phase.
+
+Validation & tests
+- Unit test added for FS storage adapter (writes to a temp dir, validates URI/content) — see `backend/src/services/vra/__tests__/disputeKitStorage.test.ts`.
+- Existing Dispute Kit tests cover redaction and in-memory storage.
+
+Safety & flags
+- Default-safe: VRA disabled by default; shadow-only mode returns 202 without writes.
+- S3 adapter is lazy-loaded and not required in dev/test; FS adapter used for local.
+
+---
+
 Changelog — Verifiable Revenue Auditor (VRA) — Additive Read‑Only Module (2025-11-23)
 
 Summary

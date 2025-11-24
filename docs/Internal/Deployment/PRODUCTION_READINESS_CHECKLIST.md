@@ -90,11 +90,12 @@
 - [ ] Create Stripe account
 - [ ] Complete identity verification (KYC)
 - [ ] Configure Estonian tax settings (VAT registration)
-- [ ] Create products and pricing:
-  - [ ] Indie: $99/month, 1M impressions, 100K API calls
-  - [ ] Studio: $499/month, 10M impressions, 1M API calls
-  - [ ] Enterprise: Custom, 100M+ impressions, 10M+ API calls
-- [ ] Configure metered billing for overages
+- [ ] Create products for BYO platform tiers:
+  - [ ] Starter: $0 platform fee (free SKU for <$10k/mo revenue)
+  - [ ] Growth: 2.5% usage-based fee on $10k–$100k mediated revenue
+  - [ ] Scale: 2.0% usage-based fee on $100k–$500k mediated revenue
+  - [ ] Enterprise: Custom rate (1.0–1.5%) + minimum
+- [ ] Configure metered billing on `mediated_revenue_usd`
 - [ ] Setup webhooks (invoice.payment_failed, invoice.payment_succeeded)
 - [ ] Configure Customer Portal (self-service)
 - [ ] Test payment flow (test mode)
@@ -265,7 +266,7 @@
 - [ ] Content:
   - [ ] Hero section (OTA-proof, transparent bidding, weekly payouts)
   - [ ] Features comparison (Unity vs ApexMediation)
-  - [ ] Pricing table (Indie, Studio, Enterprise)
+  - [ ] Pricing section (Starter 0%, Growth 2.5%, Scale 2.0%, Enterprise 1.0–1.5% + minimum)
   - [ ] Testimonials (early adopters)
   - [ ] Integration guides preview
   - [ ] Call-to-action (Sign up, Request demo)

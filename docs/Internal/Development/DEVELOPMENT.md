@@ -35,8 +35,8 @@ ApexMediation is a Unity-rival ad mediation platform designed to address Unity's
 
 #### Sales & Customer Automation (REQUIRED)
 - **Self-Service Signup**: Zero-touch customer onboarding with instant API key provisioning
-- **Tiered Pricing**: Automated plan selection (Indie $99/mo, Studio $499/mo, Enterprise custom)
-- **Usage-Based Billing**: Automated metering of API calls, SDK downloads, ad impressions
+- **Platform Fee Tiers**: Automated plan selection (Starter 0%, Growth 2.5%, Scale 2.0%, Enterprise custom 1.0–1.5%) based on gross mediated revenue
+- **Revenue-Based Billing**: Automated metering of mediated revenue + add-ons with transparent invoices
 - **Payment Collection**: Stripe/Paddle integration with automatic retry on failed payments
 - **Customer Portal**: Self-service invoice download, payment method updates, usage dashboards
 - **Dunning Management**: Automated email sequences for overdue payments
@@ -673,9 +673,10 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md) for detailed contribution guidelines.
 #### 2. Self-Service Sales & Customer Management (HIGH PRIORITY)
 
 **Business Model**:
-- **Indie Plan**: $99/mo (1M impressions, email support)
-- **Studio Plan**: $499/mo (10M impressions, priority support, dedicated account)
-- **Enterprise Plan**: Custom pricing (negotiated contracts, SLA)
+- **Starter**: $0 platform fee up to $10k/mo mediated revenue (SDKs, baseline analytics, community support)
+- **Growth**: 2.5% platform fee on $10k–$100k/mo revenue (Migration Studio, observability, email + Slack)
+- **Scale**: 2.0% platform fee on $100k–$500k/mo revenue (custom exports, priority support, fraud tooling)
+- **Enterprise**: 1.0–1.5% platform fee above $500k/mo with contractual minimums + dedicated TAM
 
 **Automation Requirements**:
 - Self-service signup flow with instant provisioning
@@ -787,7 +788,7 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md) for detailed contribution guidelines.
 | **Accounting** | **7-year compliant document retention with S3 WORM** | **Solo Ops** | **Todo** |
 | **Accounting** | **Stripe/Paddle webhook reconciliation and multi-currency handling** | **Solo Ops** | **Todo** |
 | **Sales** | **Self-service signup with Stripe Customer Portal** | **Solo Ops** | **Todo** |
-| **Sales** | **Tiered pricing implementation (Indie $99, Studio $499, Enterprise custom)** | **Solo Ops** | **Todo** |
+| **Sales** | **Tiered platform-fee implementation (Starter 0%, Growth 2.5%, Scale 2.0, Enterprise custom)** | **Solo Ops** | **Todo** |
 | **Sales** | **Usage-based billing with ClickHouse metering** | **Solo Ops** | **Todo** |
 | **Sales** | **Automated dunning management for failed payments** | **Solo Ops** | **Done** |
 | **Sales** | **Customer dashboard for invoices, usage, and payment methods** | **Solo Ops** | **Todo** |
@@ -837,7 +838,7 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md) for detailed contribution guidelines.
 | **Intelligence** | **Build competitor monitoring: pricing changes, feature launches, job postings** | **Solo Ops** | **Todo** |
 | **Intelligence** | **Implement automated A/B testing with auto-winner selection (PostHog/GrowthBook)** | **Solo Ops** | **Todo** |
 | **Cost** | **Target: $175-300/mo operational costs (vs $1,100-3,050 in traditional stack)** | **Solo Ops** | **Goal** |
-| **Cost** | **Break-even: 2 customers @ $150/mo avg (vs 8-21 in expensive model)** | **Solo Ops** | **Goal** |
+| **Cost** | **Break-even: ~1 Growth + 1 Scale customer (≈$6k/mo platform fees) vs 8-21 legacy customers** | **Solo Ops** | **Goal** |
 | **Cost** | **Profitability: 95%+ margin at 100 customers ($15K MRR - $750 costs)** | **Solo Ops** | **Goal** |
 | Documentation | Expand API reference with auth/register/login examples | Docs | Todo |
 | Documentation | Document Redis caching architecture and usage | Docs | Done |

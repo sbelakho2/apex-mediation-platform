@@ -11,7 +11,7 @@ This sales automation system uses proven psychological principles to convert lea
 
 **Target Metrics:**
 - Trial → Paid conversion: 25% → 45% (+80% improvement)
-- Average deal size: $150/mo → $250/mo (+67%)
+- Average effective platform fee: 2.5% → 2.1% (higher mediated revenue per customer)
 - Sales cycle length: 30 days → 14 days (-53%)
 - Human sales time: 2 hours/customer → 0 minutes (-100%)
 
@@ -387,8 +387,8 @@ Day 11 Email: "These features disappear in 3 days..."
 **Early Adopter Perks:**
 ```
 "Sign up in next 48 hours and get:"
-- 3 months at early-bird pricing ($99 instead of $149)
-- Lifetime grandfathered rate (price locked forever)
+- 3 months at a reduced platform fee (2.0% instead of 2.5%)
+- Lifetime grandfathered rate (effective fee locked forever)
 - 2 hours of free consultation ($500 value)
 - Early access to new features
 
@@ -397,9 +397,9 @@ Trigger: First visit to pricing page
 
 **Seasonal Campaigns:**
 ```
-Q4: "Black Friday: 40% off annual plans (3 days only)"
-Q1: "New Year Revenue Boost: Free onboarding + optimization"
-Q2: "Summer Growth Special: 2 months free on annual"
+Q4: "Black Friday: 0.5pp platform fee rebate for 3 months (3 days only)"
+Q1: "New Year Revenue Boost: Free Migration Studio staffing + optimization"
+Q2: "Summer Growth Special: Platform fee credit equal to one week of revenue"
 ```
 
 #### Competitive Scarcity
@@ -837,7 +837,7 @@ Each step increases commitment level and reduces churn probability
 
 ```
 "Just 5 minutes to complete setup"
-"Just $99/month (less than $4/day)"
+"Just 2.5% of the revenue you're already earning"
 "Just click to upgrade, we'll handle the rest"
 ```
 
@@ -850,7 +850,7 @@ Each step increases commitment level and reduces churn probability
 | Metric | Baseline | Target | Tracking |
 |--------|----------|--------|----------|
 | Trial → Paid Conversion | 20% | 45% | Daily |
-| Average Deal Size | $150/mo | $250/mo | Weekly |
+| Average Effective Platform Fee | 2.5% | 2.1% | Weekly |
 | Time to First Value | 48 hours | 6 hours | Daily |
 | Sales Cycle Length | 30 days | 14 days | Weekly |
 | Activation Rate | 60% | 85% | Daily |
@@ -940,28 +940,26 @@ Each step increases commitment level and reduces churn probability
 **Month 1:**
 - Trial signups: 100
 - Paid conversions: 40 (40% rate)
-- MRR: $6,000 ($150 avg)
-- Revenue: $6,000
+- Avg mediated revenue/customer: $40k
+- Platform fee run rate: $40k × 2.5% × 40 = **$40,000/mo mediated**, **$1,000/mo fee**
 
 **Month 3:**
 - Trial signups: 200/month
 - Paid conversions: 90 (45% rate)
-- MRR: $22,500 ($250 avg - expansion revenue)
-- Revenue: $22,500
+- Mix shift: 70% Growth, 30% Scale (avg mediated revenue $85k)
+- Platform fee run rate: **$7,650/mo**
 
 **Month 6:**
 - Trial signups: 300/month
 - Paid conversions: 135 (45% rate)
-- Total customers: 450
-- MRR: $112,500 ($250 avg)
-- Revenue: $112,500
+- Total customers: 450 (60% Growth, 30% Scale, 10% Enterprise trials)
+- Platform fee run rate: **$32k/mo** (≈$384k annualized)
 
 **Month 12:**
 - Trial signups: 400/month
 - Paid conversions: 180 (45% rate)
-- Total customers: 1,000
-- MRR: $300,000 ($300 avg - network effects)
-- Revenue: $3,600,000/year
+- Total customers: 1,000 (50% Growth, 35% Scale, 15% Enterprise)
+- Platform fee run rate: **$95k/mo** (≈$1.1M annualized) on ~$4B of mediated revenue
 
 ### ROI Analysis
 
@@ -971,10 +969,10 @@ Each step increases commitment level and reduces churn probability
 - Ongoing: 0 hours/week human time
 
 **Return:**
-- Year 1 Revenue: $3.6M
+- Year 1 Platform Fees: ~$1.1M (assuming scale mix above)
 - Cost: ~$300/month infrastructure
-- Profit: ~$3.6M (99.9% margin on sales automation)
-- ROI: Infinite (zero ongoing cost)
+- Profit: ~$1.096M (sales automation overhead is negligible)
+- ROI: Effectively infinite (no incremental headcount)
 
 ---
 

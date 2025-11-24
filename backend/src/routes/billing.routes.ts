@@ -56,15 +56,13 @@ router.post(
 );
 
 /**
- * POST /api/v1/billing/revenue-share/calculate
- * Calculate revenue share with marginal tier breakdown
+ * Platform fee tier endpoints (BYO pricing)
  */
-router.post('/revenue-share/calculate', billingController.calculateRevenueShare);
+router.post('/platform-fees/calculate', billingController.calculatePlatformFee);
+router.get('/platform-fees/tiers', billingController.getPlatformTiers);
 
-/**
- * GET /api/v1/billing/tiers
- * Get revenue share tier configuration
- */
-router.get('/tiers', billingController.getTiers);
+// Legacy endpoints kept temporarily for backwards compatibility
+router.post('/revenue-share/calculate', billingController.calculatePlatformFee);
+router.get('/tiers', billingController.getPlatformTiers);
 
 export default router;

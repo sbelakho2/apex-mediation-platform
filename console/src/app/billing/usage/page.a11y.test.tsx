@@ -22,7 +22,7 @@ jest.mock('@/lib/billing', () => ({
       total_overage_cost: 0,
     },
     subscription: {
-      plan_type: 'indie',
+      plan_type: 'starter',
       included_impressions: 1000000,
       included_api_calls: 100000,
       included_data_transfer_gb: 50,
@@ -49,7 +49,7 @@ jest.mock('@tanstack/react-query', () => ({
         total_overage_cost: 0,
       },
       subscription: {
-        plan_type: 'indie',
+        plan_type: 'starter',
         included_impressions: 1000000,
         included_api_calls: 100000,
         included_data_transfer_gb: 50,

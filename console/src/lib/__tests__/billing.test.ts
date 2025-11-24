@@ -57,7 +57,7 @@ describe('Billing API Client', () => {
           total_overage_cost: 0,
         },
         subscription: {
-          plan_type: 'indie',
+          plan_type: 'starter',
           included_impressions: 5000000,
           included_api_calls: 100000,
           included_data_transfer_gb: 500,
@@ -68,7 +68,10 @@ describe('Billing API Client', () => {
 
       const result = await getCurrentUsage()
 
-      expect(mockedApiClient.get).toHaveBeenCalledWith('/billing/usage/current')
+      expect(mockedApiClient.get).toHaveBeenCalledWith(
+        '/billing/usage/current',
+        expect.objectContaining({ signal: undefined })
+      )
       expect(result).toEqual(mockData)
     })
 

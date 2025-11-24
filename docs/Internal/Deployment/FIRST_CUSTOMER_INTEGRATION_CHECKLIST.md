@@ -154,7 +154,7 @@
   
   -- Create test subscription
   INSERT INTO subscriptions (customer_id, plan_type, status, created_at) VALUES 
-    ('test-customer-001', 'indie', 'active', NOW() - INTERVAL '100 days');
+    ('test-customer-001', 'starter', 'active', NOW() - INTERVAL '100 days');
   
   -- Create test usage records (1,500 impressions to trigger milestone)
   INSERT INTO usage_records (customer_id, impressions, created_at) VALUES 
