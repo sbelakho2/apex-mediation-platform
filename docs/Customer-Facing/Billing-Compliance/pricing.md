@@ -38,6 +38,14 @@ All tiers are based on **gross mediated revenue per app portfolio per month** (w
 | **Tier 2 — Scale** | $100,001 – $500,000 | 2.0% of mediated revenue | Everything in Growth **plus** priority support, custom dashboards & exports (BigQuery/S3), early access to fraud/ML features while they run in shadow mode. |
 | **Tier 3 — Enterprise** | $500,000+ | Custom (typically 1.0–1.5%) + minimum monthly fee | Everything in Scale **plus** contractual SLAs, custom onboarding/migration help, dedicated Slack channel, quarterly reviews, and bespoke compliance requirements. |
 
+### Payment rails & autopay expectations
+
+- **Starter** &mdash; stays free up to $10k per app per month and does **not** require a payment method on file. Keep shipping until you decide to upgrade.
+- **Growth & Scale** &mdash; require an autopay-ready rail (Stripe card or wallet globally, ACH in the US, SEPA in the EU/EEA). We store the method in Stripe and auto-charge as soon as the monthly invoice finalizes so mediation never pauses for billing.
+- **Enterprise** &mdash; defaults to the same autopay setup, but finance can approve invoice + wire terms if your procurement process mandates it. Even then, we keep a Stripe rail on file for dunning/backstop charges.
+
+Invoices follow NET 30 terms, but the actual collection happens automatically on the due date via the selected autopay rail. Reminder emails post 5 days before the charge and again the moment Stripe attempts the payment.
+
 ### Worked Examples
 
 - **Starter example:** A small studio earns $8,000 this month. The platform fee is 0%. You pay $0 and keep the full $8,000.
@@ -70,40 +78,31 @@ These services never take custody of your demand; they layer on top of BYO:
 
 ## Payment Terms
 
-### Payout Schedule
+### Invoice Schedule (NET 30)
 
-**Monthly payouts with NET 30 terms** - industry standard payment schedule.
+We meter your gross mediated revenue every calendar month and invoice you for the applicable platform fee on the 1st of the following month.
 
-**Payment Schedule:**
-- Revenue earned during calendar month (e.g., October 1-31)
-- Invoice issued on 1st of following month (e.g., November 1)
-- Payment due NET 30 (30 days after invoice date)
-- Payment processed and issued by due date
-- Funds arrive 2-5 business days after processing
+- **Month closes** (e.g., Oct 1–31 usage captured)
+- **Invoice issued** on **Nov 1** with detailed revenue bands
+- **Payment due NET 30** → **Nov 30** in this example
+- **Reminder cadence:** 7 days before due date + day-of notification
 
-**Example:**
-```
-Oct 1-31:        Revenue earned
-Nov 1:           Invoice issued
-Nov 30:          Payment due (NET 30)
-Dec 2-5:         Payment received in your account
-```
+Balances below **€100** automatically roll forward until the cumulative fee meets the minimum invoice amount. Nothing expires—you’ll see the carryover line item on the next statement.
 
-### Minimum Payout
+### How to Pay
 
-**€100 minimum threshold** - industry standard to cover processing costs. Earnings below threshold roll over to next month.
+1. **Autopay (default once you leave Starter)**
+	- Growth/Scale customers add a Stripe payment method (card, Apple/Google Pay wallet, ACH in the US, SEPA direct debit in the EU). We auto-charge on the NET 30 due date using Stripe&rsquo;s retry schedule (day 0/3/5/7) so mediation keeps running without manual steps.
+	- Enterprise keeps the same default autopay rail. If your finance team needs invoice + wire terms, request approval via billing@apexmediation.ee and we&rsquo;ll flag the account while still retaining the autopay method as a fallback.
+2. **Manual wires (approved exceptions only)**
+	- **SEPA (EUR default)** – Wise Europe SA IBAN (fee-free, same/next-day)
+	- **ACH (USD default)** – Wise US / Community Federal Savings Bank account (1–3 US banking days)
+3. **Other secondary rails**
+	- **Stripe hosted payment link** – great for ad-hoc card payments or wallet top-ups.
+	- **PayPal** – 2% pass-through fee; gross up to cover their network fee.
+	- **Wise multi-currency link** – ideal for CAD/GBP/SGD wires at mid-market FX.
 
-### Payment Methods
-
-- **Bank Transfer (SEPA)**: Free, 1-2 business days (Europe)
-- **Wire Transfer (SWIFT)**: Free, 3-5 business days (International)
-- **PayPal**: Available, 2.9% + $0.30 fee applies
-
-### Currency
-
-- **Primary**: EUR (Euro)
-- **Reporting**: Revenue shown in your local currency for convenience
-- **Exchange**: ECB (European Central Bank) daily rates
+Invoices are denominated in **EUR**. We display your mediated revenue in your local currency for convenience, but the payable amount is converted using the **ECB daily rate** on the invoice date. Autopay charges occur in EUR; Stripe handles the FX automatically if your card settles in another currency.
 
 ---
 

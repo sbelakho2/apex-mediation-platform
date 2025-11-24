@@ -136,7 +136,7 @@
 - [ ] Stripe+Wise fallback wording in policy response matches customer-facing docs and console banners.
 - [ ] Policy `version`/`updatedAt` match `stripe-mandatory-2025-11` snapshot and `docs/Internal/Deployment/BILLING_POLICY_ROLLOUT.md` status table.
 - [ ] Console `/billing/settings` page renders Starter + autopay messaging directly from the snapshot (see `npm run test -- billing/settings` for evidence).
-- [ ] Website pricing page + docs (`pricing.md`, `Website signup`) mirror Starter cap + autopay rails copy pulled from policy to avoid drift.
+- [x] Website pricing page + docs (`pricing.md`, `Website signup`, `Invoicing-Payments.md`) mirror Starter cap + autopay rails copy pulled from policy to avoid drift. (Ref: 2025-11-24 website + doc commits)
 
 ### Stripe  
 See `docs/Internal/Deployment/STRIPE_COLLECTION_RUNBOOK.md` for the command-by-command runbook and evidence expectations.

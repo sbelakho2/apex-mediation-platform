@@ -39,3 +39,4 @@ Each phase should land with feature flags (`billingPolicyVersion`) to stage chan
 
 ## Progress Log
 - **2025-11-24:** Website pricing + signup copy now mirror `stripe-mandatory-2025-11` messaging (Starter free cap, autopay rails, Enterprise exception). Website lint/tests + production build executed post-change; screenshots pending capture for QA evidence folder.
+- **2025-11-24:** Customer-facing billing docs (`docs/Customer-Facing/Billing-Compliance/pricing.md`, `docs/Customer-Facing/Compliance/Invoicing-Payments.md`) now call out Starter no-card policy, autopay requirements for paid tiers, Stripe retry cadence, and the manual Wise rails as finance-approved exceptions. Next evidence: upload pricing + signup screenshots and link them in this log.
