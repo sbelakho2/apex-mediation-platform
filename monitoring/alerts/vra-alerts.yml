@@ -1,0 +1,47 @@
+groups:
+  - name: vra-alerts
+    rules:
+      # Coverage drop > 5pp DoD (requires an external coverage metric; placeholder shown)
+      - alert: VRA_Coverage_Drop_DoD
+        expr: |
+          (vra_coverage_percent{scope="pilot"} - (vra_coverage_percent{scope="pilot"} offset 1d)) < -5
+        for: 30m
+        labels:
+          severity: warning
+          service: vra
+        annotations:
+          summary: "VRA coverage dropped by more than 5pp day-over-day"
+          description: "Coverage fell from {{ $value | printf "%.2f" }} pp DoD. Investigate ingestion/matching."
+
+      # Variance > 1% for two consecutive days (placeholder metric)
+      - alert: VRA_Unexplained_Variance_Sustained
+        expr: vra_variance_percent{scope="pilot"} > 1
+        for: 48h
+        labels:
+          severity: warning
+          service: vra
+        annotations:
+          summary: "VRA unexplained variance exceeds 1% for 48h"
+          description: "Variance above threshold for 2 days. Review reconcile rules and FX/IVT windows."
+
+      # Ingest schema drift spike (proxy by failures labeled reason)
+      - alert: VRA_Ingest_Schema_Drift
+        expr: increase(vra_statements_load_failures_total{reason="insert_failed"}[30m]) > 50
+        for: 15m
+        labels:
+          severity: warning
+          service: vra
+        annotations:
+          summary: "VRA ingestion failures spiking — possible schema drift"
+          description: "Over 50 failures in 30m for writes to recon_statements_*; inspect network normalizers."
+
+      # FX stale > 48h — placeholder if such a metric exists; otherwise use verify failures on proofs or logs
+      - alert: VRA_Proofs_Verify_Failures
+        expr: increase(vra_proofs_verify_failures_total[30m]) > 0
+        for: 10m
+        labels:
+          severity: warning
+          service: vra
+        annotations:
+          summary: "VRA proofs verification failures detected"
+          description: "One or more proofs failed verification in the last 30m. Inspect proofs_daily_roots and monthly digest."
