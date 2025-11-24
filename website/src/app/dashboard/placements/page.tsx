@@ -4,7 +4,7 @@ export const dynamic = 'force-dynamic';
 // Reference: Design.md § "Dashboard Pages" & WEBSITE_DESIGN.md § "Placements Page"
 // Ad placements management with performance heatmap and format configuration
 
-import { CheckCircleIcon, PlusCircleIcon, XCircleIcon } from '@heroicons/react/24/outline';
+import { PlusCircleIcon } from '@heroicons/react/24/outline';
 import { Suspense, useEffect, useMemo, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { api } from '@/lib/api';
@@ -384,7 +384,7 @@ function PlacementsPageInner() {
               <span className="text-brand-600">✓</span>
               <div>
                 <p className="font-semibold mb-1 text-gray-900">Native Ads</p>
-                <p className="text-gray-700">Match your app's design. Clearly label as "Sponsored". Use in content feeds or articles.</p>
+                <p className="text-gray-700">Match your app&rsquo;s design. Clearly label as &ldquo;Sponsored&rdquo;. Use in content feeds or articles.</p>
               </div>
             </div>
           </div>

@@ -252,13 +252,13 @@ export default function NetworksPage() {
             <li className="flex gap-3">
               <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border text-xs font-semibold text-brand-700" style={{borderColor:'var(--brand-500)'}}>1</span>
               <span>
-                Click the "Add Network" button above and select your ad network from the list
+                Click the &ldquo;Add Network&rdquo; button above and select your ad network from the list
               </span>
             </li>
             <li className="flex gap-3">
               <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border text-xs font-semibold text-brand-700" style={{borderColor:'var(--brand-500)'}}>2</span>
               <span>
-                Enter your API credentials (App ID, API Key, etc.) from the network's dashboard
+                Enter your API credentials (App ID, API Key, etc.) from the network&rsquo;s dashboard
               </span>
             </li>
             <li className="flex gap-3">

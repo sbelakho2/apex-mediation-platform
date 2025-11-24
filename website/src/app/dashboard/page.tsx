@@ -15,7 +15,7 @@ export default async function DashboardPage() {
             Welcome back, {user?.name || user?.email}!
           </h1>
           <p className="mt-1 text-sm text-gray-600">
-            Here's what's happening with your ad monetization today.
+            Here&rsquo;s what&rsquo;s happening with your ad monetization today.
           </p>
         </div>
 

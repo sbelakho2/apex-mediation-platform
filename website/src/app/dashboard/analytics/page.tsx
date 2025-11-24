@@ -184,7 +184,7 @@ export default function AnalyticsPage() {
           ) : series.length === 0 ? (
             <p className="text-sm text-gray-600">No data available for this range.</p>
           ) : (
-            <SimpleBarChart series={series} currencyFormatter={currencyFmt} numberFormatter={numberFmt} />
+            <SimpleBarChart series={series} currencyFormatter={currencyFmt} />
           )}
         </div>
 
@@ -236,7 +236,7 @@ function sanitize(value?: number) {
   return typeof value === 'number' && Number.isFinite(value) ? value : 0;
 }
 
-function SimpleBarChart({ series, currencyFormatter, numberFormatter }: { series: TimeSeriesPoint[]; currencyFormatter: Intl.NumberFormat; numberFormatter: Intl.NumberFormat }) {
+function SimpleBarChart({ series, currencyFormatter }: { series: TimeSeriesPoint[]; currencyFormatter: Intl.NumberFormat }) {
   const maxRevenue = Math.max(...series.map((p) => Math.max(0, p.revenue)), 1);
   return (
     <div className="h-48 flex items-end justify-between gap-2" aria-live="polite">

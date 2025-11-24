@@ -68,7 +68,6 @@ export default function FraudPage() {
   const [events, setEvents] = useState<FraudEvent[]>([]);
   const [page, setPage] = useState(1);
   const [pageSize] = useState(20);
-  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -105,7 +104,6 @@ export default function FraudPage() {
       }));
       setSummary(statsRes.data);
       setEvents(paged);
-      setTotal(alerts.length);
       setLoading(false);
     })().catch((e) => {
       if (!alive) return;
@@ -366,27 +364,6 @@ function FraudTypeBar({ type, count, percentage, color }: FraudTypeBarProps) {
         >
           <span className="text-white text-sm font-bold">{percentage}%</span>
         </div>
-      </div>
-    </div>
-  );
-}
-
-interface CountryBlockProps {
-  country: string;
-  flag?: string;
-  blocked: number;
-  percentage: number;
-}
-
-function CountryBlock({ country, blocked, percentage }: CountryBlockProps) {
-  return (
-    <div className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
-      <div className="flex items-center gap-3">
-        <span className="font-bold text-gray-900">{country}</span>
-      </div>
-      <div className="text-right">
-        <p className="font-bold text-red-600">{blocked}</p>
-        <p className="text-xs text-gray-500">{percentage}%</p>
       </div>
     </div>
   );

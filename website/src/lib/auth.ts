@@ -1,5 +1,4 @@
 import { SignJWT, jwtVerify } from 'jose';
-import { cookies } from 'next/headers';
 
 // Use environment variable for production
 const JWT_SECRET = new TextEncoder().encode(

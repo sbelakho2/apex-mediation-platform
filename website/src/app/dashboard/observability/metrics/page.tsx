@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { auctionApi } from '@/lib/auctionApi';
 import Section from '@/components/ui/Section';
 import Container from '@/components/ui/Container';
@@ -28,7 +28,7 @@ export default function AdapterMetricsPage() {
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const backoffRef = useRef<number>(5000); // start at 5s
 
-  const loadOnce = async (signal?: AbortSignal) => {
+  const loadOnce = useCallback(async (signal?: AbortSignal) => {
     const res = await auctionApi.getAdapterMetrics({ signal });
     if (!res.success) {
       setError(res.error || 'Failed to load metrics');
@@ -39,9 +39,9 @@ export default function AdapterMetricsPage() {
     setData(res.data as AdapterMetricsSnapshot[]);
     setLastUpdated(Date.now());
     return true;
-  };
+  }, []);
 
-  const scheduleNext = (success: boolean) => {
+  const scheduleNext = useCallback((success: boolean) => {
     backoffRef.current = success ? 5000 : Math.min(60000, Math.max(5000, backoffRef.current * 2));
     if (!pollingRef.current) return;
     timeoutRef.current = setTimeout(async () => {
@@ -50,7 +50,7 @@ export default function AdapterMetricsPage() {
       const ok = await loadOnce(controller?.signal).catch(() => false);
       scheduleNext(!!ok);
     }, backoffRef.current);
-  };
+  }, [loadOnce]);
 
   useEffect(() => {
     let alive = true;
@@ -90,7 +90,7 @@ export default function AdapterMetricsPage() {
       document.removeEventListener('visibilitychange', onVis);
       controller?.abort();
     };
-  }, []);
+  }, [loadOnce, scheduleNext]);
 
   return (
     <Section>

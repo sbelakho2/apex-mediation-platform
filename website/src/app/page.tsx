@@ -226,11 +226,12 @@ const pricingTiers: PricingTierConfig[] = [
     icon: Coins,
     name: 'Tier 0 — Starter',
     price: '0% platform fee',
-    description: 'Up to $10k mediated revenue per app per month. Ship the SDKs, validate BYO flows, and keep every cent while you ramp.',
+    description: 'Free up to $10k mediated revenue per app per month with no payment method required. Ship the SDKs, validate BYO flows, and keep every cent while you ramp.',
     highlights: [
       'Full Android, iOS/tvOS, Unity, Web, and TV SDK access',
       'Covers up to 5 apps per workspace',
       'Core analytics + basic mediation debugger',
+      'Upgrade only when trailing 30-day revenue crosses $10k; add a card/ACH/SEPA rail at that point.',
     ],
     badge: 'Free tier',
     ctaLabel: 'Launch for free',
@@ -241,11 +242,12 @@ const pricingTiers: PricingTierConfig[] = [
     icon: Gauge,
     name: 'Tier 1 — Growth',
     price: '2.5% platform fee',
-    description: '$10k–$100k mediated revenue per app per month. Ideal for teams running live ops with active experiments.',
+    description: '$10k–$100k mediated revenue per app per month. Stripe cards, ACH, or SEPA are stored for autopay so billing clears the moment invoices finalize.',
     highlights: [
       'Advanced observability (adapter metrics + SLO dashboards)',
       'Migration Studio + audit-ready export bundles',
       'Email/Slack support with documented SLA',
+      'Autopay using Stripe cards, ACH (US), or SEPA (EU) at billing period close',
       'Example: $50k/mo → $1,250 platform fee',
     ],
     badge: 'Most popular',
@@ -256,11 +258,12 @@ const pricingTiers: PricingTierConfig[] = [
     icon: Layers,
     name: 'Tier 2 — Scale',
     price: '2.0% platform fee',
-    description: '$100k–$500k mediated revenue per app per month with deeper data needs and partner workflows.',
+    description: '$100k–$500k mediated revenue per app per month. Autopay remains the default, with Stripe handling retries so mediation never throttles for billing.',
     highlights: [
       'Priority support + named revenue engineer',
       'Custom dashboards and exports (BigQuery/S3/native APIs)',
       'Early access to fraud/ML tooling while it runs in shadow mode',
+      'Stripe autopay with ACH/SEPA coverage plus finance visibility into every draft invoice',
       'Example: $250k/mo → $5,000 platform fee',
     ],
     ctaLabel: 'Talk to revenue engineering',
@@ -270,11 +273,12 @@ const pricingTiers: PricingTierConfig[] = [
     icon: ShieldCheck,
     name: 'Tier 3 — Enterprise',
     price: 'Custom (1.0–1.5%) + minimum',
-    description: '$500k+ mediated revenue per app per month with regulated workflows and bespoke compliance reviews.',
+    description: '$500k+ mediated revenue per app per month with regulated workflows and bespoke compliance reviews. Default autopay lives on Stripe rails, with manual invoice + wire only after finance approval.',
     highlights: [
       'All Scale features plus contractual SLAs',
       'Dedicated Slack channel + quarterly reviews',
       'Custom onboarding/migration program',
+      'Manual invoice + wire available post-review; autopay remains the default behavior',
       'Custom data residency reviews with external audit support',
     ],
     ctaLabel: 'Design your enterprise plan',
@@ -797,7 +801,7 @@ function PricingSection() {
         <SectionHeading
           eyebrow="Get started"
           title="BYO control plane pricing"
-          description="Starter (0%), Growth (2.5%), Scale (2.0%), and Enterprise (custom 1.0–1.5% + minimum) platform fees fund the SDKs, consent tooling, telemetry, and payouts while you keep ownership of demand."
+          description="Starter stays 0% up to $10k/mo without a card. Growth (2.5%), Scale (2.0%), and Enterprise auto-charge via Stripe cards, ACH, or SEPA when invoices finalize so billing never blocks mediation."
           align="center"
           headingId="pricing-heading"
         />

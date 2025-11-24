@@ -610,7 +610,7 @@ function SecurityTab() {
         </h2>
         <div className="bg-warning/10 border border-warning rounded p-4 mb-4">
           <p className="text-sm text-gray-700 mb-3">
-            Add an extra layer of security to your account. When enabled, you'll need to enter a code from your phone in addition to your password.
+            Add an extra layer of security to your account. When enabled, you&rsquo;ll need to enter a code from your phone in addition to your password.
           </p>
           <div className="flex items-center gap-3">
             <button className="btn-primary px-6 py-2 text-sm disabled:opacity-60" onClick={handleEnroll2FA} disabled={loading2fa}>
@@ -760,29 +760,6 @@ function NotificationToggle({ title, description, defaultChecked }: Notification
         <div className="w-12 h-6 bg-gray-300 rounded-full peer peer-checked:bg-brand-500 transition-colors cursor-pointer"></div>
         <div className="absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform peer-checked:translate-x-6"></div>
       </label>
-    </div>
-  );
-}
-
-interface APIKeyCardProps {
-  name: string;
-  key_value: string;
-  lastUsed: string;
-}
-
-function APIKeyCard({ name, key_value, lastUsed }: APIKeyCardProps) {
-  return (
-    <div className="border-2 border-gray-300 rounded p-4">
-      <div className="flex items-start justify-between mb-2">
-        <div>
-          <p className="font-bold text-gray-900">{name}</p>
-          <p className="text-sm text-gray-600 font-mono">{key_value}</p>
-        </div>
-        <button className="text-sm font-bold text-red-600 hover:text-red-700">
-          Revoke
-        </button>
-      </div>
-      <p className="text-xs text-gray-500">Last used: {lastUsed}</p>
     </div>
   );
 }

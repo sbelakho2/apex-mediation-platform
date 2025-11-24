@@ -8,85 +8,138 @@
 
 ## Infrastructure Setup
 
-### Fly.io Configuration
-- [ ] Create Fly.io account
-- [ ] Deploy 2 VMs (shared CPU, 256MB RAM each) → $14/month
-- [ ] Configure auto-scaling rules (>100 req/s scale up, <20 req/s scale down)
-- [ ] Setup custom domain (api.apexmediation.com)
-- [ ] Configure SSL/TLS certificates (automatic with Fly.io)
-- [ ] Test health checks and automatic restart
+### 1. Core Infrastructure (DigitalOcean-centric)
 
-### Database (Supabase)
-- [ ] Create Supabase Pro account → $25/month
-- [ ] Provision PostgreSQL database (8GB storage, connection pooling)
-- [ ] Run all migrations (001-008)
-- [ ] Configure daily backups to Backblaze B2
-- [ ] Setup read replicas for analytics (if needed)
-- [ ] Test connection from Fly.io VMs
+#### 1.1 Compute — Main App Droplet
+- [ ] Create DigitalOcean account
+- [ ] Create droplet `apex-core-1`
+  - Type: Basic Regular or Premium (AMD/Intel)
+  - Size: 2 vCPU / 4 GB RAM / 80 GB SSD (≈ $24/mo)
+  - OS: Ubuntu LTS (22.04+)
+  - Region: closest to publishers (e.g., FRA/AMS/NYC)
+- [ ] Base server hardening
+  - [ ] Create non-root user; disable password SSH; key auth only
+  - [ ] Enable UFW: allow 22, 80, 443; deny others
+  - [ ] Install fail2ban
+  - [ ] Enable unattended-upgrades (security updates)
+- [ ] Runtime setup (Docker)
+  - [ ] Install Docker and docker-compose
+  - [ ] Define `docker-compose.yml` with services: `api`, `console`, `redis`, `nginx`
+  - [ ] Expose only Nginx on 80/443; keep app containers internal
+- [ ] App networking and routing
+  - [ ] Configure Nginx: 
+    - `api.apexmediation.com` → backend API
+    - `console.apexmediation.com` → frontend console
+    - reserve `status.apexmediation.com`
 
-### Redis Cache (Upstash)
-- [ ] Create Upstash account → $10/month
-- [ ] Provision Redis instance (1GB, 10K commands/day)
-- [ ] Configure connection from backend
-- [ ] Test caching layer performance
+#### 1.2 Database — Managed PostgreSQL (DigitalOcean)
+- [ ] Create DigitalOcean Managed PostgreSQL cluster
+  - Size: smallest Basic/Dev plan (≈ $15/mo)
+  - Region: same as droplet
+  - Storage: 10–20 GB
+- [ ] Security & access
+  - [ ] Restrict DB access to droplet private IP + optional admin IP
+  - [ ] Enforce SSL connections from apps
+- [ ] Roles
+  - [ ] Create roles: `apex_app` (limited), `apex_admin` (migrations)
+  - [ ] Store credentials in env vars + encrypted secrets (DO secrets/1Password)
+- [ ] Schema & migrations
+  - [ ] Port and run existing migrations (001–008+) against managed Postgres
+  - [ ] Configure migration tool in CI (`deploy:migrations` one-command)
+  - [ ] Verify tables, indices (hot columns), FKs/constraints
+- [ ] Backups & retention
+  - [ ] Enable automated daily backups (DO setting)
+  - [ ] Test PITR by restoring to staging and verify schema/data
+  - [ ] Document RPO (24h) and RTO (1–4h) targets
+- [ ] Early analytics in Postgres
+  - [ ] Create aggregated tables: `daily_app_metrics`, `daily_network_metrics`
 
-### ClickHouse (Analytics)
-- [ ] Choose: ClickHouse Cloud ($50-100/mo) or self-hosted on Fly.io ($20/mo)
-- [ ] Create analytics database
-- [ ] Setup 1-year TTL for usage_events table
-- [ ] Configure connection from backend
-- [ ] Test query performance (<100ms for aggregations)
+#### 1.3 Cache — Redis (Self-Hosted on Droplet)
+- [ ] Install Redis (Docker `redis:6-alpine` or APT)
+- [ ] Bind to 127.0.0.1 or Docker network only (no public exposure)
+- [ ] Configure:
+  - [ ] Max memory (e.g., 512 MB)
+  - [ ] Eviction policy `allkeys-lru`
+  - [ ] Authentication (`requirepass`)
+  - [ ] Persistence: AOF or RDB based on needs
+- [ ] Use cases: rate limiting, idempotency keys, short-lived feature flags
 
-### Storage (Cloudflare R2 + Backblaze B2)
-- [ ] Create Cloudflare R2 bucket → ~$5/month
-- [ ] Create Backblaze B2 bucket for backups → ~$5/month
-- [ ] Configure 7-year retention for invoices and documents
-- [ ] Setup automated backup cron job
-- [ ] Test file upload/download
+#### 1.4 Object Storage & Backups
+- [ ] Choose storage target:
+  - Option A: DigitalOcean Spaces (e.g., `apex-prod-objects`) (~$5/mo)
+  - Option B: Backblaze B2 (~$5/mo)
+- [ ] Configure:
+  - [ ] Private by default; signed URLs for downloads
+  - [ ] Lifecycle rules for intermediate artifacts (30–90 days)
+  - [ ] Weekly/monthly DB exports to chosen bucket (encrypted)
+  - [ ] Verify restore path into a fresh DB in staging
+
+#### 1.5 Budget Check (est.)
+- Droplet 2 vCPU / 4GB: ~$24
+- Managed Postgres basic: ~$15
+- Spaces or B2: ~$5
+- Misc (egress, DNS, backups): $3–5
+→ Total: ~$44–49/month (≤ $50 target)
 
 ---
 
 ## Monitoring & Observability
 
-### Self-Hosted Grafana Stack
-- [ ] Deploy Grafana + Prometheus + Loki on Fly.io VM → $8/month
-- [ ] Configure metrics collection from backend
-- [ ] Create dashboards:
-  - [ ] System health (CPU, memory, disk, network)
-  - [ ] API performance (response time, error rate, throughput)
-  - [ ] Business metrics (MRR, customers, usage)
-  - [ ] Sales automation (dunning, email delivery, usage alerts)
-  - [ ] SDK releases (adoption rate, time to release)
-- [ ] Setup log aggregation (Loki)
-- [ ] Configure log retention (30 days)
+### 2.1 Basic Host & App Monitoring
+- [ ] Enable DigitalOcean Monitoring for `apex-core-1` (CPU, RAM, Disk, Network)
+- [ ] Configure alerts:
+  - [ ] CPU > 80% for 5 mins
+  - [ ] Memory > 80% for 5 mins
+  - [ ] Disk > 80% usage
+  - [ ] Droplet unreachable
 
-### Error Tracking
-- [ ] Choose: Sentry free tier (5K events/month) or self-hosted GlitchTip
-- [ ] Configure error reporting from backend
-- [ ] Configure SDK crash reporting (Firebase Crashlytics for iOS/Android)
+### 2.1.b Optional Grafana Stack (on droplet)
+- [ ] Run Prometheus + Grafana in Docker (low retention 7–30 days)
+- [ ] Scrape node exporter + app `/metrics`
+- [ ] Dashboards: system, API p95/error rate/QPS, business metrics
+- [ ] Protect Grafana with auth + IP restriction/VPN
+
+### 2.2 Application Logging
+- [ ] Standardize JSON structured logs (timestamp, level, service, request_id, user_id, app_id, path, latency_ms, error_code)
+- [ ] Stream to file + DO console; enable logrotate
+- [ ] Optional: add Loki later if volume grows
+
+### 2.3 Error Tracking
+- [ ] Create Sentry account (free tier)
+- [ ] Integrate Sentry in backend API and Console
+- [ ] Configure release/environment tags and basic PII sanitization
+- [ ] SDK crash reporting: Firebase Crashlytics for Android/iOS
 - [ ] Test error capture and alerting
 
-### Status Page (Upptime)
-- [ ] Fork Upptime template to GitHub
-- [ ] Configure endpoints to monitor (api, console, docs)
-- [ ] Setup GitHub Pages deployment → status.apexmediation.com
-- [ ] Configure incident templates
-- [ ] Test automated incident detection
+### 2.4 Status Page
+- [ ] Use Upptime or hosted (UptimeRobot/Better Stack)
+- [ ] Monitor:
+  - [ ] https://api.apexmediation.com/health
+  - [ ] https://console.apexmediation.com/
+- [ ] Public status page: CNAME `status.apexmediation.com` → service
+- [ ] Simulate outage: stop API and confirm red status + notification
 
-### Alerting (PagerDuty)
-- [ ] Create PagerDuty account (free tier or $25/mo)
-- [ ] Configure integration with Grafana
-- [ ] Setup escalation policies (solo: email + SMS)
-- [ ] Define alert rules:
-  - [ ] Critical: Service down, database unavailable, payment failure
-  - [ ] Warning: High error rate, slow response time, failed cron job
-- [ ] Test alert delivery (email, SMS, push notification)
+### 2.5 Alerting (Solo-Founder Friendly)
+- [ ] Choose PagerDuty Free, Better Stack alerts, or email/SMS
+- [ ] Critical alerts: API health down, DB connectivity loss, error rate > X% for Y mins
+- [ ] Warning alerts: high latency, queue/backlog growth
+- [ ] Escalation policy: you only (email + SMS)
+- [ ] Trigger test alert and confirm delivery
 
 ---
 
 ## Payment & Billing
 
-### Stripe
+### Billing Policy Snapshot
+- [ ] `/api/v1/billing/policy` returns the canonical Stripe-first policy (source of truth: `backend/src/config/billingPolicy.ts`).
+- [ ] Cache bust instructions documented for console/docs consumers (see `docs/Customer-Facing/Compliance/Invoicing-Payments.md`).
+- [ ] Stripe+Wise fallback wording in policy response matches customer-facing docs and console banners.
+- [ ] Policy `version`/`updatedAt` match `stripe-mandatory-2025-11` snapshot and `docs/Internal/Deployment/BILLING_POLICY_ROLLOUT.md` status table.
+- [ ] Console `/billing/settings` page renders Starter + autopay messaging directly from the snapshot (see `npm run test -- billing/settings` for evidence).
+- [ ] Website pricing page + docs (`pricing.md`, `Website signup`) mirror Starter cap + autopay rails copy pulled from policy to avoid drift.
+
+### Stripe  
+See `docs/Internal/Deployment/STRIPE_COLLECTION_RUNBOOK.md` for the command-by-command runbook and evidence expectations.
 - [ ] Create Stripe account
 - [ ] Complete identity verification (KYC)
 - [ ] Configure Estonian tax settings (VAT registration)
@@ -100,6 +153,29 @@
 - [ ] Configure Customer Portal (self-service)
 - [ ] Test payment flow (test mode)
 - [ ] Enable live mode
+- [x] Verify default SEPA instructions (Wise Europe SA IBAN + reference block) — `docs/Customer-Facing/Compliance/Invoicing-Payments.md` §Payment Methods (2025-11-24)
+- [x] Verify default ACH instructions (Wise US / Community Federal Savings Bank) — `docs/Customer-Facing/Compliance/Invoicing-Payments.md` §Payment Methods (2025-11-24)
+- [x] (Optional) Enable SEB account for customers that require local rails — documented under same section for procurement cases
+- [x] Document secondary rails (Wise link, Stripe card, PayPal) in Console/docs — `pricing.md` + `Invoicing-Payments.md` refreshed 2025-11-24
+- [x] Billing artifacts (pricing, invoicing guide, FAQ) reviewed for NET 30 + Wise defaults — 2025-11-24
+
+### Starter → Autopay Enforcement QA
+- [ ] Backend `starterExperience` cap enforced: Starter stays free with no payment method until $10k/app/month, upgrade triggers flip `requires_payment_method` flag in API.
+- [ ] Autopay rails (`card`, `ach`, `sepa`) surface as `autopayEligible: true`; enterprise-only rails documented as manual exceptions.
+- [ ] Console `/billing/settings` differentiates Starter vs paid tiers (no-card reassurance vs warning) and shows the autopay info card with notification copy.
+- [ ] Website signup + docs FAQ reiterate “Starter stays free / autopay after upgrade” promise with same numbers + wording (reference commit hash in rollout doc).
+- [ ] Billing notifications (pre-charge + charge receipts) templated to match `billingPolicy.billingCycle.notifications` content, stored in Resend templates.
+- [ ] QA evidence captured in `docs/Internal/Deployment/BILLING_POLICY_ROLLOUT.md` (screenshots, policy JSON, console UI) before sign-off.
+    - [ ] Website pricing + signup screenshots reflecting Starter free cap and autopay rails (blocked: capture manually after latest deploy).
+      - Use `npm run dev` (local) or the staging deploy, zoom 100%, capture: (1) Pricing grid showing Starter 0% + autopay copy; (2) Signup policy callout + settlement rail instructions.
+      - Drop PNGs into `docs/Internal/QA/billing-policy/` and link them in `docs/Internal/Deployment/BILLING_POLICY_ROLLOUT.md` once ready.
+
+### Invoice → Payment Dry-Run
+- [ ] Generate a Stripe test customer and usage event (see Runbook §5)
+- [ ] Finalize invoice in test mode and confirm webhook updates local status to `paid`
+- [ ] Download PDF/email to verify Wise SEPA + ACH wiring blocks render correctly
+- [ ] Record screenshots/evidence in `docs/Internal/QA/stripe-dry-run/`
+- [ ] Repeat in live mode with €0 invoice once Stripe is enabled
 
 ### Email (Resend.com)
 - [ ] Create Resend account (free 3K emails/month)
@@ -126,17 +202,16 @@
 - [ ] Setup submission reminder (April 30 deadline)
 
 ### Document Retention
-- [ ] Configure S3 WORM (Write-Once-Read-Many) for invoices
-- [ ] Setup 7-year retention policy (Estonian Accounting Act § 13)
+- [ ] Configure Spaces/B2 lifecycle + retention (7-year for invoices/docs)
 - [ ] Test document upload and retrieval
-- [ ] Verify immutability (can't delete or modify)
+- [ ] Verify immutability or effective retention controls
 
 ---
 
 ## Sales Automation
 
 ### Cron Jobs
-- [ ] Deploy cron job container on Fly.io
+- [ ] Run cron service as part of `docker-compose` on `apex-core-1`
 - [ ] Verify cron schedule:
   - [ ] Every minute: Email queue processing
   - [ ] Hourly: Usage limit checks
@@ -248,6 +323,7 @@
 - [ ] Verify links (no 404s)
 - [ ] Check SEO (meta tags, sitemap, robots.txt)
 - [ ] Submit to Algolia DocSearch (if using)
+- [x] Pricing + invoicing docs updated to BYO tier language (website `[...slug]`, `docs/Customer-Facing/Compliance/Invoicing-Payments.md`) – 2025-11-24
 
 ### Support Channels
 - [ ] Create Discord server (discord.gg/apexmediation)
@@ -264,12 +340,13 @@
 ### Website
 - [ ] Deploy landing page to Cloudflare Pages (apexmediation.com)
 - [ ] Content:
-  - [ ] Hero section (OTA-proof, transparent bidding, weekly payouts)
+  - [ ] Hero section (OTA-proof, transparent bidding, NET30 invoicing)
   - [ ] Features comparison (Unity vs ApexMediation)
   - [ ] Pricing section (Starter 0%, Growth 2.5%, Scale 2.0%, Enterprise 1.0–1.5% + minimum)
   - [ ] Testimonials (early adopters)
   - [ ] Integration guides preview
   - [ ] Call-to-action (Sign up, Request demo)
+- [x] BYO pricing copy verified across marketing + docs (Starter/Growth/Scale/Enterprise) — 2025-11-24 BYO audit
 - [ ] SEO optimization (keywords: "unity mediation alternative", "ad mediation SDK")
 - [ ] Google Analytics or self-hosted Plausible/Umami
 
@@ -354,28 +431,28 @@
 ## Tools & Access
 
 ### Required Accounts
-- [ ] Fly.io (hosting)
-- [ ] Supabase (database)
-- [ ] Upstash (Redis)
-- [ ] ClickHouse Cloud (analytics) or self-hosted
-- [ ] Cloudflare (R2 storage, Pages, DNS)
-- [ ] Backblaze (B2 backups)
+- [ ] DigitalOcean (droplet, managed Postgres, Spaces)
+- [ ] Backblaze (B2 backups) — optional if not using Spaces for backups
 - [ ] Stripe (payments)
 - [ ] Resend.com (emails)
-- [ ] PagerDuty (alerting)
+- [ ] Sentry (error tracking)
+- [ ] UptimeRobot/Better Stack or GitHub (Upptime)
+- [ ] PagerDuty (alerting) — optional
 - [ ] GitHub (code, CI/CD)
 - [ ] CocoaPods (iOS distribution)
 - [ ] Sonatype OSSRH (Android distribution)
 - [ ] NPM (Unity distribution)
 
 ### Required Credentials
-- [ ] DATABASE_URL (Supabase PostgreSQL)
-- [ ] REDIS_URL (Upstash)
-- [ ] CLICKHOUSE_URL (ClickHouse)
+- [ ] DATABASE_URL (DO Managed Postgres; SSL required)
+- [ ] REDIS_URL (redis://:password@127.0.0.1:6379/0)
+- [ ] SPACES_ACCESS_KEY_ID / SPACES_SECRET_ACCESS_KEY (or B2 key)
+- [ ] SPACES_ENDPOINT/BUCKET (or B2 bucket)
 - [ ] STRIPE_SECRET_KEY (Stripe)
 - [ ] RESEND_API_KEY (Resend.com)
-- [ ] CLOUDFLARE_API_TOKEN (R2, Pages)
-- [ ] PAGERDUTY_API_KEY (alerts)
+- [ ] SENTRY_DSN (error tracking)
+- [ ] STATUS_PAGE_TOKEN or service API key (if applicable)
+- [ ] PAGERDUTY_API_KEY (alerts) — optional
 - [ ] COCOAPODS_TRUNK_TOKEN (iOS)
 - [ ] OSSRH_USERNAME, OSSRH_PASSWORD (Android)
 - [ ] NPM_TOKEN (Unity)
@@ -406,7 +483,7 @@
 - ✅ Successful SDK integration (iOS, Android, or Unity)
 - ✅ First ad impression served
 - ✅ Accurate usage tracking
-- ✅ First payout processed
+- ✅ First customer invoice issued and settled (Wise or Stripe)
 
 ---
 
@@ -414,4 +491,4 @@
 **Target Completion:** November 15-30, 2025  
 **Launch Date:** 2025-12-01
 
-**Next Action:** Begin infrastructure setup (Fly.io, Supabase, Stripe)
+**Next Action:** Begin infrastructure setup (DigitalOcean droplet + Managed Postgres + Redis + Spaces/B2)

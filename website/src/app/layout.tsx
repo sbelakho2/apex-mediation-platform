@@ -4,8 +4,8 @@ import './globals.css';
 import SkipToContent from '@/components/SkipToContent';
 import { ThemeProvider } from '@/components/ui/ThemeProvider';
 
-export const inter = Inter({ subsets: ['latin'], variable: '--font-inter', display: 'swap' });
-export const pjs = Plus_Jakarta_Sans({ subsets: ['latin'], variable: '--font-pjs', display: 'swap' });
+const inter = Inter({ subsets: ['latin'], variable: '--font-inter', display: 'swap' });
+const pjs = Plus_Jakarta_Sans({ subsets: ['latin'], variable: '--font-pjs', display: 'swap' });
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://apexmediation.bel-consulting.ee'),
