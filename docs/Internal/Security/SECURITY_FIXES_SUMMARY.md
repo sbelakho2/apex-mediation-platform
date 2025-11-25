@@ -174,7 +174,7 @@ private generateCode(): string {
   "error": "Rate limit exceeded",
   "message": "Too many requests from this IP, please try again later.",
   "retryAfter": 900,
-  "upgradeUrl": "https://apexmediation.com/pricing"
+  "upgradeUrl": "https://apexmediation.ee/pricing"
 }
 ```
 
@@ -377,8 +377,8 @@ const pool = new Pool({
 - [ ] Configure `TRUSTED_WEBHOOK_IPS` for Stripe
 - [ ] Set `APP_VERSION` environment variable
 - [ ] Apply all 16 migrations (001-016)
-- [ ] Verify health checks: `curl https://api.apexmediation.com/ready`
-- [ ] Test rate limiting: `curl -I https://api.apexmediation.com/api/v1/reports/years`
+- [ ] Verify health checks: `curl https://api.apexmediation.ee/ready`
+- [ ] Test rate limiting: `curl -I https://api.apexmediation.ee/api/v1/reports/years`
 - [ ] Download test reports: VAT Q1 2025, Annual P&L 2024
 - [ ] Monitor logs for 24 hours (PagerDuty alerts)
 

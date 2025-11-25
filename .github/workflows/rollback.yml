@@ -57,9 +57,9 @@ jobs:
           
           # Verify health endpoints
           if [ "${{ inputs.environment }}" == "production" ]; then
-            BASE_URL="https://api.rivalapexmediation.com"
+            BASE_URL="https://api.rivalapexmediation.ee"
           else
-            BASE_URL="https://staging-api.rivalapexmediation.com"
+            BASE_URL="https://staging-api.rivalapexmediation.ee"
           fi
           
           curl -f $BASE_URL/health || exit 1
@@ -113,7 +113,7 @@ jobs:
           curl -X POST https://api.pagerduty.com/incidents \
             -H 'Authorization: Token token=${{ secrets.PAGERDUTY_TOKEN }}' \
             -H 'Content-Type: application/json' \
-            -H 'From: devops@rivalapexmediation.com' \
+            -H 'From: devops@rivalapexmediation.ee' \
             -d '{
               "incident": {
                 "type": "incident",

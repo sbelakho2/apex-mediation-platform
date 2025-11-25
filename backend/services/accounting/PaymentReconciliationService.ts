@@ -2,6 +2,7 @@ import { Pool } from 'pg';
 import Stripe from 'stripe';
 import axios from 'axios';
 import { EventEmitter } from 'events';
+import { primaryLedgerBankName, secondarySebLedgerName } from '../../src/config/banking';
 
 // Extend Stripe Invoice type to include expanded fields
 interface ExpandedStripeInvoice extends Stripe.Invoice {
@@ -28,7 +29,7 @@ export interface PaymentData {
   amountCents: number;
   currency: string;
   paymentMethod: string;
-  processor: 'stripe' | 'paddle' | 'bank' | 'manual';
+  processor: 'stripe' | 'paddle' | 'bank' | 'manual' | 'sepa' | 'ach' | 'seb' | 'wise';
   stripePaymentId?: string;
   stripeChargeId?: string;
   paddlePaymentId?: string;
@@ -617,6 +618,10 @@ export class PaymentReconciliationService extends EventEmitter {
       paddle: '1110',
       bank: '1120',
       manual: '1120',
+      sepa: '1120',
+      ach: '1120',
+      wise: '1120',
+      seb: '1130',
     };
     return codes[processor] || '1100';
   }
@@ -628,8 +633,12 @@ export class PaymentReconciliationService extends EventEmitter {
     const names: Record<string, string> = {
       stripe: 'Bank - Stripe',
       paddle: 'Bank - Stripe',
-      bank: 'Bank - Wise',
-      manual: 'Bank - Wise',
+      bank: primaryLedgerBankName,
+      manual: primaryLedgerBankName,
+      sepa: primaryLedgerBankName,
+      ach: `${primaryLedgerBankName} (ACH)`,
+      wise: primaryLedgerBankName,
+      seb: secondarySebLedgerName,
     };
     return names[processor] || 'Bank Accounts';
   }

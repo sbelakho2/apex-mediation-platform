@@ -250,8 +250,8 @@ Runs automatically on every push and pull request. No manual intervention requir
 #### Environment Variables
 
 ```yaml
-STAGING_BACKEND_URL: https://api-staging.rivalapexmediation.com
-STAGING_CONSOLE_URL: https://console-staging.rivalapexmediation.com
+STAGING_BACKEND_URL: https://api-staging.rivalapexmediation.ee
+STAGING_CONSOLE_URL: https://console-staging.rivalapexmediation.ee
 NAMESPACE: staging
 CLUSTER_NAME: rival-staging-eks
 ```
@@ -501,14 +501,14 @@ ingress:
   annotations:
     cert-manager.io/cluster-issuer: letsencrypt-prod
   hosts:
-    - host: console.rivalapexmediation.com
+    - host: console.rivalapexmediation.ee
       paths:
         - path: /
           pathType: Prefix
   tls:
     - secretName: console-tls
       hosts:
-        - console.rivalapexmediation.com
+        - console.rivalapexmediation.ee
 
 autoscaling:
   enabled: true
@@ -782,13 +782,13 @@ psql $DATABASE_URL
      -p '{"spec":{"selector":{"color":"green"}}}'
    
    # Verify traffic switched
-   curl -I https://api.rivalapexmediation.com
+   curl -I https://api.rivalapexmediation.ee
    ```
 
 3. **Verify** (3 minutes)
    ```bash
    # Check health
-   curl https://api.rivalapexmediation.com/health
+   curl https://api.rivalapexmediation.ee/health
    
    # Monitor error rates
    # Wait 5 minutes for stabilization
@@ -964,5 +964,5 @@ psql $DATABASE_URL
 
 For issues or questions:
 - Slack: #devops
-- Email: devops@rivalapexmediation.com
+- Email: devops@rivalapexmediation.ee
 - On-call: PagerDuty rotation

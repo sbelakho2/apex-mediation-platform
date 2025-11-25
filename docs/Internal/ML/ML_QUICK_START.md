@@ -160,7 +160,7 @@ k6 run \
 
 # Run against staging
 k6 run \
-  --env BASE_URL=https://fraud-staging.apexmediation.com \
+  --env BASE_URL=https://fraud-staging.apexmediation.ee \
   fraud-smoke-test.js
 
 # View results

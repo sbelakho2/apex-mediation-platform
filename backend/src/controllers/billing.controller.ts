@@ -7,6 +7,7 @@ import { invoiceService } from '../services/invoiceService';
 import { reconciliationService } from '../services/reconciliationService';
 import { migrationAssistantService } from '../services/billing/migrationAssistantService';
 import { platformFeeService } from '../services/billing/platformFeeService';
+import { getBillingPolicySnapshot } from '../config/billingPolicy';
 
 /**
  * GET /api/v1/billing/usage/current
@@ -374,6 +375,28 @@ export const getPlatformTiers = async (
     });
   } catch (error) {
     logger.error('Error fetching platform tier configs', { error });
+    next(error);
+  }
+};
+
+/**
+ * GET /api/v1/billing/policy
+ * Returns the Stripe-first billing policy snapshot used across surfaces
+ */
+export const getBillingPolicy = async (
+  _req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const policy = getBillingPolicySnapshot();
+
+    res.json({
+      success: true,
+      data: policy,
+    });
+  } catch (error) {
+    logger.error('Error building billing policy payload', { error });
     next(error);
   }
 };

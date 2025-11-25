@@ -573,9 +573,9 @@ This project is proprietary and confidential. All rights reserved.
 
 ## 📞 Support (Internal)
 
-- **Email:** <support@apexmediation.com>
+- **Email:** <support@apexmediation.ee>
 - **Slack:** #apexmediation-dev
-- **Documentation:** <https://docs.apexmediation.com>
+- **Documentation:** <https://docs.apexmediation.ee>
 
 ---
 

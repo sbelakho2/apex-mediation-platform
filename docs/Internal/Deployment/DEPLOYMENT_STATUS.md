@@ -318,11 +318,14 @@ GROUP BY opportunity_type;
 ### Cost Structure (Ultra-Lean)
 | Category | Monthly Cost | Notes |
 |----------|-------------|-------|
-| Supabase (DB) | $25 | 8GB database, 50GB transfer |
-| Fly.io (Compute) | $50-150 | 2-4 shared VMs, autoscaling |
+| DigitalOcean Managed Postgres | ~$15 | Basic/Dev plan, automated backups, SSL required |
+| DigitalOcean Droplet (Compute) | ~$24 | 2 vCPU / 4GB / 80GB, Ubuntu LTS, Dockerized services behind Nginx |
 | OpenAI API | $50-100 | GPT-4o-mini @ $0.15/1M tokens |
 | Stripe fees | 2.9% + $0.30 | Payment processing |
-| **Total Fixed** | **$175-300** | **<0.2% of revenue at 1000 customers** |
+| Object Storage (Spaces or B2) | ~$5 | Private bucket, signed URLs, lifecycle rules |
+| Misc (egress, DNS, backups) | $3–5 | DO monitoring, bandwidth overage buffer |
+| **Infra Subtotal** | **$44–49** | DO droplet + DO PG + Spaces/B2 + misc |
+| **Total Fixed** | **$175-300** | Includes non-infra SaaS; infra capped at ~$50 |
 
 ### Time Investment
 - **Development:** 2 weeks (complete ✅)

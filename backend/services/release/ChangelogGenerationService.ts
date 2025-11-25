@@ -348,8 +348,8 @@ export class ChangelogGenerationService {
     guide += `4. Test thoroughly before deploying\n\n`;
     guide += `## Need Help?\n\n`;
     guide += `- Discord: https://discord.gg/apexmediation\n`;
-    guide += `- Email: support@apexmediation.com\n`;
-    guide += `- Docs: https://docs.apexmediation.com/migration/v${version}\n`;
+    guide += `- Email: support@apexmediation.ee\n`;
+    guide += `- Docs: https://docs.apexmediation.ee/migration/v${version}\n`;
 
     // Save to docs/migration/
     const migrationDir = path.join(this.repoPath, 'docs', 'migration');
@@ -369,7 +369,7 @@ export class ChangelogGenerationService {
     let email = `<h2>ApexMediation SDK v${releaseNotes.version}</h2>\n\n`;
 
     if (releaseNotes.breaking_changes) {
-      email += `<p><strong>⚠️ This release contains breaking changes.</strong> Please review the <a href="https://docs.apexmediation.com/migration/v${releaseNotes.version}">migration guide</a>.</p>\n\n`;
+      email += `<p><strong>⚠️ This release contains breaking changes.</strong> Please review the <a href="https://docs.apexmediation.ee/migration/v${releaseNotes.version}">migration guide</a>.</p>\n\n`;
     }
 
     email += `<h3>What's Changed</h3>\n\n`;

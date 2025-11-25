@@ -36,18 +36,18 @@ CREATE TABLE IF NOT EXISTS billing_audit_trail (
 );
 
 -- Indexes for common queries
-CREATE INDEX idx_billing_audit_entity ON billing_audit_trail(entity_type, entity_id);
-CREATE INDEX idx_billing_audit_actor ON billing_audit_trail(actor_id);
-CREATE INDEX idx_billing_audit_event_type ON billing_audit_trail(event_type);
-CREATE INDEX idx_billing_audit_timestamp ON billing_audit_trail(timestamp DESC);
-CREATE INDEX idx_billing_audit_created ON billing_audit_trail(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_billing_audit_entity ON billing_audit_trail(entity_type, entity_id);
+CREATE INDEX IF NOT EXISTS idx_billing_audit_actor ON billing_audit_trail(actor_id);
+CREATE INDEX IF NOT EXISTS idx_billing_audit_event_type ON billing_audit_trail(event_type);
+CREATE INDEX IF NOT EXISTS idx_billing_audit_timestamp ON billing_audit_trail(timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_billing_audit_created ON billing_audit_trail(created_at DESC);
 
 -- Composite index for time-range queries by entity
-CREATE INDEX idx_billing_audit_entity_time ON billing_audit_trail(entity_type, entity_id, timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_billing_audit_entity_time ON billing_audit_trail(entity_type, entity_id, timestamp DESC);
 
 -- GIN index for JSONB queries
-CREATE INDEX idx_billing_audit_metadata ON billing_audit_trail USING GIN(metadata);
-CREATE INDEX idx_billing_audit_after_state ON billing_audit_trail USING GIN(after_state);
+CREATE INDEX IF NOT EXISTS idx_billing_audit_metadata ON billing_audit_trail USING GIN(metadata);
+CREATE INDEX IF NOT EXISTS idx_billing_audit_after_state ON billing_audit_trail USING GIN(after_state);
 
 -- Prevent updates and deletes (append-only)
 CREATE OR REPLACE FUNCTION prevent_billing_audit_modification()

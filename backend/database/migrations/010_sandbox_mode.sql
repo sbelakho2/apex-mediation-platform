@@ -172,7 +172,7 @@ VALUES
   ('sandbox_mode', '{"enabled": true, "auto_enable_for_new_customers": true, "max_days": 30, "production_ready_threshold_requests": 100, "production_ready_threshold_days": 7}', 'Sandbox mode configuration for cold start customers', NOW()),
   ('cold_start_pricing', '{"first_10_customers": true, "month_1_2_take_rate": 0.0, "month_3_take_rate": 0.05, "month_4_plus_take_rate": 0.10, "testimonial_discount_rate": 0.08, "testimonial_bonus_months": 999}', 'Cold start pricing model for first customers', NOW()),
   ('ad_network_priority', '{"recommended_first_network": "admob", "recommended_networks": ["admob", "unity", "meta", "applovin", "ironsource"], "integration_time_hours": 4, "testing_time_hours": 2, "go_live_time_hours": 24}', 'Ad network setup recommendations and timelines', NOW()),
-  ('founder_notifications', '{"sandbox_ready_enabled": true, "sandbox_ready_throttle_days": 7, "email": "sabel@apexmediation.com", "phone": "+1234567890", "availability": "Mon-Fri 9am-6pm EST"}', 'Founder notification preferences for customer milestones', NOW())
+  ('founder_notifications', '{"sandbox_ready_enabled": true, "sandbox_ready_throttle_days": 7, "email": "sabel@apexmediation.ee", "phone": "+1234567890", "availability": "Mon-Fri 9am-6pm EST"}', 'Founder notification preferences for customer milestones', NOW())
 ON CONFLICT (key) DO NOTHING;
 
 -- ============================================================================
@@ -193,15 +193,15 @@ CREATE TABLE IF NOT EXISTS sandbox_creatives (
 
 INSERT INTO sandbox_creatives (ad_format, width, height, image_url, message)
 VALUES 
-  ('banner', 320, 50, 'https://apexmediation.com/sandbox/banner/320x50.png', '🧪 Sandbox Mode: Test banner ad (320x50)'),
-  ('banner', 300, 250, 'https://apexmediation.com/sandbox/banner/300x250.png', '🧪 Sandbox Mode: Test banner ad (300x250)'),
-  ('banner', 728, 90, 'https://apexmediation.com/sandbox/banner/728x90.png', '🧪 Sandbox Mode: Test banner ad (728x90 tablet)'),
-  ('interstitial', 1920, 1080, 'https://apexmediation.com/sandbox/interstitial/1920x1080.png', '🧪 Sandbox Mode: Test interstitial ad (full screen)'),
-  ('native', 1200, 627, 'https://apexmediation.com/sandbox/native/1200x627.png', '🧪 Sandbox Mode: Test native ad');
+  ('banner', 320, 50, 'https://apexmediation.ee/sandbox/banner/320x50.png', '🧪 Sandbox Mode: Test banner ad (320x50)'),
+  ('banner', 300, 250, 'https://apexmediation.ee/sandbox/banner/300x250.png', '🧪 Sandbox Mode: Test banner ad (300x250)'),
+  ('banner', 728, 90, 'https://apexmediation.ee/sandbox/banner/728x90.png', '🧪 Sandbox Mode: Test banner ad (728x90 tablet)'),
+  ('interstitial', 1920, 1080, 'https://apexmediation.ee/sandbox/interstitial/1920x1080.png', '🧪 Sandbox Mode: Test interstitial ad (full screen)'),
+  ('native', 1200, 627, 'https://apexmediation.ee/sandbox/native/1200x627.png', '🧪 Sandbox Mode: Test native ad');
 
 INSERT INTO sandbox_creatives (ad_format, width, height, video_url, duration_seconds, message)
 VALUES 
-  ('rewarded_video', 1920, 1080, 'https://apexmediation.com/sandbox/video/rewarded_30s.mp4', 30, '🧪 Sandbox Mode: Test rewarded video (30s)');
+  ('rewarded_video', 1920, 1080, 'https://apexmediation.ee/sandbox/video/rewarded_30s.mp4', 30, '🧪 Sandbox Mode: Test rewarded video (30s)');
 
 COMMENT ON TABLE sandbox_creatives IS 'Mock ad creatives for sandbox mode testing';
 

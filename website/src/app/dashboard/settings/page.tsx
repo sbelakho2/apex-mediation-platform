@@ -164,7 +164,7 @@ function ProfileTab() {
               name="email"
               type="email"
               className="input-v2 w-full"
-              defaultValue="john@apexmediation.com"
+              defaultValue="john@apexmediation.ee"
               required
             />
           </div>
@@ -255,7 +255,7 @@ function PaymentTab() {
           <PaymentMethodCard
             type="PayPal"
             icon="💳"
-            details="john@apexmediation.com"
+            details="john@apexmediation.ee"
           />
         </div>
         <button className="mt-4 btn-secondary text-sm">

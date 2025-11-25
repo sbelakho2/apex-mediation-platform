@@ -9,7 +9,13 @@ const router = Router();
 // All billing endpoints require billing feature to be enabled
 router.use(requireFeature('billingEnabled'));
 
-// All billing endpoints require authentication
+/**
+ * GET /api/v1/billing/policy
+ * Public snapshot describing the Stripe-first billing policy
+ */
+router.get('/policy', billingController.getBillingPolicy);
+
+// All remaining billing endpoints require authentication
 router.use(authenticate);
 
 /**

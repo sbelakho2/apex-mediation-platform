@@ -1,7 +1,7 @@
 import { executeQuery } from '../../utils/clickhouse';
 import logger from '../../utils/logger';
 import { ReconOverviewParams, ReconOverviewResult, ReconDeltaQuery, ReconDeltaItem, ProofsMonthlyDigest } from './vraTypes';
-import { vraClickhouseFallbackTotal, vraEmptyResultsTotal, vraQueryDurationSeconds } from '../../utils/prometheus';
+import { vraClickhouseFallbackTotal, vraEmptyResultsTotal, vraQueryDurationSeconds, vraCoveragePercent, vraVariancePercent } from '../../utils/prometheus';
 
 // Helper to time and safely execute CH queries returning empty arrays on failure (shadow-safe)
 async function safeQuery<T = any>(
@@ -79,6 +79,14 @@ export class VraService {
 
     // Coverage: ratio of rows with any paid data (proxy for matched coverage)
     const coveragePercent = byBreakdown.length > 0 ? 100 : 0;
+
+    // Best‑effort publish pilot‑gate gauges used by alerts; never throw
+    try {
+      vraCoveragePercent.set({ scope: 'pilot' }, coveragePercent);
+      vraVariancePercent.set({ scope: 'pilot' }, variancePercent);
+    } catch (_) {
+      // ignore metric errors in lightweight/test environments
+    }
 
     // Per-network slices for UI overview and dashboards
     const byNetworkMap = new Map<string, { network: string; impressions: number; paid: number; expected: number }>();

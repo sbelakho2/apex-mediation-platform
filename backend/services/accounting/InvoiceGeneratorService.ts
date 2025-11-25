@@ -1,9 +1,12 @@
 import { Pool } from 'pg';
 import PDFDocument from 'pdfkit';
+import type PDFKit from 'pdfkit';
 import { XMLBuilder } from 'fast-xml-parser';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import crypto from 'crypto';
 import { addDays, format } from 'date-fns';
+import type { BankAccountDetails } from '../../src/config/banking';
+import { getPaymentInstructions } from '../../src/config/banking';
 
 /**
  * Invoice Generator Service
@@ -330,11 +333,24 @@ export class InvoiceGeneratorService {
         yPosition += 20;
         doc.fontSize(9)
           .font('Helvetica')
-          .text(`Payment due: ${format(data.dueDate, 'dd.MM.yyyy')}`, 50, yPosition)
-          .text('Bank: Wise Europe SA', 50, yPosition + 15)
-          .text('IBAN: EE907700771234567890', 50, yPosition + 30)
-          .text('SWIFT: TRWIBEB1XXX', 50, yPosition + 45)
-          .text(`Reference: ${data.invoiceNumber}`, 50, yPosition + 60);
+          .text(`Payment due: ${format(data.dueDate, 'dd.MM.yyyy')}`, 50, yPosition, { continued: false });
+
+        const instructions = getPaymentInstructions();
+        instructions.forEach((instruction) => {
+          yPosition += 20;
+          doc.fontSize(9)
+            .font('Helvetica-Bold')
+            .fillColor(primaryColor)
+            .text(instruction.heading, 50, yPosition);
+
+          yPosition += 14;
+          doc.font('Helvetica')
+            .fillColor('#4b5563')
+            .text(instruction.description, 50, yPosition, { width: 460 });
+
+          yPosition += 24;
+          yPosition = this.writeBankAccountDetails(doc, instruction.account, data.invoiceNumber, yPosition);
+        });
 
         // Notes
         if (data.notes) {
@@ -354,7 +370,7 @@ export class InvoiceGeneratorService {
         doc.fontSize(7)
           .fillColor('#9ca3af')
           .text(
-            'This invoice was generated automatically by RivalApexMediation. For questions, contact accounting@rivalapexmediation.com',
+            'This invoice was generated automatically by RivalApexMediation. For questions, contact accounting@rivalapexmediation.ee',
             50,
             750,
             { align: 'center', width: 500 }
@@ -365,6 +381,51 @@ export class InvoiceGeneratorService {
         reject(error);
       }
     });
+  }
+
+  /**
+   * Generate XML invoice (UBL 2.1 format for e-invoicing)
+   */
+  private writeBankAccountDetails(
+    doc: PDFKit.PDFDocument,
+    account: BankAccountDetails,
+    invoiceNumber: string,
+    yPosition: number
+  ): number {
+    const detailPairs: Array<[string, string | undefined]> = [
+      ['Account Name', account.accountName],
+      ['Bank', account.bankName],
+      ['IBAN', account.iban],
+      ['Account #', account.accountNumber],
+      ['Routing #', account.routingNumber],
+      ['BIC/SWIFT', account.bic || account.swift],
+      ['Account Type', account.accountType],
+      ['Bank Address', account.bankAddress],
+    ];
+
+    doc.font('Helvetica')
+      .fontSize(9)
+      .fillColor('#111827');
+
+    detailPairs
+      .filter(([, value]) => Boolean(value))
+      .forEach(([label, value]) => {
+        doc.text(`${label}: ${value}`, 50, yPosition);
+        yPosition += 14;
+      });
+
+    doc.text(`Reference: ${invoiceNumber}`, 50, yPosition);
+    yPosition += 16;
+
+    if (account.notes) {
+      doc.font('Helvetica-Oblique')
+        .fillColor('#6b7280')
+        .text(account.notes, 50, yPosition, { width: 460 });
+      yPosition += 18;
+    }
+
+    doc.fillColor('#111827');
+    return yPosition + 6;
   }
 
   /**

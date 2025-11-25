@@ -38,9 +38,9 @@ jobs:
         id: env_url
         run: |
           if [ "$ENVIRONMENT" = "staging" ]; then
-            echo "base_url=https://fraud-staging.apexmediation.com" >> $GITHUB_OUTPUT
+            echo "base_url=https://fraud-staging.apexmediation.ee" >> $GITHUB_OUTPUT
           else
-            echo "base_url=https://fraud.apexmediation.com" >> $GITHUB_OUTPUT
+            echo "base_url=https://fraud.apexmediation.ee" >> $GITHUB_OUTPUT
           fi
       
       - name: Run k6 smoke test

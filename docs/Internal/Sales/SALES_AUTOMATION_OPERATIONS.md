@@ -105,7 +105,7 @@ The ApexMediation sales automation system provides complete self-service custome
 ```typescript
 // iOS SDK telemetry
 func trackImpressions(count: Int) {
-    let url = URL(string: "https://api.apexmediation.com/usage/track")!
+    let url = URL(string: "https://api.apexmediation.ee/usage/track")!
     var request = URLRequest(url: url)
     request.httpMethod = "POST"
     request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -202,7 +202,7 @@ Day 7:  Retry Attempt 3 (FINAL)
 **1. Payment Failed (Immediate)**
 - Subject: "⚠️ Payment failed - action required"
 - Content: Payment amount, update link, retry schedule
-- From: noreply@apexmediation.com
+- From: noreply@apexmediation.ee
 
 **2. Payment Retry (Before Each Attempt)**
 - Subject: "Payment retry X of 3"

@@ -288,7 +288,7 @@
 - [ ] **Onboarding Guide:** For new team members
 
 ### Communication Plan
-- [ ] **Status Page:** Configured (e.g., status.apexmediation.com)
+- [ ] **Status Page:** Configured (e.g., status.apexmediation.ee)
 - [ ] **Incident Communication:** Templates for customer notifications
 - [ ] **Stakeholder Updates:** Schedule for weekly reports
 

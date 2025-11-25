@@ -7,7 +7,7 @@ import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { settingsApi } from '@/lib/api'
-import { ArrowLeft, Banknote, Save, AlertCircle, CheckCircle, Eye, EyeOff, Shield } from 'lucide-react'
+import { ArrowLeft, Banknote, Save, AlertCircle, CheckCircle, Eye, EyeOff, Shield, Info } from 'lucide-react'
 
 const payoutSchema = z
   .object({
@@ -158,6 +158,25 @@ export default function PayoutSettingsPage() {
       </header>
 
       <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <section className="card bg-amber-50/70 border border-amber-200 text-amber-900 flex flex-col gap-3 mb-6">
+          <div className="flex items-start gap-3">
+            <div className="rounded-full bg-white/70 p-2">
+              <Info className="h-5 w-5 text-amber-600" aria-hidden={true} />
+            </div>
+            <div>
+              <h2 className="text-base font-semibold text-amber-900">Settlement info is now required</h2>
+              <p className="text-sm text-amber-900/90">
+                New publishers cannot finish signup (or receive payouts) until finance verifies a SEPA or ACH account.
+                Save the same details here if you need to update banking later—the backend keeps one verified record per publisher.
+              </p>
+            </div>
+          </div>
+          <ul className="list-disc pl-10 text-sm text-amber-900/90 space-y-1">
+            <li>SEPA: account holder name + IBAN + BIC</li>
+            <li>ACH: account holder name + routing number + account number + account type</li>
+            <li>Changes trigger a manual review, so double-check before saving.</li>
+          </ul>
+        </section>
         <form onSubmit={handleSubmit} className="space-y-6">
           {message && (
             <div

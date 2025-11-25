@@ -320,7 +320,7 @@ export class FirstCustomerExperienceService {
         company_name: companyName,
         days_active: Math.round(daysActive),
         incentive: '1 month free service',
-        testimonial_form_url: 'https://apexmediation.com/testimonials/submit',
+        testimonial_form_url: 'https://apexmediation.ee/testimonials/submit',
       }),
     ]);
 
@@ -496,7 +496,7 @@ export class FirstCustomerExperienceService {
         tickets_helped: ticketsHelped,
         tickets_resolved: ticketsResolved,
         reward_amount: 100, // $100 credit
-        badge_url: 'https://apexmediation.com/badges/community-champion',
+        badge_url: 'https://apexmediation.ee/badges/community-champion',
       }),
     ]);
 

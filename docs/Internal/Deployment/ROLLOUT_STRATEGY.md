@@ -35,13 +35,13 @@
 # - Enable CloudTrail, GuardDuty, Config
 
 # 2. Domain & SSL
-# apexmediation.com
+# apexmediation.ee
 # - Cloudflare for DNS + DDoS protection
 # - SSL certificates via AWS Certificate Manager
-# api.apexmediation.com
-# console.apexmediation.com
-# docs.apexmediation.com
-# status.apexmediation.com
+# api.apexmediation.ee
+# console.apexmediation.ee
+# docs.apexmediation.ee
+# status.apexmediation.ee
 
 # 3. Database Setup
 # RDS PostgreSQL
@@ -103,7 +103,7 @@ aws elasticache create-replication-group \
 # - Monitor SDK download URLs
 # - Alert via email, Slack, PagerDuty
 
-# 4. Status Page (status.apexmediation.com)
+# 4. Status Page (status.apexmediation.ee)
 # - Use Atlassian Statuspage or self-hosted
 # - Automated incident updates
 # - Historical uptime data
@@ -143,7 +143,7 @@ stripe prices create \
 # Repeat for Scale (0.02) and Enterprise (custom contract + minimum via subscriptions / invoices)
 
 # 3. Configure Stripe Webhooks
-# Endpoint: https://api.apexmediation.com/webhooks/stripe
+# Endpoint: https://api.apexmediation.ee/webhooks/stripe
 # Events:
 #   - customer.subscription.created
 #   - customer.subscription.updated
@@ -156,13 +156,18 @@ stripe prices create \
 # - Test cards: 4242 4242 4242 4242
 # - Verify webhook delivery
 # - Test failed payment scenarios
+
+# 5. Publish Billing Policy Snapshot
+# - Endpoint: https://api.apexmediation.ee/api/v1/billing/policy
+# - Source of truth: backend/src/config/billingPolicy.ts (Stripe-first rail + Wise/ACH fallbacks)
+# - Consumers: console billing pages + docs/Customer-Facing/Compliance/Invoicing-Payments.md (cache bust after changes)
 ```
 
 #### Email Infrastructure (Week 3)
 
 ```bash
 # 1. Domain Email Setup
-# - Google Workspace or Microsoft 365 for support@apexmediation.com
+# - Google Workspace or Microsoft 365 for support@apexmediation.ee
 # - SPF, DKIM, DMARC records configured
 
 # 2. Transactional Email (SendGrid or Postmark)
@@ -196,13 +201,13 @@ stripe prices create \
    Your API Key: {{api_key}}
    
    Get Started:
-   1. Download the SDK: https://docs.apexmediation.com/download
-   2. Follow integration guide: https://docs.apexmediation.com/quickstart
-   3. Join our community: https://community.apexmediation.com
+   1. Download the SDK: https://docs.apexmediation.ee/download
+   2. Follow integration guide: https://docs.apexmediation.ee/quickstart
+   3. Join our community: https://community.apexmediation.ee
    
    You have 14 days of free trial. No credit card charged until trial ends.
    
-   Need help? Reply to this email or visit https://docs.apexmediation.com
+   Need help? Reply to this email or visit https://docs.apexmediation.ee
    
    Best regards,
    Sabel Akhoua
@@ -261,7 +266,7 @@ docs/
 
 # 4. SDK Documentation
 # - JSDoc/JavaDoc/Appledoc generation
-# - Hosted on docs.apexmediation.com/sdk/
+# - Hosted on docs.apexmediation.ee/sdk/
 # - Version switcher for multiple SDK versions
 ```
 
@@ -285,7 +290,7 @@ docs/
 # Option A: Intercom
 # Option B: Zendesk
 # Option C: Plain.com (modern, affordable)
-# Option D: Email-based (support@apexmediation.com via Google Workspace)
+# Option D: Email-based (support@apexmediation.ee via Google Workspace)
 
 # For Day 0: Start with email + Discord
 # Upgrade to proper ticketing at 50+ customers
@@ -338,7 +343,7 @@ docs/
 
 ```bash
 # ✅ Infrastructure Health Check
-curl https://api.apexmediation.com/health
+curl https://api.apexmediation.ee/health
 # Expected: {"status":"healthy","version":"1.0.0","timestamp":"2026-01-15T08:00:00Z"}
 
 # ✅ Database Connection
@@ -348,21 +353,21 @@ psql -h apexmediation-prod.xxx.eu-north-1.rds.amazonaws.com -U apexadmin -c "SEL
 redis-cli -h apexmediation-prod.xxx.cache.amazonaws.com ping
 
 # ✅ Stripe Webhooks
-curl -X POST https://api.apexmediation.com/webhooks/stripe/test
+curl -X POST https://api.apexmediation.ee/webhooks/stripe/test
 
 # ✅ Email Sending
 # Send test email to yourself via SendGrid
 
 # ✅ SDK Downloads
-curl -I https://apexmediation.com/download/ios/latest
+curl -I https://apexmediation.ee/download/ios/latest
 # Expected: 302 redirect to S3 URL
 
 # ✅ Documentation Site
-curl -I https://docs.apexmediation.com
+curl -I https://docs.apexmediation.ee
 # Expected: 200 OK
 
 # ✅ Console Login
-# Open https://console.apexmediation.com
+# Open https://console.apexmediation.ee
 # Test signup flow end-to-end
 
 # ✅ Monitoring Alerts
@@ -372,7 +377,7 @@ curl -I https://docs.apexmediation.com
 # Verify automated backup ran successfully
 
 # ✅ SSL Certificates
-openssl s_client -connect api.apexmediation.com:443 -servername api.apexmediation.com
+openssl s_client -connect api.apexmediation.ee:443 -servername api.apexmediation.ee
 # Expected: Valid certificate, expires in 90 days
 ```
 
@@ -388,12 +393,12 @@ aws s3 rm s3://apexmediation-config/maintenance.json
 aws s3api put-bucket-policy --bucket apexmediation-sdk-releases --policy file://public-policy.json
 
 # 3. Update DNS to production
-# console.apexmediation.com → CloudFront distribution
-# api.apexmediation.com → ALB in production VPC
+# console.apexmediation.ee → CloudFront distribution
+# api.apexmediation.ee → ALB in production VPC
 
 # 4. Tweet/Post announcement
 # "🚀 ApexMediation is now live! Unified ad mediation SDK for iOS, Android, Unity & Flutter. 
-#  Start with 14-day free trial. https://apexmediation.com"
+#  Start with 14-day free trial. https://apexmediation.ee"
 
 # 5. Post on Product Hunt (scheduled for 00:01 PST)
 # 6. Post on Hacker News Show HN
@@ -430,7 +435,7 @@ aws s3api put-bucket-policy --bucket apexmediation-sdk-releases --policy file://
 
 ```bash
 # Monitor support channels every 30 minutes:
-# - support@apexmediation.com
+# - support@apexmediation.ee
 # - Discord #help channel
 # - Twitter/X mentions
 # - Product Hunt comments
@@ -566,15 +571,15 @@ import { gmailAPI } from './gmail-api';
 import { openai } from './openai-client';
 
 const FAQ_RESPONSES = {
-  'how to integrate': 'https://docs.apexmediation.com/quickstart',
-  'supported networks': 'https://docs.apexmediation.com/integrations',
-  'pricing': 'https://apexmediation.com/pricing',
+  'how to integrate': 'https://docs.apexmediation.ee/quickstart',
+  'supported networks': 'https://docs.apexmediation.ee/integrations',
+  'pricing': 'https://apexmediation.ee/pricing',
   'trial': 'All plans include a 14-day free trial. No credit card required to start.',
-  'react native': 'React Native is not yet supported. Add your vote: https://feedback.apexmediation.com',
+  'react native': 'React Native is not yet supported. Add your vote: https://feedback.apexmediation.ee',
 };
 
 async function autoRespondFAQ() {
-  const unreadEmails = await gmailAPI.getUnread('support@apexmediation.com');
+  const unreadEmails = await gmailAPI.getUnread('support@apexmediation.ee');
   
   for (const email of unreadEmails) {
     const question = email.body.toLowerCase();
@@ -615,7 +620,7 @@ export class OnboardingService {
     // 1. Send welcome email immediately
     await this.emailService.send(userId, 'welcome', {
       api_key: user.api_key,
-      sdk_download_url: 'https://docs.apexmediation.com/download',
+      sdk_download_url: 'https://docs.apexmediation.ee/download',
     });
     
     // 2. Schedule follow-up emails
@@ -648,7 +653,7 @@ export class OnboardingService {
     // Send integration guide
     await this.emailService.send(userId, 'sdk-integration-guide', {
       platform,
-      guide_url: `https://docs.apexmediation.com/installation-${platform}`,
+      guide_url: `https://docs.apexmediation.ee/installation-${platform}`,
     });
   }
   
@@ -678,7 +683,7 @@ export class OnboardingService {
     
     // Celebrate milestone!
     await this.emailService.send(userId, 'first-impression-milestone', {
-      console_url: 'https://console.apexmediation.com/analytics',
+      console_url: 'https://console.apexmediation.ee/analytics',
     });
     
     // Offer 1:1 call for accounts with potential (optional)
@@ -759,7 +764,7 @@ export class ChurnPreventionService {
       const percentUsed = (customer.usage / customer.included_impressions) * 100;
       await this.emailService.send(customer.customer_id, 'usage-alert-upgrade-offer', {
         percent_used: percentUsed.toFixed(0),
-        upgrade_url: 'https://console.apexmediation.com/billing/upgrade',
+        upgrade_url: 'https://console.apexmediation.ee/billing/upgrade',
       });
     }
   }
@@ -1112,7 +1117,7 @@ export class CustomerSegmentationService {
     const powerUsers = await this.db.users.findMany({ segment: 'power_user' });
     for (const user of powerUsers) {
       await this.emailService.send(user.id, 'power-user-perks', {
-        slack_channel_invite: 'https://slack.apexmediation.com/invite/powerusers',
+        slack_channel_invite: 'https://slack.apexmediation.ee/invite/powerusers',
       });
     }
     
@@ -1647,7 +1652,7 @@ async function generateDailyDigest(): Promise<DailyDigest> {
 
 ## 1. Immediate Actions (0-5 minutes)
 - [ ] Confirm outage scope (all services or partial)
-- [ ] Check status page (https://status.apexmediation.com)
+- [ ] Check status page (https://status.apexmediation.ee)
 - [ ] Post incident notice: "Investigating connectivity issues"
 - [ ] Check #incidents Slack channel for alerts
 - [ ] Open incident log: `incidents/YYYY-MM-DD-HHmm-description.md`
@@ -1767,6 +1772,10 @@ Template: https://postmortems.pagerduty.com/
 
 ---
 
+> Update — 2025-11-24: DigitalOcean-Centric Costing
+>
+> The recommended baseline stack is now DigitalOcean droplet (2 vCPU/4GB) + DO Managed Postgres + Redis on-droplet + Spaces/B2. Monitoring uses DO built-ins with optional on-box Prometheus/Grafana. Historical Fly.io/Supabase references remain below for context but are no longer the primary plan.
+
 ## Summary: The Automated Solo Operator Model
 
 ### Time Allocation (Weekly)
@@ -1784,7 +1793,7 @@ Template: https://postmortems.pagerduty.com/
 
 | Category | Cost | Automation Strategy | Free Alternative Used |
 |----------|------|---------------------|----------------------|
-| **Infrastructure** | $150-200 | Fly.io or Railway ($20) + Supabase Postgres ($25) + Upstash Redis ($10) + ClickHouse Cloud ($50-100) + Cloudflare R2 ($5) | AWS Free Tier (first 12 months), then migrate |
+| **Infrastructure** | $44-49 | DigitalOcean droplet ($24) + DO Managed Postgres ($15) + Redis on droplet ($0) + Spaces/B2 ($5) | Historic: Fly.io + Supabase + Upstash + ClickHouse |
 | **Monitoring** | $0 | Self-hosted Grafana + Prometheus + Loki on Fly.io | Replace Datadog ($300+/mo) |
 | **Error Tracking** | $0 | Sentry free tier (5K events/mo) + GlitchTip self-hosted | Datadog APM |
 | **Email** | $0-15 | Resend.com (3K emails/mo free) or Amazon SES ($0.10/1K) | SendGrid $15+/mo |
@@ -1809,27 +1818,26 @@ Template: https://postmortems.pagerduty.com/
 ```yaml
 # Instead of AWS (expensive), use:
 stack:
-  compute: 
-    provider: fly.io  # $0.01/hour = $7/mo per VM
-    config: 2x shared-cpu-1x, 256MB RAM
-    auto-sleep: true  # Sleep after 5 min inactivity (free tier apps)
+  compute:
+    provider: digitalocean  # droplet 2 vCPU/4GB ~ $24/mo
+    instance: apex-core-1
+    region: fra|ams|nyc
     
   database:
-    provider: supabase.com  # $25/mo for 8GB, includes backups
-    alternative: neon.tech  # $19/mo, serverless Postgres
-    free_option: fly.io Postgres (512MB free)
+    provider: do-managed-postgres  # ~$15/mo basic/dev tier
+    ssl: required
+    backups: enabled_daily
     
   redis:
-    provider: upstash.com  # $10/mo for 10K commands/day
-    free_tier: 10K requests/day (enough for <100 customers)
+    provider: self_hosted  # docker on droplet
+    config: "maxmemory 512mb, allkeys-lru, requirepass, AOF"
     
   object_storage:
-    provider: cloudflare_r2  # $0.015/GB, 10M reads free
-    accounting_docs: backblaze_b2  # $5/TB/mo
+    provider: do_spaces  # ~$5/mo; or backblaze_b2 alternative
+    bucket: apex-prod-objects
     
   analytics_db:
-    provider: clickhouse.cloud  # $50-100/mo for 50GB
-    free_option: self-host ClickHouse on Fly.io ($20/mo VM)
+    provider: postgres  # early analytics via aggregated tables; ClickHouse deferred
 
 # Total infrastructure: ~$150/mo (vs AWS $500-1500/mo)
 ```
@@ -2245,7 +2253,7 @@ export class CustomerSuccessAutomation {
           current_cost: `$${currentCost}`,
           upgrade_cost: `$${upgradeCost}`,
           monthly_savings: `$${savings}`,
-          upgrade_url: `https://console.apexmediation.com/billing/upgrade?plan=${nextPlan}`,
+          upgrade_url: `https://console.apexmediation.ee/billing/upgrade?plan=${nextPlan}`,
         });
       }
     }

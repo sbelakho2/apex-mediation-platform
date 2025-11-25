@@ -239,6 +239,6 @@ INSERT INTO system_config (key, value, description, created_at) VALUES
   ('community_champions', '{
     "min_contributions_per_month": 5,
     "reward_amount_cents": 10000,
-    "badge_url": "https://apexmediation.com/badges/community-champion"
+    "badge_url": "https://apexmediation.ee/badges/community-champion"
   }'::JSONB, 'Community champion recognition and rewards', NOW())
 ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW();

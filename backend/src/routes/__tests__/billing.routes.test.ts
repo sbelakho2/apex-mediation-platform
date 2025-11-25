@@ -71,6 +71,16 @@ jest.mock('../../controllers/billing.controller', () => ({
       limits: { impressions: 10000, clicks: 500, video_starts: 100 }
     });
   }),
+  getBillingPolicy: jest.fn((_req, res) => {
+    res.json({
+      success: true,
+      data: {
+        version: 'policy-test',
+        primaryRail: { id: 'stripe' },
+        fallbackRails: [],
+      },
+    });
+  }),
   listInvoices: jest.fn((req, res) => {
     res.json({
       invoices: [
@@ -125,6 +135,21 @@ describe('Billing Routes', () => {
     app = express();
     app.use(express.json());
     app.use('/api/v1/billing', billingRoutes);
+  });
+
+  describe('GET /api/v1/billing/policy', () => {
+    it('returns the billing policy snapshot without auth', async () => {
+      const response = await request(app)
+        .get('/api/v1/billing/policy')
+        .expect(200);
+
+      expect(response.body).toEqual(
+        expect.objectContaining({
+          success: true,
+          data: expect.objectContaining({ version: 'policy-test' }),
+        })
+      );
+    });
   });
 
   describe('GET /api/v1/billing/usage/current', () => {

@@ -4,7 +4,7 @@
 
 ## Status Page Setup
 
-- **URL:** https://status.apexmediation.com
+- **URL:** https://status.apexmediation.ee
 - **Source:** Upptime repository (`infra/status-page`), deployed via GitHub Pages.
 - **Automations:**
   - Synthetic probes from `.github/workflows/synthetic-probes.yml` open incidents automatically.

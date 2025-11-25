@@ -6,6 +6,7 @@ import {
   getInvoicePDF,
   reconcileBilling,
   requestMigration,
+  getBillingPolicy,
 } from '../billing.controller';
 
 jest.mock('../../services/billing/UsageMeteringService', () => ({
@@ -464,6 +465,33 @@ describe('billing.controller', () => {
 
       expect(mockedPlatformFeeService.getTiers).toHaveBeenCalled();
       expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
+    });
+  });
+
+  describe('getBillingPolicy', () => {
+    it('returns policy snapshot without requiring user context', async () => {
+      delete (req as any).user;
+
+      await getBillingPolicy(req as Request, res, next);
+
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: true,
+          data: expect.objectContaining({
+            version: expect.any(String),
+            primaryRail: expect.objectContaining({ id: 'stripe' }),
+            fallbackRails: expect.any(Array),
+            starterExperience: expect.objectContaining({ paymentMethodRequired: expect.any(Boolean) }),
+            upgradePath: expect.objectContaining({
+              autopay: expect.objectContaining({ defaultBehavior: expect.any(String) }),
+              acceptedPaymentMethods: expect.any(Array),
+            }),
+            billingCycle: expect.objectContaining({ cadence: 'monthly' }),
+            transparencyCommitments: expect.objectContaining({ platformFeeOnly: expect.any(String) }),
+          }),
+        })
+      );
+      expect(next).not.toHaveBeenCalled();
     });
   });
 });

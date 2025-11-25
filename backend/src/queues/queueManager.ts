@@ -1,14 +1,33 @@
+import { Queue, Worker, JobsOptions, RedisOptions } from 'bullmq';
 import { redis } from '../utils/redis';
 import logger from '../utils/logger';
 
 export enum QueueName {
   ANALYTICS_INGEST = 'analytics_ingest',
+  ANALYTICS_AGGREGATION = 'analytics_aggregation',
+  DATA_EXPORT = 'data_export',
   PRIVACY = 'privacy',
   REPORT_GENERATION = 'report_generation',
   METRICS_CALCULATION = 'metrics_calculation',
   CACHE_WARMING = 'cache_warming',
   CLEANUP_TASKS = 'cleanup_tasks',
 }
+
+export type AnalyticsAggregationJob = {
+  publisherId: string;
+  startDate: string;
+  endDate: string;
+  granularity: 'hour' | 'day' | 'week';
+};
+
+export type DataExportJob = {
+  jobId: string;
+  publisherId: string;
+  format: 'csv' | 'json';
+  startDate: string;
+  endDate: string;
+  filters?: Record<string, unknown>;
+};
 
 export type PrivacyJob = {
   kind: 'export' | 'delete';
@@ -18,107 +37,188 @@ export type PrivacyJob = {
   format?: 'json' | 'csv';
 };
 
-type SimpleQueue = {
-  add: (name: string, data: Record<string, unknown>, _opts?: Record<string, unknown>) => Promise<void>;
-  getWaitingCount?: () => Promise<number>;
-  getActiveCount?: () => Promise<number>;
-  getDelayedCount?: () => Promise<number>;
-  getFailedCount?: () => Promise<number>;
+type QueueWorkerOptions = {
+  concurrency?: number;
+  limiter?: {
+    max: number;
+    duration: number;
+  };
 };
 
 class QueueManagerImpl {
+  private initialized = false;
+  private queues = new Map<QueueName, Queue>();
+  private workers = new Map<QueueName, Worker>();
+  private redisOptions: RedisOptions | null = null;
+
+  private buildRedisOptions(redisUrl: string): RedisOptions {
+    try {
+      const parsed = new URL(redisUrl);
+      const options: RedisOptions = {
+        host: parsed.hostname,
+        port: parsed.port ? Number(parsed.port) : 6379,
+      };
+      if (parsed.username) {
+        options.username = decodeURIComponent(parsed.username);
+      }
+      if (parsed.password) {
+        options.password = decodeURIComponent(parsed.password);
+      }
+      if (parsed.pathname && parsed.pathname.length > 1) {
+        const db = Number(parsed.pathname.slice(1));
+        if (!Number.isNaN(db)) {
+          options.db = db;
+        }
+      }
+      return options;
+    } catch (error) {
+      logger.warn('[QueueManager] Failed to parse REDIS_URL for BullMQ, falling back to defaults', { error });
+      return { host: '127.0.0.1', port: 6379 };
+    }
+  }
+
+  private ensureQueue(queueName: QueueName): Queue {
+    if (!this.initialized || !this.redisOptions) {
+      throw new Error('Queue manager not initialized');
+    }
+
+    let queue = this.queues.get(queueName);
+    if (!queue) {
+      queue = new Queue(queueName, { connection: this.redisOptions });
+      this.queues.set(queueName, queue);
+      logger.info('[QueueManager] BullMQ queue ready', { queueName });
+    }
+
+    return queue;
+  }
+
   /**
-   * Ready when Redis is connected. We use a minimal Redis list-backed queue
-   * to avoid a hard dependency on BullMQ/Kafka in this codebase.
+   * Ready once BullMQ connection metadata has been configured.
    */
   isReady(): boolean {
+    return this.initialized;
+  }
+
+  getQueue(name: QueueName): Queue | null {
+    if (!this.initialized) {
+      return null;
+    }
+
     try {
-      return redis.isReady();
-    } catch {
-      return false;
+      return this.ensureQueue(name);
+    } catch (error) {
+      logger.error('[QueueManager] Failed to access queue', { queueName: name, error });
+      return null;
     }
   }
 
-  getQueue(name: QueueName): SimpleQueue | null {
-    if (!this.isReady()) return null;
-    switch (name) {
-      case QueueName.ANALYTICS_INGEST:
-        return this.createListQueue('q:analytics', 'q:analytics:dlq');
-      case QueueName.PRIVACY:
-        return this.createListQueue('q:privacy', 'q:privacy:dlq');
-      case QueueName.REPORT_GENERATION:
-        return this.createListQueue('q:reports', 'q:reports:dlq');
-      case QueueName.METRICS_CALCULATION:
-        return this.createListQueue('q:metrics', 'q:metrics:dlq');
-      case QueueName.CACHE_WARMING:
-        return this.createListQueue('q:cache', 'q:cache:dlq');
-      case QueueName.CLEANUP_TASKS:
-        return this.createListQueue('q:cleanup', 'q:cleanup:dlq');
-      default:
-        return null;
+  async initialize(): Promise<void> {
+    if (this.initialized) return;
+
+    const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
+    this.redisOptions = this.buildRedisOptions(redisUrl);
+    this.initialized = true;
+    logger.info('[QueueManager] BullMQ initialized', { redisUrl });
+  }
+
+  registerWorker(
+    queueName: QueueName,
+    handler: (job: any) => Promise<unknown>,
+    options?: QueueWorkerOptions
+  ): void {
+    if (!this.initialized || !this.redisOptions) {
+      logger.warn('[QueueManager] registerWorker called before initialization', { queueName });
+      return;
     }
+
+    const worker = new Worker(queueName, handler as any, {
+      connection: this.redisOptions,
+      concurrency: options?.concurrency ?? 1,
+      limiter: options?.limiter,
+    });
+
+    worker.on('error', (error) => {
+      logger.error('[QueueManager] Worker error', { queueName, error });
+    });
+
+    worker.on('failed', (job, error) => {
+      logger.warn('[QueueManager] Job failed', { queueName, jobId: job?.id, error });
+    });
+
+    worker.on('completed', (job) => {
+      logger.debug('[QueueManager] Job completed', { queueName, jobId: job.id });
+    });
+
+    this.workers.set(queueName, worker);
+    logger.info('[QueueManager] Worker registered', {
+      queueName,
+      handler: handler?.name || 'anonymous',
+      concurrency: options?.concurrency ?? 1,
+    });
   }
 
-  private createListQueue(listKey: string, dlqKey: string): SimpleQueue {
-    return {
-      add: async (_name: string, data: Record<string, unknown>) => {
-        try {
-          const payload = JSON.stringify({ ...data, ts: Date.now() });
-          await (redis as any).lPush(listKey, payload);
-        } catch (e) {
-          // If push fails, attempt to write to DLQ as a last resort
-          try {
-            await (redis as any).lPush(dlqKey, JSON.stringify({ error: (e as Error).message, data }));
-          } catch {
-            // swallow
-          }
-          throw e;
-        }
-      },
-      getWaitingCount: async () => {
-        try { return await (redis as any).lLen(listKey); } catch { return 0; }
-      },
-      getActiveCount: async () => 0,
-      getDelayedCount: async () => 0,
-      getFailedCount: async () => { try { return await (redis as any).lLen(dlqKey); } catch { return 0; } },
-    };
+  scheduleRecurringJob(
+    queueName: QueueName,
+    jobName: string,
+    data: Record<string, unknown>,
+    cronExpression: string
+  ): void {
+    if (!this.initialized) {
+      logger.warn('[QueueManager] scheduleRecurringJob called before initialization', { queueName });
+      return;
+    }
+
+    const queue = this.ensureQueue(queueName);
+    const repeatJobId = `${jobName}:${cronExpression}`;
+
+    void queue.add(jobName, data, {
+      jobId: repeatJobId,
+      repeat: { pattern: cronExpression },
+      removeOnComplete: true,
+      removeOnFail: { age: 7 * 24 * 3600 },
+    }).then(() => {
+      logger.info('[QueueManager] Scheduled recurring job', { queueName, jobName, cron: cronExpression });
+    }).catch((error) => {
+      logger.error('[QueueManager] Failed to schedule recurring job', { queueName, jobName, error });
+    });
   }
 
-  private getQueueKey(queueName: QueueName): string {
-    return `queue:${queueName}`;
-  }
+  async shutdown(): Promise<void> {
+    const workerClose = Array.from(this.workers.values()).map(async (worker) => {
+      try { await worker.close(); } catch (error) { logger.warn('[QueueManager] Failed to close worker', { error }); }
+    });
+    const queueClose = Array.from(this.queues.values()).map(async (queue) => {
+      try { await queue.close(); } catch (error) { logger.warn('[QueueManager] Failed to close queue', { error }); }
+    });
 
-  private getJobKey(queueName: QueueName, jobId: string): string {
-    return `job:${queueName}:${jobId}`;
-  }
-
-  private getPauseKey(queueName: QueueName): string {
-    return `queue:${queueName}:paused`;
+    await Promise.all([...workerClose, ...queueClose]);
+    this.workers.clear();
+    this.queues.clear();
+    this.redisOptions = null;
+    this.initialized = false;
+    logger.info('[QueueManager] Shutdown complete');
   }
 
   /**
    * Get comprehensive queue metrics
    */
   async getQueueMetrics(queueName: QueueName): Promise<any> {
-    const queue = this.getQueue(queueName);
-    if (!queue) return null;
-    
-    const [waiting, active, delayed, failed] = await Promise.all([
-      queue.getWaitingCount?.() ?? Promise.resolve(0),
-      queue.getActiveCount?.() ?? Promise.resolve(0),
-      queue.getDelayedCount?.() ?? Promise.resolve(0),
-      queue.getFailedCount?.() ?? Promise.resolve(0),
-    ]);
+    if (!this.initialized) {
+      return null;
+    }
 
-    const isPaused = await this.isQueuePaused(queueName);
-    
-    return { 
-      waiting, 
-      active, 
-      delayed, 
-      failed, 
+    const queue = this.ensureQueue(queueName);
+    const counts = await queue.getJobCounts('waiting', 'active', 'delayed', 'failed', 'completed');
+    const paused = await queue.isPaused();
+
+    return {
       name: queueName,
-      paused: isPaused,
+      waiting: counts.waiting ?? 0,
+      active: counts.active ?? 0,
+      delayed: counts.delayed ?? 0,
+      failed: counts.failed ?? 0,
+      completed: counts.completed ?? 0,
+      paused,
     };
   }
 
@@ -131,41 +231,16 @@ class QueueManagerImpl {
     data: Record<string, unknown>,
     options?: Record<string, unknown>
   ): Promise<any> {
-    if (!this.isReady()) {
+    if (!this.initialized) {
       throw new Error('Queue manager not ready');
     }
 
-    const jobId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-    const queueKey = this.getQueueKey(queueName);
-    const jobKey = this.getJobKey(queueName, jobId);
-    
-    const job = {
-      id: jobId,
-      name: jobName,
-      data,
-      options: options || {},
-      state: 'waiting',
-      timestamp: Date.now(),
-      processedOn: null,
-      finishedOn: null,
-      progress: 0,
-      attemptsMade: 0,
-      returnvalue: null,
-      failedReason: null,
-    };
-
+    const queue = this.ensureQueue(queueName);
     try {
-      // Store job metadata
-      await (redis as any).set(jobKey, JSON.stringify(job), 'EX', 86400); // 24h TTL
-      
-      // Add job ID to queue
-      await (redis as any).lPush(`${queueKey}:waiting`, jobId);
-      
-      logger.debug('Job added to queue', { queueName, jobId, jobName });
-      
+      const job = await queue.add(jobName, data, this.normalizeJobOptions(options));
       return job;
     } catch (error) {
-      logger.error('Failed to add job', { error, queueName, jobName });
+      logger.error('Failed to add job', { queueName, jobName, error });
       throw error;
     }
   }
@@ -174,21 +249,15 @@ class QueueManagerImpl {
    * Get job details by ID
    */
   async getJob(queueName: QueueName, jobId: string): Promise<any> {
-    if (!this.isReady()) {
+    if (!this.initialized) {
       return null;
     }
 
-    const jobKey = this.getJobKey(queueName, jobId);
-    
+    const queue = this.ensureQueue(queueName);
     try {
-      const jobData = await (redis as any).get(jobKey);
-      if (!jobData) {
-        return null;
-      }
-      
-      return JSON.parse(jobData);
+      return await queue.getJob(jobId);
     } catch (error) {
-      logger.error('Failed to get job', { error, queueName, jobId });
+      logger.error('Failed to get job', { queueName, jobId, error });
       return null;
     }
   }
@@ -197,33 +266,19 @@ class QueueManagerImpl {
    * Remove a job from the queue
    */
   async removeJob(queueName: QueueName, jobId: string): Promise<boolean> {
-    if (!this.isReady()) {
+    if (!this.initialized) {
       return false;
     }
 
-    const queueKey = this.getQueueKey(queueName);
-    const jobKey = this.getJobKey(queueName, jobId);
-    
+    const queue = this.ensureQueue(queueName);
     try {
-      // Remove from all possible lists
-      const removed = await Promise.all([
-        (redis as any).lRem(`${queueKey}:waiting`, 0, jobId),
-        (redis as any).lRem(`${queueKey}:active`, 0, jobId),
-        (redis as any).lRem(`${queueKey}:completed`, 0, jobId),
-        (redis as any).lRem(`${queueKey}:failed`, 0, jobId),
-        (redis as any).del(jobKey),
-      ]);
-
-      const totalRemoved = removed.slice(0, 4).reduce((sum: number, val: number) => sum + val, 0);
-      
-      if (totalRemoved > 0) {
-        logger.debug('Job removed from queue', { queueName, jobId });
-        return true;
-      }
-      
-      return false;
+      const job = await queue.getJob(jobId);
+      if (!job) return false;
+      await job.remove();
+      logger.debug('Job removed from queue', { queueName, jobId });
+      return true;
     } catch (error) {
-      logger.error('Failed to remove job', { error, queueName, jobId });
+      logger.error('Failed to remove job', { queueName, jobId, error });
       return false;
     }
   }
@@ -232,56 +287,38 @@ class QueueManagerImpl {
    * Pause queue - prevents new jobs from being processed
    */
   async pauseQueue(queueName: QueueName): Promise<void> {
-    if (!this.isReady()) {
+    if (!this.initialized) {
       throw new Error('Queue manager not ready');
     }
 
-    const pauseKey = this.getPauseKey(queueName);
-    
-    try {
-      await (redis as any).set(pauseKey, '1', 'EX', 86400); // Pause for up to 24h
-      logger.info('Queue paused', { queueName });
-    } catch (error) {
-      logger.error('Failed to pause queue', { error, queueName });
-      throw error;
-    }
+    const queue = this.ensureQueue(queueName);
+    await queue.pause();
+    logger.info('Queue paused', { queueName });
   }
 
   /**
    * Resume queue - allows jobs to be processed again
    */
   async resumeQueue(queueName: QueueName): Promise<void> {
-    if (!this.isReady()) {
+    if (!this.initialized) {
       throw new Error('Queue manager not ready');
     }
 
-    const pauseKey = this.getPauseKey(queueName);
-    
-    try {
-      await (redis as any).del(pauseKey);
-      logger.info('Queue resumed', { queueName });
-    } catch (error) {
-      logger.error('Failed to resume queue', { error, queueName });
-      throw error;
-    }
+    const queue = this.ensureQueue(queueName);
+    await queue.resume();
+    logger.info('Queue resumed', { queueName });
   }
 
   /**
    * Check if queue is paused
    */
   async isQueuePaused(queueName: QueueName): Promise<boolean> {
-    if (!this.isReady()) {
+    if (!this.initialized) {
       return false;
     }
 
-    const pauseKey = this.getPauseKey(queueName);
-    
-    try {
-      const isPaused = await (redis as any).exists(pauseKey);
-      return isPaused === 1;
-    } catch {
-      return false;
-    }
+    const queue = this.ensureQueue(queueName);
+    return queue.isPaused();
   }
 
   /**
@@ -293,100 +330,55 @@ class QueueManagerImpl {
     limit: number = 1000,
     type: string = 'completed'
   ): Promise<number> {
-    if (!this.isReady()) {
+    if (!this.initialized) {
       return 0;
     }
 
-    const queueKey = this.getQueueKey(queueName);
-    const listKey = `${queueKey}:${type}`;
-    const cutoffTime = Date.now() - (gracePeriodSeconds * 1000);
-    
+    const queue = this.ensureQueue(queueName);
+    const status = this.normalizeCleanStatus(type);
+
     try {
-      // Get all jobs from the specified list
-      const jobIds = await (redis as any).lRange(listKey, 0, limit - 1);
-      let cleanedCount = 0;
-
-      for (const jobId of jobIds) {
-        const jobKey = this.getJobKey(queueName, jobId);
-        const jobData = await (redis as any).get(jobKey);
-        
-        if (!jobData) {
-          // Job data doesn't exist, remove from list
-          await (redis as any).lRem(listKey, 0, jobId);
-          cleanedCount++;
-          continue;
-        }
-
-        try {
-          const job = JSON.parse(jobData);
-          const finishedTime = job.finishedOn || job.timestamp;
-          
-          if (finishedTime < cutoffTime) {
-            // Job is old enough to clean
-            await Promise.all([
-              (redis as any).lRem(listKey, 0, jobId),
-              (redis as any).del(jobKey),
-            ]);
-            cleanedCount++;
-          }
-        } catch {
-          // Invalid job data, remove it
-          await (redis as any).lRem(listKey, 0, jobId);
-          await (redis as any).del(jobKey);
-          cleanedCount++;
-        }
-      }
-
-      logger.info('Queue cleaned', { queueName, type, cleanedCount, gracePeriodSeconds });
-      return cleanedCount;
+      const cleaned = await queue.clean(gracePeriodSeconds * 1000, limit, status);
+      logger.info('Queue cleaned', { queueName, type: status, cleanedCount: cleaned.length, gracePeriodSeconds });
+      return cleaned.length;
     } catch (error) {
-      logger.error('Failed to clean queue', { error, queueName, type });
+      logger.error('Failed to clean queue', { queueName, type: status, error });
       return 0;
+    }
+  }
+
+  private normalizeJobOptions(options?: Record<string, unknown>): JobsOptions {
+    const defaults: JobsOptions = {
+      removeOnComplete: { age: 24 * 3600, count: 1000 },
+      removeOnFail: { age: 7 * 24 * 3600 },
+    };
+
+    if (!options) {
+      return defaults;
+    }
+
+    return {
+      ...defaults,
+      ...(options as JobsOptions),
+    };
+  }
+
+  private normalizeCleanStatus(type: string): 'completed' | 'wait' | 'active' | 'delayed' | 'failed' {
+    switch (type) {
+      case 'wait':
+      case 'waiting':
+        return 'wait';
+      case 'active':
+        return 'active';
+      case 'delayed':
+        return 'delayed';
+      case 'failed':
+        return 'failed';
+      default:
+        return 'completed';
     }
   }
 }
 
 export const queueManager = new QueueManagerImpl();
 export type QueueManager = typeof queueManager;
-
-// Simple worker helper (blocking pop one item) for consumers to use if needed
-export async function popQueueItem(queue: QueueName, timeoutSec = 5): Promise<Record<string, unknown> | null> {
-  try {
-    if (!redis.isReady()) return null;
-    let key = '';
-    switch (queue) {
-      case QueueName.ANALYTICS_INGEST:
-        key = 'q:analytics';
-        break;
-      case QueueName.PRIVACY:
-        key = 'q:privacy';
-        break;
-      case QueueName.REPORT_GENERATION:
-        key = 'q:reports';
-        break;
-      case QueueName.METRICS_CALCULATION:
-        key = 'q:metrics';
-        break;
-      case QueueName.CACHE_WARMING:
-        key = 'q:cache';
-        break;
-      case QueueName.CLEANUP_TASKS:
-        key = 'q:cleanup';
-        break;
-      default:
-        return null;
-    }
-    // BRPOP returns [key, value] or null on timeout
-    const result = await (redis as any).brPop?.(key, timeoutSec);
-    const value = Array.isArray(result) ? result[1] : (result?.element ?? null);
-    if (!value) return null;
-    try {
-      return JSON.parse(String(value));
-    } catch (e) {
-      logger.warn('[Queue] Failed to parse queue item', { error: (e as Error).message });
-      return null;
-    }
-  } catch {
-    return null;
-  }
-}

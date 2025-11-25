@@ -48,7 +48,7 @@ jobs:
         id: health
         run: |
           # Ensure staging is healthy
-          if curl -f https://api-staging.rivalapexmediation.com/health; then
+          if curl -f https://api-staging.rivalapexmediation.ee/health; then
             echo "healthy=true" >> $GITHUB_OUTPUT
           else
             echo "healthy=false" >> $GITHUB_OUTPUT
@@ -133,7 +133,7 @@ jobs:
             --set environment=${{ env.ENVIRONMENT }} \
             --set deployment.color=green \
             --set service.selector.color=green \
-            --set api.url=https://api.rivalapexmediation.com \
+            --set api.url=https://api.rivalapexmediation.ee \
             --set nextauth.secret=${{ secrets.PROD_NEXTAUTH_SECRET }} \
             --set replicas=2 \
             --set autoscaling.enabled=true \
@@ -166,7 +166,7 @@ jobs:
 
       - name: Run smoke tests against green
         env:
-          API_URL: https://api-green.rivalapexmediation.com
+          API_URL: https://api-green.rivalapexmediation.ee
           TEST_USER_EMAIL: ${{ secrets.PROD_TEST_USER_EMAIL }}
           TEST_USER_PASSWORD: ${{ secrets.PROD_TEST_USER_PASSWORD }}
         run: |
@@ -235,13 +235,13 @@ jobs:
 
       - name: Run production health checks
         run: |
-          curl -f https://api.rivalapexmediation.com/health
-          curl -f https://console.rivalapexmediation.com
+          curl -f https://api.rivalapexmediation.ee/health
+          curl -f https://console.rivalapexmediation.ee
 
       - name: Run E2E tests against production
         env:
-          API_URL: https://api.rivalapexmediation.com
-          CONSOLE_URL: https://console.rivalapexmediation.com
+          API_URL: https://api.rivalapexmediation.ee
+          CONSOLE_URL: https://console.rivalapexmediation.ee
           TEST_USER_EMAIL: ${{ secrets.PROD_TEST_USER_EMAIL }}
           TEST_USER_PASSWORD: ${{ secrets.PROD_TEST_USER_PASSWORD }}
         run: |
@@ -325,8 +325,8 @@ jobs:
             - Deployed by: ${{ github.actor }}
 
             ## Verification
-            - API: https://api.rivalapexmediation.com
-            - Console: https://console.rivalapexmediation.com
+            - API: https://api.rivalapexmediation.ee
+            - Console: https://console.rivalapexmediation.ee
           draft: false
           prerelease: false
 
@@ -387,12 +387,12 @@ jobs:
                   {
                     "type": "button",
                     "text": "View API",
-                    "url": "https://api.rivalapexmediation.com"
+                    "url": "https://api.rivalapexmediation.ee"
                   },
                   {
                     "type": "button",
                     "text": "View Console",
-                    "url": "https://console.rivalapexmediation.com"
+                    "url": "https://console.rivalapexmediation.ee"
                   }
                 ]
               }]
@@ -450,28 +450,28 @@ jobs:
 
           while [ $(($(date +%s) - START_TIME)) -lt $DURATION_SECONDS ]; do
             # Check crash-free rate
-            CRASH_RATE=$(curl -s https://api.rivalapexmediation.com/metrics/crash_rate)
+            CRASH_RATE=$(curl -s https://api.rivalapexmediation.ee/metrics/crash_rate)
             if (( $(echo "$CRASH_RATE > 0.002" | bc -l) )); then
               echo "Crash rate exceeded threshold: $CRASH_RATE"
               exit 1
             fi
 
             # Check ANR rate
-            ANR_RATE=$(curl -s https://api.rivalapexmediation.com/metrics/anr_rate)
+            ANR_RATE=$(curl -s https://api.rivalapexmediation.ee/metrics/anr_rate)
             if (( $(echo "$ANR_RATE > 0.0002" | bc -l) )); then
               echo "ANR rate exceeded threshold: $ANR_RATE"
               exit 1
             fi
 
             # Check P99 latency
-            P99_LATENCY=$(curl -s https://api.rivalapexmediation.com/metrics/p99_latency)
+            P99_LATENCY=$(curl -s https://api.rivalapexmediation.ee/metrics/p99_latency)
             if (( $(echo "$P99_LATENCY > 150" | bc -l) )); then
               echo "P99 latency exceeded threshold: $P99_LATENCY ms"
               exit 1
             fi
 
             # Check error rate
-            ERROR_RATE=$(curl -s https://api.rivalapexmediation.com/metrics/error_rate)
+            ERROR_RATE=$(curl -s https://api.rivalapexmediation.ee/metrics/error_rate)
             if (( $(echo "$ERROR_RATE > 0.01" | bc -l) )); then
               echo "Error rate exceeded threshold: $ERROR_RATE"
               exit 1
@@ -524,7 +524,7 @@ jobs:
                   "type": "section",
                   "text": {
                     "type": "mrkdwn",
-                    "text": "*Production Deployment Complete*\nVersion: v${{ needs.validate-release.outputs.version }}\nDashboard: https://console.rivalapexmediation.com"
+                    "text": "*Production Deployment Complete*\nVersion: v${{ needs.validate-release.outputs.version }}\nDashboard: https://console.rivalapexmediation.ee"
                   }
                 }
               ]

@@ -1128,8 +1128,8 @@ data class SDKConfig @JvmOverloads constructor(
     val testMode: Boolean = false,
     val logLevel: LogLevel = LogLevel.INFO,
     val telemetryEnabled: Boolean = true,
-    val configEndpoint: String = "https://config.rivalapexmediation.com",
-    val auctionEndpoint: String = "https://auction.rivalapexmediation.com",
+    val configEndpoint: String = "https://config.rivalapexmediation.ee",
+    val auctionEndpoint: String = "https://auction.rivalapexmediation.ee",
     val auctionApiKey: String? = null,
     // Debug-only: if true, enable StrictMode penaltyDeath. Default false to avoid crashing host apps.
     val strictModePenaltyDeath: Boolean = false,
@@ -1156,8 +1156,8 @@ data class SDKConfig @JvmOverloads constructor(
         private var testMode: Boolean = false
         private var logLevel: LogLevel = LogLevel.INFO
         private var telemetryEnabled: Boolean = true
-        private var configEndpoint: String = "https://config.rivalapexmediation.com"
-        private var auctionEndpoint: String = "https://auction.rivalapexmediation.com"
+        private var configEndpoint: String = "https://config.rivalapexmediation.ee"
+        private var auctionEndpoint: String = "https://auction.rivalapexmediation.ee"
         private var auctionApiKey: String? = null
         private var strictModePenaltyDeath: Boolean = false
         private var configPublicKeyBase64: String? = null

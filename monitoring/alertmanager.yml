@@ -1,7 +1,7 @@
 # Alertmanager configuration for ApexMediation
 global:
   resolve_timeout: 5m
-  smtp_from: 'alerts@apexmediation.com'
+  smtp_from: 'alerts@apexmediation.ee'
   smtp_smarthost: 'smtp.resend.com:587'
   smtp_auth_username: 'resend'
   smtp_auth_password: '${RESEND_API_KEY}'
@@ -74,7 +74,7 @@ receivers:
   # Founder email (primary contact)
   - name: 'founder-email'
     email_configs:
-      - to: 'sabel@apexmediation.com'
+      - to: 'sabel@apexmediation.ee'
         headers:
           Subject: '🚨 [{{ .Status | toUpper }}] {{ .GroupLabels.alertname }} - ApexMediation'
         html: |
@@ -105,9 +105,9 @@ receivers:
           
           <hr>
           <p>
-            <a href="https://monitoring.apexmediation.com">View Grafana Dashboard</a> |
-            <a href="https://console.apexmediation.com">Console</a> |
-            <a href="https://status.apexmediation.com">Status Page</a>
+            <a href="https://monitoring.apexmediation.ee">View Grafana Dashboard</a> |
+            <a href="https://console.apexmediation.ee">Console</a> |
+            <a href="https://status.apexmediation.ee">Status Page</a>
           </p>
 
   # Founder SMS (critical alerts only)
@@ -126,7 +126,7 @@ receivers:
   # Business metrics digest (daily summary)
   - name: 'business-metrics-email'
     email_configs:
-      - to: 'sabel@apexmediation.com'
+      - to: 'sabel@apexmediation.ee'
         headers:
           Subject: '📊 Daily Business Metrics - ApexMediation'
         html: |
@@ -140,7 +140,7 @@ receivers:
           </div>
           {{ end }}
           
-          <p><a href="https://console.apexmediation.com/analytics">View Full Analytics</a></p>
+          <p><a href="https://console.apexmediation.ee/analytics">View Full Analytics</a></p>
 
   # Slack notifications (optional, requires Slack webhook)
   # OPTIONAL_SLACK_RECEIVER_START

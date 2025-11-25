@@ -402,7 +402,7 @@ export class DunningManagementService {
     await this.emitEvent('email.subscription_suspended', {
       to: email,
       customer_id: customerId,
-      reactivation_url: `https://console.apexmediation.com/billing/reactivate`,
+      reactivation_url: `https://console.apexmediation.ee/billing/reactivate`,
     });
   }
 

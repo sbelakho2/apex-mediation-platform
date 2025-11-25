@@ -17,8 +17,13 @@
  */
 
 require('dotenv/config');
-// Allow requiring TS modules
-try { require('ts-node/register/transpile-only'); } catch (_) {}
+// Allow requiring TS modules (force transpile-only CJS to avoid tsconfig NodeNext constraints in ops environments)
+try {
+  process.env.TS_NODE_TRANSPILE_ONLY = process.env.TS_NODE_TRANSPILE_ONLY || '1';
+  process.env.TS_NODE_COMPILER_OPTIONS =
+    process.env.TS_NODE_COMPILER_OPTIONS || JSON.stringify({ module: 'CommonJS', moduleResolution: 'Node' });
+  require('ts-node/register/transpile-only');
+} catch (_) {}
 
 const { Pool } = require('pg');
 const { initializeClickHouse, closeClickHouse } = require('../src/utils/clickhouse');
@@ -55,9 +60,39 @@ async function main() {
   const to = args.to;
   const limit = args.limit ? Number(args.limit) : undefined;
   const dryRun = toBool(args['dry-run']);
+  const force = toBool(args['force']);
+  const yes = toBool(args['yes']);
 
   if (!from || !to) {
     console.error('Missing required args: --from ISO, --to ISO');
+    process.exit(EXIT.ERROR);
+  }
+
+  // Safety caps — guardrails for operators
+  const MAX_WINDOW_MS = 3 * 24 * 60 * 60 * 1000; // 3 days
+  const MAX_ROWS = 10000; // per-run soft cap
+  try {
+    const fromMs = Date.parse(from);
+    const toMs = Date.parse(to);
+    if (!Number.isFinite(fromMs) || !Number.isFinite(toMs)) {
+      console.error('Invalid ISO timestamps for --from/--to');
+      process.exit(EXIT.ERROR);
+    }
+    const windowMs = toMs - fromMs;
+    if (windowMs > MAX_WINDOW_MS && !(force && yes)) {
+      console.error(
+        `Refusing to run: window exceeds ${MAX_WINDOW_MS / (24 * 60 * 60 * 1000)} days. Use --force --yes to bypass.`
+      );
+      process.exit(EXIT.ERROR);
+    }
+    if (typeof limit === 'number' && limit > MAX_ROWS && !(force && yes)) {
+      console.error(
+        `Refusing to run: --limit ${limit} exceeds cap ${MAX_ROWS}. Use --force --yes to bypass.`
+      );
+      process.exit(EXIT.ERROR);
+    }
+  } catch (_) {
+    console.error('Failed to evaluate safety caps for window/limit');
     process.exit(EXIT.ERROR);
   }
 

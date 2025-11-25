@@ -1,6 +1,35 @@
-OBSOLETE - DO NOT USE ANYMORE. ARCHIVAL PURPOSES ONLY
+OBSOLETE — historical backlog reference. Keep for context, but see the quick notes below for active developer commands.
 
+---
 
+## Active developer quick notes (Backend tests & VRA)
+
+- Run all backend tests (controllers/services, redaction, CLIs, matching/reconcile) from repo root:
+
+  ```bash
+  npm run test:backend
+  ```
+
+- What this does:
+  - Invokes `backend/jest.config.js` (self‑contained discovery for `backend/src/**` and `backend/scripts/**`, both `.ts` and `.js`).
+  - Executes suites including VRA: controllers validation, CSV redaction, logger redaction, matching determinism/large‑N, reconcile boundaries, and CLI guardrails.
+
+- Useful env toggles for local runs:
+  - `VRA_LARGEN=1` — enables larger synthetic dataset in `matchingEngine.largeN.test.ts` (keep off by default for speed).
+  - `LOG_LEVEL=warn` — reduces console noise during Jest runs.
+
+- Manual API smoke (when backend is running):
+  - Inverted windows must return 400 across endpoints:
+    - `GET /api/v1/recon/overview?from=<later>&to=<earlier>` → 400
+    - `GET /api/v1/recon/deltas?...` and `/api/v1/recon/deltas.csv?...` → 400
+  - CSV export should have 8 columns, `amount` to 6 d.p., `confidence` to 2 d.p., and sanitized `reason_code` (no commas/newlines/tabs).
+
+- Operator CLIs (dry‑run first):
+  - `node backend/scripts/vraBuildExpected.js --from <iso> --to <iso> --limit 10000 --dry-run`
+  - `node backend/scripts/vraReconcile.js --from <iso> --to <iso> --dry-run`
+  - Guardrails: >3‑day windows and `--limit` > 10k are blocked unless `--force --yes` is provided.
+
+---
 
 # FIXES Backlog
 

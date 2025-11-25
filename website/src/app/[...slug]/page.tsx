@@ -172,7 +172,7 @@ ApexMediation.loadInterstitial({ placementId: 'level_complete' });`}
                 <div className="mt-6 rounded-2xl bg-gray-50 p-6 text-sm text-gray-900">
                   <p className="font-semibold">API Endpoint</p>
                   <pre className="mt-2 overflow-x-auto text-xs text-gray-800">
-{`POST https://api.apexmediation.com/v1/auctions
+{`POST https://api.apexmediation.ee/v1/auctions
 Body: {
   "placement_id": "level_complete",
   "bid_floor": 1.75,
@@ -283,61 +283,66 @@ Body: {
       return (
         <PageLayout
           title="Pricing"
-          intro="We are launching with a single Bring-Your-Own control plane. You plug in your own demand accounts while our SDKs, consent tooling, telemetry, and payout automation take a documented 15→8% marginal share."
+          intro="We operate four Bring-Your-Own platform tiers. Plug in your own demand accounts, keep the lion's share of revenue, and pay a simple platform fee (0–2.5% for most customers, custom 1.0–1.5% for Enterprise) that funds SDKs, observability, fraud tooling, and payouts."
           heroTag="Billing"
           breadcrumbs={breadcrumbs}
         >
           <div className="space-y-6">
             <section className="rounded-3xl bg-white p-8 text-gray-900 shadow-xl ring-1 ring-gray-200 space-y-4">
-              <h2 className="text-h3 font-bold uppercase">BYO marginal revenue share</h2>
+              <h2 className="text-h3 font-bold uppercase">BYO platform tiers</h2>
               <p className="text-sm text-gray-700">
-                Pay only for what you earn. Each revenue band is billed at its own rate so effective percentages fall as you scale, and nothing extra is charged for managed demand because that product has not launched yet.
+                Each tier bills only the revenue that lands inside its band, so your effective platform fee drops automatically as you scale. Managed demand is not bundled—you stay in control of networks, credentials, and auctions.
               </p>
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-sm text-gray-700">
                   <thead>
                     <tr>
-                      <th className="py-2 font-semibold">Band</th>
-                      <th className="py-2 font-semibold">Apex share</th>
-                      <th className="py-2 font-semibold">Publisher share</th>
+                      <th className="py-2 font-semibold">Tier</th>
+                      <th className="py-2 font-semibold">Revenue band (per app monthly)</th>
+                      <th className="py-2 font-semibold">Platform fee</th>
+                      <th className="py-2 font-semibold">Value pillars</th>
                     </tr>
                   </thead>
                   <tbody>
                     <tr>
-                      <td className="py-2">€0 – €10,000</td>
-                      <td className="py-2">15%</td>
-                      <td className="py-2">85%</td>
+                      <td className="py-2 align-top">Tier 0 — Starter</td>
+                      <td className="py-2 align-top">Up to $10k</td>
+                      <td className="py-2 align-top">0% platform fee</td>
+                      <td className="py-2 align-top">1M impressions, 100k API calls, and 50GB transfer included while you validate BYO SDKs and consent flows.</td>
                     </tr>
                     <tr>
-                      <td className="py-2">€10,001 – €50,000</td>
-                      <td className="py-2">12%</td>
-                      <td className="py-2">88%</td>
+                      <td className="py-2 align-top">Tier 1 — Growth</td>
+                      <td className="py-2 align-top">$10k – $100k</td>
+                      <td className="py-2 align-top">2.5% platform fee</td>
+                      <td className="py-2 align-top">Advanced observability, Migration Studio, transparency proofs, and billing assistants for ops teams.</td>
                     </tr>
                     <tr>
-                      <td className="py-2">€50,001 – €100,000</td>
-                      <td className="py-2">10%</td>
-                      <td className="py-2">90%</td>
+                      <td className="py-2 align-top">Tier 2 — Scale</td>
+                      <td className="py-2 align-top">$100k – $500k</td>
+                      <td className="py-2 align-top">2.0% platform fee</td>
+                      <td className="py-2 align-top">Named revenue engineers, custom exports, fraud tooling in shadow → block mode, and SLO dashboards.</td>
                     </tr>
                     <tr>
-                      <td className="py-2">€100,000+</td>
-                      <td className="py-2">8%</td>
-                      <td className="py-2">92%</td>
+                      <td className="py-2 align-top">Tier 3 — Enterprise</td>
+                      <td className="py-2 align-top">$500k+ (plus platform minimum)</td>
+                      <td className="py-2 align-top">Custom 1.0–1.5% platform fee</td>
+                      <td className="py-2 align-top">Dedicated pod, bespoke compliance + residency reviews, contract SLAs, and white-glove migrations.</td>
                     </tr>
                   </tbody>
                 </table>
               </div>
               <p className="text-sm text-gray-700">
-                Example from the docs: €120k in a month results in €12.9k fee (10.75% effective) and €107.1k paid to you.
+                Example: $250k in mediated revenue lands entirely inside Scale, so the platform fee is $5,000 (2.0%) and $245k is paid out.
               </p>
             </section>
 
             <section className="rounded-3xl bg-white p-8 text-gray-900 shadow-xl ring-1 ring-gray-200 space-y-3">
               <h2 className="text-h3 font-bold uppercase">What the BYO fee covers</h2>
               <ul className="list-disc space-y-3 pl-6 text-sm text-gray-700">
-                <li>Credential vault, adapter orchestration, and Config-as-Code for every supported network.</li>
-                <li>Consent + compliance tooling (GDPR, COPPA, store policies) plus transparency receipts.</li>
-                <li>Telemetry, debugger replays, fraud monitoring, and verifiable reconciliation exports.</li>
-                <li>Finance automation: marginal billing, NET 30 payouts, €100 minimum, SEPA/SWIFT wiring.</li>
+                <li>Credential vault, adapter orchestration, Config-as-Code, and the single SDK that powers every supported network.</li>
+                <li>Observability + fraud stack: telemetry, debugger replays, Migration Studio, redaction-ready reconciliation exports.</li>
+                <li>Transparency + compliance: signed proofs, consent tooling (GDPR/TCF, COPPA, US-GPP), and audit-friendly logging.</li>
+                <li>Finance automation: tier-aware billing, NET 30 payouts, €/$100 minimums, SEPA/SWIFT wiring, and Stripe portal access.</li>
               </ul>
             </section>
 
@@ -345,16 +350,16 @@ Body: {
               <h2 className="text-h3 font-bold uppercase">Payment terms</h2>
               <ul className="list-disc space-y-3 pl-6 text-sm text-gray-700">
                 <li>Invoices issued on the 1st of each month for the prior period; payment NET 30.</li>
-                <li>€100 payout minimum applies to BYO earnings. Balances roll over until the threshold is hit.</li>
-                <li>Payment methods: SEPA, SWIFT, and PayPal (2.9% + $0.30 fee).</li>
-                <li>Currency: EUR for settlements; dashboards show converted local currency for convenience.</li>
+                <li>€/$100 payout minimum applies to BYO earnings. Balances roll over until the threshold is hit.</li>
+                <li>Platform fee applies marginally per tier (0%, 2.5%, 2.0%, custom 1.0–1.5% with a negotiated minimum).</li>
+                <li>Payment methods: SEPA, SWIFT, and PayPal (2.9% + $0.30 fee). Dashboards show converted local currency for convenience.</li>
               </ul>
             </section>
 
             <section className="rounded-3xl bg-brand-50 p-8 text-gray-900 shadow-xl ring-1 ring-brand-100 space-y-3">
               <h2 className="text-h3 font-bold uppercase">Talk to us</h2>
               <p className="text-sm text-gray-700">
-                Non-profits receive 50% off the BYO revenue share. Contact <a href="mailto:sales@bel-consulting.ee" className="underline">sales@bel-consulting.ee</a> or <Link href="/contact" className="font-bold underline">schedule a demo</Link> to lock in current rates (30 days’ notice before changes).
+                Non-profits receive 50% off the BYO platform fee. Contact <a href="mailto:sales@bel-consulting.ee" className="underline">sales@bel-consulting.ee</a> or <Link href="/contact" className="font-bold underline">schedule a demo</Link> to lock in Starter/Growth/Scale pricing (30 days’ notice before changes).
               </p>
             </section>
           </div>
@@ -410,7 +415,7 @@ Body: {
           <section className="mt-10 rounded-3xl bg-white/10 p-8 text-sm text-white/80">
             <h2 className="text-sm font-bold uppercase text-brand-100">Status Dashboard</h2>
             <p className="mt-3">
-              Subscribe to incident updates at <a href="https://status.apexmediation.com" className="underline">status.apexmediation.com</a>. We publish RCA documents within 48 hours of every incident.
+              Subscribe to incident updates at <a href="https://status.apexmediation.ee" className="underline">status.apexmediation.ee</a>. We publish RCA documents within 48 hours of every incident.
             </p>
           </section>
         </PageLayout>
@@ -790,7 +795,7 @@ Body: {
             <section className="rounded-3xl bg-white p-8 text-gray-900 shadow-xl ring-1 ring-gray-200 space-y-3">
               <h2 className="text-h3 font-bold uppercase">Fees & payment terms</h2>
               <ul className="list-disc space-y-3 pl-6 text-sm text-gray-700">
-                <li>Revenue share applies marginally per published bands (15%, 12%, 10%, 8%).</li>
+                <li>Platform tiers: Starter 0%, Growth 2.5%, Scale 2.0%, Enterprise 1.0–1.5% + negotiated minimum, billed marginally per revenue band.</li>
                 <li>Invoices issue on the first business day each month and are payable NET 30.</li>
                 <li>We offset negative adjustments, clawbacks, or chargebacks against future payouts.</li>
                 <li>Minimum payout is €100; balances roll forward until the threshold is met.</li>

@@ -121,7 +121,7 @@ namespace RivalApex.Mediation.Editor
             }
             if (GUILayout.Button("View Documentation"))
             {
-                Application.OpenURL("https://docs.rivalapexmediation.com");
+                Application.OpenURL("https://docs.rivalapexmediation.ee");
             }
             EditorGUILayout.EndHorizontal();
             

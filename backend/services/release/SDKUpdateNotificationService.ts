@@ -76,13 +76,13 @@ export class SDKUpdateNotificationService {
       changelog: releaseNotes.raw_changelog,
       changelog_html: this.changelogService.formatForEmail(releaseNotes),
       migration_guide_url: releaseNotes.breaking_changes
-        ? `https://docs.apexmediation.com/migration/v${releaseNotes.version}`
+        ? `https://docs.apexmediation.ee/migration/v${releaseNotes.version}`
         : undefined,
       release_url: `https://github.com/apexmediation/platform/releases/tag/v${releaseNotes.version}`,
       docs_urls: {
-        ios: 'https://docs.apexmediation.com/ios',
-        android: 'https://docs.apexmediation.com/android',
-        unity: 'https://docs.apexmediation.com/unity',
+        ios: 'https://docs.apexmediation.ee/ios',
+        android: 'https://docs.apexmediation.ee/android',
+        unity: 'https://docs.apexmediation.ee/unity',
       },
     };
 
@@ -170,7 +170,7 @@ export class SDKUpdateNotificationService {
         deprecated_api: deprecatedAPI,
         deprecation_date: deprecationDate.toISOString().split('T')[0],
         removal_version: removalVersion,
-        migration_docs_url: `https://docs.apexmediation.com/migration/deprecated/${deprecatedAPI}`,
+        migration_docs_url: `https://docs.apexmediation.ee/migration/deprecated/${deprecatedAPI}`,
       };
 
       await this.pool.query(
@@ -195,7 +195,7 @@ export class SDKUpdateNotificationService {
           'api_deprecated',
           `Deprecated API: ${deprecatedAPI}`,
           `You're using an API that will be removed in ${removalVersion}. Please update your integration.`,
-          `https://docs.apexmediation.com/migration/deprecated/${deprecatedAPI}`,
+          `https://docs.apexmediation.ee/migration/deprecated/${deprecatedAPI}`,
           'high',
         ]
       );

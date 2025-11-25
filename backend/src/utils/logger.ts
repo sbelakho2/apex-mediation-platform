@@ -68,6 +68,8 @@ const SENSITIVE_KEYS = new Set([
   'digest',
   'hash',
   'prev_hash',
+  // VRA-specific free-form reason code surfaces — always mask to avoid PII in logs
+  'reason_code',
 ]);
 
 function redactDeep(value: unknown): unknown {

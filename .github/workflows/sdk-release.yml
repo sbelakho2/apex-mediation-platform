@@ -431,16 +431,16 @@ jobs:
           
           ## Documentation
           
-          - [iOS Integration Guide](https://docs.apexmediation.com/ios)
-          - [Android Integration Guide](https://docs.apexmediation.com/android)
-          - [Unity Integration Guide](https://docs.apexmediation.com/unity)
-          $([[ $BREAKING == "true" ]] && echo "- [Migration Guide v$VERSION](https://docs.apexmediation.com/migration/v$VERSION)")
+          - [iOS Integration Guide](https://docs.apexmediation.ee/ios)
+          - [Android Integration Guide](https://docs.apexmediation.ee/android)
+          - [Unity Integration Guide](https://docs.apexmediation.ee/unity)
+          $([[ $BREAKING == "true" ]] && echo "- [Migration Guide v$VERSION](https://docs.apexmediation.ee/migration/v$VERSION)")
           
           ## Support
           
           - Discord: https://discord.gg/apexmediation
-          - Email: support@apexmediation.com
-          - Docs: https://docs.apexmediation.com
+          - Email: support@apexmediation.ee
+          - Docs: https://docs.apexmediation.ee
           EOF
 
       - name: Create GitHub Release

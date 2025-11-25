@@ -540,7 +540,7 @@ function scheduleRecurringJobs(): void {
 
   // Daily cleanup at 2 AM
   queueManager.scheduleRecurringJob(
-    QueueName.CLEANUP,
+    QueueName.CLEANUP_TASKS,
     'daily-cleanup',
     {
       type: 'old_logs',

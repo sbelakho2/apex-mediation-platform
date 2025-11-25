@@ -1,3 +1,4 @@
+import { jest } from '@jest/globals';
 import request from 'supertest';
 import { Pool } from 'pg';
 import { Application } from 'express';
@@ -8,6 +9,16 @@ import {
   cleanDatabase,
 } from '../helpers/testDatabase';
 import { createTestPublisher, createTestUser } from '../helpers/testFixtures';
+
+// Integration suite needs the real pg driver rather than the shared Jest manual mock.
+jest.mock('pg', () => jest.requireActual('pg'));
+jest.mock('../../services/twofa.service', () => ({
+  __esModule: true,
+  default: {
+    isEnabled: jest.fn(async () => false),
+    verifyTokenOrBackupCode: jest.fn(async () => true),
+  },
+}));
 
 const describeIfDb = (process.env.SKIP_DB_SETUP === 'true'
   ? describe.skip
@@ -152,6 +163,12 @@ describeIfDb('Auth Integration Tests', () => {
           email: 'newuser@example.com',
           password: 'password123',
           companyName: 'New Company Inc.',
+          bankAccount: {
+            scheme: 'sepa',
+            accountHolderName: 'New Company Inc.',
+            iban: 'DE44500105175407324931',
+            bic: 'DEUTDEFF',
+          },
         })
         .expect(201);
 
@@ -176,6 +193,13 @@ describeIfDb('Auth Integration Tests', () => {
           email: 'existing@example.com',
           password: 'password123',
           companyName: 'Another Company',
+          bankAccount: {
+            scheme: 'ach',
+            accountHolderName: 'Another Company',
+            accountNumber: '1234567890',
+            routingNumber: '021000021',
+            accountType: 'CHECKING',
+          },
         })
         .expect(409);
 

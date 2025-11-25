@@ -413,7 +413,7 @@ _Last touched: 2025-11-18 during FIX-10 documentation alignment._
 
 ### Launch Day (Ready ⏳)
 - [ ] Production deployment
-- [ ] Status page live (status.rivalapexmediation.com)
+- [ ] Status page live (status.rivalapexmediation.ee)
 - [ ] Console open for signups
 - [ ] SDK packages published (Maven, CocoaPods, NPM)
 - [ ] Press release distributed
@@ -525,11 +525,11 @@ _Last touched: 2025-11-18 during FIX-10 documentation alignment._
 ## 📞 Contact
 
 **Company:** Bel Consulting OÜ (Estonia)  
-**Website:** https://rivalapexmediation.com  
-**Console:** https://console.rivalapexmediation.com  
-**Docs:** https://docs.rivalapexmediation.com  
-**Support:** support@rivalapexmediation.com  
-**Sales:** sales@rivalapexmediation.com
+**Website:** https://rivalapexmediation.ee  
+**Console:** https://console.rivalapexmediation.ee  
+**Docs:** https://docs.rivalapexmediation.ee  
+**Support:** support@rivalapexmediation.ee  
+**Sales:** sales@rivalapexmediation.ee
 
 ---
 

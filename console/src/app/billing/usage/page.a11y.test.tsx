@@ -34,7 +34,7 @@ jest.mock('@/lib/billing', () => ({
 // Mock useQuery from react-query
 jest.mock('@tanstack/react-query', () => ({
   useQuery: jest.fn((options) => ({
-    data: options.queryKey[0] === 'usage' ? {
+    data: Array.isArray(options.queryKey) && options.queryKey.includes('usage') ? {
       current_period: {
         start: '2025-11-01T00:00:00Z',
         end: '2025-11-30T23:59:59Z',

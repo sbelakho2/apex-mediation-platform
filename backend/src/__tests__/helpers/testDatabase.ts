@@ -24,6 +24,7 @@ export const cleanDatabase = async (testPool: Pool): Promise<void> => {
   // Publishers CASCADE will clean: users, apps, placements, adapter_configs, payout_settings, payouts, fraud_alerts, revenue_events, refresh_tokens
   // Adapters needs separate TRUNCATE as it's independent
   await testPool.query('TRUNCATE TABLE publishers RESTART IDENTITY CASCADE');
+  await testPool.query('TRUNCATE TABLE publisher_bank_accounts RESTART IDENTITY CASCADE');
   await testPool.query('TRUNCATE TABLE adapters RESTART IDENTITY CASCADE');
   
   // Clean A/B testing tables

@@ -24,10 +24,10 @@ namespace RivalApex.Mediation
         
         [Header("Network")]
         [Tooltip("Auction server base URL")]
-        public string AuctionEndpoint = "https://auction.apexmediation.com/v1";
+        public string AuctionEndpoint = "https://auction.apexmediation.ee/v1";
         
         [Tooltip("Config server URL for OTA updates")]
-        public string ConfigEndpoint = "https://config.apexmediation.com/v1";
+        public string ConfigEndpoint = "https://config.apexmediation.ee/v1";
 
     [Tooltip("Optional override URL for remote config fetches")]
     public string RemoteConfigUrl;

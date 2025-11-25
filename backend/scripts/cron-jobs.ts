@@ -432,40 +432,54 @@ cron.schedule('0 10 1 * *', async () => {
     const startDate = new Date(lastMonth.getFullYear(), lastMonth.getMonth(), 1);
     const endDate = new Date(lastMonth.getFullYear(), lastMonth.getMonth() + 1, 0);
     
-    // Get all active publishers
-    const { rows: publishers } = await pool.query(
-      `SELECT id, email FROM users WHERE role = 'publisher' AND is_active = true`
-    );
-    
-    for (const publisher of publishers) {
-      try {
-        // Aggregate monthly metrics
-        const summary = await pool.query(`
-          SELECT 
-            COALESCE(SUM(revenue_usd), 0) as total_revenue,
-            COALESCE(SUM(impressions), 0) as total_impressions,
-            COALESCE(SUM(clicks), 0) as total_clicks,
-            COALESCE(AVG(ecpm_usd), 0) as avg_ecpm
-          FROM daily_aggregates
-          WHERE publisher_id = $1 
-            AND date >= $2 AND date <= $3
-        `, [publisher.id, startDate, endDate]);
-        
-        // Queue summary email
-        const redis = await import('../utils/redis');
-        await redis.default.lpush('email:notifications', JSON.stringify({
-          type: 'monthly_summary',
-          to: publisher.email,
-          publisherId: publisher.id,
-          period: lastMonth.toISOString().slice(0, 7),
-          metrics: summary.rows[0]
-        }));
-      } catch (publisherError) {
-        console.error(`[Cron] Failed to generate summary for ${publisher.id}:`, publisherError);
-      }
+    const databaseUrl = process.env.DATABASE_URL;
+    if (!databaseUrl) {
+      console.warn('[Cron] Monthly summaries skipped: DATABASE_URL not configured');
+      return;
     }
-    
-    console.log(`[Cron] Monthly summaries queued for ${publishers.length} publishers`);
+
+    const pool = new _Pool({ connectionString: databaseUrl });
+
+    try {
+      // Get all active publishers
+      const { rows: publishers } = await pool.query(
+        `SELECT id, email FROM users WHERE role = 'publisher' AND is_active = true`
+      );
+
+      const redisModule = await import('../src/utils/redis');
+      const redisClient = redisModule.default ?? redisModule.redis;
+
+      for (const publisher of publishers) {
+        try {
+          // Aggregate monthly metrics
+          const summary = await pool.query(`
+            SELECT 
+              COALESCE(SUM(revenue_usd), 0) as total_revenue,
+              COALESCE(SUM(impressions), 0) as total_impressions,
+              COALESCE(SUM(clicks), 0) as total_clicks,
+              COALESCE(AVG(ecpm_usd), 0) as avg_ecpm
+            FROM daily_aggregates
+            WHERE publisher_id = $1 
+              AND date >= $2 AND date <= $3
+          `, [publisher.id, startDate, endDate]);
+          
+          // Queue summary email
+          await (redisClient as any).lPush('email:notifications', JSON.stringify({
+            type: 'monthly_summary',
+            to: publisher.email,
+            publisherId: publisher.id,
+            period: lastMonth.toISOString().slice(0, 7),
+            metrics: summary.rows[0]
+          }));
+        } catch (publisherError) {
+          console.error(`[Cron] Failed to generate summary for ${publisher.id}:`, publisherError);
+        }
+      }
+
+      console.log(`[Cron] Monthly summaries queued for ${publishers.length} publishers`);
+    } finally {
+      await pool.end();
+    }
   } catch (error) {
     console.error('[Cron] Error sending monthly summaries:', error);
   }

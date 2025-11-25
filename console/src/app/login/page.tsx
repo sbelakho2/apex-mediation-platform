@@ -13,7 +13,7 @@ const CAN_SHOW_DEMO_MODE = DEMO_LOGIN_ENABLED && !IS_PRODUCTION_BUILD
 
 export default function LoginPage() {
   const router = useRouter()
-  const [email, setEmail] = useState(() => (CAN_SHOW_DEMO_MODE ? 'demo@apexmediation.com' : ''))
+  const [email, setEmail] = useState(() => (CAN_SHOW_DEMO_MODE ? 'demo@apexmediation.ee' : ''))
   const [password, setPassword] = useState(() => (CAN_SHOW_DEMO_MODE ? 'demo' : ''))
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
@@ -147,7 +147,7 @@ export default function LoginPage() {
               <div className="p-4 bg-blue-50 border border-blue-200 text-blue-700 rounded-lg text-sm">
                 <p className="font-medium mb-1">Demo Mode</p>
                 <p>
-                  Use <strong>demo@apexmediation.com</strong> with any password to login in sandbox
+                  Use <strong>demo@apexmediation.ee</strong> with any password to login in sandbox
                   environments.
                 </p>
               </div>
@@ -236,7 +236,7 @@ export default function LoginPage() {
             <p>
               Don&apos;t have an account?{' '}
               <a
-                href="mailto:sales@apexmediation.com"
+                href="mailto:sales@apexmediation.ee"
                 className="text-primary-600 hover:text-primary-700 font-medium"
               >
                 Contact sales

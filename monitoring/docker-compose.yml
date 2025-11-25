@@ -75,7 +75,7 @@ services:
       - GF_SMTP_HOST=smtp.resend.com:587
       - GF_SMTP_USER=resend
       - GF_SMTP_PASSWORD=${RESEND_API_KEY}
-      - GF_SMTP_FROM_ADDRESS=alerts@apexmediation.com
+      - GF_SMTP_FROM_ADDRESS=alerts@apexmediation.ee
     volumes:
       - ./grafana-datasources.generated.yml:/etc/grafana/provisioning/datasources/datasources.yml
       - ./grafana-dashboards.yml:/etc/grafana/provisioning/dashboards/dashboards.yml

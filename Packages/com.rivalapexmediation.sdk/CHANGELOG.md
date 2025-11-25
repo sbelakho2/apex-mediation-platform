@@ -81,4 +81,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-For support, please visit [https://docs.rivalapexmediation.com](https://docs.rivalapexmediation.com) or email sdk-support@rivalapexmediation.com
+For support, please visit [https://docs.rivalapexmediation.ee](https://docs.rivalapexmediation.ee) or email sdk-support@rivalapexmediation.ee

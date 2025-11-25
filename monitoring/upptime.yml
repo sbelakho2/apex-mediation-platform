@@ -6,9 +6,9 @@ assignees:
   - bel-consulting/platform-infra
 
 status-website:
-  cname: status.apexmediation.com
+  cname: status.apexmediation.ee
   baseUrl: /
-  logoUrl: https://console.apexmediation.com/logo.svg
+  logoUrl: https://console.apexmediation.ee/logo.svg
   name: ApexMediation Status
   introTitle: ApexMediation — Transparency & Reliability
   introMessage: |
@@ -20,7 +20,7 @@ status-website:
     - title: Incident Guide
       href: https://github.com/bel-consulting/Ad-Project/blob/main/docs/Monitoring/STATUS_PAGE_AND_INCIDENT_TAXONOMY.md
     - title: Transparency
-      href: https://docs.apexmediation.com/transparency
+      href: https://docs.apexmediation.ee/transparency
 
 workflowSchedule:
   uptime: '*/5 * * * *'
@@ -39,33 +39,33 @@ notifications:
 
 sites:
   - name: Auction API
-    url: https://api.apexmediation.com/healthz
+    url: https://api.apexmediation.ee/healthz
     maxResponseTime: 800
     expectedStatusCodes:
       - 200
   - name: SDK Config Service
-    url: https://config.apexmediation.com/readyz
+    url: https://config.apexmediation.ee/readyz
     maxResponseTime: 600
     expectedStatusCodes:
       - 200
   - name: Console (Next.js)
-    url: https://console.apexmediation.com
+    url: https://console.apexmediation.ee
     maxResponseTime: 1200
     expectedStatusCodes:
       - 200
       - 204
   - name: Billing API
-    url: https://api.apexmediation.com/billing/healthz
+    url: https://api.apexmediation.ee/billing/healthz
     maxResponseTime: 900
     expectedStatusCodes:
       - 200
   - name: Transparency Receipts
-    url: https://api.apexmediation.com/api/v1/transparency/keys
+    url: https://api.apexmediation.ee/api/v1/transparency/keys
     maxResponseTime: 1000
     expectedStatusCodes:
       - 200
   - name: Status Page JSON
-    url: https://status.apexmediation.com/api/status.json
+    url: https://status.apexmediation.ee/api/status.json
     maxResponseTime: 1500
     expectedStatusCodes:
       - 200
@@ -77,7 +77,7 @@ summary:
 
 heartbeat:
   cron: '*/15 * * * *'
-  url: https://api.apexmediation.com/api/v1/ops/heartbeat
+  url: https://api.apexmediation.ee/api/v1/ops/heartbeat
   method: GET
   expectedStatusCodes:
     - 200

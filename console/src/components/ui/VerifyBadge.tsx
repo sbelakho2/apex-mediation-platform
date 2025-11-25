@@ -73,6 +73,7 @@ export function VerifyBadge({ auctionId, hasSigned = true, compact = false, auto
     } catch (e: unknown) {
       if (!controller.signal.aborted) {
         handleError(e)
+        setLoaded(true)
       }
     } finally {
       if (!controller.signal.aborted && isMountedRef.current) {
@@ -158,7 +159,7 @@ export function VerifyBadge({ auctionId, hasSigned = true, compact = false, auto
     const badge = (
       <button
         type="button"
-        onClick={() => void loadVerification()}
+        onClick={() => void loadVerification({ force: true })}
         className={`inline-flex items-center gap-1.5 ${compact ? 'px-2 py-0.5 text-xs' : 'px-2.5 py-1 text-sm'} rounded bg-red-100 text-red-600 font-medium hover:bg-red-200 transition-colors`}
         aria-label={compact ? `Retry verification for auction ${auctionId}` : undefined}
       >

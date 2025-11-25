@@ -3,12 +3,24 @@
 
 import { Resend } from 'resend';
 import { Pool } from 'pg';
+import {
+  BillingPreviewEmailPayload,
+  PaymentFailedEmailPayload,
+  PaymentRetryEmailPayload,
+  PaymentSucceededEmailPayload,
+  SUPPORT_EMAIL_ADDRESS,
+  buildBillingPreviewEmail,
+  buildPaymentFailedEmail,
+  buildPaymentRetryEmail,
+  buildPaymentSucceededEmail,
+} from './billingEmailBuilders';
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
 const db = new Pool({
   connectionString: process.env.DATABASE_URL,
 });
+
 
 interface EmailTemplate {
   id: string;
@@ -26,10 +38,11 @@ interface EmailJob {
   scheduled_for?: Date;
 }
 
+
 export class EmailAutomationService {
-  private readonly FROM_EMAIL = 'ApexMediation <noreply@apexmediation.com>';
-  private readonly SUPPORT_EMAIL = 'support@apexmediation.com';
-  private readonly FOUNDER_EMAIL = 'Sabel @ ApexMediation <sabel@apexmediation.com>';
+  private readonly FROM_EMAIL = 'ApexMediation <noreply@apexmediation.ee>';
+  private readonly SUPPORT_EMAIL = SUPPORT_EMAIL_ADDRESS;
+  private readonly FOUNDER_EMAIL = 'Sabel @ ApexMediation <sabel@apexmediation.ee>';
 
   /**
    * Process email event queue (run every minute via cron)
@@ -78,6 +91,9 @@ export class EmailAutomationService {
         break;
       case 'email.trial_ending':
         await this.sendTrialEndingEmail(data);
+        break;
+      case 'email.billing_preview':
+        await this.sendBillingPreviewEmail(data);
         break;
       case 'email.payment_failed':
         await this.sendPaymentFailedEmail(data);
@@ -145,14 +161,14 @@ export class EmailAutomationService {
         
         <h2>Get Started</h2>
         <ol>
-          <li><strong>Download the SDK:</strong> <a href="https://docs.apexmediation.com/download">docs.apexmediation.com/download</a></li>
-          <li><strong>Follow the integration guide:</strong> <a href="https://docs.apexmediation.com/quickstart">docs.apexmediation.com/quickstart</a></li>
+          <li><strong>Download the SDK:</strong> <a href="https://docs.apexmediation.ee/download">docs.apexmediation.ee/download</a></li>
+          <li><strong>Follow the integration guide:</strong> <a href="https://docs.apexmediation.ee/quickstart">docs.apexmediation.ee/quickstart</a></li>
           <li><strong>Join our community:</strong> <a href="https://discord.gg/apexmediation">discord.gg/apexmediation</a></li>
         </ol>
         
         <p><strong>You have 14 days of free trial.</strong> No credit card charged until your trial ends.</p>
         
-        <p>Need help? Just reply to this email or visit <a href="https://docs.apexmediation.com">docs.apexmediation.com</a></p>
+        <p>Need help? Just reply to this email or visit <a href="https://docs.apexmediation.ee">docs.apexmediation.ee</a></p>
         
         <p>Best regards,<br>
         Sabel Akhoua<br>
@@ -161,7 +177,7 @@ export class EmailAutomationService {
         <hr>
         <p style="font-size: 12px; color: #666;">
           Plan: ${data.plan_type}<br>
-          Console: <a href="https://console.apexmediation.com">console.apexmediation.com</a>
+          Console: <a href="https://console.apexmediation.ee">console.apexmediation.ee</a>
         </p>
       `,
       replyTo: this.FOUNDER_EMAIL,
@@ -205,7 +221,7 @@ export class EmailAutomationService {
         </ul>
         
         <p><strong>Want to change your plan?</strong></p>
-        <p><a href="https://console.apexmediation.com/billing" style="background: #0066cc; color: white; padding: 10px 20px; text-decoration: none; display: inline-block; border-radius: 5px;">Manage Billing</a></p>
+        <p><a href="https://console.apexmediation.ee/billing" style="background: #0066cc; color: white; padding: 10px 20px; text-decoration: none; display: inline-block; border-radius: 5px;">Manage Billing</a></p>
         
         <p>Questions? Reply to this email - I read every message personally.</p>
         
@@ -224,48 +240,39 @@ export class EmailAutomationService {
   }
 
   /**
-   * Payment failed notification
+   * Billing preview (sent ~5 days before autopay)
    */
-  private async sendPaymentFailedEmail(data: {
-    to: string;
-    customer_id: string;
-    invoice_id: string;
-    amount_due: string;
-    currency: string;
-    payment_url: string;
-  }): Promise<void> {
+  private async sendBillingPreviewEmail(data: BillingPreviewEmailPayload): Promise<void> {
+    const { to, customer_id: _customerId, ...content } = data;
+    const { subject, html } = buildBillingPreviewEmail(content);
+
     const { data: result, error } = await resend.emails.send({
       from: this.FROM_EMAIL,
-      to: data.to,
-      subject: '⚠️ Payment failed - action required',
-      html: `
-        <h1>Payment Failed</h1>
-        <p>Hi there,</p>
-        <p>We tried to process your payment of <strong>${data.currency.toUpperCase()} ${data.amount_due}</strong>, but it failed.</p>
-        
-        <h2>Update Your Payment Method</h2>
-        <p><a href="${data.payment_url}" style="background: #cc0000; color: white; padding: 10px 20px; text-decoration: none; display: inline-block; border-radius: 5px;">Update Payment Method</a></p>
-        
-        <h2>What happens next?</h2>
-        <ul>
-          <li>We'll automatically retry the payment in 1 day</li>
-          <li>You'll receive reminders before each retry</li>
-          <li>After 3 failed attempts, your service will be suspended</li>
-        </ul>
-        
-        <p><strong>Common reasons for payment failure:</strong></p>
-        <ul>
-          <li>Insufficient funds</li>
-          <li>Expired card</li>
-          <li>Incorrect billing address</li>
-          <li>Bank declined the charge</li>
-        </ul>
-        
-        <p>Need help? Reply to this email or contact <a href="mailto:${this.SUPPORT_EMAIL}">${this.SUPPORT_EMAIL}</a></p>
-        
-        <p>Best regards,<br>
-        ApexMediation Team</p>
-      `,
+      to,
+      subject,
+      html,
+      replyTo: this.SUPPORT_EMAIL,
+    });
+
+    if (error) {
+      throw new Error(`Failed to send billing preview email: ${error.message}`);
+    }
+
+    console.log(`[Email] Sent billing preview email to ${data.to}`);
+  }
+
+  /**
+   * Payment failed notification
+   */
+  private async sendPaymentFailedEmail(data: PaymentFailedEmailPayload): Promise<void> {
+    const { to, customer_id: _customerId, ...content } = data;
+    const { subject, html } = buildPaymentFailedEmail(content);
+
+    const { data: result, error } = await resend.emails.send({
+      from: this.FROM_EMAIL,
+      to,
+      subject,
+      html,
       replyTo: this.SUPPORT_EMAIL,
     });
 
@@ -279,43 +286,15 @@ export class EmailAutomationService {
   /**
    * Payment retry notification
    */
-  private async sendPaymentRetryEmail(data: {
-    to: string;
-    customer_id: string;
-    attempt_number: number;
-    days_until_retry: number;
-    max_retries: number;
-  }): Promise<void> {
-    const attemptsRemaining = data.max_retries - data.attempt_number;
+  private async sendPaymentRetryEmail(data: PaymentRetryEmailPayload): Promise<void> {
+    const { to, customer_id: _customerId, ...content } = data;
+    const { subject, html } = buildPaymentRetryEmail(content);
 
     const { data: result, error } = await resend.emails.send({
       from: this.FROM_EMAIL,
-      to: data.to,
-      subject: `Payment retry ${data.attempt_number} of ${data.max_retries}`,
-      html: `
-        <h1>Payment Retry Attempt ${data.attempt_number}</h1>
-        <p>Hi there,</p>
-        <p>Your payment is still outstanding. We'll automatically retry in ${data.days_until_retry} day${data.days_until_retry > 1 ? 's' : ''}.</p>
-        
-        <p><strong>Attempts remaining:</strong> ${attemptsRemaining}</p>
-        
-        ${
-          attemptsRemaining === 1
-            ? `
-          <p style="background: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; margin: 20px 0;">
-            <strong>⚠️ Final Reminder:</strong> This is your last chance to update your payment method before your service is suspended.
-          </p>
-        `
-            : ''
-        }
-        
-        <p><a href="https://console.apexmediation.com/billing" style="background: #cc0000; color: white; padding: 10px 20px; text-decoration: none; display: inline-block; border-radius: 5px;">Update Payment Method Now</a></p>
-        
-        <p>If you're experiencing issues, please let us know. We're here to help.</p>
-        
-        <p>Best regards,<br>
-        ApexMediation Team</p>
-      `,
+      to,
+      subject,
+      html,
       replyTo: this.SUPPORT_EMAIL,
     });
 
@@ -329,35 +308,15 @@ export class EmailAutomationService {
   /**
    * Payment succeeded after retry
    */
-  private async sendPaymentSucceededEmail(data: {
-    to: string;
-    customer_id: string;
-    amount_paid: string;
-    currency: string;
-  }): Promise<void> {
+  private async sendPaymentSucceededEmail(data: PaymentSucceededEmailPayload): Promise<void> {
+    const { to, customer_id: _customerId, ...content } = data;
+    const { subject, html } = buildPaymentSucceededEmail(content);
+
     const { data: result, error } = await resend.emails.send({
       from: this.FROM_EMAIL,
-      to: data.to,
-      subject: '✅ Payment successful - service restored',
-      html: `
-        <h1>Payment Successful!</h1>
-        <p>Hi there,</p>
-        <p>Great news! Your payment of <strong>${data.currency.toUpperCase()} ${data.amount_paid}</strong> was processed successfully.</p>
-        
-        <h2>Your service is fully restored</h2>
-        <ul>
-          <li>✅ API access reactivated</li>
-          <li>✅ SDK functionality restored</li>
-          <li>✅ All features available</li>
-        </ul>
-        
-        <p>Thank you for resolving this quickly. If you had any issues, we apologize for the inconvenience.</p>
-        
-        <p><a href="https://console.apexmediation.com">Access Console</a></p>
-        
-        <p>Best regards,<br>
-        ApexMediation Team</p>
-      `,
+      to,
+      subject,
+      html,
       replyTo: this.SUPPORT_EMAIL,
     });
 
@@ -451,15 +410,15 @@ export class EmailAutomationService {
           
           <h2>Avoid overage charges</h2>
           <p>Upgrade to a higher plan and save money!</p>
-          <p><a href="https://console.apexmediation.com/billing/upgrade" style="background: #0066cc; color: white; padding: 10px 20px; text-decoration: none; display: inline-block; border-radius: 5px;">Upgrade Plan</a></p>
+          <p><a href="https://console.apexmediation.ee/billing/upgrade" style="background: #0066cc; color: white; padding: 10px 20px; text-decoration: none; display: inline-block; border-radius: 5px;">Upgrade Plan</a></p>
         `
             : `
           <p>You're approaching your plan limit. Consider upgrading to avoid overage charges.</p>
-          <p><a href="https://console.apexmediation.com/billing/upgrade">View Upgrade Options</a></p>
+          <p><a href="https://console.apexmediation.ee/billing/upgrade">View Upgrade Options</a></p>
         `
         }
         
-        <p><a href="https://console.apexmediation.com/usage">View Detailed Usage</a></p>
+        <p><a href="https://console.apexmediation.ee/usage">View Detailed Usage</a></p>
         
         <p>Best regards,<br>
         ApexMediation Team</p>
@@ -513,7 +472,7 @@ export class EmailAutomationService {
           </tr>
         </table>
         
-        <p><a href="https://console.apexmediation.com/analytics">View Detailed Analytics</a></p>
+        <p><a href="https://console.apexmediation.ee/analytics">View Detailed Analytics</a></p>
         
         <p>Keep up the great work! 🚀</p>
         
@@ -577,7 +536,7 @@ ${
 }
         </pre>
         
-        <p>Need help upgrading? <a href="https://docs.apexmediation.com/migration">View Migration Guide</a></p>
+        <p>Need help upgrading? <a href="https://docs.apexmediation.ee/migration">View Migration Guide</a></p>
         
         <p>Best regards,<br>
         ApexMediation Team</p>
@@ -704,9 +663,9 @@ ${
         </ul>
         
         <h2>Keep Going!</h2>
-        <p>Your ad mediation is gaining traction. Check your <a href="https://console.apexmediation.com/analytics">analytics dashboard</a> for detailed insights.</p>
+        <p>Your ad mediation is gaining traction. Check your <a href="https://console.apexmediation.ee/analytics">analytics dashboard</a> for detailed insights.</p>
         
-        <p>Need optimization tips? <a href="https://docs.apexmediation.com/optimization">Visit our optimization guide</a></p>
+        <p>Need optimization tips? <a href="https://docs.apexmediation.ee/optimization">Visit our optimization guide</a></p>
         
         <p>Best regards,<br>
         Sabel Akhoua<br>
@@ -756,13 +715,13 @@ ${
         
         <h2>Quick Share Links</h2>
         <p>
-          <a href="https://apexmediation.com/signup?ref=${data.referral_code}" style="background: #4CAF50; color: white; padding: 10px 20px; text-decoration: none; border-radius: 4px; display: inline-block; margin: 5px;">📋 Copy Signup Link</a>
+          <a href="https://apexmediation.ee/signup?ref=${data.referral_code}" style="background: #4CAF50; color: white; padding: 10px 20px; text-decoration: none; border-radius: 4px; display: inline-block; margin: 5px;">📋 Copy Signup Link</a>
         </p>
         <p style="font-size: 14px; color: #666;">
           Share on: 
-          <a href="https://twitter.com/intent/tweet?text=Just%20switched%20to%20ApexMediation%20for%20ad%20mediation%20-%2010min%20setup%2C%20only%2010%25%20take%20rate!%20Use%20code%20${data.referral_code}%20for%20%24100%20off.%20https%3A%2F%2Fapexmediation.com%2Fsignup%3Fref%3D${data.referral_code}">Twitter</a> | 
-          <a href="https://www.linkedin.com/sharing/share-offsite/?url=https%3A%2F%2Fapexmediation.com%2Fsignup%3Fref%3D${data.referral_code}">LinkedIn</a> | 
-          <a href="mailto:?subject=Check%20out%20ApexMediation&body=I%27ve%20been%20using%20ApexMediation%20for%20ad%20mediation%20and%20love%20it.%20Use%20my%20code%20${data.referral_code}%20for%20%24100%20off%3A%20https%3A%2F%2Fapexmediation.com%2Fsignup%3Fref%3D${data.referral_code}">Email</a>
+          <a href="https://twitter.com/intent/tweet?text=Just%20switched%20to%20ApexMediation%20for%20ad%20mediation%20-%2010min%20setup%2C%20only%2010%25%20take%20rate!%20Use%20code%20${data.referral_code}%20for%20%24100%20off.%20https%3A%2F%2Fapexmediation.ee%2Fsignup%3Fref%3D${data.referral_code}">Twitter</a> | 
+          <a href="https://www.linkedin.com/sharing/share-offsite/?url=https%3A%2F%2Fapexmediation.ee%2Fsignup%3Fref%3D${data.referral_code}">LinkedIn</a> | 
+          <a href="mailto:?subject=Check%20out%20ApexMediation&body=I%27ve%20been%20using%20ApexMediation%20for%20ad%20mediation%20and%20love%20it.%20Use%20my%20code%20${data.referral_code}%20for%20%24100%20off%3A%20https%3A%2F%2Fapexmediation.ee%2Fsignup%3Fref%3D${data.referral_code}">Email</a>
         </p>
         
         <p><strong>No limits.</strong> Refer as many developers as you want!</p>
@@ -814,7 +773,7 @@ ${
         <p>As a thank you, we'll give you <strong>${data.incentive}</strong> to your account.</p>
         
         <p style="text-align: center; margin: 30px 0;">
-          <a href="https://apexmediation.com/testimonials/submit?cid=${data.customer_id}" style="background: #4CAF50; color: white; padding: 15px 30px; text-decoration: none; border-radius: 4px; display: inline-block; font-weight: bold;">✍️ Submit Testimonial (2 minutes)</a>
+          <a href="https://apexmediation.ee/testimonials/submit?cid=${data.customer_id}" style="background: #4CAF50; color: white; padding: 15px 30px; text-decoration: none; border-radius: 4px; display: inline-block; font-weight: bold;">✍️ Submit Testimonial (2 minutes)</a>
         </p>
         
         <p><strong>Optional:</strong> Want to do a quick 5-minute video testimonial instead? Even better! <a href="https://cal.com/apexmediation/testimonial">Book a time here</a>.</p>
@@ -928,7 +887,7 @@ ${
         <p>Feel free to share your badge on social media! 🎉</p>
         
         <h2>Leaderboard</h2>
-        <p>Check out the <a href="https://apexmediation.com/community/leaderboard">community leaderboard</a> to see where you rank!</p>
+        <p>Check out the <a href="https://apexmediation.ee/community/leaderboard">community leaderboard</a> to see where you rank!</p>
         
         <p>Keep up the amazing work—you're making ApexMediation better for everyone.</p>
         

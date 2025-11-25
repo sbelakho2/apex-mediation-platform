@@ -14,8 +14,8 @@ jest.mock('../../services/vra/vraService', () => ({
   vraService: {
     getDeltas: jest.fn(async () => ({
       page: 1,
-      pageSize: 2,
-      total: 2,
+      pageSize: 3,
+      total: 3,
       items: [
         {
           kind: 'underpay',
@@ -37,6 +37,17 @@ jest.mock('../../services/vra/vraService', () => ({
           evidenceId: 'ev2',
           confidence: 0.6,
         },
+        {
+          kind: 'missing',
+          amount: 0,
+          currency: 'USD',
+          // raw JWT (three base64url segments) without Bearer prefix
+          reasonCode: 'investigate jwt eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.QUJDLURFRi5HSUk.SUotS0w',
+          windowStart: '2025-11-05T00:00:00Z',
+          windowEnd: '2025-11-06T00:00:00Z',
+          evidenceId: 'ev3',
+          confidence: 0.55,
+        },
       ],
     })),
   },
@@ -55,7 +66,7 @@ describe('VRA CSV export — redaction of reason_code', () => {
     app.use('/api/v1', vraRoutes);
   });
 
-  it('redacts emails/tokens and strips commas/newlines from reason_code', async () => {
+  it('redacts emails/tokens/JWT and strips commas/newlines from reason_code', async () => {
     const res = await request(app)
       .get('/api/v1/recon/deltas.csv')
       .expect(200)
@@ -65,19 +76,25 @@ describe('VRA CSV export — redaction of reason_code', () => {
     const lines = body.trim().split('\n');
     expect(lines[0]).toBe('kind,amount,currency,reason_code,window_start,window_end,evidence_id,confidence');
 
-    // First data line: email and Bearer token must be redacted; commas and newlines removed
+    // First data line: email and Bearer token must be redacted; commas/newlines/tabs removed; amount formatted to 6 decimals
     const l1 = lines[1];
-    expect(l1).toContain('underpay,1.23,USD');
+    expect(l1).toContain('underpay,1.230000,USD');
     expect(l1).toContain('[REDACTED_EMAIL]');
     expect(l1).toContain('Bearer [REDACTED]');
     // Ensure there are exactly 8 columns (commas inside reason removed)
     expect(l1.split(',').length).toBe(8);
 
-    // Second data line: stripe key and long numeric redacted; commas stripped
+    // Second data line: stripe key and long numeric redacted; commas stripped; amount formatted to 6 decimals
     const l2 = lines[2];
-    expect(l2).toContain('fx_mismatch,0,USD');
+    expect(l2).toContain('fx_mismatch,0.000000,USD');
     expect(l2).toContain('sk_test_[REDACTED]');
     expect(l2).toContain('[REDACTED_NUMERIC]');
     expect(l2.split(',').length).toBe(8);
+
+    // Third data line: raw JWT should be redacted; amount formatted 0.000000
+    const l3 = lines[3];
+    expect(l3).toContain('missing,0.000000,USD');
+    expect(l3).toContain('[REDACTED_JWT]');
+    expect(l3.split(',').length).toBe(8);
   });
 });

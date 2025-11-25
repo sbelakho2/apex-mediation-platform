@@ -82,7 +82,7 @@ val cfg = SDKConfig.Builder()
     .appId("your-publisher-id")
     .sdkMode(SdkMode.HYBRID)
     .enableS2SWhenCapable(true)
-    .auctionEndpoint("https://auction.rivalapexmediation.com")
+    .auctionEndpoint("https://auction.rivalapexmediation.ee")
     .auctionApiKey("pub-live-abc123")
     .build()
 

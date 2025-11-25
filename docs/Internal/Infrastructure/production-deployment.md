@@ -258,16 +258,16 @@ spec:
     name: letsencrypt-prod
     kind: ClusterIssuer
   dnsNames:
-    - api.rivalapexmediation.com
-    - console.rivalapexmediation.com
-    - analytics.rivalapexmediation.com
-    - fraud.rivalapexmediation.com
+    - api.rivalapexmediation.ee
+    - console.rivalapexmediation.ee
+    - analytics.rivalapexmediation.ee
+    - fraud.rivalapexmediation.ee
 EOF
 
 # Update DNS records
-# - api.rivalapexmediation.com → Load Balancer IP
-# - console.rivalapexmediation.com → Load Balancer IP
-# - *.rivalapexmediation.com → Load Balancer IP (wildcard)
+# - api.rivalapexmediation.ee → Load Balancer IP
+# - console.rivalapexmediation.ee → Load Balancer IP
+# - *.rivalapexmediation.ee → Load Balancer IP (wildcard)
 ```
 
 ## Step 5: Monitoring Setup
@@ -409,7 +409,7 @@ psql $DATABASE_URL << EOF
 INSERT INTO publishers (id, email, name, company_name, status, tier)
 VALUES (
   '00000000-0000-0000-0000-000000000001',
-  'demo@rivalapexmediation.com',
+  'demo@rivalapexmediation.ee',
   'Demo Publisher',
   'Demo Company',
   'active',
@@ -476,7 +476,7 @@ kubectl run -it --rm redis-test --image=redis:7 --restart=Never -- \
 
 ```bash
 # Create test ad request
-curl -X POST https://api.rivalapexmediation.com/v1/ad/request \
+curl -X POST https://api.rivalapexmediation.ee/v1/ad/request \
   -H "Authorization: Bearer <api-key>" \
   -H "Content-Type: application/json" \
   -d '{
@@ -647,7 +647,7 @@ See `PRE_DEPLOYMENT_CHECKLIST.md` for the full 10-section validation covering in
 watch kubectl get pods -n rival
 
 # Check service health
-curl https://api.rivalapexmediation.com/health
+curl https://api.rivalapexmediation.ee/health
 
 # View logs
 kubectl logs -f deployment/router-service -n rival --tail=100
@@ -680,7 +680,7 @@ gh workflow run rollback.yml -f environment=production
 For issues during deployment:
 - Check logs: `kubectl logs -n rival <pod-name>`
 - Review events: `kubectl get events -n rival --sort-by='.lastTimestamp'`
-- Contact: ops@rivalapexmediation.com
+- Contact: ops@rivalapexmediation.ee
 - On-call: PagerDuty incident trigger
 
 ## Next Steps

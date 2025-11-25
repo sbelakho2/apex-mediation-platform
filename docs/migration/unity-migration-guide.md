@@ -38,7 +38,7 @@ Complete migration guide for publishers transitioning from Unity LevelPlay to Ri
 
 #### 1.1 Create Rival Account
 ```bash
-# Register at console.rivalapexmediation.com
+# Register at console.rivalapexmediation.ee
 # Or use CLI
 npx @rivalapexmediation/cli auth:login
 npx @rivalapexmediation/cli publisher:create \
@@ -485,7 +485,7 @@ rival-migrate revenue:compare \
 - Direct engineering access
 
 **Contact:**
-- Email: migrate@rivalapexmediation.com
+- Email: migrate@rivalapexmediation.ee
 - Slack: rivalapexmediation.slack.com
 - Emergency: +1-XXX-XXX-XXXX
 
@@ -504,10 +504,10 @@ Track these throughout migration:
 
 ## 🎓 Training Resources
 
-- **Video Tutorials**: https://docs.rivalapexmediation.com/videos
+- **Video Tutorials**: https://docs.rivalapexmediation.ee/videos
 - **Live Workshops**: Bi-weekly on Wednesdays
 - **Sample Apps**: https://github.com/rivalapexmediation/samples
-- **API Reference**: https://docs.rivalapexmediation.com/api
+- **API Reference**: https://docs.rivalapexmediation.ee/api
 
 ## Next Steps
 

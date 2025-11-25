@@ -302,20 +302,20 @@ groups:
 export const EMAIL_TEMPLATES = {
   welcome: {
     subject: 'Welcome to ApexMediation! 🚀',
-    from: 'Sabel @ ApexMediation <sabel@apexmediation.com>',
-    replyTo: 'support@apexmediation.com',
+    from: 'Sabel @ ApexMediation <sabel@apexmediation.ee>',
+    replyTo: 'support@apexmediation.ee',
   },
   trial_ending_7d: {
     subject: 'Your ApexMediation trial ends in 7 days',
-    from: 'ApexMediation <noreply@apexmediation.com>',
+    from: 'ApexMediation <noreply@apexmediation.ee>',
   },
   payment_failed: {
     subject: 'Payment failed - action required',
-    from: 'ApexMediation Billing <billing@apexmediation.com>',
+    from: 'ApexMediation Billing <billing@apexmediation.ee>',
   },
   usage_80_percent: {
     subject: 'You\'ve used 80% of your plan limits',
-    from: 'ApexMediation <noreply@apexmediation.com>',
+    from: 'ApexMediation <noreply@apexmediation.ee>',
   },
 };
 ```
@@ -365,26 +365,26 @@ owner: apexmediation
 repo: upptime
 sites:
   - name: API
-    url: https://api.apexmediation.com/health
+    url: https://api.apexmediation.ee/health
     expectedStatusCodes:
       - 200
   - name: Console
-    url: https://console.apexmediation.com
+    url: https://console.apexmediation.ee
   - name: Documentation
-    url: https://docs.apexmediation.com
+    url: https://docs.apexmediation.ee
   - name: SDK Downloads
-    url: https://apexmediation.com/download/ios/latest
+    url: https://apexmediation.ee/download/ios/latest
 
 status-website:
-  cname: status.apexmediation.com
+  cname: status.apexmediation.ee
   name: ApexMediation Status
   introTitle: "System Status"
   introMessage: Real-time status of all ApexMediation services
   navbar:
     - title: Console
-      href: https://console.apexmediation.com
+      href: https://console.apexmediation.ee
     - title: Docs
-      href: https://docs.apexmediation.com
+      href: https://docs.apexmediation.ee
 ```
 
 **Why not Atlassian Statuspage:**
@@ -439,8 +439,8 @@ export async function handleSupportEmail(email: Email) {
         - Supported platforms: iOS, Android, Unity, Flutter
         - Integrated networks: AdMob, AppLovin, Meta Audience Network, IronSource
         
-        Documentation: https://docs.apexmediation.com
-        API reference: https://docs.apexmediation.com/api
+        Documentation: https://docs.apexmediation.ee
+        API reference: https://docs.apexmediation.ee/api
         
         Be concise, helpful, and friendly. Include relevant documentation links.
         If you don't know the answer, say "I'll escalate this to our team" and flag for human review.`
@@ -498,7 +498,7 @@ export async function handleSupportEmail(email: Email) {
 **Example Workflows:**
 ```yaml
 # n8n workflow: New blog post → social media
-trigger: RSS feed (blog.apexmediation.com)
+trigger: RSS feed (blog.apexmediation.ee)
 actions:
   - Post to Twitter
   - Post to LinkedIn
@@ -687,7 +687,7 @@ export class CustomerHealthService {
     
     // 1. Immediate email with personal touch
     await emailService.send(customerId, 'high-risk-intervention', {
-      from: 'sabel@apexmediation.com', // Personal email
+      from: 'sabel@apexmediation.ee', // Personal email
       subject: 'Quick check-in - need any help?',
     });
     
@@ -758,7 +758,7 @@ export class UpsellService {
           next_rate: `${(nextTierRate * 100).toFixed(2)}%`,
           monthly_savings: `$${potentialSavings.toFixed(0)}`,
           annual_savings: `$${(potentialSavings * 12).toFixed(0)}`,
-          cta_url: `https://console.apexmediation.com/billing/upgrade?plan=${nextTier}&reason=rate_drop`,
+          cta_url: `https://console.apexmediation.ee/billing/upgrade?plan=${nextTier}&reason=rate_drop`,
         });
 
         await db.upsell_offers.create({

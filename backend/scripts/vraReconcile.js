@@ -1,18 +1,15 @@
 #!/usr/bin/env node
 /*
- * VRA Reconcile & Delta Classification CLI (operator tool)
+ * VRA Reconcile CLI (operator tool)
  *
- * Aggregates expected vs. paid over a time window and emits coarse deltas
- * (timing_lag, underpay) into ClickHouse `recon_deltas` (idempotent by window evidence key).
+ * Computes reconcile deltas for a given window and optionally writes them to ClickHouse.
+ * Guardrails: max 3-day window unless --force --yes. Exit codes: 0 OK, 10 WARNINGS (no work/dry-run), 20 ERROR.
  *
  * Usage:
  *   node backend/scripts/vraReconcile.js \
  *     --from 2025-11-01T00:00:00Z \
  *     --to   2025-11-02T00:00:00Z \
  *     [--dry-run]
- *
- * Env:
- *   CLICKHOUSE_URL=http://localhost:8123 (or CLICKHOUSE_HOST/CLICKHOUSE_PORT)
  */
 
 require('dotenv/config');
@@ -46,24 +43,48 @@ async function main() {
   const from = args.from;
   const to = args.to;
   const dryRun = toBool(args['dry-run']);
+  const force = toBool(args['force']);
+  const yes = toBool(args['yes']);
 
   if (!from || !to) {
     console.error('Missing required args: --from ISO, --to ISO');
     process.exit(EXIT.ERROR);
   }
 
+  // Safety caps — 3-day window unless --force --yes
+  const MAX_WINDOW_MS = 3 * 24 * 60 * 60 * 1000;
+  try {
+    const fromMs = Date.parse(from);
+    const toMs = Date.parse(to);
+    if (!Number.isFinite(fromMs) || !Number.isFinite(toMs)) {
+      console.error('Invalid ISO timestamps for --from/--to');
+      process.exit(EXIT.ERROR);
+    }
+    if (fromMs > toMs) {
+      console.error('from must be <= to');
+      process.exit(EXIT.ERROR);
+    }
+    const windowMs = toMs - fromMs;
+    if (windowMs > MAX_WINDOW_MS && !(force && yes)) {
+      console.error(`Refusing to run: window exceeds ${MAX_WINDOW_MS / (24 * 60 * 60 * 1000)} days. Use --force --yes to bypass.`);
+      process.exit(EXIT.ERROR);
+    }
+  } catch (_) {
+    console.error('Failed to evaluate safety caps for window');
+    process.exit(EXIT.ERROR);
+  }
+
   try {
     await initializeClickHouse();
   } catch (e) {
-    console.error('Failed to initialize ClickHouse:', e.message || e);
+    console.error('Failed to initialize ClickHouse:', e && e.message ? e.message : String(e));
     process.exit(EXIT.ERROR);
   }
 
   try {
     const res = await reconcileWindow({ from, to, dryRun });
     console.log('[VRA Reconcile] Window:', from, '→', to, dryRun ? '(dry-run)' : '');
-    console.log('[VRA Reconcile] Amounts USD:', res.amounts);
-    console.log('[VRA Reconcile] Deltas computed:', res.deltas, 'Inserted:', res.inserted);
+    console.log('[VRA Reconcile] Deltas:', res.deltas, 'Inserted:', res.inserted);
     if (res.deltas === 0 || res.inserted === 0) {
       process.exit(EXIT.WARNINGS);
     }

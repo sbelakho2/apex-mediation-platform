@@ -101,8 +101,8 @@ public class AdManager : MonoBehaviour
 
 ## Support
 
-- Documentation: https://docs.rivalapexmediation.com
-- Email: sdk-support@rivalapexmediation.com
+- Documentation: https://docs.rivalapexmediation.ee
+- Email: sdk-support@rivalapexmediation.ee
 - GitHub Issues: https://github.com/rivalapex/unity-sdk/issues
 
 ## License

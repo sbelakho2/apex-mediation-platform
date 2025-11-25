@@ -21,7 +21,7 @@ CREATE INDEX idx_fx_rates_currencies_date
   ON fx_rates(from_currency, to_currency, rate_date DESC);
 
 CREATE INDEX idx_fx_rates_expiry 
-  ON fx_rates(expires_at) WHERE expires_at > NOW();
+  ON fx_rates(expires_at);
 
 CREATE INDEX idx_fx_rates_from_currency 
   ON fx_rates(from_currency);

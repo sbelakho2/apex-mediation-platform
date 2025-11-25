@@ -453,7 +453,7 @@ public class ApexRewardedInterstitial
 - [ ] Request flow:
   1. Build JSON payload from `AdRequest` (device info, placement ID, consent flags)
   2. Set headers: `Content-Type: application/json`, `X-Api-Key: <apiKey>`, `User-Agent: <SDKVersion>`
-  3. Send POST to `https://auction.apexmediation.com/v1/auction` (or configured endpoint)
+  3. Send POST to `https://auction.apexmediation.ee/v1/auction` (or configured endpoint)
   4. Set timeout (default 5s, configurable via `SDKConfig`)
   5. Handle response:
      - **200 + valid JSON** → parse into `AdResponse`, fire `onComplete(response, null)`
@@ -629,8 +629,8 @@ public enum AdErrorCode
       public string AppId;
       
       [Header("Network")]
-      public string AuctionEndpoint = "https://auction.apexmediation.com/v1/auction";
-      public string ConfigEndpoint = "https://config.apexmediation.com/v1/config";
+      public string AuctionEndpoint = "https://auction.apexmediation.ee/v1/auction";
+      public string ConfigEndpoint = "https://config.apexmediation.ee/v1/config";
       public int TimeoutSeconds = 5;
       
       [Header("Security")]
@@ -679,7 +679,7 @@ public enum AdErrorCode
 - [ ] Fetch flow:
   1. Check `PlayerPrefs` for cached config (key: `apex_config_cache`)
   2. If cached and fresh (< 24h old), use cached config
-  3. Fetch fresh config from `https://config.apexmediation.com/v1/config?app_id={appId}`
+  3. Fetch fresh config from `https://config.apexmediation.ee/v1/config?app_id={appId}`
   4. Verify signature (Ed25519) if `ConfigPublicKey` present and not test mode
   5. Save to `PlayerPrefs` with timestamp
   6. Return config via `onComplete(config, null)`

@@ -126,7 +126,7 @@ npm run build
 fly deploy --config fly.staging.toml
 
 # Verify deployment
-curl https://api-staging.apexmediation.com/health
+curl https://api-staging.apexmediation.ee/health
 ```
 
 ### 7. Monitor First Automation Cycle ⏳
@@ -286,13 +286,13 @@ psql $DATABASE_URL -c "SELECT * FROM growth_metrics_dashboard;"
 ### Manual Triggers (Testing)
 ```bash
 # Trigger self-evolving system
-curl -X POST https://api.apexmediation.com/admin/triggers/self-evolving
+curl -X POST https://api.apexmediation.ee/admin/triggers/self-evolving
 
 # Trigger growth engine
-curl -X POST https://api.apexmediation.com/admin/triggers/growth-engine
+curl -X POST https://api.apexmediation.ee/admin/triggers/growth-engine
 
 # Trigger value multipliers
-curl -X POST https://api.apexmediation.com/admin/triggers/value-multipliers
+curl -X POST https://api.apexmediation.ee/admin/triggers/value-multipliers
 ```
 
 ### Emergency Override

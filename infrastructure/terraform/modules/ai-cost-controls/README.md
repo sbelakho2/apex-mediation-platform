@@ -36,7 +36,7 @@ module "ai_cost_controls" {
   enable_self_evolving_ai        = false
   
   # Alerting
-  alert_email       = "platform@apexmediation.com"
+  alert_email       = "platform@apexmediation.ee"
   slack_webhook_url = data.aws_secretsmanager_secret_version.slack_webhook.secret_string
 }
 ```
@@ -57,7 +57,7 @@ module "ai_cost_controls" {
   enable_growth_ai_analytics     = false
   enable_self_evolving_ai        = false
   
-  alert_email       = "platform@apexmediation.com"
+  alert_email       = "platform@apexmediation.ee"
   slack_webhook_url = var.slack_webhook_url
 }
 ```
@@ -78,7 +78,7 @@ module "ai_cost_controls" {
   enable_growth_ai_analytics     = true   # ✅ Enable Week 2
   enable_self_evolving_ai        = false
   
-  alert_email       = "platform@apexmediation.com"
+  alert_email       = "platform@apexmediation.ee"
   slack_webhook_url = var.slack_webhook_url
 }
 ```
@@ -99,7 +99,7 @@ module "ai_cost_controls" {
   enable_growth_ai_analytics     = true
   enable_self_evolving_ai        = true   # ✅ Enable Week 3
   
-  alert_email       = "platform@apexmediation.com"
+  alert_email       = "platform@apexmediation.ee"
   slack_webhook_url = var.slack_webhook_url
 }
 ```
@@ -326,6 +326,6 @@ kubectl port-forward -n monitoring svc/prometheus 9090:9090
 ## Support
 
 For issues with AI cost controls:
-- **Platform Team:** platform@apexmediation.com
+- **Platform Team:** platform@apexmediation.ee
 - **On-Call:** PagerDuty escalation
 - **Emergency Rollback:** See "Emergency Rollback" section above

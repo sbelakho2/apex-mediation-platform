@@ -35,32 +35,30 @@ const ensureDatabaseExists = async (connectionString: string): Promise<void> => 
   }
 };
 
+// Ensure critical env vars are present before modules import configuration.
+process.env.NODE_ENV = 'test';
+process.env.JWT_SECRET = process.env.JWT_SECRET || 'test-access-secret-change-me-please-123456';
+process.env.COOKIE_SECRET = process.env.COOKIE_SECRET || 'test-cookie-secret-needs-length-123456';
+process.env.DATABASE_URL =
+  process.env.DATABASE_URL ||
+  process.env.TEST_DATABASE_URL ||
+  'postgresql://postgres:postgres@localhost:5432/apexmediation_test';
+process.env.JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'test-refresh-secret-change-me-123456';
+process.env.JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '1h';
+process.env.REFRESH_TOKEN_EXPIRES_IN = process.env.REFRESH_TOKEN_EXPIRES_IN || '7d';
+
 // Initialize database connection before all tests
 beforeAll(async () => {
-  process.env.NODE_ENV = 'test';
-  if (!process.env.JWT_SECRET) {
-    process.env.JWT_SECRET = 'test-access-secret';
-  }
-  if (!process.env.JWT_REFRESH_SECRET) {
-    process.env.JWT_REFRESH_SECRET = 'test-refresh-secret';
-  }
-  if (!process.env.JWT_EXPIRES_IN) {
-    process.env.JWT_EXPIRES_IN = '1h';
-  }
-  if (!process.env.REFRESH_TOKEN_EXPIRES_IN) {
-    process.env.REFRESH_TOKEN_EXPIRES_IN = '7d';
-  }
   if (skipDbSetup) {
     return;
   }
 
   // Ensure both DATABASE_URL and TEST_DATABASE_URL are present before importing the pool
-  const resolvedDbUrl =
-    process.env.DATABASE_URL ||
-    process.env.TEST_DATABASE_URL ||
-    'postgresql://postgres:postgres@localhost:5432/apexmediation_test';
+  if (!process.env.DATABASE_URL) {
+    throw new Error('DATABASE_URL is required for DB-backed tests');
+  }
+  const resolvedDbUrl = process.env.DATABASE_URL;
   await ensureDatabaseExists(resolvedDbUrl);
-  process.env.DATABASE_URL = resolvedDbUrl;
   process.env.TEST_DATABASE_URL = resolvedDbUrl;
 
   const postgres = await import('../utils/postgres');

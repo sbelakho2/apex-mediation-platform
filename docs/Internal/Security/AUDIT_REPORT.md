@@ -60,7 +60,7 @@
 - ✅ `console/src/app/api/auth/[...nextauth]/route.ts` - Demo credentials
 
 **Demo Credentials:**
-- Email: `demo@apexmediation.com`
+- Email: `demo@apexmediation.ee`
 - Password: `demo` (any password works in mock mode)
 
 ---

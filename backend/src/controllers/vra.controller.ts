@@ -18,10 +18,22 @@ function isIsoLike(v: string | undefined): boolean {
   return Number.isFinite(t);
 }
 
+function isWindowOrdered(from?: string, to?: string): boolean {
+  if (!from || !to) return true; // if either missing, accept
+  const f = Date.parse(from);
+  const t = Date.parse(to);
+  if (!Number.isFinite(f) || !Number.isFinite(t)) return false;
+  return f <= t;
+}
+
 function validateDeltasQuery(q: Record<string, string | undefined>): { ok: true } | { ok: false; error: string } {
   // Validate ISO-ish dates for from/to
   if (!isIsoLike(q.from) || !isIsoLike(q.to)) {
     return { ok: false, error: 'Invalid from/to timestamp' };
+  }
+  // Enforce window ordering when both present
+  if (!isWindowOrdered(q.from, q.to)) {
+    return { ok: false, error: 'from must be <= to' };
   }
   // Validate pagination
   const page = parseNumber(q.page);
@@ -51,6 +63,14 @@ import { buildDisputeKit, resolveDisputeStorageFromEnv } from '../services/vra/d
 export async function getReconOverview(req: Request, res: Response) {
   try {
     const { app_id: appId, from, to } = req.query as Record<string, string | undefined>;
+    // Validate ISO-like dates for from/to (parity with deltas endpoints)
+    if (!isIsoLike(from) || !isIsoLike(to)) {
+      return res.status(400).json({ success: false, error: 'Invalid from/to timestamp' });
+    }
+    // Enforce window ordering when both are present
+    if (!isWindowOrdered(from, to)) {
+      return res.status(400).json({ success: false, error: 'from must be <= to' });
+    }
     const data = await vraService.getOverview({ appId, from, to });
     return res.json({ success: true, data });
   } catch (err) {
@@ -116,17 +136,21 @@ export async function getReconDeltasCsv(req: Request, res: Response) {
       const redacted = redactCsvField(String(r.reasonCode || ''));
       const reason = redacted
         .replace(/\r|\n/g, ' ')
+        .replace(/\t/g, ' ')
         .replace(/"/g, '""') // escape quotes if any
         .replace(/,/g, ' ');
+      // Stable numeric formatting: amount to 6 decimals, confidence to 2 decimals
+      const amountStr = (Number(r.amount) || 0).toFixed(6);
+      const confStr = Number.isFinite(Number(r.confidence)) ? (Number(r.confidence) as number).toFixed(2) : '0.00';
       const line = [
         r.kind,
-        String(Number(r.amount) || 0),
+        amountStr,
         r.currency,
         reason,
         r.windowStart,
         r.windowEnd,
         r.evidenceId,
-        String(Number(r.confidence) || 0),
+        confStr,
       ].join(',') + '\n';
       res.write(line);
     }

@@ -77,4 +77,4 @@ kill_timeout = 5
 # - NEXT_PUBLIC_API_URL (e.g., https://apexmediation-backend.fly.dev)
 # - NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
 # - NEXTAUTH_SECRET
-# - NEXTAUTH_URL (e.g., https://console.apexmediation.com)
+# - NEXTAUTH_URL (e.g., https://console.apexmediation.ee)

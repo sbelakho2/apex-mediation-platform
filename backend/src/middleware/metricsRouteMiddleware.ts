@@ -12,14 +12,14 @@ export function metricsRouteMiddleware(req: Request, res: Response, next: NextFu
   const start = process.hrtime.bigint();
   res.on('finish', () => {
     try {
-      const route_id = getRouteId(req);
+      const route = getRouteId(req);
       const method = (req.method || 'GET').toUpperCase();
       const status_code = String(res.statusCode);
       // Duration in seconds
       const end = process.hrtime.bigint();
       const durSec = Number(end - start) / 1e9;
-      try { httpRequestsTotal.inc({ method, route_id, status_code }); } catch { /* noop */ }
-      try { httpRequestDurationSeconds.observe({ method, route_id, status_code }, durSec); } catch { /* noop */ }
+      try { httpRequestsTotal.inc({ method, route, status_code }); } catch { /* noop */ }
+      try { httpRequestDurationSeconds.observe({ method, route, status_code }, durSec); } catch { /* noop */ }
     } catch { /* noop */ }
   });
   next();

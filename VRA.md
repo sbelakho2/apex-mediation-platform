@@ -56,6 +56,20 @@ Dashboards and Alerts
   - monitoring/grafana/dashboards/vra-reconcile.json — reconcile run rate, p95, deltas by kind, CH fallbacks and empty results.
 - Prometheus alert rules: monitoring/alerts/vra-alerts.yml (coverage drop, sustained variance, ingestion failures, proofs verify failures, reconcile delta spikes, ClickHouse fallbacks).
 
+Recent hardening (validated)
+- Input validation parity and window ordering
+  - All VRA endpoints consistently validate ISO-like timestamps; `from <= to` is enforced for `overview`, `deltas` (JSON/CSV). Inverted windows return HTTP 400.
+- CSV export safety & stability
+  - `reason_code` is sanitized to remove commas/newlines/tabs and to escape quotes; numeric outputs are stable: `amount` to 6 decimals, `confidence` to 2 decimals.
+  - CSV redaction covers emails, Bearer tokens, raw JWT-like strings, Stripe keys, and long card-like numerics.
+- Logger redaction
+  - Centralized logger masks sensitive patterns deeply and now fully masks any structured `reason_code` fields (top‑level and nested) to avoid accidental PII in logs.
+- CLIs & backfill orchestrator guardrails
+  - Stage CLIs (`vraBuildExpected.js`, `vraReconcile.js`) enforce a 3‑day max window and caps (e.g., `--limit` ≤ 10k) unless explicitly bypassed with `--force --yes`.
+  - Orchestrator `vraBackfill.js` requires `--from/--to` for `--step all`, rejects `--force` without `--yes`, and validates non‑positive `--limit` at the entry point. Checkpoints allow safe resume/idempotency.
+- Console/UI wiring
+  - Overview renders per‑network cards from `byNetwork` and deep‑links to Deltas with the current window. Deltas view preserves filters for CSV download and exposes confidence bands.
+
 Environment tunables (thresholds)
 - VRA_UNDERPAY_TOL (default 0.02 → 2%)
 - VRA_IVT_P95_BAND_PP (default 2 pp)

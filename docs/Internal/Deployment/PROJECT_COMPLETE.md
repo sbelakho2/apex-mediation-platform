@@ -204,7 +204,7 @@ _Last touched: 2025-11-18 during FIX-10 documentation alignment._
 - **iOS SDK:** Jazzy (auto-generated)
 - **Android SDK:** Dokka (auto-generated)
 - **Unity SDK:** JSDoc (auto-generated)
-- **URL:** https://docs.apexmediation.com
+- **URL:** https://docs.apexmediation.ee
 
 ---
 

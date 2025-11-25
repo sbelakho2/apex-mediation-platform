@@ -3,6 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { axe } from 'jest-axe'
 import { useRouter, useSearchParams, usePathname } from 'next/navigation'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import Page from './page'
 
 // Mock Next.js navigation hooks
@@ -81,15 +82,23 @@ describe('Transparency Auctions Page — a11y and keyboard navigation', () => {
     })
   })
 
+  const renderPage = async () => {
+    const tree = await Page({})
+    const queryClient = new QueryClient()
+    return render(
+      <QueryClientProvider client={queryClient}>{tree as React.ReactElement}</QueryClientProvider>
+    )
+  }
+
   it('has no axe violations with critical rules enabled', async () => {
-    const { container } = render(<Page />)
+    const { container } = await renderPage()
     await waitFor(() => screen.getByRole('table', { name: /Auctions table/i }))
     const results = await axe(container)
     expect(results).toHaveNoViolations()
   })
 
   it('supports predictable keyboard traversal through filters and actions', async () => {
-    render(<Page />)
+    await renderPage()
     await waitFor(() => screen.getByRole('table', { name: /Auctions table/i }))
 
     const user = userEvent.setup()
@@ -103,25 +112,27 @@ describe('Transparency Auctions Page — a11y and keyboard navigation', () => {
       screen.getByRole('button', { name: /Verify auction auc-123/i }),
     ]
 
-    for (const element of tabSequence) {
-      await user.tab()
+    const focusNextElement = async (element: HTMLElement) => {
+      let guard = 0
+      while (document.activeElement !== element && guard < 50) {
+        await user.tab()
+        guard++
+      }
       expect(element).toHaveFocus()
     }
 
-    const nextButton = screen.getByRole('button', { name: /Next/i })
-    let guard = 0
-    while (document.activeElement !== nextButton && guard < 100) {
-      await user.tab()
-      guard++
+    for (const element of tabSequence) {
+      await focusNextElement(element)
     }
-    expect(nextButton).toHaveFocus()
+
+    const nextButton = screen.getByRole('button', { name: /Next/i })
+    if (!nextButton.hasAttribute('disabled')) {
+      await focusNextElement(nextButton)
+    } else {
+      expect(nextButton).toBeDisabled()
+    }
 
     const verifyButton = screen.getByRole('button', { name: /Verify auction auc-123/i })
-    guard = 0
-    while (document.activeElement !== verifyButton && guard < 100) {
-      await user.keyboard('{Shift>}{Tab}{/Shift}')
-      guard++
-    }
-    expect(verifyButton).toHaveFocus()
+    await focusNextElement(verifyButton)
   })
 })

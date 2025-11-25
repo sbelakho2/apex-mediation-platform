@@ -1,107 +1,358 @@
-# Infrastructure Migration Plan: Ultra-Lean Stack
-## Goal: $175-300/month operational costs, break-even at 2 customers
+# Infrastructure Migration Plan — DigitalOcean, $50/mo Max (FRA1 + TLS hardened)
+## Goal: Production-ready under $50/month, minimal overhead
 
-**Current State**: Traditional expensive stack ($1,100-3,050/month)
-**Target State**: Solo operator optimized stack ($175-300/month)
-**Savings**: 85% cost reduction, 2x faster break-even
+This plan replaces the previous multi-provider direction (Supabase + Upstash + ClickHouse) with a single DigitalOcean droplet, DO Managed Postgres, self-hosted Redis, and Spaces/B2 for objects and backups. Monitoring leans on DO built-ins with an optional lightweight Grafana stack. ClickHouse is deferred; use Postgres-first analytics. Region is pinned to FRA1 (Frankfurt) by default for EU latency/compliance. TLS is terminated on the droplet via Let’s Encrypt with hardened defaults (HSTS after validation, OCSP stapling, modern ciphers).
+
+Budget ceiling: $50/month (target $44–49/month)
 
 ---
 
-## Migration Phases
+## 1. Core Infrastructure (DigitalOcean-centric, ≈ $40–45/mo)
+
+### 1.1 Compute — Main App Droplet
+Goal: one solid VPS that runs API, console, background jobs, Redis and light observability.
+
+- Create DigitalOcean account
+- Create droplet `apex-core-1`
+  - Type: Basic Regular Intel/AMD or Premium AMD/Intel
+  - Size: 2 vCPU / 4 GB RAM / 80 GB SSD (≈ $24/mo)
+  - OS: Ubuntu LTS (e.g., 22.04)
+  - Region: FRA1 (Frankfurt) — default. Only dev/test may use other regions if required.
+- Base server hardening
+  - Create non-root user, disable password SSH, allow only key auth
+  - Enable UFW: allow 22/tcp (SSH), 80/tcp (HTTP), 443/tcp (HTTPS); deny everything else
+  - Install fail2ban (or similar)
+  - Keep automatic security updates enabled (unattended-upgrades)
+- Runtime setup (Docker or bare metal)
+  - Install Docker + docker-compose (or containerd)
+  - Define docker-compose.yml for:
+    - api service (Go/Node/etc.)
+    - console service (Next.js/React frontend)
+    - redis service
+    - nginx reverse proxy (if not using app server directly)
+  - Expose only nginx on 80/443; keep app containers internal
+- App networking
+  - Use DigitalOcean Load Balancer (optional, later) – for now, single droplet
+  - Configure Nginx:
+    - `api.apexmediation.ee` → backend API
+    - `console.apexmediation.ee` → frontend console
+    - `status.apexmediation.ee` reserved (for status page later)
+
+### 1.2 Database — Managed PostgreSQL (Primary DB + Light Analytics)
+Goal: managed, low-maintenance Postgres; use it for core data + early analytics; defer ClickHouse until needed.
+
+- Create DigitalOcean Managed PostgreSQL cluster
+  - Size: smallest Basic/Development plan that supports your workload (≈ $15/mo)
+  - Region: FRA1 (same as droplet `apex-core-1`) to minimize latency and keep data in EU
+  - Storage: 10–20 GB to start
+- Security & access
+  - Restrict DB access to:
+    - apex-core-1 droplet private IP
+    - Optional admin IP (your VPN/home IP) via firewall rule
+  - Enable encrypted connections (SSL) and enforce SSL from apps
+- Create DB roles:
+  - `apex_app` (limited privileges)
+  - `apex_admin` (migration / maintenance)
+- Store DB credentials in:
+  - Env vars + encrypted secrets (DO secrets or 1Password)
+- Schema & migrations
+  - Port existing migrations (001–008+) to run against managed Postgres
+  - Use a migration tool (Flyway/Liquibase/Prisma/custom) in CI: one command `deploy:migrations` for prod
+  - Confirm:
+    - All tables created
+    - Indices on hot columns (e.g., app_id, placement_id, publisher_id, timestamp)
+    - Foreign keys & constraints correct
+- Backups & retention
+  - Enable automated daily backups (DO setting)
+  - Test point-in-time recovery (PITR) in a staging DB: restore to a new instance and verify schema & data
+  - Document RPO/RTO:
+    - RPO: 24h or better
+    - RTO: 1–4h for full restore
+- Analytics (Postgres first)
+  - Create aggregated analytics tables:
+    - `daily_app_metrics` (by app, date, country, format)
+    - `daily_network_metrics`
+  - Use Postgres for early analytics dashboards (avoid ClickHouse until volume demands it)
+  - Connection security:
+    - Require SSL from all clients (`sslmode=require`)
+    - Example connection URL: `postgresql://apex_app:<PASSWORD>@<DO_PG_HOST>:25060/ad_platform?sslmode=require`
+    - If using certificate pinning, download DO CA and configure the client accordingly
+
+### 1.3 Cache — Redis (Self-Hosted on the Droplet)
+Goal: simple in-memory cache for rate limits, short-lived state, feature flags; avoid Upstash cost.
+
+- Install Redis via Docker (`redis:6-alpine` or newer) or APT
+- Bind Redis to 127.0.0.1 (or Docker internal network) – no public exposure
+- Configure Redis:
+  - Set max memory limit (e.g., 512 MB) and eviction policy (`allkeys-lru`)
+  - Enable authentication (`requirepass`) even if local
+  - Turn on append-only file (AOF) or RDB snapshots depending on persistence needs
+- Use Redis for:
+  - Rate limiting
+  - Idempotency keys
+  - Short-lived feature flags / config cache
+  - Not for long-term analytics (that’s Postgres)
+
+### 1.4 TLS Termination & Security (Let’s Encrypt, hardened)
+Goal: always-on HTTPS with modern security defaults; optional mTLS for sensitive paths.
+
+- DNS: point `api.apexmediation.ee` and `console.apexmediation.ee` A/AAAA to the droplet public IP
+- Install certbot and obtain certificates for both hosts:
+  ```bash
+  apt-get update && apt-get install -y certbot python3-certbot-nginx
+  certbot --nginx -d api.apexmediation.ee -d console.apexmediation.ee --redirect --email ops@apexmediation.ee --agree-tos
+  ```
+- Harden Nginx TLS (example snippet):
+  ```nginx
+  # /etc/nginx/snippets/ssl-params.conf
+  ssl_protocols TLSv1.2 TLSv1.3;
+  ssl_prefer_server_ciphers on;
+  ssl_ciphers 'ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256';
+  ssl_session_timeout 1d;
+  ssl_session_cache shared:SSL:10m;
+  ssl_session_tickets off;
+  ssl_stapling on;
+  ssl_stapling_verify on;
+  resolver 1.1.1.1 1.0.0.1 valid=300s;
+  add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+  add_header X-Content-Type-Options nosniff;
+  add_header X-Frame-Options SAMEORIGIN;
+  add_header Referrer-Policy no-referrer-when-downgrade;
+  add_header X-XSS-Protection "1; mode=block";
+  ```
+- Update Nginx server blocks to listen on 443 with the issued certs and include `ssl-params.conf`.
+- Containerization note (if Nginx runs in Docker):
+  - Mount certs and snippets into the container read-only:
+    - In `infrastructure/docker-compose.prod.yml`, expose 443 and add:
+      - `- /etc/letsencrypt:/etc/letsencrypt:ro`
+      - `- ./nginx/snippets:/etc/nginx/snippets:ro`
+  - Reference certbot paths inside the container, e.g. `/etc/letsencrypt/live/api.apexmediation.ee/fullchain.pem`.
+- Cert renewals: certbot installs a systemd timer/cron for auto-renew; verify with `certbot renew --dry-run`.
+- Optional mTLS for internal endpoints (example `/metrics`): create a dedicated server/location with `ssl_verify_client on;` and trusted client CA bundle.
+
+### 1.5 Object Storage & Backups
+Goal: cheap, durable object storage for invoices, reports, and long-term backups.
+
+
+
+DigitalOcean Spaces (simple, tightly integrated)
+- Create a Spaces bucket (`apex-prod-objects`) (≈ $5/mo)
+- Use for:
+  - PDFs and HTML exports (invoices, Proof-of-Revenue digest reports)
+  - Generated CSVs / zipped dispute kits (VRA)
+- Apply:
+  - Private by default, with signed URLs for downloads
+  - Lifecycle rules for intermediate artifacts (delete after 30–90 days)
+
+
+### 1.6 Budget Check
+Approximate monthly:
+- Droplet 2 vCPU / 4GB: $24
+- Managed Postgres basic: $15
+- Spaces or B2: $5
+- Misc (egress, DNS, backup overhead): $3–5
+👉 Total: $44–49 / month, within your $50 target.
+
+---
+
+## 2. Monitoring, Logging & Error Tracking (Solo-friendly, Low Cost)
+
+### 2.1 Basic Host & App Monitoring — DigitalOcean Monitoring
+- Enable DO monitoring for `apex-core-1`: CPU, RAM, Disk, Network metrics
+- Configure alerts:
+  - CPU > 80% for 5 mins
+  - Memory > 80% for 5 mins
+  - Disk > 80% usage
+  - Droplet unreachable
+
+### 2.1.b Lightweight Grafana Option (Optional)
+If you want rich graphs and can spare some RAM:
+- Run Prometheus + Grafana in Docker on `apex-core-1`
+- Prometheus scraping:
+  - Node exporter (system metrics)
+  - App metrics endpoints (`/metrics` from API)
+- Grafana:
+  - System dashboard
+  - API performance dashboard (p95 latency, error rate)
+  - Business metrics (DAU, MRR, usage, mediated revenue)
+- Set retention low (7–30 days) to conserve storage
+- Protect Grafana with: Auth + IP restriction (or VPN)
+- If this feels heavy, skip self-hosting initially and use DO built-in charts + hosted Grafana Cloud free tier.
+
+### 2.2 Application Logging
+- Standardize on structured logs (JSON) from backend and services:
+  - Fields: timestamp, level, service, request_id, user_id, app_id, path, latency_ms, error_code
+- For now:
+  - Stream logs to file + DO console
+  - Add log rotation (logrotate) to keep disk usage in check
+- Optional: add Loki (self-hosted) later if log volume grows
+
+### 2.3 Error Tracking
+- Create Sentry account (free tier)
+- Integrate Sentry into:
+  - Backend API
+  - Console (frontend)
+- Configure:
+  - Release version tagging
+  - Environment tags (dev, staging, prod)
+  - Basic sanitization (no PII in logs/errors)
+- For SDK crash reporting on clients:
+  - Use Firebase Crashlytics for Android & iOS
+  - Ensure mapping/scopes correct (no user identifiers beyond what’s necessary)
+
+### 2.4 Status Page
+To avoid self-hosting for now:
+- Use Upptime (GitHub-based) or a free/cheap service like UptimeRobot / Better Stack
+- Monitor:
+  - https://api.apexmediation.ee/health
+  - https://console.apexmediation.ee/
+- Configure:
+  - Friendly names and status messages
+  - Public status page: `status.apexmediation.ee` CNAME → service / GitHub Pages
+- Test:
+  - Simulate outage by stopping API → ensure status turns red + notification is sent
+
+### 2.5 Alerting (Solo-Founder Reality)
+- Use PagerDuty Free, Better Stack alerts, or just email/SMS from monitoring
+- Set up:
+  - Critical alerts:
+    - API health endpoint down
+    - DB connectivity loss
+    - Error rate > X% for Y minutes
+  - Warning alerts:
+    - High latency
+    - Queue/backlog growth
+- Escalation policy:
+  - For now: you only — Email + SMS
+- Test:
+  - Trigger a test alert (force failing `/health`) and confirm:
+    - Email arrives
+    - SMS/push arrives (if configured)
+
+---
+
+## 3. “Works Out of the Box” Checklist
+Final pass to ensure the infra/monitoring stack does what you need with minimal babysitting.
+
+### 3.1 Connectivity & Routing
+- `api.apexmediation.ee` resolves and serves HTTPS (valid cert)
+- `console.apexmediation.ee` resolves and loads app
+- All API endpoints used by console reachable from browser (CORS OK)
+- SSH access via key only works; root login disabled
+
+### 3.2 App + DB
+- API can connect to DO Managed Postgres (correct host, SSL, credentials)
+- Migrations run cleanly in prod
+- Basic flows tested end-to-end:
+  - Signup
+  - App creation
+  - Placement configuration
+  - SDK key generation
+  - Data appears in DB & dashboards
+
+### 3.3 Redis & Caching
+- Redis accessible from API only, not from public internet
+- Cache used for at least one visible performance path (e.g., reading static configs)
+- Failover behaviour: If Redis is down, app degrades gracefully (no hard crash)
+
+### 3.4 Monitoring & Alerts
+- At least one Grafana or DO dashboard shows: CPU, RAM, Disk, network; API latency, QPS, error rate
+- Sentry issues arrive for forced error in dev (test endpoint)
+- Status page reflects downtime when API `/health` returns 500 or times out
+- At least one alert has been triggered & acknowledged successfully
+
+### 3.5 Backups & Recovery
+- DO Postgres backups are enabled
+- Tested: Restore DB snapshot to new instance in staging; app pointed to new DB works
+- Object storage:
+  - File upload/download tested (e.g., dummy invoice)
+  - Bucket permissions correct (private; signed URLs only)
+
+---
+
+## TL;DR
+Move from Supabase + Upstash + ClickHouse to DigitalOcean droplet + DO Managed Postgres + simple Redis + Spaces/B2.
+
+Lean heavily on:
+- DO monitoring,
+- Sentry,
+- a simple status page,
+- very small self-hosted observability where needed.
+
+Your infra cost stays under $50/month, with enough horsepower for an early production BYO mediation+VRA platform, and low mental overhead for a solo operator.
 
 ### Phase 1: Core Infrastructure Migration (Week 1-2)
 **Goal**: Migrate primary services to cost-effective alternatives
 **Cost Impact**: -$400-800/month
 
-#### 1.1 Application Hosting: Fly.io Migration
+#### 1.1 Application Hosting: DigitalOcean Droplet
 **From**: AWS EC2 ($100-300/month) or Heroku ($50-250/month)
-**To**: Fly.io ($14-50/month)
-
-**Fly.io Pricing**:
-- 2× shared-cpu-1x VMs (256MB RAM): $0/month (free tier)
-- 2× shared-cpu-2x VMs (512MB RAM): $7/month each = $14/month
-- 2× dedicated-cpu-1x VMs (2GB RAM): $25/month each = $50/month (if needed for scale)
+**To**: DigitalOcean Droplet (2 vCPU / 4 GB RAM / 80 GB SSD) (~$24/month)
 
 **Migration Steps**:
 ```bash
-# 1. Install Fly CLI
-curl -L https://fly.io/install.sh | sh
+# 1. Provision droplet
+# DO Console → Create Droplet → Ubuntu 22.04 LTS, 2 vCPU / 4GB / 80GB, region FRA/AMS/NYC
 
-# 2. Login and create Fly app
-fly auth login
-fly launch --name apexmediation-backend --region sjc --no-deploy
+# 2. Harden host (SSH into droplet as root)
+adduser deploy && usermod -aG sudo deploy
+rsync -av ~/.ssh/authorized_keys deploy@<droplet-ip>:/home/deploy/.ssh/
+sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config && systemctl restart ssh
+ufw allow 22 && ufw allow 80 && ufw allow 443 && ufw --force enable
+apt-get update && apt-get install -y fail2ban unattended-upgrades
 
-# 3. Configure fly.toml
-cat > fly.toml <<EOF
-app = "apexmediation-backend"
-primary_region = "sjc"
+# 3. Install Docker & docker-compose
+curl -fsSL https://get.docker.com | bash
+usermod -aG docker deploy
 
-[build]
-  dockerfile = "Dockerfile"
+# 4. Clone repo and configure
+sudo -u deploy mkdir -p /opt/apex && sudo -u deploy git clone <repo-url> /opt/apex
+cd /opt/apex
 
-[env]
-  NODE_ENV = "production"
-  PORT = "8080"
+# 5. Configure environment
+cp backend/.env.example backend/.env
+# Set DATABASE_URL to DO Managed Postgres with sslmode=require; set REDIS_URL to internal redis
 
-[[services]]
-  internal_port = 8080
-  protocol = "tcp"
+# 6. Start stack (only Nginx exposed in production; for dev map ports as needed)
+docker compose -f docker-compose.yml up -d backend console redis
 
-  [[services.ports]]
-    handlers = ["http"]
-    port = 80
+# 7. Install and configure Nginx as reverse proxy
+apt-get install -y nginx
+cat >/etc/nginx/sites-available/apexmediation.conf <<'NG'
+server {
+  listen 80;
+  server_name api.apexmediation.ee;
+  location / {
+    proxy_pass http://127.0.0.1:8080;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+  }
+}
+server {
+  listen 80;
+  server_name console.apexmediation.ee;
+  location / {
+    proxy_pass http://127.0.0.1:3000;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+  }
+}
+NG
+ln -s /etc/nginx/sites-available/apexmediation.conf /etc/nginx/sites-enabled/
+systemctl restart nginx
 
-  [[services.ports]]
-    handlers = ["tls", "http"]
-    port = 443
-
-  [services.concurrency]
-    type = "connections"
-    hard_limit = 250
-    soft_limit = 200
-
-  [[services.tcp_checks]]
-    interval = "10s"
-    timeout = "2s"
-    grace_period = "5s"
-
-[[vm]]
-  cpu_kind = "shared"
-  cpus = 1
-  memory_mb = 512
-EOF
-
-# 4. Set secrets
-fly secrets set DATABASE_URL=$DATABASE_URL \\
-  STRIPE_SECRET_KEY=$STRIPE_SECRET_KEY \\
-  RESEND_API_KEY=$RESEND_API_KEY \\
-  JWT_SECRET=$JWT_SECRET
-
-# 5. Deploy
-fly deploy --ha=false # Single region, 1 VM for testing
-
-# 6. Scale after validation
-fly scale count 2 # 2 VMs for high availability
-fly autoscale balanced min=2 max=10 # Auto-scale on load
-EOF
+# 8. Issue certificates (MANDATORY for prod)
+# Use certbot on the droplet to terminate TLS locally; Cloudflare can remain DNS-only (no proxy) or be configured for Full (strict) if used.
+apt-get update && apt-get install -y certbot python3-certbot-nginx
+certbot --nginx -d api.apexmediation.ee -d console.apexmediation.ee --redirect --email ops@apexmediation.ee --agree-tos
+certbot renew --dry-run
 ```
 
 **Verification**:
 ```bash
-# Check deployment status
-fly status
-
-# View logs
-fly logs
-
-# Open in browser
-fly open
-
-# SSH into VM
-fly ssh console
-
-# Check health
-curl https://apexmediation-backend.fly.dev/health
+curl -I http://api.apexmediation.ee/health
+curl -I http://console.apexmediation.ee/
+docker ps --format 'table {{.Names}}\t{{.Status}}'
 ```
 
 **Rollback Plan**:
@@ -111,158 +362,45 @@ curl https://apexmediation-backend.fly.dev/health
 
 ---
 
-#### 1.2 Database: Supabase PostgreSQL
-**From**: AWS RDS ($50-200/month) or Heroku Postgres ($50-250/month)
-**To**: Supabase Pro ($25/month)
+#### 1.2 Database: DigitalOcean Managed PostgreSQL
+Use DigitalOcean Managed Postgres (Basic/Dev tier) in the same region as the droplet with SSL required.
 
-**Supabase Pro Includes**:
-- 8GB database
-- 100GB bandwidth
-- 50GB file storage
-- Daily backups (7-day retention)
-- Point-in-time recovery
-- Database branching (for staging)
-
-**Migration Steps**:
-```bash
-# 1. Create Supabase project
-# Visit https://supabase.com/dashboard
-# Click "New Project" → Name: "apexmediation" → Region: "US West (Oregon)"
-# Save connection strings
-
-# 2. Export existing database
-pg_dump $OLD_DATABASE_URL > backup_$(date +%Y%m%d).sql
-
-# 3. Import to Supabase
-psql $SUPABASE_DATABASE_URL < backup_$(date +%Y%m%d).sql
-
-# 4. Run migrations
-for migration in backend/database/migrations/*.sql; do
-  echo "Running $migration..."
-  psql $SUPABASE_DATABASE_URL -f "$migration"
-done
-
-# 5. Verify data integrity
-psql $SUPABASE_DATABASE_URL -c "\\dt" # List tables
-psql $SUPABASE_DATABASE_URL -c "SELECT COUNT(*) FROM users;"
-psql $SUPABASE_DATABASE_URL -c "SELECT COUNT(*) FROM subscriptions;"
-
-# 6. Update application DATABASE_URL
-fly secrets set DATABASE_URL=$SUPABASE_DATABASE_URL
-
-# 7. Test connections
-npm run test:db
-```
-
-**Performance Tuning**:
-```sql
--- Enable connection pooling (Supabase uses PgBouncer)
--- Update pool size in app
--- backend/db/pool.ts
-export const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  max: 20, // Supabase Pro supports 60 connections
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 5000,
-});
-
--- Create indexes for critical queries
-CREATE INDEX CONCURRENTLY idx_usage_records_customer_date 
-  ON usage_records(customer_id, created_at DESC);
-
-CREATE INDEX CONCURRENTLY idx_events_type_created 
-  ON events(event_type, created_at DESC) WHERE processed = false;
-```
+Key steps (see section 1.2 above for details):
+- Create cluster (10–20GB to start), restrict access to droplet private IP.
+- Create roles `apex_app` and `apex_admin`; store credentials in DO Secrets/1Password.
+- Run migrations via CI task `deploy:migrations`; verify tables, indexes, FKs.
+- Enable backups and perform a PITR drill; document RPO/RTO.
 
 ---
 
-#### 1.3 Analytics Database: ClickHouse Cloud
-**From**: Self-hosted ClickHouse on EC2 ($100-200/month) or BigQuery ($50-150/month)
-**To**: ClickHouse Cloud ($50-100/month)
+#### 1.3 Analytics: Postgres-first (ClickHouse deferred)
+Policy: Always prefer Postgres over 3rd-party analytics services until clear scale signals. ClickHouse is deferred and removed from this plan. Build early aggregates in Postgres and add indexes/materialized views as needed.
 
-**ClickHouse Cloud Pricing**:
-- Development tier: $50/month (24GB RAM, 100GB storage)
-- Production tier: $100/month (96GB RAM, 200GB storage)
-- Pay-per-query for additional usage
-
-**Migration Steps**:
-```bash
-# 1. Create ClickHouse Cloud project
-# Visit https://clickhouse.cloud/
-# Create project → Region: "US West"
-
-# 2. Export existing ClickHouse data
-clickhouse-client --host=$OLD_CH_HOST --query="SELECT * FROM impressions FORMAT CSV" > impressions.csv
-clickhouse-client --host=$OLD_CH_HOST --query="SELECT * FROM clicks FORMAT CSV" > clicks.csv
-clickhouse-client --host=$OLD_CH_HOST --query="SELECT * FROM revenue FORMAT CSV" > revenue.csv
-
-# 3. Create tables in ClickHouse Cloud
-clickhouse-client --host=$NEW_CH_HOST --secure --password=$CH_PASSWORD < backend/database/clickhouse/schema.sql
-
-# 4. Import data
-clickhouse-client --host=$NEW_CH_HOST --secure --password=$CH_PASSWORD --query="INSERT INTO impressions FORMAT CSV" < impressions.csv
-# Repeat for clicks, revenue tables
-
-# 5. Update application CLICKHOUSE_URL
-fly secrets set CLICKHOUSE_URL=$NEW_CLICKHOUSE_URL CLICKHOUSE_PASSWORD=$CH_PASSWORD
-
-# 6. Verify queries
-curl -X POST "https://apexmediation-backend.fly.dev/api/analytics/dashboard" \\
-  -H "Authorization: Bearer $API_KEY" \\
-  -H "Content-Type: application/json" \\
-  -d '{"start_date": "2025-10-01", "end_date": "2025-11-01"}'
-```
+Recommended steps:
+- Create `daily_app_metrics` and `daily_network_metrics` tables with concise schemas and appropriate composite indexes.
+- Use materialized views and scheduled refresh (cron/systemd timer) for heavy reports.
+- Keep long-term raw event storage minimal; archive to Spaces/B2 as gzip CSV/Parquet when needed.
+- Only revisit ClickHouse if Postgres p95 query latency for dashboards exceeds SLOs after optimization.
 
 ---
 
-#### 1.4 Cache: Upstash Redis
-**From**: AWS ElastiCache ($50-150/month) or Redis Cloud ($60-200/month)
-**To**: Upstash Redis ($10-20/month)
+#### 1.4 Cache: Self-hosted Redis (no 3rd-party)
+Policy: Always use self-hosted Redis on the droplet for ephemeral caching (rate limits, idempotency, flags). Do not use Upstash/Redis Cloud.
 
-**Upstash Pricing**:
-- Pay-per-request model
-- Free tier: 10,000 requests/day
-- Pro: $10/month for 100K requests/day
-- Enterprise: $20/month for 1M requests/day
-
-**Migration Steps**:
-```bash
-# 1. Create Upstash database
-# Visit https://console.upstash.com/
-# Click "Create Database" → Name: "apexmediation-cache" → Region: "US West"
-
-# 2. Install Upstash Redis client
-cd backend
-npm install @upstash/redis
-
-# 3. Update Redis client
-# backend/lib/redis.ts
-import { Redis } from '@upstash/redis';
-
-export const redis = new Redis({
-  url: process.env.UPSTASH_REDIS_URL!,
-  token: process.env.UPSTASH_REDIS_TOKEN!,
-});
-
-# 4. Migrate cache data (optional, cache can be empty)
-# No migration needed - cache is ephemeral
-
-# 5. Update environment variables
-fly secrets set UPSTASH_REDIS_URL=$UPSTASH_URL UPSTASH_REDIS_TOKEN=$UPSTASH_TOKEN
-
-# 6. Test cache operations
-npm run test:cache
-```
+Operational notes:
+- Bind to localhost or Docker internal network; require password; set maxmemory 512MB + `allkeys-lru`.
+- Persistence: AOF or snapshots depending on need; for pure cache, RDB snapshots daily are sufficient.
+- No migration required for cache keys; cold start is acceptable.
 
 ---
 
 ### Phase 2: Monitoring & Observability (Week 3)
-**Goal**: Replace Datadog ($50-200/month) with self-hosted stack ($0/month on Fly.io)
+**Goal**: Replace Datadog ($50-200/month) with a lightweight, self-hosted stack on the droplet (optional) or use DO built-ins
 **Cost Impact**: -$50-200/month
 
 #### 2.1 Self-Hosted Monitoring: Grafana + Prometheus + Loki
 **From**: Datadog ($50-200/month)
-**To**: Self-hosted on Fly.io ($0 - runs on existing VMs)
+**To**: Self-hosted on the DigitalOcean droplet ($0 incremental)
 
 **Architecture**:
 ```
@@ -280,11 +418,11 @@ npm run test:cache
 
 **Setup**:
 ```bash
-# 1. Create monitoring VM on Fly.io
-fly launch --name apexmediation-monitoring --region sjc --no-deploy
+# 1. Prepare monitoring stack directory on the droplet
+mkdir -p /opt/monitoring && cd /opt/monitoring
 
 # 2. Create docker-compose.yml for monitoring stack
-cat > monitoring/docker-compose.yml <<EOF
+cat > docker-compose.yml <<EOF
 version: '3.8'
 services:
   prometheus:
@@ -292,7 +430,7 @@ services:
     ports:
       - "9090:9090"
     volumes:
-      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus-data:/prometheus
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
@@ -315,7 +453,7 @@ services:
       - GF_INSTALL_PLUGINS=grafana-piechart-panel
     volumes:
       - grafana-data:/var/lib/grafana
-      - ./grafana-datasources.generated.yml:/etc/grafana/provisioning/datasources/datasources.yml
+      - ./grafana-datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml
 
 volumes:
   prometheus-data:
@@ -324,7 +462,7 @@ volumes:
 EOF
 
 # 3. Configure Prometheus scraping
-cat > monitoring/prometheus.yml <<EOF
+cat > prometheus.yml <<EOF
 global:
   scrape_interval: 15s
 
@@ -332,23 +470,21 @@ scrape_configs:
   - job_name: 'backend'
     static_configs:
       - targets:
-        - 'apexmediation-backend.fly.dev:8080'
+        - '127.0.0.1:8080'
         metrics_path: '/metrics'
   
   - job_name: 'console'
     static_configs:
       - targets:
-        - 'apexmediation-console.fly.dev:3000'
+        - '127.0.0.1:3000'
         metrics_path: '/metrics'
 EOF
 
 # 4. Deploy monitoring stack
-cd monitoring
-fly deploy
+docker compose up -d
 
 # 5. Access Grafana
-fly open # Opens https://apexmediation-monitoring.fly.dev:3000
-# Login: admin / $GRAFANA_PASSWORD
+echo "Open http://<droplet-ip>:3000 (admin / change via GF_SECURITY_ADMIN_PASSWORD)."
 
 # 6. Import dashboards
 # Backend API: Dashboard ID 11159 (Node.js Application)
@@ -358,9 +494,9 @@ fly open # Opens https://apexmediation-monitoring.fly.dev:3000
 
 ---
 
-#### 2.2 Error Tracking: Self-Hosted GlitchTip
+#### 2.2 Error Tracking: Self-Hosted GlitchTip (Optional)
 **From**: Sentry paid tier ($26-80/month)
-**To**: GlitchTip self-hosted on Fly.io ($0/month)
+**To**: GlitchTip self-hosted on the droplet ($0 incremental)
 
 **GlitchTip Features**:
 - Unlimited events (vs Sentry's 100K/month limit)
@@ -370,11 +506,11 @@ fly open # Opens https://apexmediation-monitoring.fly.dev:3000
 
 **Setup**:
 ```bash
-# 1. Create GlitchTip VM
-fly launch --name apexmediation-errors --region sjc --no-deploy
+# 1. Prepare GlitchTip directory on the droplet
+mkdir -p /opt/glitchtip && cd /opt/glitchtip
 
 # 2. Create docker-compose.yml
-cat > glitchtip/docker-compose.yml <<EOF
+cat > docker-compose.yml <<EOF
 version: '3.8'
 services:
   postgres:
@@ -402,20 +538,20 @@ services:
       SECRET_KEY: \${SECRET_KEY}
       PORT: 8000
       EMAIL_URL: smtp://\${SMTP_USER}:\${SMTP_PASSWORD}@smtp.resend.com:587
-      GLITCHTIP_DOMAIN: https://errors.apexmediation.com
-      DEFAULT_FROM_EMAIL: errors@apexmediation.com
+      GLITCHTIP_DOMAIN: https://errors.apexmediation.ee
+      DEFAULT_FROM_EMAIL: errors@apexmediation.ee
 
 volumes:
   postgres-data:
 EOF
 
 # 3. Deploy GlitchTip
-cd glitchtip
-fly secrets set SECRET_KEY=$(openssl rand -hex 32) DB_PASSWORD=$(openssl rand -hex 16)
-fly deploy
+export SECRET_KEY=$(openssl rand -hex 32)
+export DB_PASSWORD=$(openssl rand -hex 16)
+docker compose up -d
 
 # 4. Initialize GlitchTip
-fly open # Opens https://errors.apexmediation.com
+echo "Open https://errors.apexmediation.ee and complete setup."
 # Create admin account
 # Create organization "ApexMediation"
 # Create project "Backend"
@@ -434,10 +570,10 @@ Sentry.init({
 });
 
 # 7. Update environment variables
-fly secrets set GLITCHTIP_DSN=$GLITCHTIP_DSN
+export GLITCHTIP_DSN=$GLITCHTIP_DSN
 
 # 8. Test error reporting
-curl -X POST https://apexmediation-backend.fly.dev/api/test/error
+curl -X POST https://api.apexmediation.ee/api/test/error
 # Check GlitchTip dashboard for error event
 ```
 
@@ -449,7 +585,7 @@ curl -X POST https://apexmediation-backend.fly.dev/api/test/error
 
 #### 3.1 Email Marketing: Listmonk
 **From**: Mailchimp ($350-500/month for 10K-50K subscribers)
-**To**: Listmonk self-hosted on Fly.io ($0/month) + Resend.com for delivery (free 3K/month)
+**To**: Listmonk self-hosted on the droplet ($0 incremental) + Resend.com for delivery (free 3K/month)
 
 **Listmonk Features**:
 - Unlimited subscribers (vs Mailchimp's tiered pricing)
@@ -459,11 +595,11 @@ curl -X POST https://apexmediation-backend.fly.dev/api/test/error
 
 **Setup**:
 ```bash
-# 1. Create Listmonk VM
-fly launch --name apexmediation-listmonk --region sjc --no-deploy
+# 1. Prepare Listmonk directory on the droplet
+mkdir -p /opt/listmonk && cd /opt/listmonk
 
 # 2. Create docker-compose.yml
-cat > listmonk/docker-compose.yml <<EOF
+cat > docker-compose.yml <<EOF
 version: '3.8'
 services:
   postgres:
@@ -491,17 +627,17 @@ volumes:
 EOF
 
 # 3. Create config.toml
-cat > listmonk/config.toml <<EOF
+cat > config.toml <<EOF
 [app]
 address = "0.0.0.0:9000"
 admin_username = "admin"
-admin_password = "$LISTMONK_PASSWORD" # Set via fly secrets
+admin_password = "$LISTMONK_PASSWORD"
 
 [db]
 host = "postgres"
 port = 5432
 user = "listmonk"
-password = "$DB_PASSWORD" # Set via fly secrets
+password = "$DB_PASSWORD" # Provided via environment/secrets manager
 database = "listmonk"
 ssl_mode = "disable"
 
@@ -512,7 +648,7 @@ host = "smtp.resend.com"
 port = 587
 auth_protocol = "login"
 username = "resend"
-password = "$RESEND_API_KEY" # Set via fly secrets
+password = "$RESEND_API_KEY" # Provided via environment/secrets manager
 email_format = "html"
 max_conns = 10
 idle_timeout = "15s"
@@ -521,12 +657,12 @@ max_msg_retries = 2
 EOF
 
 # 4. Deploy Listmonk
-cd listmonk
-fly secrets set DB_PASSWORD=$(openssl rand -hex 16) LISTMONK_PASSWORD=$(openssl rand -hex 16) RESEND_API_KEY=$RESEND_API_KEY
-fly deploy
+export DB_PASSWORD=$(openssl rand -hex 16)
+export LISTMONK_PASSWORD=$(openssl rand -hex 16)
+docker compose up -d
 
 # 5. Initialize Listmonk
-fly open # Opens https://listmonk.apexmediation.com
+echo "Open https://listmonk.apexmediation.ee and complete setup."
 # Login: admin / $LISTMONK_PASSWORD
 # Setup → SMTP Settings → Test Connection → ✓
 
@@ -541,7 +677,7 @@ fly open # Opens https://listmonk.apexmediation.com
 
 #### 3.2 Workflow Automation: n8n
 **From**: Zapier ($19-249/month)
-**To**: n8n self-hosted on Fly.io ($0/month)
+**To**: n8n self-hosted on the droplet ($0 incremental)
 
 **n8n Features**:
 - 280+ integrations (Stripe, Slack, GitHub, email, databases)
@@ -551,56 +687,35 @@ fly open # Opens https://listmonk.apexmediation.com
 
 **Setup**:
 ```bash
-# 1. Create n8n VM
-fly launch --name apexmediation-workflows --region sjc --no-deploy
+# 1. Prepare n8n directory on the droplet
+mkdir -p /opt/n8n && cd /opt/n8n
 
-# 2. Create Dockerfile
-cat > n8n/Dockerfile <<EOF
-FROM n8nio/n8n:latest
-USER root
-RUN apk add --no-cache postgresql-client
-USER node
+# 2. Create docker-compose.yml
+cat > docker-compose.yml <<EOF
+version: '3.8'
+services:
+  n8n:
+    image: n8nio/n8n:latest
+    restart: unless-stopped
+    ports:
+      - "5678:5678"
+    environment:
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=https
+      - N8N_HOST=workflows.apexmediation.ee
+      - WEBHOOK_URL=https://workflows.apexmediation.ee
+      - GENERIC_TIMEZONE=UTC
+    volumes:
+      - n8n_data:/home/node/.n8n
+volumes:
+  n8n_data:
 EOF
 
-# 3. Create fly.toml
-cat > n8n/fly.toml <<EOF
-app = "apexmediation-workflows"
-primary_region = "sjc"
+# 3. Deploy n8n
+docker compose up -d
 
-[build]
-  dockerfile = "Dockerfile"
-
-[env]
-  N8N_PORT = "5678"
-  N8N_PROTOCOL = "https"
-  N8N_HOST = "workflows.apexmediation.com"
-  WEBHOOK_URL = "https://workflows.apexmediation.com"
-  NODE_ENV = "production"
-  
-[[mounts]]
-  source = "n8n_data"
-  destination = "/home/node/.n8n"
-
-[[services]]
-  internal_port = 5678
-  protocol = "tcp"
-
-  [[services.ports]]
-    handlers = ["http"]
-    port = 80
-
-  [[services.ports]]
-    handlers = ["tls", "http"]
-    port = 443
-EOF
-
-# 4. Deploy n8n
-cd n8n
-fly deploy
-
-# 5. Access n8n
-fly open # Opens https://workflows.apexmediation.com
-# Create account: owner@apexmediation.com
+# 4. Access n8n
+echo "Open https://workflows.apexmediation.ee to complete setup (create owner account)."
 
 # 6. Example workflows to create:
 # - Workflow 1: New Customer → Send Welcome Email + Create Stripe Customer
@@ -633,7 +748,7 @@ fly open # Opens https://workflows.apexmediation.com
 # 1. Fork Upptime repository
 # Visit https://github.com/upptime/upptime
 # Click "Use this template" → "Create a new repository"
-# Repository name: "status" (will become status.apexmediation.com)
+# Repository name: "status" (will become status.apexmediation.ee)
 
 # 2. Configure .upptimerc.yml
 cat > .upptimerc.yml <<EOF
@@ -643,33 +758,33 @@ user-agent: upptime
 
 sites:
   - name: Backend API
-    url: https://api.apexmediation.com/health
+    url: https://api.apexmediation.ee/health
     expectedStatusCodes:
       - 200
   
   - name: Console
-    url: https://console.apexmediation.com
+    url: https://console.apexmediation.ee
     expectedStatusCodes:
       - 200
   
   - name: Documentation
-    url: https://docs.apexmediation.com
+    url: https://docs.apexmediation.ee
     expectedStatusCodes:
       - 200
   
   - name: SDK Download (iOS)
-    url: https://cdn.apexmediation.com/sdk/ios/latest/ApexSDK.framework.zip
+    url: https://cdn.apexmediation.ee/sdk/ios/latest/ApexSDK.framework.zip
     expectedStatusCodes:
       - 200
   
   - name: SDK Download (Android)
-    url: https://cdn.apexmediation.com/sdk/android/latest/apex-sdk.aar
+    url: https://cdn.apexmediation.ee/sdk/android/latest/apex-sdk.aar
     expectedStatusCodes:
       - 200
 
 status-website:
-  cname: status.apexmediation.com
-  logoUrl: https://apexmediation.com/logo.png
+  cname: status.apexmediation.ee
+  logoUrl: https://apexmediation.ee/logo.png
   name: ApexMediation Status
   introTitle: "**Real-time status** and uptime monitoring"
   introMessage: All systems operational
@@ -707,20 +822,20 @@ EOF
 
 # 4. Enable GitHub Pages
 # Settings → Pages → Source: "GitHub Actions"
-# Custom domain: status.apexmediation.com
+# Custom domain: status.apexmediation.ee
 
 # 5. Add DNS records
-# CNAME status.apexmediation.com → apexmediation.github.io
+# CNAME status.apexmediation.ee → apexmediation.github.io
 
 # 6. Wait for first run
 # Actions tab → Wait for workflows to complete (~5 minutes)
 
 # 7. Visit status page
-# https://status.apexmediation.com
+# https://status.apexmediation.ee
 
 # 8. Subscribe to updates
-# RSS feed: https://status.apexmediation.com/history/rss.xml
-# Atom feed: https://status.apexmediation.com/history/atom.xml
+# RSS feed: https://status.apexmediation.ee/history/rss.xml
+# Atom feed: https://status.apexmediation.ee/history/atom.xml
 ```
 
 ---
@@ -731,7 +846,7 @@ EOF
 
 #### 5.1 Website Analytics: Umami or Plausible
 **From**: Google Analytics (free but privacy concerns)
-**To**: Umami self-hosted on Fly.io ($0/month)
+**To**: Umami self-hosted on the droplet ($0 incremental)
 
 **Umami Features**:
 - Privacy-focused (no cookies, GDPR compliant)
@@ -742,11 +857,11 @@ EOF
 
 **Setup**:
 ```bash
-# 1. Create Umami VM
-fly launch --name apexmediation-analytics --region sjc --no-deploy
+# 1. Prepare Umami directory on the droplet
+mkdir -p /opt/umami && cd /opt/umami
 
 # 2. Create docker-compose.yml
-cat > umami/docker-compose.yml <<EOF
+cat > docker-compose.yml <<EOF
 version: '3.8'
 services:
   postgres:
@@ -775,22 +890,21 @@ volumes:
 EOF
 
 # 3. Deploy Umami
-cd umami
-fly secrets set DB_PASSWORD=$(openssl rand -hex 16) APP_SECRET=$(openssl rand -hex 32)
-fly deploy
+export DB_PASSWORD=$(openssl rand -hex 16)
+export APP_SECRET=$(openssl rand -hex 32)
+docker compose up -d
 
 # 4. Initialize Umami
-fly open # Opens https://analytics.apexmediation.com
-# Login: admin / umami (change password immediately)
+echo "Open https://analytics.apexmediation.ee (via Nginx) and log in as admin (change password)."
 
 # 5. Add website
 # Settings → Websites → Add Website
 # Name: "ApexMediation Homepage"
-# Domain: apexmediation.com
+# Domain: apexmediation.ee
 # Copy tracking code
 
 # 6. Add tracking code to website
-<script defer src="https://analytics.apexmediation.com/u.js" data-website-id="YOUR-WEBSITE-ID"></script>
+<script defer src="https://analytics.apexmediation.ee/u.js" data-website-id="YOUR-WEBSITE-ID"></script>
 
 # 7. Track events
 umami.track('signup', { plan: 'indie' });
@@ -804,41 +918,17 @@ umami.track('sdk_download', { platform: 'ios' });
 
 ## Cost Comparison: Before vs After
 
-### Traditional Stack (Before)
-| Service | Monthly Cost | Annual Cost |
-|---------|--------------|-------------|
-| AWS EC2 (2× t3.medium) | $70 | $840 |
-| AWS RDS PostgreSQL (db.t3.small) | $50 | $600 |
-| AWS ElastiCache Redis | $50 | $600 |
-| AWS S3 + CloudFront | $30 | $360 |
-| Datadog | $100 | $1,200 |
-| Sentry | $80 | $960 |
-| SendGrid | $80 | $960 |
-| Mailchimp | $350 | $4,200 |
-| Zapier | $49 | $588 |
-| UptimeRobot | $58 | $696 |
-| **Total** | **$917/month** | **$11,004/year** |
-
-### Ultra-Lean Stack (After)
-| Service | Monthly Cost | Annual Cost |
-|---------|--------------|-------------|
-| Fly.io (2× VMs @ $7 each) | $14 | $168 |
-| Supabase Pro (PostgreSQL) | $25 | $300 |
-| ClickHouse Cloud | $50 | $600 |
-| Upstash Redis | $10 | $120 |
-| Cloudflare R2 (storage) | $5 | $60 |
-| Resend.com (email) | $0 | $0 (free 3K/mo) |
-| Fly.io (monitoring VM) | $7 | $84 |
-| Fly.io (Listmonk VM) | $7 | $84 |
-| Fly.io (n8n VM) | $7 | $84 |
-| Fly.io (Umami VM) | $7 | $84 |
-| Backblaze B2 (backups) | $1 | $12 |
-| **Total** | **$133/month** | **$1,596/year** |
-
-### Savings
-- **Monthly**: $784 saved (85% reduction)
-- **Annual**: $9,408 saved
-- **Break-even**: 2 customers @ $67/month avg (vs 7 customers in old stack)
+### Cost Snapshot (DigitalOcean-first)
+| Service | Monthly Cost | Notes |
+|---------|--------------|-------|
+| DigitalOcean Droplet (2 vCPU/4GB/80GB) | ~$24 | Single droplet `apex-core-1` |
+| DO Managed Postgres (Basic/Dev) | ~$15 | SSL required, automated backups |
+| Object Storage (Spaces or B2) | ~$5 | Private bucket + signed URLs |
+| Misc (egress, DNS, backups) | $3–5 | Buffer for bandwidth/monitoring |
+| Optional: Grafana/Prometheus | $0 | Self-host on droplet; low retention |
+| Optional: Status Page (Upptime) | $0 | GitHub Pages |
+| Optional: Email (Resend) | $0–15 | 3K emails/mo free |
+| **Infra Subtotal** | **$44–49** | ≤ $50 cap |
 
 ---
 

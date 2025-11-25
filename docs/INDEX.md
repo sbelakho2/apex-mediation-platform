@@ -47,7 +47,7 @@ Docs/
 - Error codes and handling
 
 ### Billing & Compliance
-- `pricing.md` - Revenue share models (15%, 12%, 10%)
+- `pricing.md` - BYO platform tiers (Starter 0%, Growth 2.5%, Scale 2.0%, Enterprise 1.0–1.5% + minimum)
 - Payment methods and schedules
 - Estonian tax compliance
 - GDPR and data processing

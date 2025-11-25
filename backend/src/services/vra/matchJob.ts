@@ -88,7 +88,7 @@ export async function runMatchingBatch(params: MatchBatchParams): Promise<{ auto
   );
 
   if (stmtRows.length === 0 || expRows.length === 0) {
-    return { auto: 0, review: 0, unmatched: stmtRows.length, inserted: 0 };
+    return { auto: 0, review: 0, unmatched: stmtRows.length, inserted: 0, reviewPersisted: 0 };
   }
 
   const stmts: StatementRowLite[] = stmtRows.map((r) => ({

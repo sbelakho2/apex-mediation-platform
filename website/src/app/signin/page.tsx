@@ -177,7 +177,7 @@ function SignInInner() {
             </div>
           </div>
           <div className="mt-4 text-xs text-center text-gray-700 bg-gray-50 p-3 rounded border" style={{borderColor:'var(--gray-200)'}}>
-            <p className="mb-1">Email: demo@apexmediation.com</p>
+            <p className="mb-1">Email: demo@apexmediation.ee</p>
             <p>Password: demo1234</p>
           </div>
         </div>

@@ -11,6 +11,8 @@ const config = {
   moduleFileExtensions: ['ts', 'tsx', 'js', 'json'],
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1',
+    // Allow CLI script tests under backend/scripts/** to import TS sources via "../src/..."
+    '^\.\./src/(.*)$': '<rootDir>/src/$1',
   },
   // Ignore built output to prevent duplicate manual mocks (__mocks__) from dist
   modulePathIgnorePatterns: ['<rootDir>/dist/'],

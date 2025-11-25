@@ -49,7 +49,7 @@ jobs:
     needs: pre-deploy-checks
     environment:
       name: staging
-      url: https://api-staging.rivalapexmediation.com
+      url: https://api-staging.rivalapexmediation.ee
     
     steps:
       - name: Checkout code
@@ -78,7 +78,7 @@ jobs:
             --set image.repository=${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-backend \
             --set image.tag=${{ github.sha }} \
             --set environment=${{ env.ENVIRONMENT }} \
-            --set ingress.host=api-staging.rivalapexmediation.com \
+            --set ingress.host=api-staging.rivalapexmediation.ee \
             --set database.url=${{ secrets.STAGING_DATABASE_URL }} \
             --set clickhouse.url=${{ secrets.STAGING_CLICKHOUSE_URL }} \
             --set redis.url=${{ secrets.STAGING_REDIS_URL }} \
@@ -94,7 +94,7 @@ jobs:
       - name: Run smoke tests
         run: |
           sleep 30  # Wait for service to be fully ready
-          curl -f https://api-staging.rivalapexmediation.com/health || exit 1
+          curl -f https://api-staging.rivalapexmediation.ee/health || exit 1
 
   # Deploy console to staging
   deploy-console:
@@ -102,7 +102,7 @@ jobs:
     needs: deploy-backend
     environment:
       name: staging
-      url: https://console-staging.rivalapexmediation.com
+      url: https://console-staging.rivalapexmediation.ee
     
     steps:
       - name: Checkout code
@@ -127,8 +127,8 @@ jobs:
             --set image.repository=${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-console \
             --set image.tag=${{ github.sha }} \
             --set environment=${{ env.ENVIRONMENT }} \
-            --set ingress.host=console-staging.rivalapexmediation.com \
-            --set api.url=https://api-staging.rivalapexmediation.com \
+            --set ingress.host=console-staging.rivalapexmediation.ee \
+            --set api.url=https://api-staging.rivalapexmediation.ee \
             --set nextauth.secret=${{ secrets.STAGING_NEXTAUTH_SECRET }} \
             --wait \
             --timeout 10m
@@ -141,7 +141,7 @@ jobs:
       - name: Run smoke tests
         run: |
           sleep 30
-          curl -f https://console-staging.rivalapexmediation.com || exit 1
+          curl -f https://console-staging.rivalapexmediation.ee || exit 1
 
   # Run post-deployment tests
   post-deploy-tests:
@@ -162,8 +162,8 @@ jobs:
 
       - name: Run E2E tests against staging
         env:
-          API_URL: https://api-staging.rivalapexmediation.com
-          CONSOLE_URL: https://console-staging.rivalapexmediation.com
+          API_URL: https://api-staging.rivalapexmediation.ee
+          CONSOLE_URL: https://console-staging.rivalapexmediation.ee
           TEST_USER_EMAIL: ${{ secrets.STAGING_TEST_USER_EMAIL }}
           TEST_USER_PASSWORD: ${{ secrets.STAGING_TEST_USER_PASSWORD }}
         run: |
@@ -174,8 +174,8 @@ jobs:
       - name: Run API health checks
         run: |
           # Check all critical endpoints
-          curl -f https://api-staging.rivalapexmediation.com/health
-          curl -f https://api-staging.rivalapexmediation.com/api/v1/health
+          curl -f https://api-staging.rivalapexmediation.ee/health
+          curl -f https://api-staging.rivalapexmediation.ee/api/v1/health
 
   # Database migrations
   run-migrations:
@@ -296,7 +296,7 @@ jobs:
       
       - name: Run smoke tests
         run: |
-          curl -f https://staging-api.rivalapexmediation.com/health || exit 1
+          curl -f https://staging-api.rivalapexmediation.ee/health || exit 1
           npm run test:smoke -- --env=staging
       
       - name: Notify Slack

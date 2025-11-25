@@ -1,6 +1,10 @@
 # ApexMediation Deployment Roadmap
 ## From Development to Production in 16 Weeks
 
+> Update — 2025-11-24: DigitalOcean-Centric Rollout
+>
+> Phase 1 has been refocused from previous multi-provider choices to a single DigitalOcean droplet running Dockerized services behind Nginx, DO Managed PostgreSQL, self-hosted Redis, and Spaces/B2 for storage/backups. Monitoring leans on DO built-ins with optional on-box Prometheus/Grafana. This aligns with the <$50/mo target and lowers operational overhead for a solo founder.
+
 **Current Date**: 2025-11-04
 **Target Launch**: 2026-02-23 (16 weeks)
 **Goal**: Solo operator platform with $175-300/month costs, 2-customer break-even
@@ -36,69 +40,35 @@
 
 ## 🚀 Phase 1: Infrastructure Migration (Weeks 1-2)
 
-**Goal**: Reduce costs from $917/month to $133/month (85% savings)
+**Goal**: Reduce costs to ~$44–49/month while improving operational simplicity.
 
 ### Week 1: Core Services Migration
 
-#### Day 1-2: Fly.io Setup
-- [ ] Install Fly CLI: `curl -L https://fly.io/install.sh | sh`
-- [ ] Create Fly.io account (free tier: 3GB RAM, 160GB bandwidth/month)
-- [ ] Deploy backend: `cd backend && ./deploy-backend.sh staging`
-- [ ] Deploy console: `cd console && fly deploy`
-- [ ] Test deployments:
-  ```bash
-  curl https://apexmediation-backend-staging.fly.dev/health
-  curl https://apexmediation-console-staging.fly.dev/api/health
-  ```
+#### Day 1-2: DigitalOcean Droplet Setup
+- [ ] Create DO account and provision droplet `apex-core-1` (2 vCPU/4GB/80GB, Ubuntu 22.04, FRA/AMS/NYC).
+- [ ] Harden host: non-root user, SSH keys only, disable password SSH, UFW allow 22/80/443, fail2ban, unattended-upgrades.
+- [ ] Install Docker + docker-compose; clone repo to `/opt/apex`.
+- [ ] Configure docker-compose services: `api`, `console`, `redis` (private), `nginx` (only public 80/443).
+- [ ] Configure Nginx sites: `api.apexmediation.ee` → API; `console.apexmediation.ee` → Console; reserve `status.apexmediation.ee`.
 
-#### Day 3-4: Database Migration
-- [ ] Create Supabase project (Pro: $25/month)
-  - Visit https://supabase.com/dashboard
-  - Create project: "apexmediation-prod"
-  - Region: US West (Oregon)
-- [ ] Export existing database:
-  ```bash
-  pg_dump $OLD_DATABASE_URL > backup_$(date +%Y%m%d).sql
-  ```
-- [ ] Import to Supabase:
-  ```bash
-  psql $SUPABASE_DATABASE_URL < backup_$(date +%Y%m%d).sql
-  ```
-- [ ] Run migrations:
-  ```bash
-  for migration in backend/database/migrations/*.sql; do
-    psql $SUPABASE_DATABASE_URL -f "$migration"
-  done
-  ```
-- [ ] Update app DATABASE_URL:
-  ```bash
-  fly secrets set DATABASE_URL=$SUPABASE_DATABASE_URL --app apexmediation-backend-staging
-  ```
+#### Day 3-4: Database Migration to DO Managed Postgres
+- [ ] Create DO Managed PostgreSQL (basic/dev tier) in same region; 10–20GB storage.
+- [ ] Restrict access to droplet private IP and enforce SSL.
+- [ ] Create roles `apex_app` (limited) and `apex_admin` (migrations); store secrets securely.
+- [ ] Run migrations (001–008+) using CI `deploy:migrations`; verify tables, indices, FKs.
+- [ ] Enable automated backups; execute PITR restore to staging and document RPO/RTO.
 
-#### Day 5: Analytics & Cache Migration
-- [ ] Setup ClickHouse Cloud ($50-100/month)
-  - Visit https://clickhouse.cloud/
-  - Create project: "apexmediation-analytics"
-  - Export/import analytics data
-- [ ] Setup Upstash Redis ($10/month)
-  - Visit https://console.upstash.com/
-  - Create database: "apexmediation-cache"
-  - Update app secrets:
-    ```bash
-    fly secrets set \
-      UPSTASH_REDIS_URL=$UPSTASH_URL \
-      UPSTASH_REDIS_TOKEN=$UPSTASH_TOKEN \
-      --app apexmediation-backend-staging
-    ```
+#### Day 5: Cache and Object Storage
+- [ ] Run Redis in Docker bound to localhost/private network; set `requirepass`, maxmemory 512MB, allkeys-lru, AOF enabled.
+- [ ] Choose object storage: DO Spaces (`apex-prod-objects`) or Backblaze B2; default private, signed URLs.
+- [ ] Configure lifecycle rules (30–90 days) for intermediates; plan weekly/monthly encrypted DB exports to bucket.
 
 #### Day 6-7: Testing & Validation
 - [ ] Performance testing:
   ```bash
   # Load test with k6
   k6 run --vus 100 --duration 5m load-test.js
-  
-  # Check P95 latency < 100ms
-  # Check error rate < 0.1%
+  # Targets: P95 latency < 100ms; error rate < 0.1%
   ```
 - [ ] Smoke tests:
   ```bash
@@ -106,25 +76,53 @@
   ```
 - [ ] Database integrity check:
   ```bash
-  psql $SUPABASE_DATABASE_URL -c "SELECT COUNT(*) FROM users;"
-  psql $SUPABASE_DATABASE_URL -c "SELECT COUNT(*) FROM subscriptions;"
+  psql $DATABASE_URL -c "SELECT COUNT(*) FROM users;"
+  psql $DATABASE_URL -c "SELECT COUNT(*) FROM subscriptions;"
+  ```
+- [ ] Billing policy snapshot:
+  ```bash
+  curl https://api.apexmediation.ee/api/v1/billing/policy | jq '.primaryRail.provider, .fallbackRails'
+  # Ensure response matches backend/src/config/billingPolicy.ts + customer docs cache bust instructions
   ```
 
 ### Week 2: Monitoring & Observability
 
-#### Day 8-9: Monitoring Stack Setup
-- [ ] Deploy monitoring on Fly.io:
+#### Day 8-9: Monitoring Stack Setup (DigitalOcean Droplet)
+- [ ] Deploy lightweight Prometheus + Grafana on the droplet (optional):
   ```bash
-  cd monitoring
-  fly launch --name apexmediation-monitoring --region sjc
-  fly deploy
+  # On apex-core-1
+  sudo mkdir -p /opt/monitoring && cd /opt/monitoring
+  cat > docker-compose.yml <<'YML'
+  services:
+    prometheus:
+      image: prom/prometheus:latest
+      volumes:
+        - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      ports:
+        - "9090:9090"
+    grafana:
+      image: grafana/grafana:latest
+      ports:
+        - "3000:3000"
+      environment:
+        - GF_SECURITY_ADMIN_USER=admin
+        - GF_SECURITY_ADMIN_PASSWORD=changeme
+  YML
+  cat > prometheus.yml <<'CFG'
+  global:
+    scrape_interval: 15s
+  scrape_configs:
+    - job_name: 'backend'
+      static_configs:
+        - targets: ['127.0.0.1:8080']
+    - job_name: 'node'
+      static_configs:
+        - targets: ['127.0.0.1:9100']
+  CFG
+  docker run -d --name node-exporter -p 9100:9100 --restart unless-stopped quay.io/prometheus/node-exporter:latest
+  docker compose up -d
   ```
-- [ ] Start monitoring locally (for development):
-  ```bash
-  cd monitoring
-  ./deploy-monitoring.sh start
-  ```
-- [ ] Access Grafana: http://localhost:3000 (admin / password from .env)
+- [ ] Access Grafana: http://<droplet-ip>:3000 (admin / password from docker-compose)
 
 #### Day 10: Dashboard Configuration
 - [ ] Import pre-built dashboards:
@@ -163,7 +161,7 @@
   ```
 
 **Week 2 Deliverables**:
-- ✅ Monitoring dashboard live at monitoring.apexmediation.com
+- ✅ Monitoring dashboard live at monitoring.apexmediation.ee
 - ✅ Alerts flowing to founder email/SMS
 - ✅ Error tracking operational
 - ✅ Baseline metrics established
@@ -177,12 +175,9 @@
 ### Week 3: Email Marketing (Listmonk)
 
 #### Day 15-16: Listmonk Setup
-- [ ] Deploy Listmonk on Fly.io:
-  ```bash
-  cd listmonk
-  fly launch --name apexmediation-listmonk
-  fly deploy
-  ```
+- [ ] Deploy Listmonk on the droplet via Docker or use a managed email tool:
+  - Containerize `listmonk` with PostgreSQL on the droplet network
+  - Restrict admin UI via auth and IP allowlist
 - [ ] Configure Resend.com SMTP:
   - Update listmonk/config.toml
   - Test email delivery
@@ -202,12 +197,8 @@
 - [ ] Create product update announcement template
 
 #### Day 19-21: Workflow Automation (n8n)
-- [ ] Deploy n8n on Fly.io:
-  ```bash
-  cd n8n
-  fly launch --name apexmediation-workflows
-  fly deploy
-  ```
+- [ ] Deploy n8n on the droplet via Docker (optional):
+  - Mount persistent volume, set admin credentials via env, restrict access
 - [ ] Create workflows:
   1. New customer → Send welcome email + Create Stripe customer
   2. Payment failed → Update status + Send dunning email + Alert founder
@@ -223,26 +214,22 @@
   ```yaml
   sites:
     - name: Backend API
-      url: https://api.apexmediation.com/health
+      url: https://api.apexmediation.ee/health
     - name: Console
-      url: https://console.apexmediation.com
+      url: https://console.apexmediation.ee
     - name: Documentation
-      url: https://docs.apexmediation.com
+      url: https://docs.apexmediation.ee
   ```
 - [ ] Enable GitHub Pages
-- [ ] Add custom domain: status.apexmediation.com
+- [ ] Add custom domain: status.apexmediation.ee
 - [ ] Configure DNS: CNAME status → username.github.io
 
 #### Day 24-25: Website Analytics (Umami)
-- [ ] Deploy Umami on Fly.io:
-  ```bash
-  cd umami
-  fly launch --name apexmediation-analytics
-  fly deploy
-  ```
+- [ ] Deploy Umami on the droplet via Docker (optional):
+  - Use Postgres for storage; expose only via Nginx with TLS
 - [ ] Add tracking code to website:
   ```html
-  <script defer src="https://analytics.apexmediation.com/u.js" 
+  <script defer src="https://analytics.apexmediation.ee/u.js" 
           data-website-id="YOUR-WEBSITE-ID"></script>
   ```
 - [ ] Configure event tracking:
@@ -276,7 +263,7 @@
 ### Week 5: Security Hardening
 
 #### Day 29-30: SSL/TLS Configuration
-- [ ] Configure Fly.io TLS certificates (automatic via Let's Encrypt)
+- [ ] Configure TLS certificates (Let's Encrypt via Nginx or Cloudflare origin certs)
 - [ ] Force HTTPS redirects
 - [ ] Enable HSTS headers:
   ```javascript
@@ -510,7 +497,7 @@
   - Revenue milestone ($10K earned) → "Tell your indie dev community"
 - [ ] Embeddable badges:
   ```html
-  <img src="https://apexmediation.com/badge/impressions/1000000" 
+  <img src="https://apexmediation.ee/badge/impressions/1000000" 
        alt="1M impressions served via ApexMediation" />
   ```
 
@@ -573,15 +560,15 @@
   ```javascript
   // k6 load test script
   export default function() {
-    http.get('https://api.apexmediation.com/health');
-    http.post('https://api.apexmediation.com/api/v1/auth/login', {
+    http.get('https://api.apexmediation.ee/health');
+    http.post('https://api.apexmediation.ee/api/v1/auth/login', {
       email: 'test@example.com',
       password: 'password'
     });
   }
   ```
 - [ ] 1,000 requests/second API throughput
-- [ ] Verify auto-scaling triggers (Fly.io scales up at 80% CPU)
+- [ ] Verify scaling headroom and resource usage (monitor CPU <80%, RAM <80%)
 
 #### Day 71-74: SDK Performance
 - [ ] Measure SDK overhead:
@@ -747,7 +734,7 @@
 If anything goes wrong during deployment:
 
 1. **Immediate**: Revert DNS to old infrastructure (TTL: 300s)
-2. **Within 5 min**: Stop Fly.io deployments
+2. **Within 5 min**: Pause any legacy deployments on non‑DO platforms
 3. **Within 15 min**: Restore database from last backup
 4. **Within 30 min**: Notify customers via status page
 5. **Within 1 hour**: Root cause analysis, fix, redeploy
@@ -762,9 +749,9 @@ Rollback triggers:
 
 ## 📞 Support During Migration
 
-**Founder Contact**: sabel@apexmediation.com | +XXX-XXX-XXXX
-**Status Page**: https://status.apexmediation.com
-**Monitoring**: https://monitoring.apexmediation.com
+**Founder Contact**: sabel@apexmediation.ee | +XXX-XXX-XXXX
+**Status Page**: https://status.apexmediation.ee
+**Monitoring**: https://monitoring.apexmediation.ee
 **Incident Response Time**: <15 minutes (critical), <2 hours (non-critical)
 
 ---

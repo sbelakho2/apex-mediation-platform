@@ -1,3 +1,143 @@
+Changelog — DO Infra Plan: FRA1 + TLS Hardened + Postgres‑First (2025-11-25)
+
+Summary
+- Pins production region to FRA1, mandates on-droplet TLS termination with Let’s Encrypt and hardened Nginx settings, and removes remaining ClickHouse/Upstash guidance from the infra migration plan in favor of Postgres‑first analytics and self‑hosted Redis.
+
+What changed (highlights)
+- Infrastructure plan
+  - Updated `docs/Internal/Infrastructure/INFRASTRUCTURE_MIGRATION_PLAN.md` title and scope to “(FRA1 + TLS hardened)”.
+  - Region pinned to FRA1 (Frankfurt) across compute and DO Managed Postgres; added EU data locality note.
+  - New TLS section with certbot steps, OCSP stapling, modern ciphers, HSTS, and optional mTLS for sensitive endpoints like `/metrics`.
+  - Replaced prior “ClickHouse Cloud” section with “Postgres‑first (ClickHouse deferred)”, including materialized views and aggregation guidance.
+  - Replaced “Upstash Redis” section with “Self‑hosted Redis (no 3rd‑party)” and operational notes.
+  - Strengthened Phase 1 steps to make cert issuance mandatory for prod and provided verification commands.
+
+Validation & notes
+- Documentation‑only changes. No runtime code altered; business logic unaffected.
+- Existing `infrastructure/nginx/apexmediation.conf` already contains secure headers and comments; follow the plan to enable TLS on 443 with certbot.
+
+---
+
+Changelog — Nginx TLS Enablement Artifacts (2025-11-25)
+
+Summary
+- Adds production-ready HTTPS configuration for Nginx with hardened TLS parameters and updates the production compose file to expose 443 and mount certbot-managed certificates.
+
+What changed (highlights)
+- Nginx
+  - Updated `infrastructure/nginx/apexmediation.conf` to include 443 `server` blocks for `api.apexmediation.ee` and `console.apexmediation.ee`, referencing certbot paths and a shared TLS snippet.
+  - Added `infrastructure/nginx/snippets/ssl-params.conf` with modern ciphers, OCSP stapling, and security headers (HSTS commented until verified).
+- Compose
+  - Updated `infrastructure/docker-compose.prod.yml` to expose `443:443`, mount `/etc/letsencrypt` read-only, and include the `snippets` directory.
+- Documentation
+  - Extended `docs/Internal/Infrastructure/INFRASTRUCTURE_MIGRATION_PLAN.md` with containerization notes for mounting certs/snippets inside Nginx.
+
+Validation & notes
+- Documentation and infra-only artifacts. No application business logic changed.
+- Run certbot on the droplet host, then `docker compose -f infrastructure/docker-compose.prod.yml up -d nginx` to pick up certificates. Validate with SSL Labs before enabling HSTS.
+
+---
+
+Changelog — Test Harness Stabilization + DO Prod Artifacts (2025-11-25)
+
+Summary
+- Stabilizes the backend Jest runner by forcing a single config file and adds production deployment artifacts for the DigitalOcean rollout.
+
+What changed (highlights)
+- Backend tests
+  - Updated `backend/package.json` test scripts to explicitly use `jest.config.cjs`, eliminating the prior “multiple configuration files found” error and restoring a green baseline for fast/unit suites by default.
+  - Preserved DB-heavy integration tests behind `FORCE_DB_SETUP=true` to keep CI fast while still allowing full runs on demand.
+- Production deployment artifacts (DigitalOcean)
+  - Added `infrastructure/docker-compose.prod.yml` that runs `backend`, `console`, and `redis` on a private network with `nginx` as the only public service; environment variables assume DO Managed Postgres with `sslmode=require` and Redis `requirepass`.
+  - Added `infrastructure/nginx/apexmediation.conf` for API and Console reverse proxying with sensible security headers, gzip, and placeholders for tightening `/metrics` access. TLS termination can be enabled here or at Cloudflare.
+
+Validation & notes
+- `npm run test:backend --workspace backend` now executes with a single Jest configuration; previously observed config-conflict error is resolved.
+- These changes are additive (new files + script switches); no business logic altered. Next steps will wire staging/prod envs and complete end-to-end validation per the DO plan.
+
+---
+
+Changelog — Production Env Template + Infra Verify Scripts (2025-11-25)
+
+Summary
+- Adds production environment template and first-class verification scripts to safely validate DigitalOcean services (Postgres, Redis, Spaces/B2) without touching business logic.
+
+What changed (highlights)
+- Production config
+  - Added `infrastructure/production/.env.backend.example` covering DO Managed Postgres with `sslmode=require`, Redis `requirepass`, strict CORS for apex domains, and Spaces/B2 variables.
+- Verify scripts (backend)
+  - `backend/scripts/verifyDb.ts` with `npm run verify:db` — checks connectivity and optional expected tables via `VERIFY_DB_EXPECT_TABLES`.
+  - `backend/scripts/verifyRedis.ts` with `npm run verify:redis` — AUTH, PING, short TTL set/get, and cleanup.
+  - `backend/scripts/verifyStorage.ts` with `npm run verify:storage` — S3‑compatible PUT/HEAD/GET/DELETE against DO Spaces or B2.
+  - Wired new scripts into `backend/package.json`.
+
+Validation & notes
+- These are additive utilities + templates only; no runtime behavior changes.
+- Intended for staging/prod smoke checks during DO roll‑out; they can run locally with the right env vars.
+
+---
+
+Changelog — Stripe-First Billing Policy Prep (2025-11-25)
+
+Summary
+- Aligns Resend billing notifications, QA evidence capture, and readiness tracking with the `stripe-mandatory-2025-11` policy so we can prove parity before flipping the billing rollout flag.
+
+What changed (highlights)
+- Email builders & previews
+  - Added `backend/services/email/billingEmailBuilders.ts`, extracting the HTML/subject builders and payload types for billing preview, payment failed, payment retry, and payment succeeded notifications so Resend, QA tooling, and tests share the exact copy.
+  - Updated `backend/services/email/EmailAutomationService.ts` to consume the shared builders, keeping runtime behavior identical while enabling offline rendering.
+  - Introduced `backend/scripts/generateBillingEmailSamples.ts` plus `npm run qa:billing-emails --workspace backend`, which renders HTML previews into `docs/Internal/QA/billing-policy/samples/` for interim reviews.
+- QA evidence pipeline
+  - Created `docs/Internal/QA/billing-policy/README.md` with capture requirements, file naming conventions, and a submission checklist (screenshots + `.eml` exports for preview/failed/retry/success emails, console/UI shots, website pricing, etc.).
+  - Auto-generate placeholder HTML samples (billing preview, payment failed, payment retry, payment succeeded) so reviewers can validate copy/layout before staging Resend events fire; once real emails arrive, they drop side-by-side in the same folder.
+- Documentation & tracking
+  - Rebuilt `docs/Internal/Deployment/PRODUCTION_READINESS_CHECKLIST.md` as a checkbox-driven list so the “QA evidence captured” gate lives next to the Starter → Autopay section.
+  - Expanded `docs/Internal/Deployment/BILLING_POLICY_ROLLOUT.md` with an Evidence Tracker table that links to the generated HTML samples today and will be swapped for live evidence; also logged the builder/tooling milestone for auditing.
+
+Validation & notes
+- `npm run qa:billing-emails --workspace backend` (renders HTML previews via `ts-node` without requiring Resend credentials).
+- Standard backend lint/test suites still report pre-existing `any` warnings unrelated to these changes; no new lint violations introduced.
+
+Changelog — Infra Migration Plan (DO) Rewritten under $50 Cap (2025-11-24)
+
+Summary
+- Rewrites `docs/Internal/Infrastructure/INFRASTRUCTURE_MIGRATION_PLAN.md` to a precise, budget-capped ($50/mo max) DigitalOcean plan. Details a single droplet (2 vCPU/4GB) running Dockerized `api`, `console`, `redis`, and `nginx`; DO Managed Postgres (SSL enforced); Redis on-droplet (requirepass, 512MB, allkeys-lru); and Spaces/B2 for object storage + backups. Includes DO Monitoring, optional Prometheus+Grafana (short retention), Sentry, and an Upptime/UptimeRobot status page. Adds a pragmatic “Works out of the box” checklist.
+
+What changed (highlights)
+- Infrastructure plan
+  - Updated to: DigitalOcean droplet `apex-core-1`, DO Managed Postgres, Redis (local-only), Spaces/B2, Nginx routing for `api.apexmediation.ee` and `console.apexmediation.ee` with `status.apexmediation.ee` reserved.
+  - Security baselines: non-root user, SSH keys only, UFW (22/80/443), fail2ban, unattended-upgrades.
+  - Database roles: `apex_app`, `apex_admin`; SSL required; PITR test guidance and RPO/RTO documentation.
+  - Object storage lifecycle rules; signed URLs; weekly/monthly encrypted DB export template (restore drill required).
+  - Monitoring/alerts: DO Monitoring alerts, optional Grafana stack, Sentry integration, status page monitors.
+  - Budget check: Droplet $24 + DO PG $15 + Spaces/B2 $5 + misc $3–5 → total $44–49/mo (≤ $50 cap).
+
+Validation
+- Documentation-only change. No runtime or build behavior affected.
+- Tests: not impacted by this docs update; next infra step will add CI guardrails and keep a green subset for infra-only commits.
+
+---
+
+Changelog — Mandatory SEPA/ACH Capture + Auth Integration (2025-11-25)
+
+Summary
+- Enforces bank-account capture for every new publisher signup, persists normalized SEPA/ACH details server-side, and proves the flow end-to-end with the DB-backed auth integration suite.
+
+What changed (highlights)
+- Database & validation
+  - Added `backend/migrations/029_publisher_bank_accounts.sql` to create the `publisher_bank_accounts` table with scheme-aware constraints and a uniqueness guard per publisher.
+  - `backend/src/schemas/bankAccount.ts` now defines a discriminated union for SEPA vs. ACH payloads (IBAN/BIC vs. account/routing numbers + account type) so controllers can trust the incoming shape.
+- Auth controller & repository
+  - `backend/src/controllers/auth.controller.ts` requires `bankAccount` on `/auth/register`, normalizes casing/spacing, and keeps refresh-token IDs as UUIDs to satisfy the PG constraint when integration tests run against a real database.
+  - `backend/src/repositories/userRepository.ts` writes the provided bank details inside the existing publisher/user transaction (upserting by `publisher_id`) so settlement data is always paired with the newly created publisher.
+- Tests & tooling
+  - `backend/src/__tests__/integration/auth.integration.test.ts` forces the real `pg` driver, mocks 2FA, and exercises register/login/refresh flows with SEPA + ACH payloads under `FORCE_DB_SETUP=true` + `RUN_MIGRATIONS_IN_TEST=true`.
+  - Documented how to run migrations + integration tests locally now that the flow depends on live Postgres state.
+
+Validation & ops notes
+- `DATABASE_URL=postgres://localhost:5432/ad_platform npm run migrate --workspace backend`
+- `DATABASE_URL=postgres://localhost:5432/ad_platform FORCE_DB_SETUP=true RUN_MIGRATIONS_IN_TEST=true npm run test --workspace backend -- --runTestsByPath src/__tests__/integration/auth.integration.test.ts --forceExit`
+
 Changelog — Backend Platform Tier Alignment (2025-11-24)
 
 Summary
@@ -1118,7 +1258,7 @@ What changed (highlights)
 - FIX-07-01 — `quality/load-tests/tracking-load-test.js` now logs in during the k6 `setup()` phase, mints a configurable pool of signed tracking tokens (or fails fast when credentials/RTB toggles are missing), and asserts 204/302 outcomes so regressions surface immediately in CI. Manual `TOKEN_IMP`/`TOKEN_CLICK` overrides remain available for local smoke runs.
 - FIX-07-02 — `quality/perf/billing/invoices-api.js` accepts `BILLING_ORG_ID`, page, and limit env overrides (and fails fast when missing) so perf runs always target a real tenant instead of the stale `550e8400-*` placeholder.
 - FIX-07-03 — `quality/perf/billing/usage-api.js` mirrors the same organization env requirement and now mandates a caller-provided JWT (via `BILLING_USAGE_TOKEN`, `BILLING_API_TOKEN`, or `API_TOKEN`) so the load test hits the authenticated happy path.
-- FIX-07-04 — `quality/e2e/billing/usage-to-invoice.spec.ts` now reads console/API base URLs plus login credentials from env vars, letting CI supply real tenants instead of hard-coded `demo@apexmediation.com` values while preserving the local defaults.
+- FIX-07-04 — `quality/e2e/billing/usage-to-invoice.spec.ts` now reads console/API base URLs plus login credentials from env vars, letting CI supply real tenants instead of hard-coded `demo@apexmediation.ee` values while preserving the local defaults.
 - FIX-07-05 — `quality/load-tests/auction-load-test.js` shares the staging-ready defaults from the tracking test (placement/adFormat/device/app metadata), injects unique request IDs each iteration, and normalizes the optional Bearer token header so load runs surface real adapter issues.
 - FIX-07-06 — `quality/e2e/website/visual.spec.ts` now accepts `WEBSITE_BASE_URL`, writes every screenshot to `artifacts/website-visual/`, and attaches the PNG to the test run so CI retains visual evidence even when snapshots pass/fail.
 - FIX-07-07 — `quality/go.mod` now declares `github.com/bel-consulting/rival-ad-stack/quality` (instead of the generic `quality` path) and `go mod tidy` refreshed `go.sum`, preventing accidental dependency resolution conflicts when importing the suite externally.
@@ -1899,7 +2039,7 @@ Details and file map
   - `backend/src/services/thompsonSamplingService.ts` — seeded RNG, validation, minimal rate limiting, revenue weighting.
 
 Environment variables introduced/used
-- `TRACK_BASE_URL` (default `https://track.apexmediation.com`) — base for signed tracking links.
+- `TRACK_BASE_URL` (default `https://track.apexmediation.ee`) — base for signed tracking links.
 - `CANONICALIZER_MAX_DEPTH` (default 10) — recursion guard for canonicalizer.
 - Shadow recorder limits: `RTB_SHADOW_MAX_QUEUE` (default 500), `RTB_SHADOW_FLUSH_MS` (default 1000), `RTB_SHADOW_MAX_JSON` (default 20000).
 - Thompson Sampling: `THOMPSON_RNG_SEED` (optional deterministic seed), `THOMPSON_UPDATE_MIN_MS` (default 250).
@@ -1920,6 +2060,22 @@ Backward compatibility
 - Legacy RTB engine remains a fallback path; orchestrator remains the production path when enabled.
 
 ---
+
+Changelog — Remove Fly.io References from Infrastructure Migration Plan (2025-11-24)
+
+Summary
+- Purged all Fly.io references from `docs/Internal/Infrastructure/INFRASTRUCTURE_MIGRATION_PLAN.md` per the DigitalOcean-first direction. Hosting, monitoring, error tracking, email marketing (Listmonk), workflow automation (n8n), and analytics (Umami) sections now describe droplet-based Docker deployments or neutral guidance. Replaced Fly-specific commands (`fly launch/deploy/open/secrets`) with Docker/Nginx steps and DO/agnostic secret management notes. Updated ClickHouse verification URLs to `api.apexmediation.ee` and refreshed the cost snapshot to the ≤$50/mo DigitalOcean stack.
+
+What changed (highlights)
+- Infrastructure Plan
+  - Rewrote “Application Hosting” to use a DigitalOcean droplet with Nginx reverse proxy and Dockerized services.
+  - Monitoring section now provides an on-droplet Prometheus + Grafana docker-compose example and DO built-in monitoring notes.
+  - Error tracking (GlitchTip), Listmonk, n8n, and Umami sections moved to droplet/docker-compose with secrets via env/secrets manager.
+  - Removed legacy Fly.io URLs and commands, replaced all verification calls to target apex domains.
+  - Replaced the cost comparison with a DigitalOcean-first cost snapshot (Infra subtotal $44–49).
+
+Validation
+- Docs-only change; no code or runtime behavior modified. Test suites unaffected.
 
 ---
 Changelog — Placements OpenAPI, PATCH route, Console headers, deepMerge tests (2025-11-19)
@@ -1986,3 +2142,41 @@ Validation
 - Functional behavior remains unchanged for adapter loads; S2S path is gated by mode/flags.
 
 ---
+Changelog — VRA Canary Validation Defaults + Smoke Plan (2025-11-25)
+
+Summary
+- Records the operator decision to proceed with VRA staging canary using repository defaults and documents those defaults explicitly. Aligns Runbook and CI docs with a copy‑paste canary smoke flow using `backend/scripts/vraCanarySmoke.sh`.
+
+Decision (Operator‑requested “Use defaults”)
+- Proceed with canary validation using repository defaults; document the choice in Runbook and here in the changelog for full auditability.
+
+Defaults used when env not provided
+- API_URL: `http://localhost:3000`
+- Auth: no `Authorization` header
+- Time window: last 24 hours (`FROM=now-24h`, `TO=now`)
+- Flags: `VRA_ENABLED=true`, `VRA_SHADOW_ONLY=true`
+- Backfill rehearsal: safe dry‑run on ≤3‑day window; exit code 10 (WARNINGS) treated as non‑fatal to continue
+
+Artifacts & docs
+- Runbook updated with a new “Defaults when not provided” note under Operator Quick Start: `docs/Internal/VRA/RUNBOOK.md`.
+- Canary smoke script (read‑only): `backend/scripts/vraCanarySmoke.sh` (exit codes: 0 OK; 1 overview failed; 2 CSV/header failed; 3 gauges missing; 4 usage error).
+- CI smoke doc includes an optional job to run the smoke script against staging: `docs/Internal/VRA/CI_SMOKE.md`.
+
+How to validate (read‑only, canary)
+```
+# enable canary
+export VRA_ENABLED=true
+export VRA_SHADOW_ONLY=true
+
+# run smoke with defaults (API_URL=http://localhost:3000, last 24h window, no auth)
+bash backend/scripts/vraCanarySmoke.sh
+
+# optional explicit window/auth
+API_URL="https://api.apexmediation.com" \
+FROM="2025-11-01T00:00:00Z" TO="2025-11-02T00:00:00Z" \
+AUTH_TOKEN="<jwt>" bash backend/scripts/vraCanarySmoke.sh
+```
+
+Notes
+- All ClickHouse calls remain wrapped by `safeQuery` to fail‑open with empty results in read‑only canary.
+- No serving‑risk changes included in this entry; documentation‑only update and operator tooling.

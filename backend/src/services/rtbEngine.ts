@@ -54,17 +54,17 @@ const DEMAND_PARTNERS: DemandPartnerBid[] = [
   {
     adapter: 'admob',
     cpm: 12.3,
-    creativeUrl: 'https://ads.apexmediation.com/admob/interstitial-1.mp4',
+    creativeUrl: 'https://ads.apexmediation.ee/admob/interstitial-1.mp4',
   },
   {
     adapter: 'applovin',
     cpm: 11.7,
-    creativeUrl: 'https://ads.apexmediation.com/applovin/rewarded-2.mp4',
+    creativeUrl: 'https://ads.apexmediation.ee/applovin/rewarded-2.mp4',
   },
   {
     adapter: 'unity',
     cpm: 10.9,
-    creativeUrl: 'https://ads.apexmediation.com/unity/banner-4.png',
+    creativeUrl: 'https://ads.apexmediation.ee/unity/banner-4.png',
   },
 ];
 
@@ -86,7 +86,7 @@ export const executeBid = async (request: BidRequest): Promise<BidResponse | nul
     const bidId = crypto.randomUUID();
 
     // Build authenticated tracking URLs using signed tokens
-    const baseTrack = process.env.TRACK_BASE_URL || 'https://track.apexmediation.com';
+    const baseTrack = process.env.TRACK_BASE_URL || 'https://track.apexmediation.ee';
     const tokenClaims = {
       bidId,
       placementId: request.placementId,

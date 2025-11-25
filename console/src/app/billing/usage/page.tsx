@@ -9,6 +9,15 @@ import { Button } from '@/ui-v2/components/Button'
 import { Select } from '@/ui-v2/components/Select'
 import { useMemo, useState, useCallback, type ChangeEvent } from 'react'
 
+const escapeCsv = (value: string | number | null | undefined) => {
+  if (value === null || typeof value === 'undefined') return ''
+  const stringValue = String(value)
+  if (/[",\n]/.test(stringValue)) {
+    return `"${stringValue.replace(/"/g, '""')}"`
+  }
+  return stringValue
+}
+
 type RangeOption = '7d' | '30d' | '90d' | 'all'
 
 export default function BillingUsagePage() {

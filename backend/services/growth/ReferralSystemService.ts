@@ -82,7 +82,7 @@ export class ReferralSystemService {
             email: row.email,
             referral_code: code.code,
             reward_amount: '$500',
-            referral_url: `https://apexmediation.com/signup?ref=${code.code}`
+            referral_url: `https://apexmediation.ee/signup?ref=${code.code}`
           }),
           'pending'
         ]);

@@ -297,7 +297,7 @@ All requested deployment preparation tasks have been completed. The ApexMediatio
 ## Contact Information
 
 ### For Questions About This Report
-- **Platform Team:** platform@apexmediation.com
+- **Platform Team:** platform@apexmediation.ee
 - **Documentation:** All docs in `/Users/sabelakhoua/Ad Project/`
 
 ### Emergency Contacts (Post-Deployment)

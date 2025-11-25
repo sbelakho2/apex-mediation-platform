@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS email_templates (
     subject_line TEXT NOT NULL,
     html_body TEXT NOT NULL,
     text_body TEXT,
-    from_email VARCHAR(255) DEFAULT 'noreply@apexmediation.com',
+    from_email VARCHAR(255) DEFAULT 'noreply@apexmediation.ee',
     from_name VARCHAR(255) DEFAULT 'Apex Mediation',
     category VARCHAR(50), -- 'transactional', 'marketing', 'lifecycle'
     personalization_vars TEXT[], -- ['first_name', 'company_name', 'usage_stats']

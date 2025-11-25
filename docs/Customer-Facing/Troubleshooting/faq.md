@@ -54,16 +54,6 @@ You can use us exclusively or as part of your existing stack.
 
 ---
 
-## Revenue & Payments
-
-### When will I receive my first payment?
-
-**Answer**: Depends on your plan:
-- **Starter**: Monthly, 15th of following month (after reaching €100 minimum)
-- **Growth**: Weekly, every Monday (after reaching €500 minimum)
-- **Enterprise**: Daily, next business day (no minimum)
-
-**Example**: If you earn €150 in January on Starter plan, you'll receive payment on February 15th.
 
 ---
 
@@ -79,22 +69,26 @@ Because you bring your own demand, these fees simply cover the control plane, ob
 
 ---
 
-### How do I get paid?
+### How do I pay my invoice?
 
-**Answer**: We support three payment methods:
-1. **Bank Transfer** (SEPA/SWIFT) - Free, 1-5 business days
-2. **PayPal** - +2% fee, instant
-3. **Cryptocurrency** (Enterprise only) - +1% fee, 24 hours
+**Answer**: We invoice you for the monthly platform fee (NET 30). Send payment using the rails listed on the invoice:
+1. **SEPA (EUR)** – Wise Europe SA IBAN, free, same/next-day
+2. **ACH (USD)** – Wise US account (Community Federal Savings Bank), 1–3 US business days
 
-Set up your payment method in **Dashboard → Settings → Payments**.
+Need alternatives?
+3. **Stripe card/wallet** – 2.9% + fee, instant confirmation
+4. **PayPal** – +2% fee, <48h settlement
+5. **Wise multi-currency link** – for CAD/GBP/SGD or rapid FX conversions
+
+Open **Dashboard → Billing → Invoices** to download the PDF/CSV and copy the wiring block. Each invoice email repeats the SEPA + ACH reference to avoid transcription errors.
 
 ---
 
-### What happens if I don't reach the minimum payout threshold?
+### What happens if our fee is below the minimum invoicing threshold?
 
-**Answer**: Your earnings **roll over** to the next payment period. No earnings ever expire.
+**Answer**: We only issue an invoice once your accumulated platform fee reaches **€100**. If a month closes below that amount, the balance rolls forward and appears on the next invoice. Nothing expires—you’ll just see the carryover line item when it crosses the threshold.
 
-**Example**: You earn €75 in January (below €100 minimum) → €75 carries over → You earn €50 in February → You receive €125 on March 15th.
+**Example**: You owe €75 in January (below €100) → €75 carries over → February fee is €50 → March 1 invoice shows €125 due NET 30.
 
 ---
 
@@ -210,8 +204,8 @@ Changes take effect immediately. You get instant access to new features.
 **Answer**: **Yes**, no contracts or cancellation fees.
 
 **What happens when you cancel**:
-1. Account remains active until end of current billing period
-2. Final payout processed (even below minimum threshold)
+1. Account remains active until the end of the current billing period
+2. Final invoice issued (even if the balance is below €100)
 3. Historical data accessible for 1 year
 4. Can reactivate within 1 year (data restored)
 

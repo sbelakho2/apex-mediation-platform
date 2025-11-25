@@ -124,13 +124,13 @@ export class SandboxModeService {
       network: 'sandbox',
       format: 'banner',
       creative: {
-        imageUrl: `https://apexmediation.com/sandbox/banner/${size.width}x${size.height}.png`,
-        clickUrl: 'https://apexmediation.com/sandbox/click',
+        imageUrl: `https://apexmediation.ee/sandbox/banner/${size.width}x${size.height}.png`,
+        clickUrl: 'https://apexmediation.ee/sandbox/click',
         width: size.width,
         height: size.height,
       },
-      impressionTracking: [`https://apexmediation.com/sandbox/impression/${adId}`],
-      clickTracking: [`https://apexmediation.com/sandbox/click/${adId}`],
+      impressionTracking: [`https://apexmediation.ee/sandbox/impression/${adId}`],
+      clickTracking: [`https://apexmediation.ee/sandbox/click/${adId}`],
       metadata: {
         isSandbox: true,
         message: '🧪 Sandbox Mode: Test ad (no real ad networks connected yet)',
@@ -157,19 +157,19 @@ export class SandboxModeService {
       network: 'sandbox',
       format: 'interstitial',
       creative: {
-        imageUrl: `https://apexmediation.com/sandbox/interstitial/${width}x${height}.png`,
-        clickUrl: 'https://apexmediation.com/sandbox/click',
+        imageUrl: `https://apexmediation.ee/sandbox/interstitial/${width}x${height}.png`,
+        clickUrl: 'https://apexmediation.ee/sandbox/click',
         width,
         height,
       },
-      impressionTracking: [`https://apexmediation.com/sandbox/impression/${adId}`],
-      clickTracking: [`https://apexmediation.com/sandbox/click/${adId}`],
+      impressionTracking: [`https://apexmediation.ee/sandbox/impression/${adId}`],
+      clickTracking: [`https://apexmediation.ee/sandbox/click/${adId}`],
       metadata: {
         isSandbox: true,
         message: '🧪 Sandbox Mode: Full-screen test ad',
         nextSteps: [
           'Your interstitial ad logic is working correctly',
-          'Email sabel@apexmediation.com to connect real ad networks',
+          'Email sabel@apexmediation.ee to connect real ad networks',
           'Platform ready for production when you are',
         ],
       },
@@ -185,18 +185,18 @@ export class SandboxModeService {
       network: 'sandbox',
       format: 'rewarded_video',
       creative: {
-        videoUrl: 'https://apexmediation.com/sandbox/video/rewarded_30s.mp4',
-        clickUrl: 'https://apexmediation.com/sandbox/click',
+        videoUrl: 'https://apexmediation.ee/sandbox/video/rewarded_30s.mp4',
+        clickUrl: 'https://apexmediation.ee/sandbox/click',
         width: 1920,
         height: 1080,
         duration: 30, // 30-second video
       },
       impressionTracking: [
-        `https://apexmediation.com/sandbox/impression/${adId}`,
-        `https://apexmediation.com/sandbox/video_start/${adId}`,
-        `https://apexmediation.com/sandbox/video_complete/${adId}`,
+        `https://apexmediation.ee/sandbox/impression/${adId}`,
+        `https://apexmediation.ee/sandbox/video_start/${adId}`,
+        `https://apexmediation.ee/sandbox/video_complete/${adId}`,
       ],
-      clickTracking: [`https://apexmediation.com/sandbox/click/${adId}`],
+      clickTracking: [`https://apexmediation.ee/sandbox/click/${adId}`],
       metadata: {
         isSandbox: true,
         message: '🧪 Sandbox Mode: Rewarded video test ad (30s)',
@@ -218,13 +218,13 @@ export class SandboxModeService {
       network: 'sandbox',
       format: 'native',
       creative: {
-        imageUrl: 'https://apexmediation.com/sandbox/native/icon_1200x627.png',
-        clickUrl: 'https://apexmediation.com/sandbox/click',
+        imageUrl: 'https://apexmediation.ee/sandbox/native/icon_1200x627.png',
+        clickUrl: 'https://apexmediation.ee/sandbox/click',
         width: 1200,
         height: 627,
       },
-      impressionTracking: [`https://apexmediation.com/sandbox/impression/${adId}`],
-      clickTracking: [`https://apexmediation.com/sandbox/click/${adId}`],
+      impressionTracking: [`https://apexmediation.ee/sandbox/impression/${adId}`],
+      clickTracking: [`https://apexmediation.ee/sandbox/click/${adId}`],
       metadata: {
         isSandbox: true,
         message: '🧪 Sandbox Mode: Native ad test',
@@ -355,7 +355,7 @@ export class SandboxModeService {
     }
     if (readyForProduction) {
       nextSteps.push(
-        'Your integration is ready! Email sabel@apexmediation.com to connect your first ad network (AdMob recommended)'
+        'Your integration is ready! Email sabel@apexmediation.ee to connect your first ad network (AdMob recommended)'
       );
       nextSteps.push(
         'We can have live ads flowing within 24-48 hours of first contact'

@@ -102,6 +102,19 @@ export const trackingHeadTotal = new Counter({
   help: 'Total number of HEAD requests to tracking endpoints',
 });
 
+// --- VRA pilot‑gate gauges (used by alerts; may be populated best‑effort) ---
+export const vraCoveragePercent = new Gauge({
+  name: 'vra_coverage_percent',
+  help: 'VRA coverage as a percent (0..100)',
+  labelNames: ['scope'] as const,
+});
+
+export const vraVariancePercent = new Gauge({
+  name: 'vra_variance_percent',
+  help: 'VRA unexplained variance as a percent (0..100)',
+  labelNames: ['scope'] as const,
+});
+
 // Analytics ingestion (queue-based) metrics
 export const analyticsEventsEnqueuedTotal = new Counter({
   name: 'analytics_events_enqueued_total',

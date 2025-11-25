@@ -31,12 +31,12 @@ The ApexMediation website and dashboard give publishers a single place to manage
 
 ## Getting Started
 
-1. Sign in at https://console.apexmediation.com with your organization credentials and enable 2FA when prompted.
+1. Sign in at https://console.apexmediation.ee with your organization credentials and enable 2FA when prompted.
 2. Complete the onboarding checklist on the Overview page (placements, credentials, consent, billing).
 3. Invite teammates via Settings → Access Control and assign roles (Admin, Finance, Analyst, Read-only).
 4. Use the Mediation Debugger and Transparency sections to verify SDK integrations before promoting to production.
 
 ## Support & Feedback
 
-- Need help? Use the in-app support widget or email support@apexmediation.com with your organization ID.
+- Need help? Use the in-app support widget or email support@apexmediation.ee with your organization ID.
 - Feature ideas are welcome—submit them through Settings → Feedback so the product team can review them with you.

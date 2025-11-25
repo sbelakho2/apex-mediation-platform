@@ -52,9 +52,9 @@ ingress:
     nginx.ingress.kubernetes.io/ssl-redirect: "true"
     nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
   hostnamePrefix: console
-  defaultDomain: rivalapexmediation.com
+  defaultDomain: rivalapexmediation.ee
   hosts:
-    - host: console.rivalapexmediation.com
+    - host: console.rivalapexmediation.ee
       servicePort: null
       paths:
         - path: /
@@ -62,7 +62,7 @@ ingress:
   tls:
     - secretName: console-tls
       hosts:
-        - console.rivalapexmediation.com
+        - console.rivalapexmediation.ee
 
 resources:
   limits:
@@ -154,7 +154,7 @@ secrets:
     - STRIPE_PUBLIC_KEY
     - SESSION_ENCRYPTION_KEY
   data: {}
-    # NEXTAUTH_URL: https://console.rivalapexmediation.com
+    # NEXTAUTH_URL: https://console.rivalapexmediation.ee
     # NEXTAUTH_SECRET: super-secret
     # JWT_SECRET: base64encodedsecret
     # RESEND_API_KEY: re_...
@@ -169,8 +169,8 @@ config:
   mount: true
   annotations: {}
   data:
-    NEXT_PUBLIC_API_URL: https://api.rivalapexmediation.com
-    NEXT_PUBLIC_CONSOLE_BASE_URL: https://console.rivalapexmediation.com
+    NEXT_PUBLIC_API_URL: https://api.rivalapexmediation.ee
+    NEXT_PUBLIC_CONSOLE_BASE_URL: https://console.rivalapexmediation.ee
     NEXT_PUBLIC_ENABLE_TRANSPARENCY_REFRESH: "false"
 
 # Pod disruption budget

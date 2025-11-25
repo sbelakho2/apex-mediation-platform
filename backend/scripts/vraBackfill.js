@@ -61,8 +61,13 @@ async function readCheckpoints(file) {
 }
 
 async function writeCheckpoints(file, data) {
-  ensureDirSync(path.dirname(file));
-  await fsp.writeFile(file, JSON.stringify(data, null, 2), 'utf8');
+  try {
+    ensureDirSync(path.dirname(file));
+    await fsp.writeFile(file, JSON.stringify(data, null, 2), 'utf8');
+  } catch (e) {
+    // Do not fail the orchestrator on checkpoint write issues; warn and continue
+    console.warn('[VRA Backfill] Warning: failed to write checkpoint file:', file, '-', (e && e.message) || String(e));
+  }
 }
 
 function keyForRun({ from, to, publisher, network }) {
@@ -82,6 +87,21 @@ async function main() {
   if (!from || !to) {
     console.error('Missing required args: --from ISO, --to ISO');
     process.exit(EXIT.ERROR);
+  }
+
+  // Additional operator guardrails
+  // If the operator specified --force without --yes, refuse to proceed to avoid accidental force runs
+  if (toBool(args.force) && !toBool(args.yes)) {
+    console.error('Refusing to run with --force without --yes confirmation');
+    process.exit(EXIT.ERROR);
+  }
+  // If a limit is passed at the orchestrator level (forwarded to stages), validate it's non-negative
+  if (args.limit != null) {
+    const lim = Number(args.limit);
+    if (!Number.isFinite(lim) || lim <= 0) {
+      console.error('Refusing to run: --limit must be a positive integer');
+      process.exit(EXIT.ERROR);
+    }
   }
 
   const plan = ['ingestion', 'expected', 'matching', 'reconcile', 'proofs'];

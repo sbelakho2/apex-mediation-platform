@@ -32,6 +32,8 @@ describe('VRA Routes', () => {
     // Reset env flags each test
     delete process.env.VRA_ENABLED;
     delete process.env.VRA_SHADOW_ONLY;
+    // Set a generous read-only rate limit by default so tests don't flake on 429s
+    process.env.TRANSPARENCY_RATE_LIMIT_RPM_DEFAULT = '1000';
     app.use('/api/v1', vraRoutes);
   });
 
@@ -117,6 +119,36 @@ describe('VRA Routes', () => {
     expect(text.split('\n')[0]).toBe('kind,amount,currency,reason_code,window_start,window_end,evidence_id,confidence');
   });
 
+  it('GET /recon/deltas.csv includes Content-Disposition filename with from/to when provided', async () => {
+    process.env.VRA_ENABLED = 'true';
+    const res = await request(app)
+      .get('/api/v1/recon/deltas.csv?from=2025-11-01T00:00:00Z&to=2025-11-02T00:00:00Z')
+      .expect(200);
+    const cd = res.headers['content-disposition'] || '';
+    expect(cd).toContain('attachment;');
+    // Suffix contains _<from>_to_<to> in YYYY-MM-DD form
+    expect(cd).toMatch(/recon_deltas_.*2025-11-01.*_to_.*2025-11-02.*\.csv"?$/);
+  });
+
+  it('GET /recon/deltas.csv omits _from_to_ suffix when only one window bound provided', async () => {
+    process.env.VRA_ENABLED = 'true';
+    // Only from provided
+    let res = await request(app)
+      .get('/api/v1/recon/deltas.csv?from=2025-11-01T00:00:00Z')
+      .expect(200);
+    let cd = res.headers['content-disposition'] || '';
+    expect(cd).toContain('attachment;');
+    expect(cd).not.toMatch(/_to_/);
+
+    // Only to provided
+    res = await request(app)
+      .get('/api/v1/recon/deltas.csv?to=2025-11-02T00:00:00Z')
+      .expect(200);
+    cd = res.headers['content-disposition'] || '';
+    expect(cd).toContain('attachment;');
+    expect(cd).not.toMatch(/_to_/);
+  });
+
   it('GET /recon/deltas.csv redacts PII/secrets in reason_code', async () => {
     process.env.VRA_ENABLED = 'true';
     const { executeQuery } = jest.requireMock('../../utils/clickhouse');
@@ -189,10 +221,13 @@ describe('VRA Routes', () => {
     app.use(express.json());
     app.use('/api/v1', vraRoutes);
 
-    await request(app).get('/api/v1/recon/deltas.csv').expect(200);
-    // Second call in same window should be rate-limited
+    const res1 = await request(app).get('/api/v1/recon/deltas.csv');
     const res2 = await request(app).get('/api/v1/recon/deltas.csv');
-    expect([429, 200]).toContain(res2.status); // flakiness guard in very fast test env
+    // In a tight test window the limiter may trigger on the first or second call depending on timing.
+    // Accept either order but require that at least one request is rate-limited (429).
+    expect([200, 429]).toContain(res1.status);
+    expect([200, 429]).toContain(res2.status);
+    expect([res1.status, res2.status]).toContain(429);
   });
 
   it('GET /recon/deltas returns 400 on invalid kind', async () => {
@@ -204,12 +239,28 @@ describe('VRA Routes', () => {
     expect(res.body).toHaveProperty('error');
   });
 
+  it('GET /recon/deltas.csv returns 400 on inverted window (from > to)', async () => {
+    process.env.VRA_ENABLED = 'true';
+    await request(app)
+      .get('/api/v1/recon/deltas.csv?from=2025-11-03T00:00:00Z&to=2025-11-02T00:00:00Z')
+      .expect(400);
+  });
+
   it('GET /recon/deltas returns 400 on invalid page_size (>500)', async () => {
     process.env.VRA_ENABLED = 'true';
     const res = await request(app)
       .get('/api/v1/recon/deltas?page_size=1000')
       .expect(400);
     expect(res.body).toHaveProperty('success', false);
+  });
+
+  it('GET /recon/deltas accepts page_size=500 boundary', async () => {
+    process.env.VRA_ENABLED = 'true';
+    const res = await request(app)
+      .get('/api/v1/recon/deltas?page_size=500')
+      .expect(200);
+    expect(res.body).toHaveProperty('success', true);
+    expect(res.body).toHaveProperty('pageSize', 500);
   });
 
   it('GET /recon/deltas returns 400 on invalid page (0)', async () => {

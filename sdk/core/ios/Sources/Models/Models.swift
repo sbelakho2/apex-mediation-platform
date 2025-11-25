@@ -301,8 +301,8 @@ public struct SDKConfig: Codable, Equatable {
 
     public static func `default`(
         appId: String,
-        configEndpoint: String = "https://config.rivalapexmediation.com",
-        auctionEndpoint: String = "https://auction.rivalapexmediation.com",
+        configEndpoint: String = "https://config.rivalapexmediation.ee",
+        auctionEndpoint: String = "https://auction.rivalapexmediation.ee",
         telemetryEnabled: Bool = true,
         logLevel: LogLevel = .info,
         testMode: Bool = false,

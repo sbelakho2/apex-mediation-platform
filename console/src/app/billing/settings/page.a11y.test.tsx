@@ -183,7 +183,7 @@ describe('BillingSettingsPage Accessibility', () => {
     })
 
     const salesLink = screen.getByRole('link', { name: /contact sales/i })
-    expect(salesLink).toHaveAttribute('href', 'mailto:billing@apexmediation.com')
+    expect(salesLink).toHaveAttribute('href', 'mailto:billing@apexmediation.ee')
   })
 
   it('supports keyboard navigation for primary actions', async () => {
@@ -194,6 +194,9 @@ describe('BillingSettingsPage Accessibility', () => {
     })
 
     const user = userEvent.setup()
+
+    await user.tab()
+    expect(screen.getByRole('link', { name: /contact sales/i })).toHaveFocus()
 
     await user.tab()
     expect(screen.getByRole('link', { name: /view usage/i })).toHaveFocus()

@@ -294,14 +294,14 @@ ENABLE_SELF_EVOLVING_AI=false        # Week 3 rollout
 4. Verify all services healthy
    ```bash
    kubectl get pods -n production
-   curl https://api.apexmediation.com/health
+   curl https://api.apexmediation.ee/health
    ```
 
 5. Update DNS records (cutover to production)
 
 6. Verify SSL certificates
    ```bash
-   curl -I https://api.apexmediation.com
+   curl -I https://api.apexmediation.ee
    ```
 
 ### Post-Deployment (T+1 hour)
@@ -394,7 +394,7 @@ ENABLE_SELF_EVOLVING_AI=false        # Week 3 rollout
 ## 12. Contact Information
 
 ### Emergency Contacts
-- **Platform Team:** platform@apexmediation.com
+- **Platform Team:** platform@apexmediation.ee
 - **On-Call Engineer:** PagerDuty escalation
 - **CTO:** [INSERT CONTACT]
 
@@ -402,7 +402,7 @@ ENABLE_SELF_EVOLVING_AI=false        # Week 3 rollout
 - **Slack:** #platform-alerts (automated alerts)
 - **Slack:** #platform-team (team coordination)
 - **PagerDuty:** Critical incident escalation
-- **Email:** ops@apexmediation.com
+- **Email:** ops@apexmediation.ee
 
 ### External Dependencies
 - **OpenAI Support:** https://platform.openai.com/support

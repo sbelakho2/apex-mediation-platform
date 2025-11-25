@@ -800,8 +800,8 @@ export class InfluenceBasedSalesService {
 
     // Queue notification for async delivery via email service
     try {
-      const redis = await import('../../utils/redis');
-      await redis.default.lpush('email:notifications', JSON.stringify({
+      const redis = await import('../../src/utils/redis');
+      await (redis.default as any).lPush('email:notifications', JSON.stringify({
         type: 'sales_touchpoint',
         touchpointId: touchpoint.id,
         customerId: touchpoint.customer_id,

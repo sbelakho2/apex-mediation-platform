@@ -22,6 +22,10 @@ Scope delivered in this iteration
     - `getDeltas(query)` — reads `recon_deltas` with pagination and confidence filter.
     - `getMonthlyDigest(month)` — fetches proofs from `proofs_monthly_digest`.
   - All ClickHouse interactions are wrapped in `safeQuery` which degrades to empty results to guarantee “no insights” instead of failures.
+  - Pilot‑gate metrics (gauges):
+    - File: `backend/src/utils/prometheus.ts`
+    - Gauges: `vra_coverage_percent{scope}` and `vra_variance_percent{scope}` registered and exported.
+    - Publishing: `vraService.getOverview` best‑effort sets `{scope="pilot"}` values; never throws in lightweight envs.
   - Matching Engine (scaffold, library):
     - File: `backend/src/services/vra/matchingEngine.ts`
     - Provides `scoreCandidate(...)` and `matchStatementsToExpected(...)` for Phase A (exact keys placeholder) and Phase B (fuzzy window) matching.
@@ -68,9 +72,17 @@ Scope delivered in this iteration
     - `page` ≥ 1; `page_size` ∈ [1..500]
     - `min_conf` ∈ [0..1]
     - `kind` ∈ {`underpay`|`missing`|`viewability_gap`|`ivt_outlier`|`fx_mismatch`|`timing_lag`}
-  - CSV export escaping: doubles quotes, strips newlines and commas in `reason_code` to keep a stable CSV schema
+  - Window ordering validation: APIs enforce `from <= to` across JSON, CSV, and Overview endpoints (400 on inverted windows)
+  - CSV export escaping/sanitization:
+    - Doubles quotes, strips newlines/commas/tabs in `reason_code`; fixes numeric formatting (amount 6 d.p., confidence 2 d.p.) to keep a stable CSV schema
   - CSV filename UX: `Content-Disposition` suggests `recon_deltas_<from>_to_<to>_<timestamp>.csv` when window params are provided
   - Operator tip: When filtering by `kind` and `min_conf`, the CSV mirrors JSON filters exactly. Suggested usage: keep `page_size` reasonably large (<=500) and paginate chronologically by `window_start`.
+- Operator CLIs (backfill helpers)
+  - `backend/scripts/vraBuildExpected.js` — builds `recon_expected` from PG↔CH join with guardrails (3‑day window cap, `--limit`<=10k unless `--force --yes`). Exit codes: 0 OK, 10 WARNINGS (e.g., no work/dry‑run), 20 ERROR.
+  - `backend/scripts/vraMatch.js` — runs the matching engine for a window with thresholds (`--autoThreshold`, `--minConf`); same caps and exit code contract.
+  - `backend/scripts/vraReconcile.js` — computes deltas and optionally writes to CH; same caps and exit code contract.
+  - `backend/scripts/vraIssueProofs.js` — creates/updates `proofs_monthly_digest` for `--month YYYY-MM`; validates input; exit codes 0/10/20.
+  - `backend/scripts/vraBackfill.js` — safe orchestrator scaffold that chains stages (ingestion→expected→matching→reconcile→proofs) with resumable checkpoints and flag forwarding; treats exit code 10 as non‑fatal to continue.
 - Tests
   - `backend/src/routes/__tests__/vra.routes.test.ts` verifies:
     - Feature-disabled returns 404
@@ -87,9 +99,18 @@ Scope delivered in this iteration
      - `backend/src/services/vra/__tests__/matchingEngine.largeN.test.ts` — synthetic large‑N performance sanity with Prometheus counter assertions (gate larger N via `VRA_LARGEN=1`).
    - Controller/CSV redaction:
      - `backend/src/routes/__tests__/vra.csv.redaction.test.ts` — ensures `reason_code` emails/tokens are redacted and commas/newlines are stripped in CSV export.
+    - Controllers/services log redaction:
+      - `backend/src/routes/__tests__/vra.controllers.rbac.logs.extended.test.ts` — verifies `reason_code` masking on log paths (top-level and nested) via centralized logger.
+    - Builder/proofs/dispute-kit log redaction:
+      - `backend/src/services/vra/__tests__/expectedBuilder.logsRedaction.test.ts`, `backend/src/services/vra/__tests__/proofs.logsRedaction.test.ts`, `backend/src/services/vra/__tests__/disputeKit.logsRedaction.test.ts` — assert masking of emails/Bearer/JWT, Stripe-like keys, long numerics, and crypto fields (`digest`, `signature`, `hash`).
   - Reconcile boundary tests:
     - `backend/src/services/vra/__tests__/reconcile.boundaries.test.ts` — underpay tolerance exact-equals suppression.
     - `backend/src/services/vra/__tests__/reconcile.fx_viewability.boundaries.test.ts` — FX band and viewability gap thresholds (below/equals/above) with env-driven tolerances.
+  - CLI guardrails:
+    - `backend/scripts/__tests__/vraBuildExpected.caps.test.ts`
+    - `backend/scripts/__tests__/vraMatch.caps.test.ts`
+    - `backend/scripts/__tests__/vraReconcile.caps.test.ts`
+    - `backend/scripts/__tests__/vraIssueProofs.caps.test.ts`
 
 Observability polish (new)
 - Overview enhancements
@@ -102,12 +123,45 @@ Observability polish (new)
     - 24h total deltas and CH fallbacks/empty results guardrails.
 - Metrics/alerts alignment
   - Prometheus metrics used across VRA flows: `vra_query_duration_seconds`, `vra_clickhouse_fallback_total`, `vra_empty_results_total`, ingestion/expected/matching/reconcile counters and histograms listed in `backend/src/utils/prometheus.ts`.
-  - Alert samples aligned to the metric names in `monitoring/alerts/vra-alerts.yml` (coverage drop, sustained variance, ingestion failures, proof verify failures, reconcile delta spikes, ClickHouse fallbacks).
+  - Alert samples aligned to the metric names in `monitoring/alerts/vra-alerts.yml` (coverage drop, sustained variance, ingestion failures, proof verify failures, reconcile delta spikes, ClickHouse fallbacks), with `runbook_url` annotations pointing to `docs/Internal/VRA/RUNBOOK.md` anchors.
+  - Gauges used by alerts: `vra_coverage_percent{scope="pilot"}`, `vra_variance_percent{scope="pilot"}` — set by Overview; alerts reference RUNBOOK anchors.
+
+Infrastructure posture (DigitalOcean, budget‑capped)
+- Deployment follows the infra plan in `docs/Internal/Infrastructure/INFRASTRUCTURE_MIGRATION_PLAN.md`:
+  - Single DO droplet (2 vCPU / 4 GB) running API, Console, Redis, and Nginx.
+  - DO Managed Postgres for primary DB and early analytics.
+  - ClickHouse is optional: all VRA queries are wrapped in `safeQuery` and degrade to empty, ensuring read‑only behavior and no serving risk.
+  - DO Monitoring for base signals; optional Prometheus/Grafana stack for VRA dashboards with short retention.
+ - Matching dashboard
+   - Added `monitoring/grafana/dashboards/vra-matching.json` with timeseries p95 panels for `vra_match_duration_seconds_bucket` and funnel counters (candidates/auto/review/unmatched).
 
 RBAC & Logs spot‑checks
 - All VRA routes are behind `requireFeature('vraEnabled')`, `authenticate`, and `readOnlyRateLimit`.
+
+---
+
+Operator quick links
+- Runbook (Operator Quick Start, canary/pilot, backfill & CLIs): `docs/Internal/VRA/RUNBOOK.md`
+- CI smoke (backend-only, DB/observability opt-in): `docs/Internal/VRA/CI_SMOKE.md`
+- Canary smoke script (read‑only): `backend/scripts/vraCanarySmoke.sh`
+- Dashboards (Grafana JSON): `monitoring/grafana/dashboards/vra-matching.json`, `monitoring/grafana/dashboards/vra-reconcile.json`
+- Alerts (Prometheus rules): `monitoring/alerts/vra-alerts.yml` (links to Runbook anchors)
 - Disputes respect `VRA_SHADOW_ONLY` — in shadow mode, API returns 202 and performs no writes. Counters: `vra_dispute_shadow_acks_total` (shadow) vs `vra_disputes_created_total` (non‑shadow).
-- Logger has centralized redaction for sensitive strings and keys (now with deep traversal and patterns for JWT‑like strings, OAuth tokens, and long hex secrets); VRA CSV and kit builders apply additional redaction for `reason_code`/evidence. Tests cover redaction and no‑secret logging.
+- Logger has centralized redaction for sensitive strings and keys (deep traversal; patterns for JWT‑like strings, OAuth tokens, long hex secrets, long numerics; and masking for structured keys including `reason_code`, `signature`, `sig`, `digest`, `hash`, `prev_hash`).
+- VRA CSV and kit builders apply additional redaction for `reason_code`/evidence; controller/service log paths mask `reason_code` even when nested.
+- Tests cover redaction and no‑secret logging across ingestion, controllers/services, proofs, and dispute kit.
+
+CLI safety & backfill
+- Stage CLIs (`vraBuildExpected.js`, `vraReconcile.js`) enforce safety caps: max window 3 days; `--limit` ≤ 10k unless `--force --yes`. Dry‑run produces exit codes 0/10.
+- Orchestrator `vraBackfill.js` requires `--from/--to` for `--step all`, rejects `--force` without `--yes` and non‑positive `--limit`, supports checkpoints/resume and forwards flags (`--dry-run`, `--autoThreshold`, `--minConf`).
+- Tests: `backend/scripts/__tests__/vraBuildExpected.*.test.ts`, `backend/scripts/__tests__/vraReconcile.*.test.ts`, `backend/scripts/__tests__/vraBackfill.*.test.ts` cover caps, bypasses, invalid combos, and resume semantics.
+
+CI test discoverability
+- Backend Jest config at `backend/jest.config.js` discovers tests under `backend/src/**` and `backend/scripts/**` for both `.ts` and `.js` files; root script `npm run test:backend` executes the suite. A CJS proxy `backend/jest.config.cjs` is present for CI environments that require it.
+
+Docs & Runbooks
+- Operator runbook with actionable anchors and CLI recipes: `docs/Internal/VRA/RUNBOOK.md`.
+- Cross-links added from dashboards and alerts to runbook anchors for one‑click troubleshooting.
 
 Runbooks and operator tips
 - CSV export

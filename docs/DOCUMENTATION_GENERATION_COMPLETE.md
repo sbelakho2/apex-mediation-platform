@@ -179,7 +179,7 @@ Docs/Customer-Facing/
 #### Pricing (`pricing.md`)
 - **Lines**: 220+ (already existed)
 - **Content**:
-  - Revenue share tiers (15%, 12%, 10%)
+  - BYO tiers (Starter 0%, Growth 2.5%, Scale 2.0%, Enterprise 1.0–1.5% + minimum)
   - Payment methods
   - Minimum payouts
   - Estonian VAT compliance
@@ -213,7 +213,7 @@ Docs/Customer-Facing/
 - ❌ Internal pricing strategies
 
 **✅ Only public-facing information included:**
-- ✅ Revenue share percentages (standard: 15%, premium: 12%, enterprise: 10%)
+- ✅ BYO platform percentages (Starter 0%, Growth 2.5%, Scale 2.0%, Enterprise 1.0–1.5% + minimum)
 - ✅ Minimum payout thresholds ($100, $50, $0)
 - ✅ Payment schedules (monthly, bi-weekly, daily)
 - ✅ API endpoints and authentication methods

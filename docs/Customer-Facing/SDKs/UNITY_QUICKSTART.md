@@ -235,4 +235,4 @@ Open **Window → Apex Mediation → Adapter Credentials** to:
 - **No logs** → Call `Apex.Mediation.Internal.Logger.SetDebug(true)` in development builds.
 - **Test mode** → Switch the SDK into BYO test mode via the Editor window or set `SdkMode.HYBRID` with mock placements while you finish accreditation.
 
-Need more help? Reach us at support@apexmediation.com with your transparency receipt hash and SDK version for faster triage.
+Need more help? Reach us at support@apexmediation.ee with your transparency receipt hash and SDK version for faster triage.

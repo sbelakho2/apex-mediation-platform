@@ -13,11 +13,11 @@ import {
   revokeRefreshToken,
 } from '../repositories/refreshTokenRepository';
 import { isAuthTokenPayload } from '../types/auth';
-import crypto from 'crypto';
 import { setAuthCookies } from '../utils/cookies';
 import twofaService from '../services/twofa.service';
 import { authAttemptsTotal, twofaEventsTotal } from '../utils/prometheus';
 import { getFeatureFlags } from '../config/featureFlags';
+import { bankAccountSchema, BankAccountPayload } from '../schemas/bankAccount';
 
 // Validation schemas
 export const loginSchema = z.object({
@@ -29,6 +29,7 @@ export const registerSchema = z.object({
   email: z.string().email(),
   password: z.string().min(8),
   companyName: z.string().min(2),
+  bankAccount: bankAccountSchema,
 });
 
 export const refreshSchema = z.object({
@@ -100,6 +101,22 @@ interface RefreshTokenIssueOptions {
   ipAddress?: string;
 }
 
+const normalizeBankAccount = (account: BankAccountPayload): BankAccountPayload => {
+  if (account.scheme === 'sepa') {
+    return {
+      ...account,
+      iban: account.iban.replace(/\s+/g, '').toUpperCase(),
+      bic: account.bic.replace(/\s+/g, '').toUpperCase(),
+    };
+  }
+
+  return {
+    ...account,
+    accountNumber: account.accountNumber.replace(/\s+/g, ''),
+    routingNumber: account.routingNumber.replace(/[^0-9]/g, ''),
+  };
+};
+
 const issueAccessToken = (payload: TokenPayload) => {
   const expiresInSeconds = resolveAccessTokenExpirationSeconds();
   const token = jwt.sign({ ...payload, tokenType: 'access' }, getAccessTokenSecret(), {
@@ -115,11 +132,10 @@ const issueRefreshToken = async (
 ) => {
   const expiresInSeconds = resolveRefreshTokenExpirationSeconds();
   const id = randomUUID();
-  const idHash = crypto.createHash('sha256').update(id).digest('hex');
   const expiresAt = new Date(Date.now() + expiresInSeconds * 1000);
 
   const record = await insertRefreshToken({
-    id: idHash, // store hashed id only
+    id,
     userId: payload.userId,
     expiresAt,
     userAgent: options.userAgent,
@@ -128,7 +144,7 @@ const issueRefreshToken = async (
 
   const token = jwt.sign({ ...payload, tokenType: 'refresh' }, getRefreshTokenSecret(), {
     expiresIn: expiresInSeconds,
-    jwtid: record.id, // jti is hashed id
+    jwtid: record.id,
     subject: payload.userId,
   });
 
@@ -313,7 +329,8 @@ export const register = async (
 ): Promise<void> => {
   try {
     // Validate request body
-    const { email, password, companyName } = registerSchema.parse(req.body);
+    const { email, password, companyName, bankAccount } = registerSchema.parse(req.body);
+    const normalizedBankAccount = normalizeBankAccount(bankAccount);
 
     // Hash password
     const passwordHash = await bcrypt.hash(password, 10);
@@ -324,7 +341,12 @@ export const register = async (
       throw new AppError('Email is already registered', 409);
     }
 
-    const { user } = await createUserWithPublisher(email, passwordHash, companyName);
+    const { user } = await createUserWithPublisher(
+      email,
+      passwordHash,
+      companyName,
+      normalizedBankAccount
+    );
 
     const tokenPayload: TokenPayload = {
       userId: user.id,

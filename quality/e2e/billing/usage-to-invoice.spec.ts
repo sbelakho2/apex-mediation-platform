@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test'
 const CONSOLE_BASE_URL = (process.env.CONSOLE_BASE_URL || 'http://localhost:3000').replace(/\/$/, '')
 const API_BASE_URL = (process.env.API_URL || 'http://localhost:4000').replace(/\/$/, '')
 const LOGIN_EMAIL =
-  process.env.CONSOLE_LOGIN_EMAIL || process.env.PLAYWRIGHT_EMAIL || 'demo@apexmediation.com'
+  process.env.CONSOLE_LOGIN_EMAIL || process.env.PLAYWRIGHT_EMAIL || 'demo@apexmediation.ee'
 const LOGIN_PASSWORD =
   process.env.CONSOLE_LOGIN_PASSWORD || process.env.PLAYWRIGHT_PASSWORD || 'demo'
 

@@ -345,7 +345,7 @@ GET /api/marketplace/performance-insights
 - Likely an agency or publishing house (not individual developer)
 
 **Offer**:
-- Custom branding: Your logo, domain (e.g., agency.apexmediation.com), color scheme
+- Custom branding: Your logo, domain (e.g., agency.apexmediation.ee), color scheme
 - White-label dashboard: Your clients see your brand, not ApexMediation
 - 60% commission: You keep 60% of ad revenue take (your 10% take rate = 6% to you, 4% to platform)
 - Priority support: Dedicated Slack channel, <2 hour SLA, quarterly business reviews

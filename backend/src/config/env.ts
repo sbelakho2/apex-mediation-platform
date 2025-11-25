@@ -49,6 +49,24 @@ const envSchema = z.object({
   // External Services - Payment
   STRIPE_SECRET_KEY: z.string().startsWith('sk_', 'STRIPE_SECRET_KEY must start with sk_').optional(),
   STRIPE_WEBHOOK_SECRET: z.string().startsWith('whsec_', 'STRIPE_WEBHOOK_SECRET must start with whsec_').optional(),
+
+  // Banking & Settlement
+  COMPANY_NAME: z.string().default('Bel Consulting OÜ'),
+  SEPA_BANK_NAME: z.string().default('Wise'),
+  SEPA_BANK_IBAN: z.string().default('BE41967430490410'),
+  SEPA_BANK_BIC: z.string().default('TRWIBEB1XXX'),
+  SEPA_BANK_ADDRESS: z.string().default('Wise, Rue du Trône 100, 3rd Floor, 1050 Brussels, Belgium'),
+  ACH_BANK_NAME: z.string().default('Community Federal Savings Bank'),
+  ACH_ACCOUNT_NUMBER: z.string().default('8312408211'),
+  ACH_ROUTING_NUMBER: z.string().default('026073150'),
+  ACH_ACCOUNT_TYPE: z.enum(['CHECKING', 'SAVINGS']).default('CHECKING'),
+  ACH_SWIFT: z.string().default('CMFGUS33'),
+  ACH_BANK_ADDRESS: z.string().default('Community Federal Savings Bank, 89-16 Jamaica Ave, Woodhaven, NY 11421, USA'),
+  WISE_ACCOUNT_REFERENCE_PREFIX: z.string().default('APEXM'),
+  SEB_BANK_NAME: z.string().optional(),
+  SEB_BANK_IBAN: z.string().optional(),
+  SEB_BANK_BIC: z.string().optional(),
+  SEB_BANK_ADDRESS: z.string().optional(),
   
   // External Services - Email
   RESEND_API_KEY: z.string().startsWith('re_', 'RESEND_API_KEY must start with re_').optional(),

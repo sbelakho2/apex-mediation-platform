@@ -40,6 +40,46 @@ interface BillingSettings {
   stripe_customer_id: string | null
 }
 
+interface BillingPolicy {
+  summary: string
+  starterExperience: {
+    paymentMethodRequired: boolean
+    revenueCapUsd: number
+    capabilities: string[]
+    messaging: string
+  }
+  upgradePath: {
+    triggers: string[]
+    acceptedPaymentMethods: {
+      id: string
+      label: string
+      regions: string[]
+      autopayEligible: boolean
+      enterpriseOnly?: boolean
+    }[]
+    autopay: {
+      defaultBehavior: string
+      encouragement: string
+      enterpriseOverride: string
+    }
+  }
+  billingCycle: {
+    cadence: string
+    notifications: {
+      channel: string
+      timing: string
+      content: string
+    }[]
+  }
+  transparencyCommitments: {
+    weDontTouchPayouts: string
+    platformFeeOnly: string
+  }
+}
+
+const formatUsd = (value: number) =>
+  new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(value)
+
 const MESSAGE_STORAGE_KEY = 'billing-settings:toast'
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const MIGRATION_NOTES_MIN_LENGTH = 20
@@ -102,6 +142,15 @@ export default function BillingSettingsPage() {
     queryFn: async () => {
       const response = await apiClient.get('/billing/settings')
       return response.data
+    },
+    enabled: !!user,
+  })
+
+  const { data: billingPolicy } = useQuery<BillingPolicy>({
+    queryKey: ['billing', 'policy'],
+    queryFn: async () => {
+      const response = await apiClient.get('/billing/policy')
+      return response.data?.data
     },
     enabled: !!user,
   })
@@ -260,6 +309,31 @@ export default function BillingSettingsPage() {
     billingEmail.trim() === settings.billing_email ||
     !!emailError
   const preferencesSubmitDisabled = !preferencesDirty || preferencesMutation.isPending
+  const isStarterPlan = settings.plan.type === 'starter'
+  const autopayEligibleMethods = billingPolicy?.upgradePath?.acceptedPaymentMethods?.filter(
+    (method) => method.autopayEligible && !method.enterpriseOnly
+  ) ?? []
+  const enterpriseOnlyMethods = billingPolicy?.upgradePath?.acceptedPaymentMethods?.filter(
+    (method) => method.enterpriseOnly
+  ) ?? []
+  const preChargeNotification = billingPolicy?.billingCycle?.notifications?.find((notification) =>
+    notification.timing.toLowerCase().includes('before')
+  )
+  const starterRevenueCapLabel = billingPolicy?.starterExperience
+    ? formatUsd(billingPolicy.starterExperience.revenueCapUsd)
+    : null
+  const starterCapabilities = billingPolicy?.starterExperience?.capabilities ?? []
+  const starterMessaging = billingPolicy?.starterExperience?.messaging
+  const autopayDetails = billingPolicy?.upgradePath?.autopay
+  const autopayDefaultBehavior =
+    autopayDetails?.defaultBehavior ?? 'Stripe auto-charges the primary payment method when invoices finalize.'
+  const autopayEncouragement =
+    autopayDetails?.encouragement ?? 'Cards, ACH, or SEPA autopay keeps mediation running with zero manual steps.'
+  const enterpriseOverrideCopy = autopayDetails?.enterpriseOverride
+  const showPolicySection = Boolean(billingPolicy?.starterExperience && billingPolicy?.upgradePath)
+  const showAutopayCard = Boolean(autopayDetails)
+  const transparencyCopy = billingPolicy?.transparencyCommitments
+  const upgradeTriggers = billingPolicy?.upgradePath?.triggers ?? []
 
   return (
     <div className="bg-gray-50 min-h-screen">
@@ -308,6 +382,74 @@ export default function BillingSettingsPage() {
         )}
 
         <div className="space-y-6">
+          <section className="bg-primary-50 border border-primary-100 text-primary-900 rounded-lg p-4" aria-live="polite">
+            <h2 className="text-sm font-semibold uppercase tracking-wide">
+              Need to upgrade or change your plan?
+            </h2>
+            <p className="text-sm mt-2">
+              Start an upgrade from this page or
+              <a href="mailto:billing@apexmediation.ee" className="underline font-medium mx-1" aria-label="Contact sales">
+                contact sales
+              </a>
+              if you need custom terms. Growth, Scale, and Enterprise plans auto-charge at each billing period unless your
+              account is flagged for manual invoices.
+            </p>
+          </section>
+
+          {showPolicySection && (
+            <section className="bg-white rounded-lg shadow-sm border border-primary-100 p-6" aria-live="polite">
+              <div className="flex flex-col gap-2">
+                <h2 className="text-lg font-semibold text-gray-900">Starter tier & upgrade policy</h2>
+                <p className="text-sm text-gray-600">
+                  {billingPolicy?.summary ?? 'Stripe autopay is the default once you leave Starter.'}
+                </p>
+              </div>
+              <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div className="rounded-lg border border-emerald-100 bg-emerald-50/80 p-4">
+                  <p className="text-sm font-semibold text-emerald-900">Starter stays free</p>
+                  <p className="text-sm text-emerald-900 mt-1">
+                    {starterRevenueCapLabel
+                      ? `Stay on Starter with no payment method until you cross ${starterRevenueCapLabel} in mediated revenue per month.`
+                      : 'Stay on Starter with no payment method until you hit the published revenue cap.'}
+                  </p>
+                  <ul className="mt-3 text-sm text-emerald-900 list-disc list-inside space-y-1">
+                    {starterCapabilities.map((capability) => (
+                      <li key={capability}>{capability}</li>
+                    ))}
+                  </ul>
+                  {starterMessaging && <p className="mt-3 text-xs text-emerald-800">{starterMessaging}</p>}
+                </div>
+                <div className="rounded-lg border border-primary-100 p-4">
+                  <p className="text-sm font-semibold text-gray-900">Upgrade requirements</p>
+                  <p className="text-sm text-gray-700 mt-1">{autopayDefaultBehavior}</p>
+                  {autopayEligibleMethods.length > 0 && (
+                    <div className="mt-3">
+                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Autopay rails</p>
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        {autopayEligibleMethods.map((method) => (
+                          <span
+                            key={method.id}
+                            className="px-2 py-1 text-xs font-medium rounded-full bg-primary-50 text-primary-700 border border-primary-100"
+                          >
+                            {method.label}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  <ul className="mt-3 text-sm text-gray-600 list-disc list-inside space-y-1">
+                    {upgradeTriggers.map((trigger) => (
+                      <li key={trigger}>{trigger}</li>
+                    ))}
+                  </ul>
+                  <p className="mt-3 text-xs text-gray-500">{autopayEncouragement}</p>
+                  {enterpriseOnlyMethods.length > 0 && enterpriseOverrideCopy && (
+                    <p className="mt-2 text-xs text-gray-500">{enterpriseOverrideCopy}</p>
+                  )}
+                </div>
+              </div>
+            </section>
+          )}
           {/* Current Platform Tier */}
           <section className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
             <div className="flex items-start justify-between">
@@ -393,8 +535,20 @@ export default function BillingSettingsPage() {
               {!settings?.stripe_customer_id && (
                 <p className="text-sm text-amber-600 mt-3 flex items-start gap-2">
                   <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
-                  No Stripe account linked. Contact support to set up billing.
+                  {isStarterPlan
+                    ? 'Starter tier accounts can stay card-free until they exceed the revenue cap. Add a payment method early to ensure autopay works the moment you upgrade.'
+                    : 'No Stripe account linked. Contact support to set up billing.'}
                 </p>
+              )}
+              {showAutopayCard && (
+                <div className="mt-4 rounded-lg border border-primary-100 bg-primary-50/60 p-4 text-sm text-primary-900">
+                  <p className="font-semibold">Automatic charges</p>
+                  <p className="mt-1">{autopayDefaultBehavior}</p>
+                  <p className="mt-2 text-xs text-primary-800">{autopayEncouragement}</p>
+                  {preChargeNotification && (
+                    <p className="mt-2 text-xs text-primary-800">{preChargeNotification.content}</p>
+                  )}
+                </div>
               )}
             </div>
           </section>
@@ -621,11 +775,16 @@ export default function BillingSettingsPage() {
                   <p className="font-medium mb-1">Need to adjust your platform tier?</p>
                   <p>
                     Contact our billing team at{' '}
-                    <a href="mailto:billing@apexmediation.com" className="underline font-medium">
-                      billing@apexmediation.com
+                    <a href="mailto:billing@apexmediation.ee" className="underline font-medium">
+                      billing@apexmediation.ee
                     </a>{' '}
                     to review usage, negotiate contracts, or request Enterprise onboarding support.
                   </p>
+                  {transparencyCopy && (
+                    <p className="mt-2 text-xs text-blue-900/80">
+                      {transparencyCopy.weDontTouchPayouts} {transparencyCopy.platformFeeOnly}
+                    </p>
+                  )}
               </div>
             </div>
           </div>

@@ -313,7 +313,7 @@ node -r ts-node/register services/release/SDKUpdateNotificationService.ts remind
 <h2>ApexMediation SDK v1.2.0</h2>
 
 <p><strong>⚠️ This release contains breaking changes.</strong> 
-Please review the <a href="https://docs.apexmediation.com/migration/v1.2.0">migration guide</a>.</p>
+Please review the <a href="https://docs.apexmediation.ee/migration/v1.2.0">migration guide</a>.</p>
 
 <h3>What's Changed</h3>
 
@@ -467,14 +467,14 @@ This is a BREAKING CHANGE - bump major version
 **Deployment:**
 - **Primary**: Cloudflare Pages (free, fast CDN)
 - **Fallback**: GitHub Pages (if Cloudflare not configured)
-- **URL**: https://docs.apexmediation.com
+- **URL**: https://docs.apexmediation.ee
 
 ### Version Switcher
 
 **Structure:**
 
 ```
-docs.apexmediation.com/
+docs.apexmediation.ee/
 ├── index.html                 # Landing page
 ├── versions.json              # Version list
 ├── latest/ → v1.2.0/          # Symlink to latest
@@ -525,7 +525,7 @@ docs.apexmediation.com/
 {
   "index_name": "apexmediation",
   "start_urls": [
-    "https://docs.apexmediation.com/"
+    "https://docs.apexmediation.ee/"
   ],
   "selectors": {
     "lvl0": "h1",

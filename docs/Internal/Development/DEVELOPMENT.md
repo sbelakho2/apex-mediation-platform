@@ -443,7 +443,7 @@ kubectl scale deployment apexmediation-backend-green --replicas=15 -n production
 - **Logs**: CloudWatch Logs aggregation
 - **Tracing**: OpenTelemetry integration (planned)
 - **Alerts**: PagerDuty for critical issues
-- **Status**: https://status.apexmediation.com
+- **Status**: https://status.apexmediation.ee
 
 ## Deployment
 
@@ -1400,5 +1400,5 @@ churnRisk = healthScore < 40 ? 'high' : healthScore < 60 ? 'medium' : 'low'
 ## Support
 
 - Discord: https://discord.gg/apexmediation
-- Email: support@apexmediation.com
-- Status: https://status.apexmediation.com
+- Email: support@apexmediation.ee
+- Status: https://status.apexmediation.ee

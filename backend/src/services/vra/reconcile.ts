@@ -25,17 +25,22 @@ const envFloat = (v: string | undefined, d: number) => {
   return Number.isFinite(n) ? n : d;
 };
 
-// Tunables (defaults per VRA.md)
-const UNDERPAY_TOL = envFloat(process.env.VRA_UNDERPAY_TOL, 0.02); // 2%
-const IVT_P95_BAND_PP = envFloat(process.env.VRA_IVT_P95_BAND_PP, 2); // +2 percentage points over 30d p95
-const FX_BAND_PCT = envFloat(process.env.VRA_FX_BAND_PCT, 0.5); // ±0.5% band
-const VIEWABILITY_GAP_PP = envFloat(process.env.VRA_VIEWABILITY_GAP_PP, 15); // > 15 pp gap
+// Read tunables per invocation so tests and operators can adjust without restarts
+function readReconTunables() {
+  return {
+    UNDERPAY_TOL: envFloat(process.env.VRA_UNDERPAY_TOL, 0.02), // 2%
+    IVT_P95_BAND_PP: envFloat(process.env.VRA_IVT_P95_BAND_PP, 2), // +2 pp over 30d p95
+    FX_BAND_PCT: envFloat(process.env.VRA_FX_BAND_PCT, 0.5), // ±0.5% band
+    VIEWABILITY_GAP_PP: envFloat(process.env.VRA_VIEWABILITY_GAP_PP, 15), // > 15 pp gap
+  } as const;
+}
 
 export async function reconcileWindow(params: ReconcileParams): Promise<ReconcileResult> {
   const { from, to, dryRun } = params;
   const end = vraReconcileDurationSeconds.startTimer();
 
   try {
+    const { UNDERPAY_TOL, IVT_P95_BAND_PP, FX_BAND_PCT, VIEWABILITY_GAP_PP } = readReconTunables();
     // 1) Aggregate expected USD in window
     const expectedRows = await executeQuery<{ expected_usd: string }>(
       `SELECT toFloat64(sum(expected_value)) AS expected_usd
@@ -198,7 +203,9 @@ export async function reconcileWindow(params: ReconcileParams): Promise<Reconcil
           const avg = Number(r.avg_rate);
           if (!base || base <= 0) continue;
           const dev = Math.abs(avg - base) / base;
-          if (dev > band) {
+          // Use epsilon to avoid floating drift causing equality to trigger
+          const EPS = 1e-9;
+          if (dev - band > EPS) {
             rows.push({
               kind: 'fx_mismatch',
               amount: 0.0,
@@ -231,7 +238,9 @@ export async function reconcileWindow(params: ReconcileParams): Promise<Reconcil
       const om = Number(rowsView[0]?.om ?? NaN);
       const stmt = Number(rowsView[0]?.stmt ?? NaN);
       if (Number.isFinite(om) && Number.isFinite(stmt)) {
-        if (Math.abs(om - stmt) > gap) {
+        // Use epsilon to avoid emitting when exactly on threshold due to float drift
+        const EPS = 1e-9;
+        if (Math.abs(om - stmt) - gap > EPS) {
           rows.push({
             kind: 'viewability_gap',
             amount: 0.0,

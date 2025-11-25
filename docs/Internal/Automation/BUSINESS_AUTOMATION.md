@@ -851,8 +851,8 @@ jobs:
             -H "Authorization: Bearer $SENDGRID_API_KEY" \
             -H "Content-Type: application/json" \
             -d '{
-              "personalizations": [{"to": [{"email": "customers@rivalapexmediation.com"}]}],
-              "from": {"email": "releases@rivalapexmediation.com"},
+              "personalizations": [{"to": [{"email": "customers@rivalapexmediation.ee"}]}],
+              "from": {"email": "releases@rivalapexmediation.ee"},
               "subject": "New SDK Release: ${{ github.ref_name }}",
               "content": [{"type": "text/plain", "value": "${{ steps.changelog.outputs.changelog }}"}]
             }'

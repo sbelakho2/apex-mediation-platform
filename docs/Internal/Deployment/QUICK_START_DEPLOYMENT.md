@@ -132,11 +132,11 @@ pkill -f "port-forward"
 kubectl get svc -n production backend-api -o jsonpath='{.status.loadBalancer.ingress[0].ip}'
 
 # Update DNS records (in your DNS provider):
-# api.apexmediation.com → <LOAD_BALANCER_IP>
-# console.apexmediation.com → <LOAD_BALANCER_IP>
+# api.apexmediation.ee → <LOAD_BALANCER_IP>
+# console.apexmediation.ee → <LOAD_BALANCER_IP>
 
 # Wait for DNS propagation (1-5 minutes)
-watch -n 5 dig api.apexmediation.com +short
+watch -n 5 dig api.apexmediation.ee +short
 ```
 
 ---
@@ -154,7 +154,7 @@ kubectl port-forward -n monitoring svc/prometheus 9090:9090
 # Open: http://localhost:9090/alerts
 
 # API Health
-curl https://api.apexmediation.com/health
+curl https://api.apexmediation.ee/health
 ```
 
 ### Critical Metrics to Watch
@@ -305,9 +305,9 @@ kubectl get cronjobs -n production
 | Scenario | Contact |
 |----------|---------|
 | Production down | PagerDuty (auto-escalates) |
-| AI spend spike | platform@apexmediation.com + finance@apexmediation.com |
-| Security incident | security@apexmediation.com |
-| Database issues | dba@apexmediation.com |
+| AI spend spike | platform@apexmediation.ee + finance@apexmediation.ee |
+| Security incident | security@apexmediation.ee |
+| Database issues | dba@apexmediation.ee |
 | General support | #platform-alerts (Slack) |
 
 ---
