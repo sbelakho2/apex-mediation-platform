@@ -44,6 +44,9 @@ const FORBIDDEN = [
   /render\.com/i,
   /\brailway\b/i,
   /upstash/i,
+  /backblaze/i,
+  /backblazeb2/i,
+  /\bB2\b/i,
 ];
 
 const TEXT_EXT = new Set([

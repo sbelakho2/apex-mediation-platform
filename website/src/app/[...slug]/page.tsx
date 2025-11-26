@@ -46,54 +46,98 @@ function PageLayout({
   title,
   intro,
   breadcrumbs,
-  children,
+          intro="Detailed guidance for data controllers integrating ApexMediation, the Bel Consulting OÜ platform operating at apexmediation.ee."
   heroTag,
 }: {
   title: string;
   intro: string;
-  breadcrumbs: Breadcrumb[];
-  children: React.ReactNode;
-  heroTag?: string;
-}) {
-  return (
-    <main className="min-h-screen bg-white text-gray-900">
-      <div className="container mx-auto max-w-6xl px-4 py-16 space-y-10">
-        <nav className="text-xs font-semibold uppercase tracking-[0.2em] text-gray-600">
-          <Link
-            href="/"
-            className="hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-brand-500"
-          >
-            Home
-          </Link>
-          {breadcrumbs.map((crumb) => (
-            <span key={crumb.href} className="ml-2">
-              /{' '}
-              <Link
-                href={crumb.href}
-                className="hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-brand-500"
-              >
-                {crumb.label}
-              </Link>
-            </span>
-          ))}
-        </nav>
+            <section className="rounded-3xl bg-white p-8 text-gray-900 shadow-xl ring-1 ring-gray-200 space-y-3">
+              <h2 className="text-h3 font-bold uppercase">Scope & roles</h2>
+              <p className="text-sm text-gray-700">
+                ApexMediation (Bel Consulting OÜ) processes personal data strictly to provide mediation, reporting, fraud, and billing services to publishers. You remain the Data Controller; Bel Consulting OÜ acts as Data Processor under Article 28 GDPR and the Data Processing Agreement accessible in <Link href="/dashboard/settings?tab=security" className="font-bold underline">Settings → Security</Link>. Sub-processors are limited to core infrastructure (Fly.io, DigitalOcean, ClickHouse Cloud, Resend), and the demand partners you explicitly connect. Notices of new sub-processors are posted 30 days in advance.
+              </p>
+            </section>
 
-        <header className="space-y-4">
-          {heroTag && (
-            <span className="inline-flex items-center rounded-full bg-brand-50 px-3 py-1 text-xs font-semibold tracking-[0.1em] text-brand-700">
-              {heroTag}
-            </span>
-          )}
-          <h1 className="text-h2-sm md:text-h2-md lg:text-h2 font-semibold text-gray-900">
-            {title}
-          </h1>
-          <p className="max-w-3xl text-body text-gray-600 leading-relaxed">
-            {intro}
-          </p>
-        </header>
+            <section className="rounded-3xl bg-white p-8 text-gray-900 shadow-xl ring-1 ring-gray-200 space-y-3">
+              <h2 className="text-h3 font-bold uppercase">Data categories & purposes</h2>
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
+                  <h3 className="text-sm font-semibold text-gray-900">End-user data</h3>
+                  <ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-gray-700">
+                    <li>Advertising identifiers (IDFA, GAID, AdID), hashed user IDs, consent strings.</li>
+                    <li>Device metadata (OS version, locale, screen size, timezone).</li>
+                    <li>Event telemetry (requests, fills, impressions, clicks, rewards, revenue).</li>
+                  </ul>
+                </div>
+                <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
+                  <h3 className="text-sm font-semibold text-gray-900">Publisher & finance data</h3>
+                  <ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-gray-700">
+                    <li>Organisation profile, billing contacts, tax IDs, payout banking info.</li>
+                    <li>Support conversations, audit logs, and automation metadata.</li>
+                    <li>Aggregated marketplace metrics for benchmarking (anonymised).</li>
+                  </ul>
+                </div>
+              </div>
+              <p className="text-sm text-gray-700">
+                Purposes include ad serving, fraud detection, reporting, usage-based billing, support, and compliance evidence. We never sell or broker personal data.
+              </p>
+            </section>
 
-        {children}
-      </div>
+            <section className="rounded-3xl bg-white p-8 text-gray-900 shadow-xl ring-1 ring-gray-200 space-y-3">
+              <h2 className="text-h3 font-bold uppercase">Lawful bases & consent</h2>
+              <ul className="list-disc space-y-3 pl-6 text-sm text-gray-700">
+                <li>Personalised ads and analytics rely on user consent gathered through your CMP (IAB TCF v2.2 or equivalent). Our SDK stores consent records for up to 13 months.</li>
+                <li>Fraud detection, security logging, availability monitoring, and non-personalised ads rely on legitimate interest (Article 6(1)(f)). Balancing tests are documented within the DPIA template.</li>
+                <li>Payment processing and invoicing rely on contract fulfilment (Article 6(1)(b)) and legal obligations (tax retention rules).</li>
+              </ul>
+              <p className="text-sm text-gray-700">
+                Provide clear notices, purpose-specific toggles, and equal withdrawal mechanisms. The SDK exposes `setConsentState`, `setChildDirected`, and `setLimitAdTracking` helpers for mobile and Unity surfaces.
+              </p>
+            </section>
+
+            <section className="rounded-3xl bg-white p-8 text-gray-900 shadow-xl ring-1 ring-gray-200 space-y-3">
+              <h2 className="text-h3 font-bold uppercase">Data subject rights tooling</h2>
+              <p className="text-sm text-gray-700">
+                Automations satisfy access, deletion, rectification, portability, and objection requests inside 30 days (median under 15 minutes). Integrations include:
+              </p>
+              <ul className="list-disc space-y-3 pl-6 text-sm text-gray-700">
+                <li><code className="rounded bg-gray-100 px-1 py-0.5">POST /v1/gdpr/access</code> – returns JSON/CSV including raw auction and reward history.</li>
+                <li><code className="rounded bg-gray-100 px-1 py-0.5">POST /v1/gdpr/delete</code> – purges hot + cold storage, adapter caches, and queued payouts, then emits a signed deletion receipt.</li>
+                <li>Role-gated console workflows for manual review plus webhook notifications for your compliance inbox.</li>
+              </ul>
+            </section>
+
+            <section className="rounded-3xl bg-white p-8 text-gray-900 shadow-xl ring-1 ring-gray-200 space-y-3">
+              <h2 className="text-h3 font-bold uppercase">International transfers & retention</h2>
+              <ul className="list-disc space-y-3 pl-6 text-sm text-gray-700">
+                <li>Primary storage lives in EU-West (Frankfurt) with encrypted backups in Dublin. Cross-border transfers outside the EEA use EU Standard Contractual Clauses plus supplementary controls (TLS 1.3, encryption keys held in EU HSMs).</li>
+                <li>End-user telemetry deletes 90 days after last activity; aggregated analytics remain but are irreversibly anonymised.</li>
+                <li>Account, billing, and contract data deletes 30 days after termination unless finance or tax law requires up to seven-year retention.</li>
+              </ul>
+            </section>
+
+            <section className="rounded-3xl bg-white p-8 text-gray-900 shadow-xl ring-1 ring-gray-200 space-y-3">
+              <h2 className="text-h3 font-bold uppercase">Security & incident response</h2>
+              <p className="text-sm text-gray-700">
+                Controls include TLS 1.3 everywhere, AES-256 encryption at rest, hardware security keys for privileged access, quarterly penetration tests, and 24/7 anomaly detection on ingestion pipelines. Incident response SLAs:
+              </p>
+              <ul className="list-disc space-y-3 pl-6 text-sm text-gray-700">
+                <li>Notify controllers within 24 hours of confirming a breach affecting their data.</li>
+                <li>Notify supervisory authorities within 72 hours when required by Article 33.</li>
+                <li>Provide post-incident reports, mitigation steps, and updated risk assessments.</li>
+              </ul>
+            </section>
+
+            <section className="rounded-3xl bg-white p-8 text-gray-900 shadow-xl ring-1 ring-gray-200 space-y-3">
+              <h2 className="text-h3 font-bold uppercase">Contact & escalation</h2>
+              <p className="text-sm text-gray-700">
+                Data Protection Officer: <a href="mailto:dpo@apexmediation.ee" className="underline">dpo@apexmediation.ee</a>. Mailing address: Bel Consulting OÜ, Sepapaja 6, Tallinn 15551, Estonia. For complaints you may also contact the Estonian Data Protection Inspectorate (Andmekaitse Inspektsioon) at <a href="https://www.aki.ee" className="underline" rel="noreferrer" target="_blank">aki.ee</a>.
+              </p>
+              <p className="text-sm text-gray-700">
+                For implementation help email <a href="mailto:support@bel-consulting.ee" className="underline">support@bel-consulting.ee</a> or file a ticket in the dashboard. DPIA templates, consent copy, and audit checklists live in the Customer-Facing GDPR documentation bundle.
+              </p>
+            </section>
+          </div>
     </main>
   );
 }
@@ -780,53 +824,113 @@ Body: {
       return (
         <PageLayout
           title="Terms of Service"
-          intro="These highlights mirror the contractual language used in the Billing & Compliance and Support documentation."
+          intro="These Terms govern access to apexmediation.ee, the ApexMediation platform, SDKs, and related services operated by Bel Consulting OÜ."
           heroTag="Legal"
           breadcrumbs={breadcrumbs}
         >
           <div className="space-y-6">
-            <section className="rounded-3xl bg-white p-8 text-gray-900 shadow-xl ring-1 ring-gray-200">
-              <h2 className="text-h3 font-bold uppercase">Accounts & access</h2>
+            <section className="rounded-3xl bg-white p-8 text-gray-900 shadow-xl ring-1 ring-gray-200 space-y-3">
+              <h2 className="text-h3 font-bold uppercase">1. Parties & acceptance</h2>
               <p className="text-sm text-gray-700">
-                Keep credentials secure, enable 2FA, and grant least-privilege roles (Admin, Finance, Analyst, Read-only) as documented in the dashboard overview. You must notify us within 24 hours of suspected compromise.
+                ApexMediation is a brand of Bel Consulting OÜ (registry code 14955546, Sepapaja 6, 15551 Tallinn, Estonia). By creating an account, integrating our SDKs, or accessing any resource on apexmediation.ee you enter into a binding agreement with Bel Consulting OÜ. If you represent an organisation, you confirm you have authority to accept these Terms on its behalf.
+              </p>
+              <p className="text-sm text-gray-700">
+                These Terms incorporate the Privacy Policy, GDPR playbooks, Billing Policy Snapshot, and any order form or statement of work you sign. Conflicts resolve in the following order: custom order → DPA/SCCs → these Terms → public documentation.
               </p>
             </section>
 
             <section className="rounded-3xl bg-white p-8 text-gray-900 shadow-xl ring-1 ring-gray-200 space-y-3">
-              <h2 className="text-h3 font-bold uppercase">Fees & payment terms</h2>
+              <h2 className="text-h3 font-bold uppercase">2. Services</h2>
+              <p className="text-sm text-gray-700">
+                We provide SDKs, APIs, dashboards, reporting, and professional services that allow you to run a bring-your-own demand mediation stack. Feature availability may vary by tier. We may modify non-material features to improve performance or security but will not materially reduce core functionality without 30 days’ notice.
+              </p>
+              <p className="text-sm text-gray-700">
+                Beta or preview features are offered “as is” and may be withdrawn at any time. You acknowledge they should not be relied upon for production workloads until designated GA in writing.
+              </p>
+            </section>
+
+            <section className="rounded-3xl bg-white p-8 text-gray-900 shadow-xl ring-1 ring-gray-200 space-y-3">
+              <h2 className="text-h3 font-bold uppercase">3. Accounts, security & acceptable use</h2>
               <ul className="list-disc space-y-3 pl-6 text-sm text-gray-700">
-                <li>Platform tiers: Starter 0%, Growth 2.5%, Scale 2.0%, Enterprise 1.0–1.5% + negotiated minimum, billed marginally per revenue band.</li>
-                <li>Invoices issue on the first business day each month and are payable NET 30.</li>
-                <li>We offset negative adjustments, clawbacks, or chargebacks against future payouts.</li>
-                <li>Minimum payout is €100; balances roll forward until the threshold is met.</li>
+                <li>Maintain accurate profile information, enforce least-privilege roles, and enable MFA for Admin and Finance seats.</li>
+                <li>You are responsible for all activity under your credentials. Notify <a href="mailto:security@bel-consulting.ee" className="underline">security@bel-consulting.ee</a> within 24 hours of any suspected compromise.</li>
+                <li>Do not reverse engineer, benchmark for competitive purposes without consent, or use the platform to transmit malware, prohibited content, invalid traffic, or privacy-invasive signals.</li>
+                <li>Provide truthful consent signals (GDPR/TCF v2.2, COPPA, US state laws) and honour user opt-outs captured via ApexMediation APIs or our consent helpers.</li>
               </ul>
             </section>
 
             <section className="rounded-3xl bg-white p-8 text-gray-900 shadow-xl ring-1 ring-gray-200 space-y-3">
-              <h2 className="text-h3 font-bold uppercase">Acceptable use & compliance</h2>
+              <h2 className="text-h3 font-bold uppercase">4. Fees, billing & taxes</h2>
               <ul className="list-disc space-y-3 pl-6 text-sm text-gray-700">
-                <li>No prohibited content, invalid traffic, ad stacking, or tampering with SDKs or auctions.</li>
-                <li>You must provide accurate consents (GDPR/TCF, COPPA, US-GPP) and honour opt-outs recorded via ApexMediation APIs.</li>
-                <li>We may suspend access for material breaches, fraud, or legal requirements after notifying your primary contact.</li>
+                <li>Pricing tiers: Starter 0%, Growth 2.5%, Scale 2.0%, Enterprise 1.0–1.5% plus negotiated minimums. Fees accrue marginally per mediated revenue band and exclude taxes.</li>
+                <li>Invoices are issued on the first business day each month, payable NET 30 by bank transfer, SEPA, ACH, or Stripe autopay. Late amounts accrue 1.5% interest per month or the maximum allowed by law.</li>
+                <li>You are responsible for VAT, withholding, and other taxes linked to your use of the services. Provide valid tax IDs to avoid backup withholding.</li>
+                <li>We may suspend access for non-payment after 10 days’ written notice. Suspensions do not relieve you of accrued fees.</li>
               </ul>
             </section>
 
             <section className="rounded-3xl bg-white p-8 text-gray-900 shadow-xl ring-1 ring-gray-200 space-y-3">
-              <h2 className="text-h3 font-bold uppercase">Service levels & support</h2>
+              <h2 className="text-h3 font-bold uppercase">5. Data protection & confidentiality</h2>
               <ul className="list-disc space-y-3 pl-6 text-sm text-gray-700">
-                <li>Dashboard availability target: 99.5% monthly; edge bidders are multi-region.</li>
-                <li>Support response: under 4 business hours (Mon–Fri, 09:00–17:00 EET) via email or in-app chat.</li>
-                <li>Planned maintenance communicated at least 48 hours in advance.</li>
+                <li>Our Data Processing Agreement (Article 28 GDPR) and Standard Contractual Clauses form part of these Terms. You remain the Data Controller; ApexMediation acts as Data Processor.</li>
+                <li>We process personal data only according to your instructions, maintain SOC 2 Type II-aligned safeguards, and limit sub-processors to listed infrastructure or networks you enable.</li>
+                <li>Each party must protect the other’s confidential information with care equal to its own, and at least reasonable care, and only use it for purposes of this agreement.</li>
               </ul>
             </section>
 
             <section className="rounded-3xl bg-white p-8 text-gray-900 shadow-xl ring-1 ring-gray-200 space-y-3">
-              <h2 className="text-h3 font-bold uppercase">Liability & termination</h2>
+              <h2 className="text-h3 font-bold uppercase">6. Intellectual property</h2>
+              <p className="text-sm text-gray-700">
+                Bel Consulting OÜ retains all rights, title, and interest in the platform, SDKs, documentation, and derivative works. You retain ownership of your apps, creatives, data, and network credentials. We may use aggregated, anonymised analytics to improve the service provided they cannot identify you or your end users.
+              </p>
+            </section>
+
+            <section className="rounded-3xl bg-white p-8 text-gray-900 shadow-xl ring-1 ring-gray-200 space-y-3">
+              <h2 className="text-h3 font-bold uppercase">7. Warranties & disclaimers</h2>
               <ul className="list-disc space-y-3 pl-6 text-sm text-gray-700">
-                <li>Liability capped at the fees paid to ApexMediation during the preceding 12 months.</li>
-                <li>Either party may terminate with 30 days’ notice; data deletion SLAs (30 days) continue to apply.</li>
-                <li>EU law governs; disputes handled in Tallinn, Estonia unless otherwise agreed.</li>
+                <li>We warrant that we will provide the services in a professional manner consistent with industry standards and that we hold all rights necessary to grant the licenses herein.</li>
+                <li>You warrant that you have obtained all necessary rights, consents, and licenses to use your content and to direct us to process end-user data.</li>
+                <li>Except as expressly stated, the services are provided “as is” without other warranties, including implied warranties of merchantability, fitness for a particular purpose, or non-infringement.</li>
               </ul>
+            </section>
+
+            <section className="rounded-3xl bg-white p-8 text-gray-900 shadow-xl ring-1 ring-gray-200 space-y-3">
+              <h2 className="text-h3 font-bold uppercase">8. Indemnity</h2>
+              <p className="text-sm text-gray-700">
+                Each party will indemnify, defend, and hold the other harmless against third-party claims alleging infringement or violation of law arising from the indemnifying party’s content or misuse of the services, provided the indemnified party promptly notifies the other and allows control of the defence.
+              </p>
+            </section>
+
+            <section className="rounded-3xl bg-white p-8 text-gray-900 shadow-xl ring-1 ring-gray-200 space-y-3">
+              <h2 className="text-h3 font-bold uppercase">9. Limitation of liability</h2>
+              <ul className="list-disc space-y-3 pl-6 text-sm text-gray-700">
+                <li>Total liability for all claims arising out of these Terms is limited to the fees you paid during the twelve (12) months immediately preceding the claim.</li>
+                <li>Neither party is liable for indirect, incidental, consequential, or punitive damages, loss of profit, or business interruption, even if advised of the possibility.</li>
+                <li>These caps do not apply to payment obligations, confidentiality breaches, or indemnification duties.</li>
+              </ul>
+            </section>
+
+            <section className="rounded-3xl bg-white p-8 text-gray-900 shadow-xl ring-1 ring-gray-200 space-y-3">
+              <h2 className="text-h3 font-bold uppercase">10. Term, suspension & termination</h2>
+              <ul className="list-disc space-y-3 pl-6 text-sm text-gray-700">
+                <li>These Terms remain in effect until terminated. Either party may terminate for convenience with 30 days’ written notice.</li>
+                <li>We may suspend or terminate immediately for material breach, non-payment, legal requirement, or security risk. We will provide prompt notice with remediation steps when practical.</li>
+                <li>Upon termination we will disable access, delete personal data within 30 days (unless law requires longer retention), and make reasonable efforts to assist with data export.</li>
+              </ul>
+            </section>
+
+            <section className="rounded-3xl bg-white p-8 text-gray-900 shadow-xl ring-1 ring-gray-200 space-y-3">
+              <h2 className="text-h3 font-bold uppercase">11. Governing law & disputes</h2>
+              <p className="text-sm text-gray-700">
+                These Terms are governed by the laws of the Republic of Estonia without regard to conflict-of-law rules. Parties submit to the exclusive jurisdiction of the Harju County Court in Tallinn. We are open to good-faith mediation prior to formal proceedings.
+              </p>
+            </section>
+
+            <section className="rounded-3xl bg-white p-8 text-gray-900 shadow-xl ring-1 ring-gray-200 space-y-3">
+              <h2 className="text-h3 font-bold uppercase">12. Contact</h2>
+              <p className="text-sm text-gray-700">
+                Questions about these Terms can be sent to <a href="mailto:legal@apexmediation.ee" className="underline">legal@apexmediation.ee</a> or Bel Consulting OÜ, Sepapaja 6, Tallinn 15551, Estonia. Notices are deemed delivered when emailed to your designated billing contact or posted in the dashboard inbox.
+              </p>
             </section>
           </div>
         </PageLayout>

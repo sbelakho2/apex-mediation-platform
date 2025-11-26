@@ -2,7 +2,7 @@
 -- Usage:
 -- 1) Connect as admin (DO dashboard reset/superuser) to the target database (e.g., apex)
 -- 2) Run this script once per cluster/database
--- 3) Store credentials securely (DO Secrets / 1Password)
+-- 3) Store credentials securely (DO App Secrets; operator backup in KeePassXC or `pass`)
 
 -- Create application role with least privilege
 DO

@@ -18,25 +18,27 @@ async function streamToString(stream: any): Promise<string> {
 }
 
 async function main() {
-  const bucket = getEnv('SPACES_BUCKET', !!process.env.B2_BUCKET ? false : true) || getEnv('B2_BUCKET', false);
-  const endpoint = process.env.SPACES_ENDPOINT || process.env.B2_ENDPOINT; // B2 may not be provided; SDK can infer from region in some setups
-  const region = process.env.SPACES_REGION || process.env.B2_REGION || 'us-east-1';
-  const keyId = process.env.SPACES_ACCESS_KEY_ID || process.env.B2_KEY_ID;
-  const secret = process.env.SPACES_SECRET_ACCESS_KEY || process.env.B2_APPLICATION_KEY;
+  // Generic S3-compatible configuration (MinIO-first)
+  // Required: S3_BUCKET, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY
+  // Optional: S3_ENDPOINT (e.g., http://minio:9000 or https://fra1.digitaloceanspaces.com), AWS_DEFAULT_REGION
+  const bucket = getEnv('S3_BUCKET');
+  const endpoint = process.env.S3_ENDPOINT || '';
+  const region = process.env.AWS_DEFAULT_REGION || 'us-east-1';
+  const keyId = getEnv('AWS_ACCESS_KEY_ID');
+  const secret = getEnv('AWS_SECRET_ACCESS_KEY');
 
-  if (!bucket) throw new Error('[verify:storage] No bucket provided (SPACES_BUCKET or B2_BUCKET)');
-  if (!keyId || !secret) throw new Error('[verify:storage] No credentials provided (SPACES_ACCESS_KEY_ID/SECRET or B2_KEY_ID/APPLICATION_KEY)');
+  // Inject creds for fromEnv() to pick up
+  process.env.AWS_ACCESS_KEY_ID = keyId;
+  process.env.AWS_SECRET_ACCESS_KEY = secret;
 
   const client = new S3Client({
     region,
-    endpoint: endpoint ? `https://${endpoint}` : undefined,
-    forcePathStyle: !!process.env.B2_BUCKET, // safer for some S3-compatible providers
+    // Allow plain HTTP for MinIO on internal network; SDK accepts full URL
+    endpoint: endpoint || undefined,
+    // Force path-style by default for broad S3-compatibility (MinIO, Spaces)
+    forcePathStyle: true,
     credentials: fromEnv(),
   });
-
-  // Inject creds to env provider
-  process.env.AWS_ACCESS_KEY_ID = keyId;
-  process.env.AWS_SECRET_ACCESS_KEY = secret;
 
   const testKey = `test/verify-${Date.now()}.txt`;
   const body = 'apex verify storage';

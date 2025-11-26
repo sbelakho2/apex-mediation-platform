@@ -1,7 +1,7 @@
 # Infrastructure Migration Plan — DigitalOcean, $50/mo Max (FRA1 + TLS hardened)
 ## Goal: Production-ready under $50/month, minimal overhead
 
-This plan replaces the previous multi-provider direction (Supabase + Upstash + ClickHouse) with a single DigitalOcean droplet, DO Managed Postgres, self-hosted Redis, and Spaces/B2 for objects and backups. Monitoring leans on DO built-ins with an optional lightweight Grafana stack. ClickHouse is deferred; use Postgres-first analytics. Region is pinned to FRA1 (Frankfurt) by default for EU latency/compliance. TLS is terminated on the droplet via Let’s Encrypt with hardened defaults (HSTS after validation, OCSP stapling, modern ciphers).
+This plan replaces the previous multi-provider direction (Supabase + Upstash + ClickHouse) with a single DigitalOcean droplet, DO Managed Postgres, self-hosted Redis, and MinIO (self-hosted S3) for objects and backups with optional offsite sync to DigitalOcean Spaces. Monitoring leans on DO built-ins with an optional lightweight Grafana stack. ClickHouse is deferred; use Postgres-first analytics. Region is pinned to FRA1 (Frankfurt) by default for EU latency/compliance. TLS is terminated on the droplet via Let’s Encrypt with hardened defaults (HSTS after validation, OCSP stapling, modern ciphers).
 
 Budget ceiling: $50/month (target $44–49/month)
 
@@ -53,7 +53,7 @@ Goal: managed, low-maintenance Postgres; use it for core data + early analytics;
   - `apex_app` (limited privileges)
   - `apex_admin` (migration / maintenance)
 - Store DB credentials in:
-  - Env vars + encrypted secrets (DO secrets or 1Password)
+  - Env vars + encrypted secrets (DO App Secrets or operator vault like KeePassXC/`pass`)
 - Schema & migrations
   - Port existing migrations (001–008+) to run against managed Postgres
   - Use a migration tool (Flyway/Liquibase/Prisma/custom) in CI: one command `deploy:migrations` for prod
@@ -374,7 +374,7 @@ Use DigitalOcean Managed Postgres (Basic/Dev tier) in the same region as the dro
 
 Key steps (see section 1.2 above for details):
 - Create cluster (10–20GB to start), restrict access to droplet private IP.
-- Create roles `apex_app` and `apex_admin`; store credentials in DO Secrets/1Password.
+- Create roles `apex_app` and `apex_admin`; store credentials in DO App Secrets and mirror into operator vault (KeePassXC/`pass`).
 - Run migrations via CI task `deploy:migrations`; verify tables, indexes, FKs.
 - Enable backups and perform a PITR drill; document RPO/RTO.
 
@@ -386,7 +386,7 @@ Policy: Always prefer Postgres over 3rd-party analytics services until clear sca
 Recommended steps:
 - Create `daily_app_metrics` and `daily_network_metrics` tables with concise schemas and appropriate composite indexes.
 - Use materialized views and scheduled refresh (cron/systemd timer) for heavy reports.
-- Keep long-term raw event storage minimal; archive to Spaces/B2 as gzip CSV/Parquet when needed.
+- Keep long-term raw event storage minimal; archive to MinIO (primary) as gzip CSV/Parquet; optionally mirror offsite to DigitalOcean Spaces on a weekly schedule.
 - Only revisit ClickHouse if Postgres p95 query latency for dashboards exceeds SLOs after optimization.
 
 ---
@@ -930,7 +930,7 @@ umami.track('sdk_download', { platform: 'ios' });
 |---------|--------------|-------|
 | DigitalOcean Droplet (2 vCPU/4GB/80GB) | ~$24 | Single droplet `apex-core-1` |
 | DO Managed Postgres (Basic/Dev) | ~$15 | SSL required, automated backups |
-| Object Storage (Spaces or B2) | ~$5 | Private bucket + signed URLs |
+| Object Storage (MinIO self-hosted, optional Spaces offsite) | ~$0–5 | Uses droplet disk; optional Spaces for offsite |
 | Misc (egress, DNS, backups) | $3–5 | Buffer for bandwidth/monitoring |
 | Optional: Grafana/Prometheus | $0 | Self-host on droplet; low retention |
 | Optional: Status Page (Upptime) | $0 | GitHub Pages |

@@ -46,6 +46,12 @@ describe('Infrastructure Migration Plan — Repository Conformance', () => {
     expect(txt).toMatch(/Enable authentication \(`requirepass`\)/);
   });
 
+  test('Infra plan adopts MinIO-first object storage and removes Backblaze/B2', () => {
+    const txt = read(infraPlan);
+    expect(/MinIO/i.test(txt)).toBe(true);
+    expect(/Backblaze|\bB2\b/i.test(txt)).toBe(false);
+  });
+
   test('docker-compose.prod.yml has safe local defaults and healthchecks', () => {
     const txt = read(composeProd);
     expect(txt).toMatch(/DATABASE_URL=\$\{DATABASE_URL:-postgresql:\/\/postgres:postgres@postgres:5432\/apexmediation}/);
@@ -112,12 +118,37 @@ describe('Infrastructure Migration Plan — Repository Conformance', () => {
     expect(txt).toMatch(/##\s+2\.\s+Day‑2 Operations \(Long‑Term Running\)/);
     expect(txt).toMatch(/###\s+2\.1\s+CI\/CD \& Release Management/);
     expect(txt).toMatch(/###\s+2\.2\s+Scheduled Jobs \(Cron\/Queues\) — Accounting, Billing, Sync/);
-    expect(txt).toMatch(/###\s+2\.3\s+Backups \& Retention \(DB → Spaces\/B2\)/);
+    expect(txt).toMatch(/###\s+2\.3\s+Backups \& Retention/i);
     expect(txt).toMatch(/###\s+2\.4\s+Monitoring, Metrics, and Alerting/);
     expect(txt).toMatch(/###\s+2\.5\s+Incident Response \& Runbooks/);
     expect(txt).toMatch(/###\s+2\.6\s+Security Operations/);
     expect(txt).toMatch(/###\s+2\.7\s+Capacity \& Cost Management/);
     expect(txt).toMatch(/###\s+2\.8\s+Operator Routines \(Checklist\)/);
+  });
+
+  test('Production readiness checklist adopts MinIO-first object storage and no Backblaze', () => {
+    const txt = read(prodChecklist);
+    expect(/MinIO/i.test(txt)).toBe(true);
+    expect(/Backblaze|\bB2\b/i.test(txt)).toBe(false);
+  });
+
+  test('Production readiness checklist includes SDK Release Management & Platform Support', () => {
+    const txt = read(prodChecklist);
+    expect(txt).toMatch(/##\s+SDK Release Management \& Platform Support/);
+    expect(txt).toMatch(/###\s+Governance \& Versioning/);
+    expect(txt).toMatch(/###\s+Release Pipeline \& Smoke Tests/);
+    expect(txt).toMatch(/JavaInteropSmoke\.java/);
+    expect(txt).toMatch(/TelemetryCollectorTest\.kt/);
+  });
+
+  test('Production readiness checklist includes Support, Security, Legal, Website/Console, SLOs, and GTM sign-off', () => {
+    const txt = read(prodChecklist);
+    expect(txt).toMatch(/##\s+Customer Support, SLAs \& Onboarding/);
+    expect(txt).toMatch(/##\s+Security Readiness \& Audits/);
+    expect(txt).toMatch(/##\s+Legal \& Compliance \(Product\)/);
+    expect(txt).toMatch(/##\s+Website \& Console UX Readiness/);
+    expect(txt).toMatch(/##\s+Operational Reporting \& SLOs/);
+    expect(txt).toMatch(/##\s+Final Sign‑off — Additional Go‑To‑Market Gates/);
   });
 
   test('TLS snapshot script writes expected evidence files', () => {

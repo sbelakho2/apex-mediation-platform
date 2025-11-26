@@ -301,14 +301,14 @@ jobs:
 
 ### Scenario 1: Infisical Outage
 
-**Fallback**: Keep encrypted backup of production secrets in 1Password (team vault).
+**Fallback**: Keep encrypted backup of production secrets in a local vault (KeePassXC `.kdbx`) or UNIX `pass` (GPG-backed).
 
 **Steps**:
-1. Access 1Password team vault
-2. Decrypt secrets using master password
-3. Export to `.env` file
-4. Deploy with `.env` until Infisical recovers
-5. Delete `.env` after recovery
+1. Open KeePassXC vault (.kdbx) or initialize/access the UNIX `pass` store (GPG)
+2. Decrypt and retrieve required secrets using the master password/key file (or GPG key)
+3. Export to a temporary `.env` file on the admin host
+4. Deploy with `.env` until Infisical recovers (prefer DO App Secrets for runtime)
+5. Securely delete the temporary `.env` after recovery
 
 ### Scenario 2: Leaked Secret
 
@@ -326,7 +326,7 @@ jobs:
 **Recovery**:
 1. Contact Infisical support with ownership proof
 2. Use backup admin account
-3. Fallback to 1Password encrypted backup (see Scenario 1)
+3. Fallback to KeePassXC/`pass` encrypted backup (see Scenario 1)
 
 ## Migration Checklist
 
@@ -344,7 +344,7 @@ jobs:
 - [ ] Remove `.env` files from git history (use BFG Repo-Cleaner)
 - [ ] Add `.env*` to `.gitignore` (if not already)
 - [ ] Document rotation schedule
-- [ ] Set up encrypted backup in 1Password
+- [ ] Set up encrypted backup in KeePassXC or `pass`
 - [ ] Schedule quarterly secret rotation reminders
 - [ ] Train team on Infisical usage
 

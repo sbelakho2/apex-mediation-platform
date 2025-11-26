@@ -2657,3 +2657,23 @@ Impact
 - Documentation and tests only; no runtime behavior changes. Provides operators with an actionable, auditable runbook for long‑term maintenance and semi‑automated operations.
 
 ---
+Changelog — Secrets management guidance switched to KeePassXC/`pass` (2025-11-26)
+
+Summary
+- Replaced references to proprietary vaults with free, local alternatives suitable for solo-operator workflows. Standardized on KeePassXC (`.kdbx`) or UNIX `pass` (GPG-backed) for operator-held secrets, and DO App Secrets/Infisical for runtime injection.
+
+What changed
+- Production Readiness Checklist: prerequisites and security sections now instruct using KeePassXC/`pass` for SSH keys and operator vault; clarified secrets manager selection (Infisical self-hosted recommended, or DO App Secrets).
+- Infra Migration Plan: DB credentials storage updated to DO App Secrets + operator vault (KeePassXC/`pass`).
+- DO Readiness Checklist: SSH private key storage guidance updated to KeePassXC/`pass`.
+- Security/Secrets runbook: fallback and recovery steps updated to KeePassXC/`pass`; migration checklist revised accordingly.
+- DB roles SQL notes: comments updated to DO App Secrets + KeePassXC/`pass`.
+
+Validation
+- Repo-wide scan confirms no remaining references to 1Password.
+- Infra tests remain green.
+
+Impact
+- Documentation-only change; operational guidance aligned with free and safe local alternatives.
+
+---

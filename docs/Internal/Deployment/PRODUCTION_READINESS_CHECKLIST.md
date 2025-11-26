@@ -6,7 +6,7 @@ This is the single, self-contained runbook to take the system to production on D
 - [ ] Domain configured: `api.apexmediation.ee`, `console.apexmediation.ee` (TTL 300s)
 - [ ] DigitalOcean account with billing enabled
 - [ ] Provisioning decisions documented (FRA1, droplet size 2 vCPU/4GB/80GB, DO Managed Postgres Basic/Dev)
-- [ ] SSH keypair for deploy user created and stored in 1Password
+- [ ] SSH keypair for deploy user created and stored in a local encrypted vault (KeePassXC or `pass`)
 - [ ] GitHub repo secrets prepared (add when ready): `DROPLET_HOST`, `DEPLOY_USER`, `DEPLOY_SSH_KEY`
 - [ ] Production `.env` templates reviewed:
   - Backend: `infrastructure/production/.env.backend.example` (requires `?sslmode=require`)
@@ -91,6 +91,7 @@ This is the single, self-contained runbook to take the system to production on D
 - [ ] Execute VRA pipeline; verify `recon_statements_norm`, `recon_expected`, `recon_match`, and `recon_deltas` contain correct classifications.
 - [ ] Review console VRA overview metrics, deltas filtering (app/network/date), and dispute-kit ZIP (CSV + receipt summary).
 - [ ] Validate Proof-of-Revenue: daily roots + monthly digest generation plus hash verification tooling.
+ - [ ] Cross‑reference `docs/Internal/VRA/IMPLEMENTATION_SUMMARY.md` for expected table names, flows, and evidence examples.
 
 ### 0.0.11 Cron Jobs, Emails & Automation (Staging)
 - [ ] Run staging cron/worker stack (usage aggregation daily, Stripe sync, email queue) and confirm zero crashes in logs.
@@ -203,9 +204,15 @@ References
 - [ ] Confirm Redis is not publicly reachable (external `nmap <host> -p 6379` → closed/filtered); in‑cluster AUTH works (`npm run verify:redis --workspace backend`).
 
 ### 1.4 Object Storage & Backups
-- [ ] Choose storage target (DigitalOcean Spaces `apex-prod-objects` or Backblaze B2).
-- [ ] Enforce private buckets, signed URLs, lifecycle rules (30–90 days for intermediates).
-- [ ] Schedule weekly/monthly DB exports to the bucket (encrypted) and test restore path.
+- [ ] Primary: Self-hosted MinIO on the droplet (internal network only)
+  - S3 endpoint: `http://minio:9000` (private bridge)
+  - Bucket: `apex-prod-objects` (private)
+  - Access: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` (MinIO root/user or scoped user)
+- [ ] Offsite (optional): DigitalOcean Spaces replication/sync for offsite copies
+  - Endpoint: `https://fra1.digitaloceanspaces.com`
+  - Use `rclone`/`mc mirror` weekly to sync MinIO → Spaces (Day‑2 job)
+- [ ] Enforce signed URLs and lifecycle rules (30–90 days for intermediates) on both targets if used.
+- [ ] Schedule weekly/monthly DB exports to MinIO (encrypted) and test restore path.
 
 ### 1.5 Budget Check
 - [ ] Confirm monthly infra spend (droplet ~$24 + Postgres ~$15 + storage ~$5 + misc $3–5 ≤ $50 target).
@@ -236,6 +243,97 @@ References
 - [ ] Choose PagerDuty/Better Stack/email/SMS.
 - [ ] Define critical vs warning alerts and solo-founder escalation policy.
 - [ ] Trigger test alert and confirm delivery.
+
+## SDK Release Management & Platform Support
+### Governance & Versioning
+- [ ] Adopt semantic versioning for all SDKs (Android, iOS, Unity, tvOS/CTV) with per-SDK `CHANGELOG` and upgrade notes.
+- [ ] Publish a Compatibility Matrix (SDK ↔ API version ↔ Console minimum) in docs.
+
+### Release Pipeline & Smoke Tests
+- [ ] Android: CI runs unit tests and interop smoke (see `sdk/core/android/`).
+  - Example: `./gradlew :sdk:core:android:testDebugUnitTest`
+  - Repo tests: `sdk/core/android/src/test/java/com/rivalapexmediation/sdk/JavaInteropSmoke.java`, `sdk/core/android/src/test/kotlin/com/rivalapexmediation/sdk/telemetry/TelemetryCollectorTest.kt`
+- [ ] iOS: CI job builds library and runs unit/UI smoke (add workflow when ready).
+- [ ] Unity: Verify Android/iOS exports build and callbacks fire once; attach minimal sample scene.
+- [ ] tvOS/CTV: Build verification for Apple TV/Android TV sample apps.
+- [ ] Tag releases and attach sample binaries where applicable.
+
+### Samples & Integration Guides
+- [ ] Provide sample apps for Android, iOS, Unity, and CTV (staging endpoints pre-wired).
+- [ ] Ship Quick Start per platform with consent toggles and placement wiring examples.
+- [ ] Ensure API Keys/placement IDs can be created via Console and propagate to SDK configs.
+
+### QA Evidence (SDKs)
+- [ ] Record initialize→load→show flows (video/gifs) for each platform.
+- [ ] Store under `docs/Internal/QA/sdks-YYYY-MM-DD/<platform>/` with logs and configs.
+
+## Customer Support, SLAs & Onboarding
+### Support Channels
+- [ ] Establish support@ mailbox and autoresponder; document response-time policy.
+- [ ] Optional: Discord/Forum channel for developers; moderation guidelines in place.
+
+### SLAs & Status Communications
+- [ ] Publish SLA targets and maintenance window policy (link status page from Section 2.4).
+- [ ] Prepare incident communication templates (degradation, outage, postmortem).
+
+### Onboarding & Integration
+- [ ] Create “Hello World” integration guides per SDK (copy-paste snippets, consent notes).
+- [ ] Provide sample placements and test credentials in staging; Console onboarding checklist (org → app → placements → API keys → first ad).
+
+### Evidence
+- [ ] Store onboarding screenshots and first-ad proof under `docs/Internal/QA/onboarding-YYYY-MM-DD/`.
+
+## Security Readiness & Audits
+### Policies & Scans
+- [ ] Enable dependency vulnerability scanning (Dependabot/Snyk) and SAST (ESLint security rules; optional CodeQL).
+- [ ] Plan a lightweight external pentest before GA; track findings to closure.
+
+### Secrets & Access
+- [ ] Review secrets storage (KeePassXC/`pass` or DO App Secrets) and least-privilege access to droplet/DB.
+- [ ] Rotate Stripe/Resend keys and DB/Redis passwords before GA; document cadence.
+
+### Data Protection
+- [ ] Verify PII handling in logs/errors; ensure redaction in `/metrics` and Sentry.
+- [ ] Confirm backups encryption and test restore drill from Spaces/B2.
+
+### Evidence
+- [ ] Save scan reports and pentest summary under `docs/Internal/QA/security-YYYY-MM-DD/`.
+
+## Legal & Compliance (Product)
+### GDPR & DPIA
+- [ ] Complete DPIA for core data flows (publishers, end-users where applicable).
+- [ ] Data Processing Addendum (DPA) template ready; countersign for customers on request.
+
+### Public Policies
+- [ ] Publish Privacy Policy, Terms of Service, and Cookie Policy on the website.
+- [ ] Maintain Subprocessor list and data retention schedule aligned with Section 8.3.
+
+### Evidence
+- [ ] Snapshot published pages (PDF) and store under `docs/Internal/QA/legal-YYYY-MM-DD/`.
+
+## Website & Console UX Readiness
+### Website
+- [ ] Run capture scripts and store artifacts:
+  - `npm run capture:website` → `docs/Internal/QA/website-YYYY-MM-DD/`
+- [ ] Verify `/`, `/pricing`, `/docs`, `/legal/*` parity with backend billing policy.
+
+### Console
+- [ ] Run `npm run capture:console` after staging deploy; verify critical flows and screenshots.
+
+## Operational Reporting & SLOs
+### SLOs and Error Budgets
+- [ ] Define availability and latency SLOs for API/Console; set error budgets.
+- [ ] Create monthly ops report template (uptime, incidents, costs, customer growth).
+
+### Evidence
+- [ ] Store first monthly report under `docs/Internal/QA/ops-report-YYYY-MM/`.
+
+## Final Sign‑off — Additional Go‑To‑Market Gates
+- [ ] SDKs: latest release tags + smoke tests green; Compatibility Matrix published
+- [ ] Customer Support: channels live, SLA published, incident comms templates ready
+- [ ] Security: scans clean or exceptions documented; secrets rotated pre‑GA
+- [ ] Legal: Privacy, Terms, Cookie Policy, Subprocessors published; DPA template ready
+- [ ] Sales: pricing live, demo org ready, CRM funnel connected; basic collateral published
 
 ## 3. Payment & Billing Consumers
 - [ ] `/api/v1/billing/policy` serves canonical snapshot (`backend/src/config/billingPolicy.ts`).
@@ -332,7 +430,7 @@ References
 
 ## 11. Security
 ### 11.1 Secrets Management
-- [ ] Choose secrets manager (Infisical, Doppler, or DO App Secrets + 1Password).
+- [ ] Choose secrets manager (Infisical self-hosted recommended, or DO App Secrets). Operator vault: KeePassXC or `pass`.
 - [ ] Migrate `.env` secrets; enforce least privilege policies.
 - [ ] Establish rotation policy (quarterly Stripe keys, JWT secrets) and test container injection.
 
@@ -427,7 +525,6 @@ References
 ## 16. Tools & Access
 ### 16.1 Required Accounts
 - [ ] DigitalOcean (droplet/Postgres/Spaces).
-- [ ] Backblaze (if not using Spaces backups).
 - [ ] Stripe.
 - [ ] Resend.com.
 - [ ] Sentry.
@@ -439,7 +536,7 @@ References
 ### 16.2 Required Credentials
 - [ ] `DATABASE_URL` (Managed Postgres, SSL enforced).
 - [ ] `REDIS_URL` (`redis://:password@127.0.0.1:6379/0`).
-- [ ] `SPACES_ACCESS_KEY_ID` / `SPACES_SECRET_ACCESS_KEY` or B2 equivalent + `SPACES_ENDPOINT/BUCKET`.
+- [ ] Object storage (S3-compatible): `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `S3_ENDPOINT`, `S3_BUCKET`.
 - [ ] `STRIPE_SECRET_KEY`.
 - [ ] `RESEND_API_KEY`.
 - [ ] `SENTRY_DSN`.

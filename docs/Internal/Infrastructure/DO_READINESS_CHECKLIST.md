@@ -45,7 +45,7 @@ Status: Pre‑provisioning complete. Post‑provisioning verification steps incl
 - Confirm quota is sufficient for:
   - 1 droplet (2 vCPU / 4GB / 80GB) in FRA1
   - 1 Managed PostgreSQL (Basic/Dev) in FRA1
-  - 1 Spaces bucket (FRA1) for objects/backups
+  - Optional: 1 Spaces bucket (FRA1) for offsite object/backups (MinIO is primary)
 
 ## 2) Domains and DNS Plan
 - Domains: `apexmediation.ee` (or your final domain).
@@ -60,7 +60,7 @@ Status: Pre‑provisioning complete. Post‑provisioning verification steps incl
   ```bash
   ssh-keygen -t ed25519 -C "deploy@apexmediation" -f ~/.ssh/apex_do_deploy
   ```
-- Store the private key securely (1Password or similar).
+- Store the private key securely (KeePassXC or `pass`; avoid cloud vaults for initial setup).
 - Public key will be added to `deploy` user `authorized_keys` on the droplet later.
 
 ## 4) GitHub Repository Secrets (do not add until ready)
@@ -78,8 +78,8 @@ Status: Pre‑provisioning complete. Post‑provisioning verification steps incl
   - DB name: `ad_platform`
   - Roles: `apex_app` (app), `apex_admin` (migrations)
   - Port: `25060`
-- Spaces bucket (FRA1): e.g., `apex-prod-objects` (private by default)
-- Backups bucket (Spaces or B2): e.g., `apex-prod-backups`
+- Object storage primary: MinIO self-hosted on droplet (private bridge only)
+- Offsite (optional): Spaces bucket (FRA1) e.g., `apex-prod-objects` (private by default)
 
 ## 6) Environment Variables and Templates
 - Backend production template is in `infrastructure/production/.env.backend.example` (uses `sslmode=require`, FRA1 Spaces defaults).
@@ -92,10 +92,13 @@ Status: Pre‑provisioning complete. Post‑provisioning verification steps incl
 - HSTS remains commented until SSL Labs A/A+ is confirmed.
 - Optionally protect `/metrics` via Basic Auth (htpasswd snippet provided) or IP allowlist.
 
-## 8) Backup Plan (Postgres → Spaces/B2)
+## 8) Backup Plan (Postgres → MinIO, optional Spaces offsite)
 - Script template: `scripts/backup/pg_dump_s3_template.sh`
-- Prepare object storage credentials (Spaces access key/secret) and endpoint `fra1.digitaloceanspaces.com`.
-- Plan lifecycle retention (30–90 days) on the bucket.
+- Primary target: MinIO on droplet (S3-compatible)
+  - Example env: `S3_ENDPOINT=http://minio:9000`, `S3_BUCKET=s3://apex-prod-backups`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`
+- Offsite (optional): DigitalOcean Spaces FRA1 for replication/sync
+  - Endpoint: `https://fra1.digitaloceanspaces.com`
+- Plan lifecycle retention (30–90 days) on the bucket(s).
 
 ## 9) Monitoring and Status
 - DO Monitoring alerts (to be configured after droplet exists):

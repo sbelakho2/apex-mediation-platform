@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Postgres → S3-compatible backup template
-# Supported targets: DigitalOcean Spaces, Backblaze B2 S3, AWS S3
+# Supported targets: MinIO (self-hosted, primary), DigitalOcean Spaces (offsite), AWS S3
 #
 # Required env vars:
 #   PGHOST, PGPORT, PGDATABASE, PGUSER, (PGPASSWORD or PGPASSFILE)
@@ -11,13 +11,14 @@ set -euo pipefail
 # Optional env vars:
 #   S3_PREFIX              # e.g. pg/
 #   AWS_DEFAULT_REGION     # e.g. eu-central-1
-#   S3_ENDPOINT            # e.g. https://fra1.digitaloceanspaces.com
+#   S3_ENDPOINT            # e.g. http://minio:9000 (primary) or https://fra1.digitaloceanspaces.com (offsite)
 #   BACKUP_RETENTION_DAYS  # default 30 (only informational; lifecycle via bucket policy)
 #   BACKUP_LABEL           # e.g. prod
 #   DRY_RUN=1              # print commands without executing
 #
 # Notes:
-# - For DO Spaces/B2, set S3_ENDPOINT and AWS_DEFAULT_REGION appropriately.
+# - For MinIO primary, set S3_ENDPOINT to the internal MinIO endpoint and provide access keys.
+# - For DO Spaces offsite, set S3_ENDPOINT and AWS_DEFAULT_REGION appropriately.
 # - Configure bucket lifecycle rules for retention enforcement server-side.
 
 timestamp() { date -u +"%Y%m%dT%H%M%SZ"; }
