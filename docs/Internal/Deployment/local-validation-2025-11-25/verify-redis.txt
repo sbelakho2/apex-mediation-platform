@@ -1,0 +1,4 @@
+[STEP] Redis verification via backend container
+[INFO] Running: node dist/scripts/verifyRedis.js (inside backend container)
+[verify:redis] OK
+[NOTE] External nmap check should be executed from another machine: nmap <host-ip> -p 6379 (expect closed/filtered)

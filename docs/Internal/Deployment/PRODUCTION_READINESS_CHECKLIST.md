@@ -1,5 +1,26 @@
 # Production Readiness Checklist
 
+This is the single, self-contained runbook to take the system to production on DigitalOcean. It consolidates prerequisites, environment materialization, deployment, HTTPS/HSTS, DB/Redis verification, metrics protection, evidence capture, and rollback guidance. Cross-links point to deeper runbooks where needed, but all critical commands are summarized here for operator convenience.
+
+## Prerequisites (one-time)
+- [ ] Domain configured: `api.apexmediation.ee`, `console.apexmediation.ee` (TTL 300s)
+- [ ] DigitalOcean account with billing enabled
+- [ ] Provisioning decisions documented (FRA1, droplet size 2 vCPU/4GB/80GB, DO Managed Postgres Basic/Dev)
+- [ ] SSH keypair for deploy user created and stored in 1Password
+- [ ] GitHub repo secrets prepared (add when ready): `DROPLET_HOST`, `DEPLOY_USER`, `DEPLOY_SSH_KEY`
+- [ ] Production `.env` templates reviewed:
+  - Backend: `infrastructure/production/.env.backend.example` (requires `?sslmode=require`)
+  - Console: `infrastructure/production/.env.console.example`
+- [ ] Evidence tooling verified locally: `scripts/ops/local_health_snapshot.sh`, `scripts/ops/do_tls_snapshot.sh`
+
+## Quick Start (DO)
+- [ ] Boot droplet and harden host using copy-ready commands in `docs/Internal/Deployment/DO_INITIAL_BOOT_COMMANDS.md`
+- [ ] Clone repo to `/opt/apex` on the droplet
+- [ ] Materialize `.env` files from templates (do not commit secrets)
+- [ ] Start stack HTTP-only: `docker compose -f infrastructure/docker-compose.prod.yml up -d` and verify `http://<ip>/health`
+- [ ] Issue certs with certbot, mount `/etc/letsencrypt`, enable `infrastructure/nginx/apexmediation.ssl.conf`, expose 443
+- [ ] From your laptop run: `npm run do:tls` to capture TLS/HSTS evidence
+
 ## 0.0 Full Sandbox Test Matrix (All SDKs + Console + Website + Billing + VRA)
 
 ### 0.0.1 Environments, Fixtures & Common Test Data
@@ -88,6 +109,82 @@
 - [ ] Define `docker-compose.yml` with `api`, `console`, `redis`, `nginx` services; expose only Nginx on 80/443.
 - [ ] Configure Nginx routing for `api.apexmediation.ee`, `console.apexmediation.ee`, and reserve `status.apexmediation.ee`.
 
+#### 1.1.1 Post‑DO HTTPS/HSTS Verification (Phase 9)
+- [ ] Issue certificates with certbot for `api.apexmediation.ee` and `console.apexmediation.ee` on the droplet
+  - Command reference: `docs/Internal/Deployment/DO_INITIAL_BOOT_COMMANDS.md`
+  - Mount `/etc/letsencrypt` into the Nginx container (compose already contains the volume)
+- [ ] Enable HTTPS server blocks by mounting `infrastructure/nginx/apexmediation.ssl.conf`
+- [ ] Expose 443 in Nginx service on the droplet only (`infrastructure/docker-compose.prod.yml`)
+- [ ] Verify HTTP→HTTPS redirects and HTTPS response headers
+  - From your laptop: `bash scripts/ops/do_tls_snapshot.sh api.apexmediation.ee`
+  - Save outputs under `docs/Internal/Deployment/do-readiness-YYYY-MM-DD/`
+- [ ] Gate and then enable HSTS after achieving SSL Labs grade A/A+
+  - Uncomment `Strict-Transport-Security` header in `infrastructure/nginx/snippets/ssl-params.conf`
+  - Verify with: `curl -Is https://api.apexmediation.ee/ | grep -i strict-transport-security`
+- [ ] Protect `/metrics` (choose one)
+  - IP allowlist in the HTTPS server block, or
+  - Basic Auth via `infrastructure/nginx/snippets/metrics-basic-auth.conf` and mounted `./nginx/htpasswd`
+- [ ] Cross‑link and follow: `docs/Internal/Infrastructure/DO_READINESS_CHECKLIST.md` → Section 12 (Phase 9)
+
+### 1.5 DigitalOcean Full Production Deployment Plan (End‑to‑End)
+
+This section consolidates the end‑to‑end steps to deploy the production stack on DigitalOcean. It references detailed runbooks elsewhere in this repo and acts as a single sign‑off checklist for going live.
+
+Pre‑flight
+- [ ] DNS prepared: `api.apexmediation.ee`, `console.apexmediation.ee` (TTL 300s)
+- [ ] GitHub Actions deploy workflow prepared with DO secrets but kept manual-only until cutover
+- [ ] Production environment variables prepared (see `infrastructure/production/.env.backend.example` and `.env.console.example`)
+
+Build & Publish
+- [ ] Build backend and console images in CI and push to container registry (GHCR or DOCR)
+- [ ] Tag images with immutable version (e.g., git SHA) and “prod” channel
+
+Provision & Harden Droplet
+- [ ] Create `apex-core-1` in FRA1 (2 vCPU / 4GB / 80GB)
+- [ ] Create non-root `deploy` user; harden SSH (key-only); enable UFW (22/80/443)
+- [ ] Install Docker + docker compose; clone repo to `/opt/apex`
+
+Environment Materialization
+- [ ] Materialize `.env` files on droplet (backend/console) without committing secrets
+- [ ] Set `DATABASE_URL` for DO Managed Postgres with `?sslmode=require`
+- [ ] Set `REDIS_URL` to private bridge host with password (no public exposure)
+
+Start Stack (HTTP only initially)
+- [ ] `docker compose -f infrastructure/docker-compose.prod.yml up -d`
+- [ ] Verify `GET http://<droplet-ip>/health` via port 80 → 200 OK proxied to backend
+
+Enable HTTPS & Gate HSTS
+- [ ] Issue certs with certbot for API/Console on droplet; mount `/etc/letsencrypt`
+- [ ] Mount `infrastructure/nginx/apexmediation.ssl.conf` and expose `443` in compose
+- [ ] Reload Nginx; verify HTTP→HTTPS redirects and HTTPS headers using `scripts/ops/do_tls_snapshot.sh`
+- [ ] Keep HSTS commented until SSL Labs grade A/A+; then enable and verify
+
+Data Plane Verification
+- [ ] Database TLS: run `npm run verify:db --workspace backend` and then migrations
+- [ ] Redis isolation: `npm run verify:redis --workspace backend` and external `nmap` on `6379` (expect closed/filtered)
+- [ ] Protect `/metrics` (Basic Auth or IP allowlist) and capture 401/403 proof
+
+Evidence & Changelog
+- [ ] Store evidence under `docs/Internal/Deployment/do-readiness-YYYY-MM-DD/`
+- [ ] Add top entry to `CHANGELOG.md` linking the evidence and summarizing verification
+
+Rollback Preparedness
+- [ ] Define 5‑minute TTL DNS rollback to previous infra
+- [ ] Document clear rollback triggers (latency/error rate/downtime) and operator steps
+
+References
+- `docs/Internal/Infrastructure/DO_READINESS_CHECKLIST.md`
+- `scripts/ops/do_tls_snapshot.sh`, `scripts/ops/local_health_snapshot.sh`
+- `infrastructure/docker-compose.prod.yml`, `infrastructure/nginx/*`
+
+## Final Sign‑off (Go‑Live Gate)
+- [ ] HTTPS validated with SSL Labs grade A/A+; HSTS enabled and verified
+- [ ] `DATABASE_URL` enforces TLS (`?sslmode=require`) and migrations applied successfully
+- [ ] Redis not publicly reachable (external nmap shows 6379 closed/filtered); in-cluster AUTH verified
+- [ ] `/metrics` protected (401 Basic or 403 IP allowlist) from public Internet
+- [ ] Evidence bundle stored under `docs/Internal/Deployment/do-readiness-YYYY-MM-DD/` and referenced in `CHANGELOG.md`
+- [ ] CI “policy guard” green: provider content guard and infra plan tests pass (`npm run test:infra`)
+
 ### 1.2 Database — Managed PostgreSQL
 - [ ] Create DigitalOcean Managed PostgreSQL cluster (Basic/Dev plan, same region, 10–20 GB storage).
 - [ ] Restrict access to droplet private IP + admin IPs and enforce SSL.
@@ -96,11 +193,13 @@
 - [ ] Verify schema (tables, hot-column indexes, FKs, constraints).
 - [ ] Enable automated daily backups and document RPO (24h) / RTO (1–4h); test PITR restore in staging.
 - [ ] Build early analytics tables (`daily_app_metrics`, `daily_network_metrics`).
+- [ ] Production `DATABASE_URL` enforces TLS: append `?sslmode=require` (verify with `npm run verify:db --workspace backend`)
 
 ### 1.3 Cache — Redis
 - [ ] Install Redis (docker `redis:6-alpine` or apt) bound to localhost/Docker network.
 - [ ] Configure 512 MB max memory, `allkeys-lru` eviction, `requirepass`, persistence (AOF/RDB).
 - [ ] Validate rate limiting, idempotency, and feature flag use cases.
+- [ ] Confirm Redis is not publicly reachable (external `nmap <host> -p 6379` → closed/filtered); in‑cluster AUTH works (`npm run verify:redis --workspace backend`).
 
 ### 1.4 Object Storage & Backups
 - [ ] Choose storage target (DigitalOcean Spaces `apex-prod-objects` or Backblaze B2).

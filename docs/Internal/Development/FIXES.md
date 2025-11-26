@@ -1107,3 +1107,38 @@ _Last updated: 2025-11-14 22:16 UTC_
 <!-- markdownlint-enable MD007 MD013 -->
 
 
+
+## Infra Migration Prod‑Readiness Audit — 2025‑11‑25
+
+Objective
+- Ensure the repository is production‑ready and aligned with the updated Infra Migration Plan (FRA1 + TLS + Postgres‑first, Redis self‑hosted), with no critical stubs/scaffolding left in prod paths. This audit is infra/docs only — no business logic changes.
+
+Verified present and wired (no action needed)
+- Nginx configs
+  - infrastructure/nginx/apexmediation.conf — HTTP reverse proxy with `/health` and `/metrics` locations; includes commented examples for metrics protection (IP allowlist or Basic Auth).
+  - infrastructure/nginx/apexmediation.ssl.conf — HTTPS server blocks split out for enablement after certificates exist on the droplet.
+  - infrastructure/nginx/snippets/ssl-params.conf — Hardened TLS params with HSTS commented until A/A+ validation.
+  - infrastructure/nginx/snippets/metrics-basic-auth.conf — Optional Basic Auth snippet for `/metrics`.
+- Docker Compose (prod)
+  - infrastructure/docker-compose.prod.yml — Exposes port 80 only; 443 and SSL config mount are commented until certs exist; Redis not publicly exposed; optional htpasswd and certs mounts present.
+- Environment templates
+  - infrastructure/production/.env.backend.example — FRA1 posture; Postgres `sslmode=require` noted.
+  - infrastructure/production/.env.console.example — `NEXT_PUBLIC_API_URL=https://api.apexmediation.ee/api/v1`.
+- Backend verification scripts
+  - backend/scripts/verifyDb.ts — `npm run verify:db`.
+  - backend/scripts/verifyRedis.ts — `npm run verify:redis`.
+  - backend/scripts/verifyStorage.ts — `npm run verify:storage` (S3‑compatible PUT/HEAD/GET/DELETE).
+- Backups
+  - scripts/backup/pg_dump_s3_template.sh — Env‑driven Postgres → S3‑compatible backup with optional custom endpoint (Spaces FRA1) and DRY_RUN.
+
+Must‑fix items (prod paths)
+- None identified in infra/compose/nginx/env‑templates/verify scripts at this time. All referenced artifacts in the Infra Plan exist and are reachable.
+
+Backlog (to execute per Plan; not blockers pre‑DO)
+- Enable HSTS only after external TLS validation (SSL Labs A/A+).
+- Upptime status page (`status.apexmediation.ee`) once domains are set and DO is live.
+- DO Monitoring alert policies (CPU/RAM/Disk/unreachable) after droplet provisioning.
+- Quarterly PITR drill on a staging clone once Managed Postgres is provisioned.
+
+Notes
+- Large repository TODOs exist across various documentation and third‑party code (SDKs, vendored test data). These are non‑prod‑path and out of scope for the infra readiness gate. We will keep them tracked separately in documentation backlogs.

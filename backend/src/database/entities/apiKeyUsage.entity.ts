@@ -13,18 +13,18 @@ export class ApiKeyUsage {
   @CreateDateColumn()
   ts!: Date;
 
-  @Column({ length: 128, nullable: true })
+  @Column({ type: 'varchar', length: 128, nullable: true })
   route!: string | null;
 
-  @Column({ length: 64, nullable: true })
+  @Column({ type: 'varchar', length: 64, nullable: true })
   method!: string | null;
 
-  @Column({ length: 64, nullable: true })
+  @Column({ type: 'varchar', length: 64, nullable: true })
   ipHash!: string | null;
 
-  @Column({ length: 64, nullable: true })
+  @Column({ type: 'varchar', length: 64, nullable: true })
   uaHash!: string | null;
 
-  @Column({ length: 16, nullable: true })
+  @Column({ type: 'varchar', length: 16, nullable: true })
   status!: string | null; // e.g., '200', '401'
 }

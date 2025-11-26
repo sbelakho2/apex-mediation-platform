@@ -9,7 +9,7 @@ import { errorHandler } from './middleware/errorHandler';
 import { requestContextMiddleware } from './middleware/requestContext';
 import apiRoutes from './routes';
 import { initializeDatabase } from './database';
-import { initializeClickHouse, checkClickHouseHealth } from './utils/clickhouse';
+// ClickHouse is deprecated per the infra migration plan (Postgres-first). Do not initialize here.
 import { redis } from './utils/redis';
 import { initializeQueues, shutdownQueues, queueManager } from './queues/queueInitializer';
 import { promRegister, httpRequestDurationSeconds, httpRequestsTotal } from './utils/prometheus';
@@ -25,6 +25,50 @@ import { env } from './config/env';
 const app: Application = express();
 const PORT = env.PORT;
 const API_VERSION = env.API_VERSION;
+
+// Phase 1 (Infra readiness): non-breaking production posture warnings
+// These logs help operators ensure FRA1/TLS-aligned settings without changing business logic.
+(() => {
+  try {
+    if (process.env.NODE_ENV === 'production') {
+      // 1) DATABASE_URL should enforce TLS
+      const dbUrl = process.env.DATABASE_URL || '';
+      if (dbUrl && !/sslmode=require/i.test(dbUrl)) {
+        logger.warn(
+          'DATABASE_URL does not include sslmode=require — add ?sslmode=require for managed Postgres in production.'
+        );
+      }
+
+      // 2) REDIS_URL should include a password and target private network host
+      const redisUrl = process.env.REDIS_URL || '';
+      if (redisUrl) {
+        try {
+          const u = new URL(redisUrl);
+          const hasPassword = (u.password && u.password.length > 0);
+          if (!hasPassword) {
+            logger.warn('REDIS_URL has no password — set a strong password and require AUTH in production.');
+          }
+          if (u.hostname && !['redis', 'localhost'].includes(u.hostname) && /^[0-9.]+$/.test(u.hostname)) {
+            logger.warn('REDIS_URL points to a raw IP — ensure Redis is not publicly exposed and is reachable only on private network.');
+          }
+        } catch {
+          logger.warn('REDIS_URL is not a valid URL — expected e.g. redis://:<password>@redis:6379/0');
+        }
+      }
+
+      // 3) CORS allowlist should include console + apex domains
+      const corsAllow = (process.env.CORS_ALLOWLIST || process.env.CORS_ORIGIN || '').split(',').map(s => s.trim());
+      const requiredOrigins = ['https://console.apexmediation.ee', 'https://apexmediation.ee'];
+      for (const origin of requiredOrigins) {
+        if (!corsAllow.includes(origin)) {
+          logger.warn(`CORS allowlist does not include ${origin} — add it for production.`);
+        }
+      }
+    }
+  } catch {
+    // best-effort warnings only; never block startup
+  }
+})();
 
 // Configure trust proxy if behind reverse proxy (load balancer, nginx, etc.)
 if (env.TRUST_PROXY) {
@@ -103,19 +147,18 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 
 // Health check endpoint
 app.get('/health', async (req: Request, res: Response) => {
-  const postgresHealthy = true; // Already checked during startup
-  const clickhouseHealthy = await checkClickHouseHealth();
+  const postgresHealthy = true; // DB connection verified during startup migrations/init where applicable
   const redisHealthy = redis.isReady();
   const queuesHealthy = queueManager.isReady();
+  const overallHealthy = postgresHealthy && redisHealthy && queuesHealthy;
   
   res.json({
-    status: postgresHealthy && clickhouseHealthy ? 'healthy' : 'degraded',
+    status: overallHealthy ? 'healthy' : 'degraded',
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
     environment: process.env.NODE_ENV,
     services: {
       postgres: postgresHealthy ? 'up' : 'down',
-      clickhouse: clickhouseHealthy ? 'up' : 'down',
       redis: redisHealthy ? 'up' : 'down',
       queues: queuesHealthy ? 'up' : 'down',
     },
@@ -162,15 +205,6 @@ const startServer = async (): Promise<void> => {
   try {
     // Initialize PostgreSQL
     await initializeDatabase();
-
-    // Initialize ClickHouse (non-blocking - log warning if fails)
-    try {
-      await initializeClickHouse();
-    } catch (error) {
-      logger.warn('ClickHouse initialization failed - analytics features may be unavailable', {
-        error: error instanceof Error ? error.message : 'Unknown error',
-      });
-    }
 
     // Initialize Redis (non-blocking - log warning if fails)
     try {

@@ -1,6 +1,12 @@
 // services/automation/SelfEvolvingSystemService.ts
 // Zero-touch self-evolving system that continuously improves platform performance
 // Uses AI to detect patterns, predict issues, and automatically optimize configurations
+//
+// DEPRECATION NOTICE (2025-11-25)
+// This file previously referenced legacy multi-provider deployment examples (e.g., Fly.io) in comments
+// and operational notes. The authoritative production plan is DigitalOcean-only with Managed Postgres
+// and self-hosted Redis, per docs/Internal/Infrastructure/INFRASTRUCTURE_MIGRATION_PLAN.md.
+// Any provider-specific guidance here is deprecated and must not be used for new work.
 
 import { Pool } from 'pg';
 import OpenAI from 'openai';

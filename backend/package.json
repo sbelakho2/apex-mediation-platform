@@ -50,6 +50,7 @@
   "dependencies": {
     "@asteasolutions/zod-to-openapi": "^7.3.4",
     "@aws-sdk/client-s3": "^3.922.0",
+    "@aws-sdk/credential-providers": "^3.922.0",
     "@clickhouse/client": "^1.12.1",
     "@fast-csv/format": "^5.0.5",
     "@google-cloud/bigquery": "^8.1.1",

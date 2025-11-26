@@ -8,7 +8,6 @@ Budget ceiling: $50/month (target $44–49/month)
 ---
 
 ## 1. Core Infrastructure (DigitalOcean-centric, ≈ $40–45/mo)
-
 ### 1.1 Compute — Main App Droplet
 Goal: one solid VPS that runs API, console, background jobs, Redis and light observability.
 
@@ -129,6 +128,14 @@ Goal: always-on HTTPS with modern security defaults; optional mTLS for sensitive
   - Reference certbot paths inside the container, e.g. `/etc/letsencrypt/live/api.apexmediation.ee/fullchain.pem`.
 - Cert renewals: certbot installs a systemd timer/cron for auto-renew; verify with `certbot renew --dry-run`.
 - Optional mTLS for internal endpoints (example `/metrics`): create a dedicated server/location with `ssl_verify_client on;` and trusted client CA bundle.
+
+Metrics endpoint protection (optional)
+- Basic Auth: A ready-made snippet is provided at `infrastructure/nginx/snippets/metrics-basic-auth.conf`.
+  - Create credentials on the droplet: `mkdir -p /opt/apex/infrastructure/nginx/htpasswd && htpasswd -c /opt/apex/infrastructure/nginx/htpasswd/metrics admin`
+  - Ensure the compose file mounts the directory (already present): `./nginx/htpasswd:/etc/nginx/htpasswd:ro`
+  - In `apexmediation.conf`, inside the `/metrics` location, uncomment `include /etc/nginx/snippets/metrics-basic-auth.conf;`.
+  - Reload Nginx container.
+- Alternative: IP allowlist in the `/metrics` location; or mTLS later.
 
 ### 1.5 Object Storage & Backups
 Goal: cheap, durable object storage for invoices, reports, and long-term backups.
@@ -963,6 +970,35 @@ umami.track('sdk_download', { platform: 'ios' });
 
 ---
 
+## Automated Verification (Repo Tests)
+
+To prevent drift between this plan and the actual repository artifacts, an automated test suite is included in the repo. It validates that key infra files and runbooks match the guidance in this document.
+
+How to run:
+
+```
+npm run test:infra
+```
+
+What is verified (high-level):
+- docker-compose.prod.yml
+  - Safe local defaults for `DATABASE_URL` and `REDIS_URL` with password and private networking
+  - Healthchecks for Postgres and Redis
+  - Nginx port exposed via `${NGINX_PORT:-8080}` and Console gated behind the `ui` profile
+- Nginx configs
+  - Security headers, HSTS header present but commented (gate until A/A+)
+  - HTTPS server blocks include `snippets/ssl-params.conf` and optional `/metrics` protection comment
+- Evidence and DO readiness scripts
+  - `scripts/ops/local_health_snapshot.sh` captures `/health` via Nginx and executes Redis verification inside the backend container
+  - `scripts/ops/do_tls_snapshot.sh` saves HTTPS/TLS/HSTS evidence to a dated directory
+- Docs cross-links
+  - DO Readiness checklist contains Phase 9 with TLS/HSTS gating, DB TLS (`sslmode=require`), Redis isolation, and references to the TLS snapshot script
+  - Production Readiness checklist includes a Post‑DO HTTPS/HSTS verification section
+
+If a test fails, update either the docs or the corresponding artifact to bring the repo back to a consistent, production‑ready posture.
+
+---
+
 ## Next Steps After Infrastructure Migration
 
 1. **Marketing Infrastructure** (Week 6-7): Blog (Ghost), SEO tools, social media automation
@@ -972,3 +1008,67 @@ umami.track('sdk_download', { platform: 'ios' });
 5. **Launch Preparation** (Week 15-16): Security audit, performance testing, documentation finalization
 
 **Total Time to Launch**: 16 weeks (4 months)
+
+---
+
+Appendix — Ops templates added in repo
+
+- Environment templates
+  - Backend: `infrastructure/production/.env.backend.example` (uses `sslmode=require` for Postgres; Redis `requirepass`)
+  - Console: `infrastructure/production/.env.console.example` with `NEXT_PUBLIC_API_URL=https://api.apexmediation.ee/api/v1`
+  - Materialize real `.env` files out-of-repo or on the droplet; do not commit secrets.
+
+- Operator runbooks (pre‑DO)
+  - Backend environment reference: `docs/Internal/Deployment/BACKEND_ENVIRONMENT.md`
+  - Console environment reference: `docs/Internal/Deployment/CONSOLE_ENVIRONMENT.md`
+  - Local prod‑like validation: `docs/Internal/Deployment/LOCAL_PROD_VALIDATION.md`
+
+- Nginx security snippets
+  - TLS params: `infrastructure/nginx/snippets/ssl-params.conf`
+  - Metrics Basic Auth: `infrastructure/nginx/snippets/metrics-basic-auth.conf` (see Section 1.4 for enablement)
+
+- Backup script template (Postgres → S3-compatible)
+  - `scripts/backup/pg_dump_s3_template.sh`
+  - Usage (example for DO Spaces FRA1):
+    ```bash
+    export PGHOST=<do-pg-host> PGPORT=25060 PGDATABASE=ad_platform PGUSER=apex_admin PGPASSWORD=<admin-pass>
+    export AWS_ACCESS_KEY_ID=<spaces-key> AWS_SECRET_ACCESS_KEY=<spaces-secret>
+    export AWS_DEFAULT_REGION=eu-central-1 S3_ENDPOINT=https://fra1.digitaloceanspaces.com
+    export S3_BUCKET=s3://apex-prod-backups S3_PREFIX=pg/ BACKUP_LABEL=prod
+    bash scripts/backup/pg_dump_s3_template.sh
+    ```
+  - Retention: enforce via bucket lifecycle rules (30–90 days); script prints reminder.
+
+---
+
+Appendix — Services Alignment (Phase 4)
+
+- Minimal production service set (pre‑DO and on DO):
+  - backend (API) — exposed only to Nginx on the private bridge
+  - console (Next.js dashboard) — served via Nginx
+  - redis (self‑hosted) — private bridge only, `requirepass`, memory cap, AOF
+  - nginx (reverse proxy) — HTTP on 80 locally; HTTPS split config mounted only after certs exist on DO
+
+- Intentionally excluded from production compose unless explicitly enabled later:
+  - Any experimental/auxiliary services in `services/` or elsewhere not required for core operation
+  - Analytics/observability stacks beyond the basics (enable later as needed per Plan)
+
+- Guidance for enabling additional services later:
+  - Add a commented service block in `infrastructure/docker-compose.prod.yml` with private‑only networking
+  - Provide an example env template under `infrastructure/production/` (do not commit secrets)
+  - Ensure Nginx exposure is explicit and minimal; no public ports for internal services
+  - Update DO Readiness Checklist with any new secrets/ports and verify with local prod‑like validation
+
+> Provisioning status: As of now, the DigitalOcean account is not yet provisioned. This plan and the repo are aligned to be “DO‑ready,” and CI is configured to avoid accidental deploys until DO secrets exist. See “0. Readiness & Enablement” below.
+
+### 0. Readiness & Enablement (Before Creating DO Resources)
+
+- Repo/CI safe mode
+  - The deploy workflow `.github/workflows/deploy-do.yml` runs only on manual dispatch and will no‑op the droplet deploy steps when DO secrets are missing.
+  - Build/push to GHCR still works so images can be validated ahead of DO provisioning.
+- Pre‑provisioning checklist (see `docs/Internal/Infrastructure/DO_READINESS_CHECKLIST.md` for a step‑by‑step list):
+  - Register DO account; set billing.
+  - Decide domains and DNS provider (Cloudflare/DNS host). Keep A/AAAA records planned but not live.
+  - Generate a dedicated deploy SSH keypair for the droplet.
+  - Prepare GitHub repo secrets you’ll need later (do not add yet): `DROPLET_HOST`, `DEPLOY_USER`, `DEPLOY_SSH_KEY`.
+  - Decide FRA1 names: droplet `apex-core-1`, PG cluster name, Spaces bucket name.

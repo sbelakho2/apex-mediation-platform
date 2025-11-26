@@ -11,7 +11,8 @@ export class TwoFactorAuth {
   user!: User;
 
   // Deprecated: plaintext secret (kept nullable for backward compatibility)
-  @Column({ nullable: true })
+  // Explicitly set column type for Postgres to avoid reflect-metadata inferring Object for union types
+  @Column({ type: 'text', nullable: true })
   secret!: string | null;
 
   // Encrypted TOTP secret (AES-GCM base64 payload as JSON string)

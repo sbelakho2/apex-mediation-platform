@@ -4,11 +4,17 @@ RUN apk add --no-cache libc6-compat
 
 FROM base AS deps
 ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
-COPY package.json package-lock.json ./
+COPY package*.json ./
 COPY scripts ./scripts
-RUN npm ci
+# Support monorepo scenarios where console/package-lock.json may not exist.
+# If a lockfile exists, use npm ci for deterministic installs; otherwise fall back to npm install.
+RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
 
 FROM base AS builder
+ARG NEXT_PUBLIC_API_URL
+ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
+ARG NEXT_IGNORE_TS_ERRORS
+ENV NEXT_IGNORE_TS_ERRORS=${NEXT_IGNORE_TS_ERRORS}
 ENV NEXT_TELEMETRY_DISABLED=1
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .

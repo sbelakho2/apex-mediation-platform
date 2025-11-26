@@ -1,4 +1,12 @@
-# Fly.io deployment configuration for ApexMediation Console (Next.js)
+# DEPRECATION NOTICE — Fly.io configuration (do not use)
+#
+# This file is retained only for historical reference. The production plan has
+# migrated to DigitalOcean (single droplet + DO Managed Postgres + self‑hosted Redis).
+# Do not deploy with Fly.io. Follow the DO checklists instead:
+# - docs/Internal/Infrastructure/DO_READINESS_CHECKLIST.md
+# - docs/Internal/Deployment/PRODUCTION_READINESS_CHECKLIST.md
+#
+# Original content below (deprecated):
 app = "apexmediation-console"
 primary_region = "sjc" # San Jose, California
 kill_signal = "SIGINT"

@@ -15,7 +15,7 @@ export class SkanPostback {
   @Column({ name: 'campaign_id', length: 128 })
   campaignId!: string;
 
-  @Column({ length: 16, nullable: true })
+  @Column({ type: 'varchar', length: 16, nullable: true })
   version!: string | null;
 
   @Column({ type: 'boolean', default: false })

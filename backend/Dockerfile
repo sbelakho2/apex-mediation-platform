@@ -2,7 +2,11 @@
 FROM node:20-alpine AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
-RUN npm ci
+# Prefer deterministic install; if lockfile incompatible, fall back to npm install
+RUN if [ -f package-lock.json ]; then npm ci || npm install; else npm install; fi
+# Ensure @aws-sdk/credential-providers is present for verifyStorage build; install if missing
+RUN node -e "try{const p=require('./package.json'); if(!(p.dependencies&&p.dependencies['@aws-sdk/credential-providers'])) process.exit(1);}catch(e){process.exit(1)}" \
+    || npm install @aws-sdk/credential-providers@^3.922.0 --save
 
 # Stage 2: Build source
 FROM node:20-alpine AS build

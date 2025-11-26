@@ -963,3 +963,12 @@ This is the blueprint for a truly sustainable solo SaaS business.
 **Author:** Sabel Akhoua (Bel Consulting OÜ)  
 **Budget:** $400/month target, $237/month achieved  
 **Status:** Ready for implementation
+
+# Ultra-Lean Automation Playbook
+
+> DEPRECATION NOTICE (2025-11-25)
+>
+> Sections recommending Upstash Redis or multi-provider stacks are deprecated. The authoritative plan
+> is Postgres‑first with self‑hosted Redis on the droplet and hardened Nginx TLS, per
+> `docs/Internal/Infrastructure/INFRASTRUCTURE_MIGRATION_PLAN.md`. Retain this document for historical
+> context only; do not plan new work against Upstash/legacy scheme.

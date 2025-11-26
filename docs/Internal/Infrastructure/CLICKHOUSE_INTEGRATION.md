@@ -428,3 +428,11 @@ Create Grafana dashboards for:
 - [Node.js Client](https://github.com/TimonKK/clickhouse)
 - [MergeTree Engine](https://clickhouse.com/docs/en/engines/table-engines/mergetree-family/mergetree)
 - [Materialized Views](https://clickhouse.com/docs/en/guides/developer/cascading-materialized-views)
+
+# ClickHouse Integration
+
+> DEPRECATION NOTICE (2025-11-25)
+>
+> This document is deprecated. The production posture is Postgres‑first with self‑hosted Redis, per
+> `docs/Internal/Infrastructure/INFRASTRUCTURE_MIGRATION_PLAN.md`. Do not implement new work against
+> ClickHouse. Retained for historical reference only.

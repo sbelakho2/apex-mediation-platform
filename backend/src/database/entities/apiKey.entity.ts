@@ -15,7 +15,8 @@ export class ApiKey {
   secret!: string; // bcrypt hash of the secret
 
   // Constant-time lookup key (e.g., sha256(secret) hex). Never returns to clients.
-  @Column({ nullable: true })
+  // Explicit text type avoids TypeORM inferring unsupported Object for union types in Postgres
+  @Column({ type: 'text', nullable: true })
   secretDigest!: string | null;
 
   @Column()

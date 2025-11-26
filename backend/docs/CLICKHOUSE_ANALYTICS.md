@@ -542,3 +542,9 @@ When upgrading schema:
 - [Node.js ClickHouse Client](https://github.com/ClickHouse/clickhouse-js)
 - [MergeTree Engine](https://clickhouse.com/docs/en/engines/table-engines/mergetree-family/mergetree/)
 - [Materialized Views](https://clickhouse.com/docs/en/sql-reference/statements/create/view/#materialized-view)
+
+> DEPRECATION NOTICE (2025-11-25)
+>
+> ClickHouse analytics is deprecated per `docs/Internal/Infrastructure/INFRASTRUCTURE_MIGRATION_PLAN.md`.
+> The production posture is Postgres‑first with self‑hosted Redis. This document is retained for
+> historical reference only and must not be used for new work. Prefer Postgres rollups and views.

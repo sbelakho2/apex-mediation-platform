@@ -15,16 +15,19 @@ const nextConfig = {
   // Environment variables exposed to the browser (marketing site; keep minimal)
   // NOTE: For sensitive values prefer server env or middleware. Consider moving to runtime env at deploy time.
   env: {
-    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || 'https://api.apexmediation.ee/v1',
+    // Public API (through Nginx). Default to production origin with explicit /api/v1 path
+    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || 'https://api.apexmediation.ee/api/v1',
+    // Console (Dashboard)
     NEXT_PUBLIC_CONSOLE_URL: process.env.NEXT_PUBLIC_CONSOLE_URL || 'https://console.apexmediation.ee',
-    NEXT_PUBLIC_SITE_URL: process.env.NEXT_PUBLIC_SITE_URL || 'https://apexmediation.bel-consulting.ee',
+    // Canonical site URL (production)
+    NEXT_PUBLIC_SITE_URL: process.env.NEXT_PUBLIC_SITE_URL || 'https://apexmediation.ee',
     NEXT_PUBLIC_ENABLE_GA: process.env.NEXT_PUBLIC_ENABLE_GA || 'false',
     NEXT_PUBLIC_ENABLE_HOTJAR: process.env.NEXT_PUBLIC_ENABLE_HOTJAR || 'false',
   },
 
   // Image optimization
   images: {
-    domains: ['cdn.apexmediation.ee', 'images.unsplash.com'],
+    domains: ['cdn.apexmediation.ee', 'images.unsplash.com', 'apexmediation.ee', 'console.apexmediation.ee'],
     formats: ['image/avif', 'image/webp'],
   },
 
@@ -77,13 +80,12 @@ const nextConfig = {
 
     const csp = cspDirectives.join('; ')
 
-    return [
+    const headers = [
       {
         source: '/:path*',
         headers: [
           // Security headers
           { key: 'X-DNS-Prefetch-Control', value: 'on' },
-          { key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains; preload' },
           { key: 'X-Content-Type-Options', value: 'nosniff' },
           { key: 'X-Frame-Options', value: 'DENY' },
           { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
@@ -92,6 +94,14 @@ const nextConfig = {
         ]
       }
     ];
+
+    // Align with Infra Plan: enable HSTS only after external TLS validation (SSL Labs A/A+)
+    // Controlled by ENABLE_HSTS=1 at deploy time (and only in production)
+    if (process.env.NODE_ENV === 'production' && process.env.ENABLE_HSTS === '1') {
+      headers[0].headers.unshift({ key: 'Strict-Transport-Security', value: 'max-age=31536000; includeSubDomains' });
+    }
+
+    return headers;
   },
 
   // Redirects

@@ -15,10 +15,10 @@ export class AuditTwofa {
   @Column({ length: 64 })
   action!: string; // enroll|enable|regen|disable
 
-  @Column({ length: 320, nullable: true })
+  @Column({ type: 'varchar', length: 320, nullable: true })
   actorEmail!: string | null;
 
   @Index()
-  @Column({ length: 64, nullable: true })
+  @Column({ type: 'varchar', length: 64, nullable: true })
   ipHash!: string | null;
 }

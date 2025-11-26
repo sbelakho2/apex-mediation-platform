@@ -1,0 +1,7 @@
+[INFO] Dumping Postgres database 'example' from localhost:5432 (sslmode=require)
+[DRY_RUN] pg_dump postgresql://postgres@localhost:5432/example?sslmode=require -F p | gzip > /tmp/tmp.FzRGXurXAR/example_prod_20251125T200501Z.sql.gz
+[INFO] Uploading to object storage: s3://dummy/pg/example_prod_20251125T200501Z.sql.gz
+[DRY_RUN] aws s3 cp /tmp/tmp.FzRGXurXAR/example_prod_20251125T200501Z.sql.gz s3://dummy/pg/example_prod_20251125T200501Z.sql.gz
+[INFO] Verifying uploaded object exists
+[DRY_RUN] aws s3 ls s3://dummy/pg/example_prod_20251125T200501Z.sql.gz
+[NOTE] Enforce retention with bucket lifecycle rules (BACKUP_RETENTION_DAYS=30).

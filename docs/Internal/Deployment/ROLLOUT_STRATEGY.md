@@ -1,5 +1,14 @@
 # ApexMediation - Automated Rollout Strategy (Day 0)
 
+> DEPRECATION NOTICE (2025-11-25)
+>
+> This document contains references to legacy providers such as Fly.io, Supabase-as-primary, and Upstash.
+> The authoritative production path is now DigitalOcean droplet (FRA1) + DO Managed Postgres (TLS `?sslmode=require`)
+> + self‑hosted Redis behind a private bridge, with Nginx TLS and gated HSTS, as defined by
+> `docs/Internal/Infrastructure/INFRASTRUCTURE_MIGRATION_PLAN.md`, `docs/Internal/Infrastructure/DO_READINESS_CHECKLIST.md`,
+> and `docs/Internal/Deployment/PRODUCTION_READINESS_CHECKLIST.md`.
+> Keep this file for historical context only; do not plan new work against Fly/Upstash/etc.
+
 **Company:** Bel Consulting OÜ  
 **Product:** ApexMediation - Mobile Ad Mediation SDK  
 **Target:** Solo operator, zero-touch operations  
@@ -2361,3 +2370,4 @@ export class CustomerSuccessAutomation {
 **Remember:** You're building a sustainable business, not a unicorn. Profitability > growth. Automation > hiring. Focus > features.
 
 Good luck with the launch! 🚀
+

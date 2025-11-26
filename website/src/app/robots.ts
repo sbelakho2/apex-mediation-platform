@@ -4,7 +4,7 @@ function getBaseUrl() {
   const env = process.env.NEXT_PUBLIC_SITE_URL || process.env.SITE_URL
   if (env) return env.replace(/\/$/, '')
   // Default to https in production if host header is available at runtime; fallback localhost
-  return process.env.NODE_ENV === 'production' ? 'https://example.com' : 'http://localhost:3000'
+  return process.env.NODE_ENV === 'production' ? 'https://apexmediation.ee' : 'http://localhost:3000'
 }
 
 export default function robots(): MetadataRoute.Robots {

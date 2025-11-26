@@ -1,25 +1,21 @@
-name: Deploy to DigitalOcean Droplet
+name: Deploy to DigitalOcean Droplet (manual)
 
 on:
+  # NOTE: DO account not provisioned yet — keep this workflow manual-only.
+  # Enable push triggers later once DO services and secrets are ready.
   workflow_dispatch:
     inputs:
       target:
         description: "Target environment"
         required: true
         default: "production"
-  push:
-    branches:
-      - main
-    paths:
-      - 'backend/**'
-      - 'console/**'
-      - 'infrastructure/**'
 
 jobs:
   deploy:
     name: Build and Deploy
     runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main' }}
+    # Run only on manual dispatch until DO is ready
+    if: ${{ github.event_name == 'workflow_dispatch' }}
     concurrency:
       group: do-deploy-${{ github.ref }}
       cancel-in-progress: false
@@ -106,3 +102,10 @@ jobs:
             "cd /opt/apex && \
              docker compose -f infrastructure/docker-compose.prod.yml ps && 
              docker compose -f infrastructure/docker-compose.prod.yml up -d"
+
+      - name: No-op notice (DO not provisioned)
+        if: ${{ !secrets.DROPLET_HOST || !secrets.DEPLOY_SSH_KEY }}
+        run: |
+          echo "[INFO] DigitalOcean deploy secrets are not configured yet."
+          echo "[INFO] This workflow is manual-only and will perform build/push to GHCR,"
+          echo "       but will skip droplet deployment and health checks until DO is ready."

@@ -1,0 +1,4 @@
+
+> apexmediation-backend@1.0.0 verify:db
+> ts-node scripts/verifyDb.ts
+

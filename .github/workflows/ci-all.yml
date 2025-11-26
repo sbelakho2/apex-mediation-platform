@@ -7,6 +7,21 @@ on:
     branches: [ main, master ]
 
 jobs:
+  policy-guard:
+    name: Repository — provider content guard
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install dependencies (root only)
+        run: npm ci --ignore-scripts
+      - name: Run provider content guard
+        run: npm run guard:providers
+
   shellcheck:
     name: Scripts — Shellcheck validation
     runs-on: ubuntu-22.04
@@ -358,6 +373,91 @@ jobs:
           name: website-bundle-analyzer
           path: website/analyze/**
           retention-days: 14
+
+  console-build:
+    name: Console — production build (API URL wired)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use Node.js 18.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18.20.4'
+      - name: Cache npm (console)
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.npm
+            console/node_modules
+          key: ${{ runner.os }}-npm-console-${{ hashFiles('console/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-npm-console-
+      - name: Install console deps
+        working-directory: console
+        run: npm ci
+      - name: Build Console (production)
+        working-directory: console
+        env:
+          NODE_ENV: production
+          NEXT_PUBLIC_API_URL: https://api.apexmediation.ee/api/v1
+        run: npm run build
+
+  forbidden-dev-urls:
+    name: Repo guard — forbid dev-only URLs in production source
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Scan console/src and website/src for localhost/dev URLs
+        run: |
+          echo "Scanning for forbidden dev URLs (http://localhost, 127.0.0.1) in production source..."
+          set -e
+          # Allowlist patterns: test files, markdown, config, examples
+          FORBID_PATTERNS='http://localhost|127\.0\.0\.1'
+          # Console
+          ! grep -R -nE "$FORBID_PATTERNS" console/src \
+            --exclude-dir='__tests__' \
+            --exclude-dir='__mocks__' \
+            --exclude='*.test.*' \
+            --exclude='*.spec.*' \
+            --exclude='README*' \
+            --exclude='CHANGELOG*' \
+            --exclude='*.md' \
+            --exclude='*.example' \
+            || (echo "Found forbidden dev URL references in console/src. Replace with NEXT_PUBLIC_API_URL or conditional dev logic." && exit 1)
+          # Website
+          ! grep -R -nE "$FORBID_PATTERNS" website/src \
+            --exclude-dir='__tests__' \
+            --exclude-dir='__mocks__' \
+            --exclude='*.test.*' \
+            --exclude='*.spec.*' \
+            --exclude='README*' \
+            --exclude='CHANGELOG*' \
+            --exclude='*.md' \
+            --exclude='*.example' \
+            || (echo "Found forbidden dev URL references in website/src. Use NEXT_PUBLIC_* envs and production domains." && exit 1)
+          echo "✅ No forbidden dev URLs found in production source paths."
+
+  deploy-workflow-safety:
+    name: CI safety — deploy workflow is manual/no‑op until DO ready
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect deploy-do.yml triggers and safety notice
+        run: |
+          set -e
+          FILE=.github/workflows/deploy-do.yml
+          test -f "$FILE" || (echo "Missing $FILE" && exit 1)
+          echo "Checking that deploy workflow triggers only on workflow_dispatch..."
+          # Must contain workflow_dispatch
+          grep -qE '^on:\s*$' "$FILE" || true
+          grep -q 'workflow_dispatch' "$FILE" || (echo "deploy-do.yml must contain workflow_dispatch trigger" && exit 1)
+          # Must NOT contain push or pull_request triggers (pre‑DO)
+          ! grep -qE '^\s*push:' "$FILE" || (echo "deploy-do.yml should not be triggered by push (pre‑DO)" && exit 1)
+          ! grep -qE '^\s*pull_request:' "$FILE" || (echo "deploy-do.yml should not be triggered by pull_request (pre‑DO)" && exit 1)
+          echo "✅ deploy-do.yml is manual‑only and safe pre‑DO."
 
   website-visual-regression:
     name: Website — visual regression (light/dark across 3 widths)

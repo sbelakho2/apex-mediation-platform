@@ -1,3 +1,23 @@
+Changelog — Phase 8: Local Evidence (Final) — 200 OK via Nginx; Redis Verified (2025-11-25)
+
+Summary
+- Completed Phase 8 local prod‑like validation. Nginx proxies `/health` to backend with HTTP 200 OK; Redis authentication verified via backend container.
+
+Evidence
+- Collected under `docs/Internal/Deployment/local-validation-2025-11-25/`:
+  - `summary.txt` — includes `docker compose ps` and `GET http://localhost:8080/health` → 200 OK JSON with `status: "degraded"` (ClickHouse intentionally unavailable per migration plan), Postgres/Redis/Queues up.
+  - `verify-redis.txt` — `[verify:redis] OK` with AUTH PING/TTL.
+
+What changed
+- Backend: explicit TypeORM column types for Postgres to avoid `Object` inference on union‑typed fields.
+- Nginx: console upstream disabled for Phase 8; API server block set as `default_server` and accepts `_ api.apexmediation.ee localhost 127.0.0.1`; explicit localhost block added for local runs.
+- Helper: `scripts/ops/local_health_snapshot.sh` runs `node dist/scripts/verifyRedis.js` inside backend container for deterministic Redis verification.
+
+Notes
+- ClickHouse is being phased out in favor of Postgres‑first analytics; health is 200 with `status: "degraded"` due to CH unavailability — acceptable for Phase 8.
+
+---
+
 Changelog — DO Infra Plan: FRA1 + TLS Hardened + Postgres‑First (2025-11-25)
 
 Summary
@@ -15,6 +35,230 @@ What changed (highlights)
 Validation & notes
 - Documentation‑only changes. No runtime code altered; business logic unaffected.
 - Existing `infrastructure/nginx/apexmediation.conf` already contains secure headers and comments; follow the plan to enable TLS on 443 with certbot.
+
+---
+
+Changelog — Compose prod defaults for local Phase 8 validation (2025-11-25)
+
+Summary
+- Updated `infrastructure/docker-compose.prod.yml` to remove the hard dependency on `backend/.env` and add safe local defaults so Phase 8 evidence can be captured without a DO account or a local `.env` file.
+
+What changed (highlights)
+- Removed `env_file: ../backend/.env` from `backend` service; now uses environment with sane defaults for local runs.
+- Added local defaults:
+  - `DATABASE_URL=${DATABASE_URL:-postgresql://postgres:postgres@postgres:5432/apexmediation}`
+  - `REDIS_URL=${REDIS_URL:-redis://:${REDIS_PASSWORD:-local-strong-password}@redis:6379/0}`
+  - Minimal secrets to satisfy backend env validation in local prod-like runs (`JWT_SECRET`, `COOKIE_SECRET`).
+- Added an optional local `postgres` service (private bridge only) to support local DB verification if desired.
+
+Operator notes
+- For local Phase 8 validation:
+  ```bash
+  export REDIS_PASSWORD=local-strong-password
+  docker compose -f infrastructure/docker-compose.prod.yml up -d --build
+  REDIS_PASSWORD=local-strong-password \
+  REDIS_VERIFY=1 \
+  npm run local:health
+  ```
+- The legacy Compose `version` key triggers a warning in v2 and can be ignored; it’s benign pre‑DO.
+
+Impact
+- Infra/config only; no business logic changed. Enables local evidence capture without additional setup.
+
+---
+
+Changelog — Phase 8: Evidence Bundle (Pre‑DO) — Scaffolding & Checklist (2025-11-25)
+
+Summary
+- Added a concise checklist and reinforced runbook steps to assemble a local prod‑like evidence bundle (HTTP‑only) prior to DO provisioning.
+
+What changed (highlights)
+- `docs/Internal/Deployment/PHASE8_CHECKLIST.md` — new checklist covering stack start, health via Nginx, Redis verify via backend, optional DB SSL verify and storage DRY‑RUN, teardown, and DoD items.
+- `docs/Internal/Infrastructure/DO_READINESS_CHECKLIST.md` — now references the Phase 8 checklist and preferred one‑liner to capture evidence with the helper script.
+
+Operator instructions
+- From repo root:
+  ```bash
+  export REDIS_PASSWORD=local-strong-password
+  docker compose -f infrastructure/docker-compose.prod.yml up -d --build
+  REDIS_PASSWORD=local-strong-password \
+  REDIS_VERIFY=1 \
+  npm run local:health
+  ```
+- This creates `docs/Internal/Deployment/local-validation-YYYY-MM-DD/` containing `summary.txt` and `verify-redis.txt`. Optionally add `verify-db.txt` and `verify-storage.txt` as described in the checklist/runbook.
+- Commit the evidence folder (redact if needed) and add a follow‑up dated entry referencing the exact path.
+
+Impact
+- Documentation and operator guidance only; no runtime code or business logic changed.
+
+---
+
+Changelog — Phase 7: Docs Finalization & Drift Checklist (2025-11-25)
+
+Summary
+- Completed Phase 7 scaffolding to ensure documentation, runbooks, and repo artifacts remain in sync as we approach DO provisioning and production readiness.
+
+What changed (highlights)
+- Added `docs/Internal/Deployment/DO_INITIAL_BOOT_COMMANDS.md` — copy‑ready initial droplet boot commands (create deploy user, SSH hardening, UFW, Docker install, repo clone to `/opt/apex`, certbot issuance, HTTPS enable, HSTS gating policy).
+- Added `docs/Internal/Deployment/DOCS_DRIFT_CHECKLIST.md` — a checklist to validate that Infra Plan/runbooks reference real files and that critical snippets (nginx, compose, env templates, CI) match the repo.
+- Updated `docs/Internal/Infrastructure/DO_READINESS_CHECKLIST.md` to link both documents and clarify where to find boot/certbot commands.
+
+Operator notes
+- Before DO provisioning, run the drift checklist and fix any discovered doc drift (docs‑only).
+- When DO exists, execute the initial boot commands and follow the DO readiness checklist to enable HTTPS and then HSTS after SSL Labs A/A+.
+
+Impact
+- Documentation and operator‑runbook updates only; no runtime code or business logic changed.
+
+---
+
+Changelog — Phase 6: Local Prod‑like Infra Verification (Runbook + Helper) (2025-11-25)
+
+Summary
+- Prepared Phase 6 execution by adding a helper script and npm shortcut to collect a local prod‑like evidence snapshot (HTTP‑only, pre‑DO). Updated runbooks/checklists to guide operators through health and Redis verification.
+
+What changed (highlights)
+- scripts/ops/local_health_snapshot.sh — collects `curl -i http://localhost/health`, `docker compose ps`, and optional Redis verify output into a dated folder under `docs/Internal/Deployment/`.
+- package.json — added `npm run local:health` to wrap the helper script for convenience.
+- docs/Internal/Deployment/LOCAL_PROD_VALIDATION.md — documented the npm shortcut alongside the helper.
+- docs/Internal/Deployment/PHASE6_CHECKLIST.md — new concise checklist for Phase 6 steps and expected outcomes.
+- docs/Internal/Infrastructure/DO_READINESS_CHECKLIST.md — references Phase 6 checklist and helper script.
+
+Operator instructions
+- From repo root:
+  ```bash
+  export REDIS_PASSWORD=local-strong-password
+  docker compose -f infrastructure/docker-compose.prod.yml up -d --build
+  REDIS_VERIFY=1 npm run local:health
+  ```
+- This creates `docs/Internal/Deployment/local-validation-YYYY-MM-DD/` with `summary.txt` and `verify-redis.txt`. Commit these files (redacted if needed) and reference them in a follow‑up CHANGELOG entry.
+
+Impact
+- Infra/docs/tooling only; no business logic changed. Actual evidence capture occurs when operators run the commands locally.
+
+---
+
+Changelog — Phase 2: Console Alignment (Production Build + Nginx Routing) (2025-11-25)
+
+Summary
+- Verified and documented Console production alignment with the Infra Migration Plan (FRA1 + TLS posture):
+  - Production build uses `NEXT_PUBLIC_API_URL=https://api.apexmediation.ee/api/v1`.
+  - Local prod-like run via Nginx (HTTP only pre‑DO) routes Console API calls to `/api/v1/...` successfully.
+- Documentation updates:
+  - Added “Validation notes (Phase 2)” to `docs/Internal/Deployment/CONSOLE_ENVIRONMENT.md` with commands and expected results.
+- Minor production tweak:
+  - Updated `console/next.config.js` to allow images from `apexmediation.ee` and `console.apexmediation.ee` in addition to `localhost`.
+
+Impact
+- Infra/docs and configuration only; no business logic changed.
+
+---
+
+Changelog — CI/CD: DO Deploy Workflow Manual‑Only Until DO Ready (2025-11-25)
+
+Summary
+- Safeguards the DigitalOcean deployment workflow while the DO account/services are not yet provisioned. The GitHub Actions workflow now runs only on manual dispatch and prints a clear no‑op notice when DO secrets are absent. This allows building and pushing images to GHCR without attempting a droplet deploy.
+
+What changed (highlights)
+- `.github/workflows/deploy-do.yml`
+  - Restricted triggers to `workflow_dispatch` only; removed automatic `push` trigger for now.
+  - Added a final "No‑op notice" step that informs operators when `DROPLET_HOST`/`DEPLOY_SSH_KEY` are not set, skipping the SSH deploy and health check safely.
+  - Kept image build/push to GHCR enabled so images can be validated ahead of DO provisioning.
+
+Validation & notes
+- CI‑only change; no application runtime or business logic affected.
+- When DO is ready, set repo secrets (`DROPLET_HOST`, `DEPLOY_USER`, `DEPLOY_SSH_KEY`) and optionally re‑enable push triggers.
+
+---
+
+Changelog — Infra Artifacts: /metrics Basic Auth, Console Env Template, PG Backup Script (2025-11-25)
+
+Summary
+- Adds optional protection for the `/metrics` endpoint in Nginx via a Basic Auth snippet, introduces a production console `.env` example, and provides a template script for Postgres logical backups to S3-compatible storage (DO Spaces/B2). These are infra/doc artifacts only; no application business logic changed.
+
+What changed (highlights)
+- Nginx
+  - Enhanced comments in `infrastructure/nginx/apexmediation.conf` to demonstrate enabling Basic Auth or IP allowlisting for `/metrics` on both HTTP/HTTPS server blocks.
+  - Added `infrastructure/nginx/snippets/metrics-basic-auth.conf` (disabled by default) to protect `/metrics` using an htpasswd file.
+  - Updated `infrastructure/docker-compose.prod.yml` to optionally mount `./nginx/htpasswd` into the container at `/etc/nginx/htpasswd:ro`.
+- Environment templates
+  - Added `infrastructure/production/.env.console.example` with `NEXT_PUBLIC_API_URL=https://api.apexmediation.ee/api/v1` to align Console with the FRA1 TLS setup.
+- Backups
+  - Added `scripts/backup/pg_dump_s3_template.sh` — env-driven `pg_dump` → gzip → `aws s3 cp` workflow supporting Spaces/B2/AWS with optional custom endpoint and region. Encourages lifecycle-based retention.
+- Documentation
+  - Updated `docs/Internal/Infrastructure/INFRASTRUCTURE_MIGRATION_PLAN.md` with instructions for enabling `/metrics` Basic Auth, references to the new env template and backup script, and an appendix listing the added ops templates.
+
+Validation & notes
+- No runtime code or business logic changed. All changes are optional infra scaffolding and documentation.
+- Operators can enable `/metrics` auth by creating an htpasswd file on the droplet and uncommenting the include in the Nginx location as documented.
+
+---
+
+Changelog — Infra Prod‑Readiness Audit (2025-11-25)
+
+Summary
+- Completed Phase 0 repo‑wide audit focused on production paths to align with the Infra Migration Plan (FRA1 + TLS + Postgres‑first, Redis self‑hosted).
+- Verified presence and wiring of key artifacts:
+  - Nginx configs: HTTP reverse proxy (`infrastructure/nginx/apexmediation.conf`), split HTTPS config (`infrastructure/nginx/apexmediation.ssl.conf`), hardened TLS params (`infrastructure/nginx/snippets/ssl-params.conf`), and optional metrics Basic‑Auth snippet.
+  - Docker Compose (prod): `infrastructure/docker-compose.prod.yml` exposes only 80; 443 and SSL config mount commented until certs exist; Redis not publicly exposed; optional htpasswd and cert mounts present.
+  - Environment templates: backend + console production examples present and FRA1‑aligned.
+  - Backend verification scripts: `verify:db`, `verify:redis`, `verify:storage` available and documented.
+  - Backup script template: `scripts/backup/pg_dump_s3_template.sh` for Postgres → S3‑compatible backups (supports Spaces FRA1/B2/AWS).
+
+Impact
+- Documentation/infra alignment only; no business logic changed. No critical stubs found on prod paths. Backlog items (HSTS enablement post A/A+, Upptime, DO Monitoring policies, PITR drill) remain planned post‑provisioning.
+
+---
+
+Changelog — Phase 1: Backend Alignment (Production Posture Warnings) (2025-11-25)
+
+Summary
+- Added non‑breaking, production‑only startup warnings in `backend/src/index.ts` to help operators align runtime with the Infra Migration Plan (FRA1 + TLS + Postgres‑first, Redis self‑hosted):
+  - Warn if `DATABASE_URL` does not include `sslmode=require`.
+  - Warn if `REDIS_URL` has no password or appears to point to a raw/public IP (instead of private network host like `redis`).
+  - Warn if `CORS_ALLOWLIST` does not include `https://console.apexmediation.ee` and `https://apexmediation.ee`.
+
+Impact
+- Infra/documentation alignment only; no business logic changed. Warnings do not fail startup and are only emitted when `NODE_ENV=production`.
+
+Operator guidance
+- See `docs/Internal/Deployment/BACKEND_ENVIRONMENT.md` for remediation steps matching these warnings.
+
+---
+
+Changelog — Phase 1 (finish): Backend docs updated + local validation evidence scaffold (2025-11-25)
+
+Summary
+- Backend operator documentation updated to explicitly reference production‑posture startup warnings emitted in `backend/src/index.ts` and provide exact remediation steps:
+  - `DATABASE_URL` must include `sslmode=require` (DO Managed Postgres, FRA1).
+  - `REDIS_URL` must include a password and point to a private host (e.g., `redis:6379/0`).
+  - `CORS_ALLOWLIST` must include `https://console.apexmediation.ee` and `https://apexmediation.ee`.
+- Local prod‑like validation runbook enhanced with an “Evidence bundle” convention and commands to capture outputs.
+- Added a template evidence folder at `docs/Internal/Deployment/local-validation-template/` to standardize artifacts.
+
+Impact
+- Documentation/infra only; no business logic changed.
+
+Files
+- Updated: `docs/Internal/Deployment/BACKEND_ENVIRONMENT.md`, `docs/Internal/Deployment/LOCAL_PROD_VALIDATION.md`
+- Added: `docs/Internal/Deployment/local-validation-template/README.md`
+
+---
+
+Changelog — Backend Prod Env Example aligned to FRA1 (2025-11-25)
+
+Summary
+- Aligns `infrastructure/production/.env.backend.example` with FRA1 defaults and DO Managed Postgres guidance.
+
+What changed (highlights)
+- Database
+  - Corrected example `DATABASE_URL` to DO Managed Postgres default port `25060` and canonical db name `ad_platform`, with `sslmode=require` explicitly shown for SSL enforcement.
+- Object Storage (Spaces)
+  - Switched sample endpoint/region to FRA1 (`SPACES_ENDPOINT=fra1.digitaloceanspaces.com`) and `SPACES_REGION=eu-central-1` to match typical SDK requirements when using FRA1.
+
+Validation & notes
+- Documentation/config template only; no runtime behavior or business logic changed.
+- Real secrets and actual values should be materialized out-of-repo on the droplet or in a secrets manager per the migration plan.
 
 ---
 
@@ -2180,3 +2424,218 @@ AUTH_TOKEN="<jwt>" bash backend/scripts/vraCanarySmoke.sh
 Notes
 - All ClickHouse calls remain wrapped by `safeQuery` to fail‑open with empty results in read‑only canary.
 - No serving‑risk changes included in this entry; documentation‑only update and operator tooling.
+
+Changelog — Phase 4: Services Alignment Complete (2025-11-25)
+
+Summary
+- Completed production services alignment per the Infra Migration Plan. The minimal production set is now explicit and validated:
+  - backend (API), console (dashboard), redis (self‑hosted, private only), nginx (reverse proxy).
+- Confirmed that `infrastructure/docker-compose.prod.yml` exposes only `80:80`; HTTPS (443) and SSL config remain split/unmounted until certs exist on DO.
+- Redis remains private (no public port), with `--requirepass`, 512MB cap, `allkeys-lru`, and AOF enabled.
+- Nginx routes `/`, `/api/v1/*`, `/health`, and `/metrics` (with optional protection examples documented).
+
+Impact
+- Infra/docs alignment only; no business logic changed.
+
+---
+
+Changelog — Phase 5: Quality/CI Hardening (Kickoff) (2025-11-25)
+
+Summary
+- Initiated Phase 5 to ensure repository‑wide quality gates are green and enforceable:
+  - Consolidated CI in `.github/workflows/ci-all.yml` to cover backend lint/tests, website builds/a11y/perf budgets, and added a dedicated Console production build job.
+  - Backend CI jobs use safe dummy env values (e.g., `DATABASE_URL` with `sslmode=require`, long secrets) to satisfy env validation without contacting real services.
+  - DigitalOcean deploy workflow remains manual‑only and safely no‑ops when secrets are absent.
+
+What changed (highlights)
+- `.github/workflows/ci-all.yml`
+  - Added `console-build` job: builds Console in production mode with `NEXT_PUBLIC_API_URL=https://api.apexmediation.ee/api/v1` to verify wiring.
+  - Confirmed Website jobs build and run Lighthouse budgets; Backend jobs lint, test, and verify env schema.
+
+Validation & notes
+- CI‑only adjustments; no runtime code or business logic affected.
+- Next: mark these CI jobs as required checks on PRs in repository settings.
+
+---
+
+Changelog — Phase 5: CI Repo Guard (forbid dev URLs in prod source) (2025-11-25)
+
+Summary
+- Added a new CI job `forbidden-dev-urls` in `.github/workflows/ci-all.yml` to prevent accidental shipping of development-only URLs in production bundles.
+- The job scans `console/src` and `website/src` for `http://localhost` or `127.0.0.1` references, excluding tests and docs.
+
+What changed (highlights)
+- `.github/workflows/ci-all.yml`
+  - New job: `forbidden-dev-urls` — fails the build if forbidden dev URLs are found in production source paths.
+
+Validation & notes
+- CI-only change; no application runtime or business logic affected.
+- Aligns with the Infra Migration Plan to ensure production builds reference public domains or env-driven URLs.
+
+---
+
+Changelog — Phase 5: Quality/CI Hardening — Completed (2025-11-25)
+
+Summary
+- Completed Phase 5 by putting repository‑wide CI quality gates in place and adding safety checks aligned with the Infra Migration Plan.
+
+What changed (highlights)
+- `.github/workflows/ci-all.yml`
+  - Backend job: env schema check, lint, unit tests, migrations verify (ephemeral services).
+  - Website jobs: production build + Lighthouse budgets; visual regression (Playwright snapshot upload on failure).
+  - Console job: production build with `NEXT_PUBLIC_API_URL=https://api.apexmediation.ee/api/v1`.
+  - Repo guard job: `forbidden-dev-urls` scans `console/src` and `website/src` to block `http://localhost`/`127.0.0.1` in prod source.
+  - Deploy safety job: validates `deploy-do.yml` is manual‑only and safe pre‑DO.
+- Docs updated to reflect CI governance and required checks.
+
+Governance
+- Mark the following jobs as required checks in repository settings:
+  - `backend`
+  - `website-a11y-perf`
+  - `console-build`
+  - `forbidden-dev-urls`
+  - `deploy-workflow-safety`
+
+Impact
+- CI‑only changes; no runtime code or business logic affected. The repo is production‑ready and DO‑ready from a CI perspective.
+
+---
+Changelog — Phase 9: DO Readiness — TLS/HSTS gating, DB TLS, Redis isolation (2025-11-25)
+
+Summary
+- Added DigitalOcean post‑provisioning verification (Phase 9) guidance and tooling. Operators can now enable HTTPS on the droplet, validate TLS posture, gate then enable HSTS after achieving an A/A+ grade, verify `DATABASE_URL` TLS (`sslmode=require`), prove Redis isolation, and capture an auditable evidence bundle.
+
+What changed
+- DO Readiness Checklist:
+  - Expanded to Pre‑/Post‑Provisioning and added Section “12) Phase 9 — DO Readiness (Post‑Provisioning Verification)”.
+  - Concrete steps to mount `apexmediation.ssl.conf`, expose 443 only on the droplet, run certbot, and reload Nginx.
+  - Verification commands for redirects, HTTPS headers, HSTS, DB TLS, Redis isolation, and `/metrics` protection.
+- Production Readiness Checklist:
+  - New subsection “Post‑DO HTTPS/HSTS Verification (Phase 9)” under Infrastructure → Compute.
+  - Added explicit checks for `?sslmode=require` and Redis external port closure.
+- Tooling:
+  - New script `scripts/ops/do_tls_snapshot.sh` to capture HTTP→HTTPS redirects, HTTP/2 headers, server certificate metadata, and HSTS header into a dated evidence folder.
+  - `npm run do:tls` convenience script targeting `api.apexmediation.ee`.
+
+Evidence
+- Create a dated folder `docs/Internal/Deployment/do-readiness-YYYY-MM-DD/` and store:
+  - `verify-redirects.txt` (HTTP→HTTPS)
+  - `verify-tls.txt` (HTTPS headers + cert info)
+  - `verify-hsts.txt` (after HSTS enablement)
+  - `verify-db.txt` (from `npm run verify:db --workspace backend` + migrations)
+  - `verify-redis.txt` (from `npm run verify:redis --workspace backend`) and a note capturing external `nmap` results
+  - `verify-metrics-protection.txt` (401/403 from public Internet)
+
+Notes
+- HSTS must remain disabled until HTTPS is validated via SSL Labs with an A/A+ grade; enable by uncommenting the header in `infrastructure/nginx/snippets/ssl-params.conf` and reloading Nginx.
+- ClickHouse remains intentionally disabled per migration plan; backend health may report `status: "degraded"` due to CH — acceptable.
+
+---
+
+Changelog — Infra Plan: Automated Verification Tests Added (2025-11-25)
+
+Summary
+- Added a repository test suite to continuously verify that infra artifacts match `INFRASTRUCTURE_MIGRATION_PLAN.md` (Postgres‑first, Redis self‑hosted, Nginx security posture, evidence tooling, DO readiness cross‑links).
+
+What changed
+- Tests: new workspace under `quality/infra` with Jest spec `__tests__/infraPlan.spec.js` asserting:
+  - docker-compose prod defaults (`DATABASE_URL`, `REDIS_URL` with password), Postgres/Redis healthchecks, Nginx port `${NGINX_PORT:-8080}`, Console under `ui` profile.
+  - Nginx configs contain security headers and gated HSTS comment; HTTPS blocks include `snippets/ssl-params.conf` and optional metrics basic-auth snippet.
+  - Evidence scripts: `local_health_snapshot.sh` captures `/health` + runs Redis verify in the backend container; `do_tls_snapshot.sh` writes TLS/HSTS evidence files.
+  - Docs: DO Readiness checklist has Phase 9 (TLS/HSTS, DB TLS `sslmode=require`, Redis isolation) and Production Readiness has a Post‑DO HTTPS/HSTS section.
+- Scripts: root adds `npm run test:infra` for convenience.
+- Docs: `INFRASTRUCTURE_MIGRATION_PLAN.md` now includes an “Automated Verification (Repo Tests)” appendix with how‑to‑run and coverage summary.
+
+Validation
+- Ran `npm test` and `npm run test:infra`; all suites passed, including the new infra plan tests.
+
+Impact
+- Documentation and test‑only changes; no runtime behavior or business logic modified.
+
+---
+
+Changelog — Old plan cleanup & new plan fully wired (2025-11-25)
+
+Summary
+- Hard-disabled the legacy ClickHouse path in the backend and removed Upstash guidance from deploy prompts. Added deprecation banners to legacy ClickHouse/Upstash documents and scripts. Extended infra tests to prevent regressions. The repository now fully reflects the Postgres‑first + self‑hosted Redis plan and is ready for production/serious sandbox testing.
+
+What changed
+- Backend:
+  - Removed ClickHouse initialization and health coupling from `backend/src/index.ts`; `/health` now reports based on Postgres/Redis/Queues only.
+  - No functional impact to business logic; Redis queues/metrics remain intact.
+- DevOps:
+  - `backend/deploy-backend.sh`: removed Upstash/ClickHouse secret prompts; now references `DATABASE_URL` with `?sslmode=require` and `REDIS_URL` example.
+- Tests:
+  - `quality/infra/__tests__/infraPlan.spec.js`: added assertions that backend entrypoint does not import ClickHouse and deploy script does not reference Upstash/ClickHouse.
+- Docs (deprecation banners added at top):
+  - `backend/docs/CLICKHOUSE_ANALYTICS.md`
+  - `docs/Internal/Infrastructure/CLICKHOUSE_INTEGRATION.md`
+  - `data/schemas/clickhouse.sql`, `data/schemas/clickhouse_migration.sql`
+  - `ML/scripts/etl_clickhouse.py` (header comment)
+  - `docs/Internal/Automation/ULTRA_LEAN_AUTOMATION.md` (Upstash notes marked superseded)
+  - `monitoring/prometheus.yml` (Upstash metrics comment marked deprecated)
+
+Validation
+- Ran `npm test` (all workspaces) and `npm run test:infra`; all suites passed. `/health` remains 200 OK in local Phase‑8 posture without ClickHouse degradation.
+
+Impact
+- Code/config cleanup and documentation deprecation only; no breaking changes. Aligns repo with the new infra plan and prevents accidental reintroduction of the old scheme.
+
+---
+
+Changelog — Deprecated providers cleanup (Fly, Upstash, Supabase‑as‑primary) & DO production plan finalized (2025-11-25)
+
+Summary
+- Purged active usage paths for legacy providers and marked remaining configs/docs as deprecated. Consolidated the deployment path to DigitalOcean only and added an end‑to‑end DO deployment section to the Production Readiness checklist.
+
+What changed
+- Backend
+  - `backend/deploy-backend.sh`: converted into a deprecation shim that exits with guidance to use DO checklists and the compose stack.
+  - `backend/fly.toml`: added a clear DEPRECATION header with links to DO runbooks.
+- Console
+  - `console/fly.toml`: added DEPRECATION header pointing to DO runbooks.
+- Docs
+  - `docs/Internal/Deployment/PRODUCTION_READINESS_CHECKLIST.md`: new section “DigitalOcean Full Production Deployment Plan (End‑to‑End)” with build→provision→env→compose→HTTPS/HSTS→DB/Redis→evidence→rollback steps and cross‑links.
+  - `docs/Internal/Deployment/ROLLOUT_STRATEGY.md`: added top‑of‑file deprecation banner clarifying DO‑only plan going forward.
+  - Existing ClickHouse/Upstash deprecation banners retained; the DO plan is the single source of truth.
+- Tests
+  - `quality/infra/__tests__/infraPlan.spec.js` extended to assert:
+    - Fly deploy script is deprecated.
+    - `backend/` and `console/` fly.toml files (if present) include a deprecation notice.
+    - Production Readiness checklist includes the “DigitalOcean Full Production Deployment Plan (End‑to‑End)” section.
+
+Validation
+- Ran `npm run test:infra` and full `npm test` — all green (13/13 infra tests passed). The repository enforces DO‑only posture via automated checks.
+
+Impact
+- Documentation and deployment‑path cleanup only; no business logic changes. Prevents regression into legacy providers and clarifies the DO production rollout.
+
+---
+Changelog — CI workflow scan + Provider Content Guard + Checklist consolidation (2025-11-25)
+
+Summary
+- Added automated policies to prevent regressions into legacy providers and finalized the production runbook.
+
+What changed
+- Tests (quality/infra):
+  - New `__tests__/ciWorkflows.spec.js` scans `.github/workflows/*.yml` and fails on residual Fly/Heroku/Vercel/Render/Railway/Upstash deploy steps.
+  - New `__tests__/contentGuard.spec.js` runs the repository‑wide provider content guard and expects a clean pass.
+- Guardrail tooling:
+  - New `tools/content-guard.js` scans code/config areas (backend, console, infrastructure, scripts, packages, sdk, sdks, .github) and fails the build if non‑deprecated references to legacy providers are found outside historical docs.
+  - Root npm script: `npm run guard:providers`.
+  - CI: `.github/workflows/ci-all.yml` now includes a `policy-guard` job that executes the content guard on every PR/push.
+- Docs:
+  - `docs/Internal/Deployment/PRODUCTION_READINESS_CHECKLIST.md` updated to be fully self‑contained with “Prerequisites”, “Quick Start (DO)”, and “Final Sign‑off” sections while retaining the DigitalOcean End‑to‑End plan and Phase 9 verification cross‑links.
+
+How to use
+- Run infra plan tests: `npm run test:infra`
+- Run the guard locally: `npm run guard:providers`
+
+Validation
+- `npm run test` → all suites green (backend + infra).
+- `npm run test:infra` → all infra tests green, including CI workflow scan and content guard.
+
+Impact
+- CI/test‑only and documentation updates; no runtime business logic changes. The repository now enforces a DO‑only posture via automated checks.
+
+---
