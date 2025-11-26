@@ -2639,3 +2639,21 @@ Impact
 - CI/test‑only and documentation updates; no runtime business logic changes. The repository now enforces a DO‑only posture via automated checks.
 
 ---
+
+Changelog — Day‑2 Operations Playbook added to Production Readiness (2025-11-26)
+
+Summary
+- Expanded `docs/Internal/Deployment/PRODUCTION_READINESS_CHECKLIST.md` with a comprehensive Day‑2 Operations section covering CI/CD, scheduled jobs for accounting/billing, backups & retention, monitoring/alerting, incident response runbooks, security operations, capacity & cost management, and operator daily/weekly/monthly routines.
+- This makes the checklist fully self‑contained for taking the system to production and operating it long‑term on DigitalOcean.
+
+What changed
+- Production Readiness Checklist: new `## 2. Day‑2 Operations (Long‑Term Running)` with detailed subsections and runnable examples (cron, verify scripts, TLS snapshots, backup template usage).
+- Infra tests: extended `quality/infra/__tests__/infraPlan.spec.js` to assert presence of the Day‑2 Operations section and key subsections in the checklist.
+
+Validation
+- Ran `npm run test:infra`; all infra tests pass including the new assertions.
+
+Impact
+- Documentation and tests only; no runtime behavior changes. Provides operators with an actionable, auditable runbook for long‑term maintenance and semi‑automated operations.
+
+---

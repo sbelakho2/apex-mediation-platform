@@ -107,6 +107,19 @@ describe('Infrastructure Migration Plan — Repository Conformance', () => {
     expect(txt).toMatch(/DigitalOcean Full Production Deployment Plan \(End‑to‑End\)/);
   });
 
+  test('Production readiness checklist includes Day‑2 Operations section and key subsections', () => {
+    const txt = read(prodChecklist);
+    expect(txt).toMatch(/##\s+2\.\s+Day‑2 Operations \(Long‑Term Running\)/);
+    expect(txt).toMatch(/###\s+2\.1\s+CI\/CD \& Release Management/);
+    expect(txt).toMatch(/###\s+2\.2\s+Scheduled Jobs \(Cron\/Queues\) — Accounting, Billing, Sync/);
+    expect(txt).toMatch(/###\s+2\.3\s+Backups \& Retention \(DB → Spaces\/B2\)/);
+    expect(txt).toMatch(/###\s+2\.4\s+Monitoring, Metrics, and Alerting/);
+    expect(txt).toMatch(/###\s+2\.5\s+Incident Response \& Runbooks/);
+    expect(txt).toMatch(/###\s+2\.6\s+Security Operations/);
+    expect(txt).toMatch(/###\s+2\.7\s+Capacity \& Cost Management/);
+    expect(txt).toMatch(/###\s+2\.8\s+Operator Routines \(Checklist\)/);
+  });
+
   test('TLS snapshot script writes expected evidence files', () => {
     const txt = read(tlsScript);
     expect(txt).toMatch(/verify-redirects\.txt/);

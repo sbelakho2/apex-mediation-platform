@@ -185,6 +185,7 @@ References
 - [ ] Evidence bundle stored under `docs/Internal/Deployment/do-readiness-YYYY-MM-DD/` and referenced in `CHANGELOG.md`
 - [ ] CI “policy guard” green: provider content guard and infra plan tests pass (`npm run test:infra`)
 
+
 ### 1.2 Database — Managed PostgreSQL
 - [ ] Create DigitalOcean Managed PostgreSQL cluster (Basic/Dev plan, same region, 10–20 GB storage).
 - [ ] Restrict access to droplet private IP + admin IPs and enforce SSL.
@@ -446,3 +447,112 @@ References
 - [ ] `PAGERDUTY_API_KEY` (if applicable).
 - [ ] `COCOAPODS_TRUNK_TOKEN`, `OSSRH_USERNAME`, `OSSRH_PASSWORD`, `NPM_TOKEN`.
 - [ ] `JWT_SECRET`, `ENCRYPTION_KEY`.
+
+## 2. Day‑2 Operations (Long‑Term Running)
+
+This section operationalizes long‑term running of the platform: CI/CD, scheduled jobs (accounting/billing), backups, monitoring/alerting, security hygiene, capacity/cost controls, and clear operator routines. Treat it as your primary ops playbook post‑launch.
+
+### 2.1 CI/CD & Release Management
+- [ ] Versioning policy: tag releases with `vYYYY.MM.DD-<sha>` and annotate in `CHANGELOG.md`.
+- [ ] CI required checks: keep `ci-all` jobs required on PRs; deploy workflow stays manual until you explicitly flip it.
+- [ ] Release gates:
+    - [ ] Infra tests green: `npm run test:infra`
+    - [ ] Backend/unit suites green: `npm run test --workspace backend`
+    - [ ] Console build succeeds with `NEXT_PUBLIC_API_URL` pinned
+- [ ] Deploy to DO (manual): run `.github/workflows/deploy-do.yml` with `workflow_dispatch` after checks.
+- [ ] Rollback plan: previous GHCR image tags available; rerun deploy with prior tag or `docker compose up -d` on droplet to revert.
+
+### 2.2 Scheduled Jobs (Cron/Queues) — Accounting, Billing, Sync
+Define time windows when traffic is low (FRA1 02:00–05:00 local) and prefer UTC in cron.
+
+- [ ] Usage aggregation (daily): computes app/network usage for tiers and invoices
+    - Runner: backend job/queue or cron container
+    - Verify: inspect logs for completion markers; metrics exported under `/metrics` RED histograms
+- [ ] Stripe sync (hourly + daily catch‑up): reconciles invoices, payments, dunning
+    - Verify: `npm run verify:db --workspace backend` for DB connectivity; confirm Stripe test mode on staging
+- [ ] Email queue drain (every 5 min): ensures transactional emails go out (Resend)
+- [ ] Data hygiene (nightly/weekly): purge temp rows, rotate API key usage logs if needed
+- [ ] Evidence hooks (optional): append summaries to `logs/cron/*.log` and surface counters in `/metrics`
+
+Example crontab (on droplet, using rootless container exec):
+```
+# /etc/cron.d/apex
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+# Nightly 02:15 — usage aggregation
+15 2 * * * root docker compose -f /opt/apex/infrastructure/docker-compose.prod.yml exec -T backend node dist/scripts/aggregateUsage.js >> /var/log/apex/cron-usage.log 2>&1
+
+# Hourly — Stripe sync
+5 * * * * root docker compose -f /opt/apex/infrastructure/docker-compose.prod.yml exec -T backend node dist/scripts/stripeSync.js >> /var/log/apex/cron-stripe.log 2>&1
+
+# Every 5 min — email queue
+*/5 * * * * root docker compose -f /opt/apex/infrastructure/docker-compose.prod.yml exec -T backend node dist/scripts/drainEmailQueue.js >> /var/log/apex/cron-email.log 2>&1
+```
+
+Notes:
+- Prefer queue‑based scheduling inside backend where feasible; use host cron only as a thin trigger.
+- Ensure Redis is healthy before queue work; see `npm run verify:redis --workspace backend`.
+
+### 2.3 Backups & Retention (DB → Spaces/B2)
+- [ ] Nightly logical backup of Postgres via `pg_dump` to S3‑compatible storage
+    - Script template: `scripts/backup/pg_dump_s3_template.sh`
+    - Configure: `S3_ENDPOINT`, `S3_BUCKET`, `S3_PREFIX`, lifecycle retention (30–90 days)
+- [ ] Weekly restore drill to staging DB
+    - Procedure: restore latest dump to temp instance; run smoke queries; record duration (RTO)
+- [ ] Evidence: store `backup-YYYY-MM-DD.log` and restore notes under `docs/Internal/Deployment/backups-YYYY-MM/`
+
+Sample run:
+```
+export PGHOST=<do-pg-host> PGPORT=25060 PGDATABASE=ad_platform PGUSER=apex_admin PGPASSWORD=<admin-pass>
+export AWS_ACCESS_KEY_ID=<spaces-key> AWS_SECRET_ACCESS_KEY=<spaces-secret>
+export AWS_DEFAULT_REGION=eu-central-1 S3_ENDPOINT=https://fra1.digitaloceanspaces.com
+export S3_BUCKET=s3://apex-prod-backups S3_PREFIX=pg/ BACKUP_LABEL=prod
+bash scripts/backup/pg_dump_s3_template.sh
+```
+
+### 2.4 Monitoring, Metrics, and Alerting
+- [ ] Enable DO Monitoring alerts: CPU/RAM>80% (5m), disk>80%, droplet unreachable
+- [ ] Export Prometheus metrics from backend (`/metrics`); protect via Basic Auth or IP allowlist
+- [ ] Define SLOs (initial):
+    - API availability 99.9%/30d; p95 < 200ms; error rate < 0.5%
+- [ ] Alert policies:
+    - p95 latency > 400ms for 10m
+    - error rate > 1% for 5m
+    - queue length growing 15m
+- [ ] Error tracking: Sentry DSN configured for backend/console; scrub PII
+- [ ] Optional: Upptime for external status page on `status.apexmediation.ee`
+
+### 2.5 Incident Response & Runbooks
+- [ ] Common failures & fixes
+    - Backend crashloop: `docker compose ... logs backend | tail -n 200`; check env validation; rollback image
+    - Redis unavailable: confirm container health; if down, restart; investigate AOF
+    - Database connection errors: confirm `?sslmode=require`; check DO PG status page; failover procedure
+- [ ] Nginx 502/504: `docker compose exec nginx nginx -t && nginx -s reload`; review upstream health
+- [ ] Evidence capture during incident: run `scripts/ops/do_tls_snapshot.sh` and save outputs with timestamps
+- [ ] Postmortem template: cause, timeline, impact, remediation, follow‑ups
+
+### 2.6 Security Operations
+- [ ] Secrets rotation schedule (quarterly): Stripe, Resend, JWT/COOKIE secrets; update env; restart stack
+- [ ] Access review (quarterly): GitHub, DO, Sentry; least privilege; remove ex‑contributors
+- [ ] Patch policy: apply Ubuntu security updates weekly (unattended‑upgrades) and container base updates monthly
+- [ ] TLS hygiene: certbot auto‑renew configured; HSTS locked; re‑run TLS snapshot quarterly
+- [ ] Content guard: CI `policy-guard` job must remain green; forbidden providers blocked by tests
+
+### 2.7 Capacity & Cost Management
+- [ ] Observe CPU/RAM/disk trends monthly; scale droplet if p95 CPU > 70% or memory pressure sustained
+- [ ] Database: monitor connections, slow queries; add indices as needed; consider plan upgrade when CPU saturates
+- [ ] Storage: track Spaces/B2 usage; enforce lifecycle rules; review backup sizes
+- [ ] Network egress: review DO bills; enable gzip in Nginx (already set) and cache headers where safe
+
+### 2.8 Operator Routines (Checklist)
+- Daily
+    - [ ] Scan alerts and Sentry; zero criticals
+    - [ ] Spot‑check `/health` and `/metrics`
+- Weekly
+    - [ ] Review cron logs (`/var/log/apex/*`); confirm jobs succeeded
+    - [ ] Run `npm run test:infra` on main; check drift
+- Monthly
+    - [ ] Restore drill to staging; document RTO/RPO
+    - [ ] Re‑capture TLS snapshot and verify HSTS present
+    - [ ] Review costs and capacity; adjust limits
