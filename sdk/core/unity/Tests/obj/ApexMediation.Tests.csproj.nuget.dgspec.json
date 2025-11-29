@@ -1,20 +1,20 @@
 {
   "format": 1,
   "restore": {
-    "/home/aaron/IdeaProjects/Ad-Project/sdk/core/unity/Tests/ApexMediation.Tests.csproj": {}
+    "/Users/sabelakhoua/IdeaProjects/Ad-Project/sdk/core/unity/Tests/ApexMediation.Tests.csproj": {}
   },
   "projects": {
-    "/home/aaron/IdeaProjects/Ad-Project/sdk/core/unity/Tests/ApexMediation.Tests.csproj": {
+    "/Users/sabelakhoua/IdeaProjects/Ad-Project/sdk/core/unity/Tests/ApexMediation.Tests.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "/home/aaron/IdeaProjects/Ad-Project/sdk/core/unity/Tests/ApexMediation.Tests.csproj",
+        "projectUniqueName": "/Users/sabelakhoua/IdeaProjects/Ad-Project/sdk/core/unity/Tests/ApexMediation.Tests.csproj",
         "projectName": "ApexMediation.Tests",
-        "projectPath": "/home/aaron/IdeaProjects/Ad-Project/sdk/core/unity/Tests/ApexMediation.Tests.csproj",
-        "packagesPath": "/home/aaron/.nuget/packages/",
-        "outputPath": "/home/aaron/IdeaProjects/Ad-Project/sdk/core/unity/Tests/obj/",
+        "projectPath": "/Users/sabelakhoua/IdeaProjects/Ad-Project/sdk/core/unity/Tests/ApexMediation.Tests.csproj",
+        "packagesPath": "/Users/sabelakhoua/.nuget/packages/",
+        "outputPath": "/Users/sabelakhoua/IdeaProjects/Ad-Project/sdk/core/unity/Tests/obj/",
         "projectStyle": "PackageReference",
         "configFilePaths": [
-          "/home/aaron/.nuget/NuGet/NuGet.Config"
+          "/Users/sabelakhoua/.nuget/NuGet/NuGet.Config"
         ],
         "originalTargetFrameworks": [
           "net8.0"
@@ -32,7 +32,13 @@
           "warnAsError": [
             "NU1605"
           ]
-        }
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
+        },
+        "SdkAnalysisLevel": "9.0.300"
       },
       "frameworks": {
         "net8.0": {
@@ -62,12 +68,22 @@
           ],
           "assetTargetFallback": true,
           "warn": true,
+          "downloadDependencies": [
+            {
+              "name": "Microsoft.AspNetCore.App.Ref",
+              "version": "[8.0.21, 8.0.21]"
+            },
+            {
+              "name": "Microsoft.NETCore.App.Ref",
+              "version": "[8.0.21, 8.0.21]"
+            }
+          ],
           "frameworkReferences": {
             "Microsoft.NETCore.App": {
               "privateAssets": "all"
             }
           },
-          "runtimeIdentifierGraphPath": "/usr/lib/dotnet/sdk/8.0.121/PortableRuntimeIdentifierGraph.json"
+          "runtimeIdentifierGraphPath": "/usr/local/share/dotnet/sdk/9.0.306/PortableRuntimeIdentifierGraph.json"
         }
       }
     }

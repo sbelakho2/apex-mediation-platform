@@ -1,0 +1,21 @@
+name: ApexSandboxiOS
+options:
+  minimumXcodeGenVersion: 2.41.0
+  deploymentTarget:
+    iOS: "16.0"
+targets:
+  ApexSandboxiOS:
+    type: application
+    platform: iOS
+    sources:
+      - path: Sources
+    settings:
+      INFOPLIST_FILE: Sources/Info.plist
+      PRODUCT_BUNDLE_IDENTIFIER: com.apex.sandbox.ios
+      SWIFT_VERSION: 5.0
+      CODE_SIGNING_ALLOWED: NO
+      CODE_SIGNING_REQUIRED: NO
+      CODE_SIGNING_STYLE: Manual
+      DEVELOPMENT_TEAM: ""
+    scheme:
+      testTargets: []

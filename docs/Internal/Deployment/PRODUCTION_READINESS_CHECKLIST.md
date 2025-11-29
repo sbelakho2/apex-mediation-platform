@@ -2,9 +2,12 @@
 
 This is the single, self-contained runbook to take the system to production on DigitalOcean. It consolidates prerequisites, environment materialization, deployment, HTTPS/HSTS, DB/Redis verification, metrics protection, evidence capture, and rollback guidance. Cross-links point to deeper runbooks where needed, but all critical commands are summarized here for operator convenience.
 
+> **DigitalOcean CLI policy:** All cloud interactions below must be executed from Bash using [`doctl`](https://docs.digitalocean.com/reference/doctl/) or the S3-compatible tooling called out in each section. Do not click through the DigitalOcean UI; if a step is missing a CLI, stop and add it here before proceeding.
+
 ## Prerequisites (one-time)
 - [ ] Domain configured: `api.apexmediation.ee`, `console.apexmediation.ee` (TTL 300s)
 - [ ] DigitalOcean account with billing enabled
+- [ ] Install and authenticate `doctl`: `brew install doctl && doctl auth init --context apex-prod`
 - [ ] Provisioning decisions documented (FRA1, droplet size 2 vCPU/4GB/80GB, DO Managed Postgres Basic/Dev)
 - [ ] SSH keypair for deploy user created and stored in a local encrypted vault (KeePassXC or `pass`)
 - [ ] GitHub repo secrets prepared (add when ready): `DROPLET_HOST`, `DEPLOY_USER`, `DEPLOY_SSH_KEY`
@@ -14,7 +17,23 @@ This is the single, self-contained runbook to take the system to production on D
 - [ ] Evidence tooling verified locally: `scripts/ops/local_health_snapshot.sh`, `scripts/ops/do_tls_snapshot.sh`
 
 ## Quick Start (DO)
-- [ ] Boot droplet and harden host using copy-ready commands in `docs/Internal/Deployment/DO_INITIAL_BOOT_COMMANDS.md`
+- [ ] Boot droplet via CLI and harden host using copy-ready commands in `docs/Internal/Deployment/DO_INITIAL_BOOT_COMMANDS.md`
+  ```bash
+  export DO_REGION=fra1
+  export DROPLET_NAME=apex-core-1
+  export DROPLET_SIZE=s-2vcpu-4gb
+  export DROPLET_IMAGE=ubuntu-22-04-x64
+  export SSH_KEY_ID=$(doctl compute ssh-key list --format ID --no-header | head -n 1)
+  doctl compute droplet create "$DROPLET_NAME" \
+    --region "$DO_REGION" \
+    --size "$DROPLET_SIZE" \
+    --image "$DROPLET_IMAGE" \
+    --ssh-keys "$SSH_KEY_ID" \
+    --tag-names apex,production \
+    --wait
+  export DROPLET_IP=$(doctl compute droplet list "$DROPLET_NAME" --format PublicIPv4 --no-header)
+  ssh root@"$DROPLET_IP"
+  ```
 - [ ] Clone repo to `/opt/apex` on the droplet
 - [ ] Materialize `.env` files from templates (do not commit secrets)
 - [ ] Start stack HTTP-only: `docker compose -f infrastructure/docker-compose.prod.yml up -d` and verify `http://<ip>/health`
@@ -24,7 +43,7 @@ This is the single, self-contained runbook to take the system to production on D
 ## 0.0 Full Sandbox Test Matrix (All SDKs + Console + Website + Billing + VRA)
 
 ### 0.0.1 Environments, Fixtures & Common Test Data
-- [] Provision dedicated staging endpoints (`STAGING_API_BASE`, `STAGING_CONSOLE_BASE`) and an isolated staging database
+- [ ] Provision dedicated staging endpoints (`STAGING_API_BASE`, `STAGING_CONSOLE_BASE`) and an isolated staging database
 - [ ] Create sandbox org **Apex Sandbox Studio** with Android, iOS, Unity, Android TV/CTV, and tvOS apps.
 - [ ] Give every app at least two interstitial placements, two rewarded placements, and one banner slot with consistent IDs.
 - [ ] Stand up FakeNetworkA (always fill), FakeNetworkB (random fill/no-fill), and FakeNetworkC (slow/timeout) plus Starter (~$3k), Growth (~$50k), and Scale (~$150k) revenue scripts.
@@ -103,8 +122,30 @@ This is the single, self-contained runbook to take the system to production on D
 
 ## 1. Infrastructure Setup
 ### 1.1 Compute — Main App Droplet (DigitalOcean)
-- [ ] Create DigitalOcean account.
-- [ ] Provision droplet `apex-core-1` (Basic Regular/Premium, 2 vCPU / 4 GB RAM / 80 GB SSD, Ubuntu 22.04+, region near FRA/AMS/NYC).
+- [ ] Confirm CLI access (reuse the prerequisite step if already complete):
+  ```bash
+  export DIGITALOCEAN_CONTEXT=apex-prod
+  doctl auth switch --context "$DIGITALOCEAN_CONTEXT"
+  doctl account get
+  ```
+- [ ] Provision droplet `apex-core-1` (Basic Regular/Premium, 2 vCPU / 4 GB RAM / 80 GB SSD, Ubuntu 22.04+, region near FRA/AMS/NYC) directly from Bash:
+  ```bash
+  export DO_REGION=fra1
+  export DROPLET_NAME=apex-core-1
+  export DROPLET_SIZE=s-2vcpu-4gb
+  export DROPLET_IMAGE=ubuntu-22-04-x64
+  export SSH_KEY_ID=$(doctl compute ssh-key list --format ID --no-header | head -n 1)
+  doctl compute droplet create "$DROPLET_NAME" \
+    --region "$DO_REGION" \
+    --image "$DROPLET_IMAGE" \
+    --size "$DROPLET_SIZE" \
+    --ssh-keys "$SSH_KEY_ID" \
+    --tag-names apex,production \
+    --vpc-uuid $(doctl vpcs list --format ID --no-header | head -n 1) \
+    --wait
+  export DROPLET_ID=$(doctl compute droplet list "$DROPLET_NAME" --format ID --no-header)
+  export DROPLET_IP=$(doctl compute droplet list "$DROPLET_NAME" --format PublicIPv4 --no-header)
+  ```
 - [ ] Harden the server (non-root user, disable password SSH, key-only auth, enable UFW 22/80/443, install fail2ban, enable unattended-upgrades).
 - [ ] Install Docker and docker-compose.
 - [ ] Define `docker-compose.yml` with `api`, `console`, `redis`, `nginx` services; expose only Nginx on 80/443.
@@ -133,6 +174,21 @@ This section consolidates the end‑to‑end steps to deploy the production stac
 
 Pre‑flight
 - [ ] DNS prepared: `api.apexmediation.ee`, `console.apexmediation.ee` (TTL 300s)
+  ```bash
+  doctl compute domain create apexmediation.ee || true
+  # Requires apex-core-1 to be created; otherwise set DROPLET_IP manually
+  export DROPLET_IP=$(doctl compute droplet list apex-core-1 --format PublicIPv4 --no-header)
+  doctl compute domain records create apexmediation.ee \
+    --record-type A \
+    --record-name api \
+    --record-data "$DROPLET_IP" \
+    --record-ttl 300
+  doctl compute domain records create apexmediation.ee \
+    --record-type A \
+    --record-name console \
+    --record-data "$DROPLET_IP" \
+    --record-ttl 300
+  ```
 - [ ] GitHub Actions deploy workflow prepared with DO secrets but kept manual-only until cutover
 - [ ] Production environment variables prepared (see `infrastructure/production/.env.backend.example` and `.env.console.example`)
 
@@ -142,6 +198,20 @@ Build & Publish
 
 Provision & Harden Droplet
 - [ ] Create `apex-core-1` in FRA1 (2 vCPU / 4GB / 80GB)
+  ```bash
+  export DO_REGION=fra1
+  export DROPLET_NAME=apex-core-1
+  export DROPLET_SIZE=s-2vcpu-4gb
+  export DROPLET_IMAGE=ubuntu-22-04-x64
+  export SSH_KEY_ID=$(doctl compute ssh-key list --format ID --no-header | head -n 1)
+  doctl compute droplet create "$DROPLET_NAME" \
+    --region "$DO_REGION" \
+    --size "$DROPLET_SIZE" \
+    --image "$DROPLET_IMAGE" \
+    --ssh-keys "$SSH_KEY_ID" \
+    --tag-names apex,production \
+    --wait
+  ```
 - [ ] Create non-root `deploy` user; harden SSH (key-only); enable UFW (22/80/443)
 - [ ] Install Docker + docker compose; clone repo to `/opt/apex`
 
@@ -188,14 +258,39 @@ References
 
 
 ### 1.2 Database — Managed PostgreSQL
-- [ ] Create DigitalOcean Managed PostgreSQL cluster (Basic/Dev plan, same region, 10–20 GB storage).
+- [ ] Create DigitalOcean Managed PostgreSQL cluster (Basic/Dev plan, same region, 10–20 GB storage) via CLI:
+  ```bash
+  export DB_NAME=apex-prod-db
+  doctl databases create "$DB_NAME" \
+    --engine pg \
+    --version 15 \
+    --region fra1 \
+    --num-nodes 1 \
+    --size db-s-1vcpu-1gb
+  export DB_ID=$(doctl databases list --format ID,Name --no-header | awk '/apex-prod-db/ {print $1; exit}')
+  doctl databases db create "$DB_ID" ad_platform || true
+  doctl databases user create "$DB_ID" --name apex_app || true
+  doctl databases user create "$DB_ID" --name apex_admin || true
+  doctl databases connection "$DB_ID" --format URI --no-header
+  ```
 - [ ] Restrict access to droplet private IP + admin IPs and enforce SSL.
+  ```bash
+  export DROPLET_ID=$(doctl compute droplet list apex-core-1 --format ID --no-header)
+  export ADMIN_IP=$(curl -s https://api.ipify.org)
+  doctl databases firewall update "$DB_ID" \
+    --rule droplet:"$DROPLET_ID" \
+    --rule ip:"$ADMIN_IP/32"
+  ```
 - [ ] Create roles `apex_app` (limited) and `apex_admin` (migrations); store credentials in env/secrets.
 - [ ] Port and run migrations (001–008+) against managed Postgres; wire CI deploy script.
 - [ ] Verify schema (tables, hot-column indexes, FKs, constraints).
 - [ ] Enable automated daily backups and document RPO (24h) / RTO (1–4h); test PITR restore in staging.
 - [ ] Build early analytics tables (`daily_app_metrics`, `daily_network_metrics`).
 - [ ] Production `DATABASE_URL` enforces TLS: append `?sslmode=require` (verify with `npm run verify:db --workspace backend`)
+  ```bash
+  export CONN_URI=$(doctl databases connection "$DB_ID" --format URI --no-header)
+  psql "${CONN_URI}?sslmode=require" -c 'select current_timestamp;'
+  ```
 
 ### 1.3 Cache — Redis
 - [ ] Install Redis (docker `redis:6-alpine` or apt) bound to localhost/Docker network.
@@ -211,6 +306,16 @@ References
 - [ ] Offsite (optional): DigitalOcean Spaces replication/sync for offsite copies
   - Endpoint: `https://fra1.digitaloceanspaces.com`
   - Use `rclone`/`mc mirror` weekly to sync MinIO → Spaces (Day‑2 job)
+  ```bash
+  export SPACES_ENDPOINT=https://fra1.digitaloceanspaces.com
+  export SPACES_BUCKET=apex-prod-offsite
+  aws s3api create-bucket \
+    --bucket "$SPACES_BUCKET" \
+    --endpoint-url "$SPACES_ENDPOINT" \
+    --acl private || true
+  mc alias set do-spaces "$SPACES_ENDPOINT" "$AWS_ACCESS_KEY_ID" "$AWS_SECRET_ACCESS_KEY"
+  mc mirror --overwrite minio/apex-prod-objects do-spaces/"$SPACES_BUCKET"
+  ```
 - [ ] Enforce signed URLs and lifecycle rules (30–90 days for intermediates) on both targets if used.
 - [ ] Schedule weekly/monthly DB exports to MinIO (encrypted) and test restore path.
 
@@ -220,6 +325,27 @@ References
 ## 2. Monitoring & Observability
 ### 2.1 Host & App Monitoring
 - [ ] Enable DigitalOcean Monitoring for `apex-core-1` (CPU/RAM/Disk/Network).
+  ```bash
+  export DROPLET_ID=$(doctl compute droplet list apex-core-1 --format ID --no-header)
+  doctl monitoring alert create \
+    --type droplet_cpu \
+    --description "Apex CPU > 80%" \
+    --comparison GreaterThan \
+    --value 80 \
+    --window 5m \
+    --enabled true \
+    --entities "$DROPLET_ID" \
+    --emails oncall@apexmediation.ee
+  doctl monitoring alert create \
+    --type droplet_memory \
+    --description "Apex RAM > 80%" \
+    --comparison GreaterThan \
+    --value 80 \
+    --window 5m \
+    --enabled true \
+    --entities "$DROPLET_ID" \
+    --emails oncall@apexmediation.ee
+  ```
 - [ ] Configure alerts (CPU>80%, Memory>80%, Disk>80%, droplet unreachable).
 
 ### 2.1b Optional Grafana Stack
@@ -525,6 +651,7 @@ References
 ## 16. Tools & Access
 ### 16.1 Required Accounts
 - [ ] DigitalOcean (droplet/Postgres/Spaces).
+  - CLI: `doctl auth switch --context apex-prod && doctl account get`
 - [ ] Stripe.
 - [ ] Resend.com.
 - [ ] Sentry.
@@ -610,6 +737,11 @@ bash scripts/backup/pg_dump_s3_template.sh
 
 ### 2.4 Monitoring, Metrics, and Alerting
 - [ ] Enable DO Monitoring alerts: CPU/RAM>80% (5m), disk>80%, droplet unreachable
+  ```bash
+  doctl monitoring alert list --format ID,Type,Description,Enabled
+  # Update individual alerts if thresholds need tuning
+  doctl monitoring alert update <alert-id> --value 80 --enabled true
+  ```
 - [ ] Export Prometheus metrics from backend (`/metrics`); protect via Basic Auth or IP allowlist
 - [ ] Define SLOs (initial):
     - API availability 99.9%/30d; p95 < 200ms; error rate < 0.5%
