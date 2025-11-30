@@ -5,13 +5,17 @@ set -euo pipefail
 #
 # Creates a dated evidence folder under docs/Internal/Deployment and captures:
 #  - Nginx health (curl -i http://localhost/health)
-#  - docker compose ps for prod stack
+#  - docker compose ps for prod stack (optional soft-fail when Docker unavailable)
 #  - Optional: Redis verify via backend container (enabled by REDIS_VERIFY=1)
 #
 # Usage:
 #   REDIS_PASSWORD=local-strong-password \
 #   REDIS_VERIFY=1 \
 #   bash scripts/ops/local_health_snapshot.sh
+#
+# Env toggles:
+#   ALLOW_SUDO=1       → attempt sudo when Docker requires it
+#   ALLOW_NO_DOCKER=1  → do not fail if Docker is unavailable; record a note and continue
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 COMPOSE_FILE="$ROOT_DIR/infrastructure/docker-compose.prod.yml"
@@ -30,10 +34,14 @@ run_compose() {
   elif [[ "${ALLOW_SUDO:-}" == "1" ]]; then
     echo "[WARN] Docker not accessible. Retrying with sudo (-E)." | tee -a "$EVID_DIR/summary.txt"
     sudo -E docker compose -f "$COMPOSE_FILE" "$@"
+  elif [[ "${ALLOW_NO_DOCKER:-}" == "1" ]]; then
+    echo "[WARN] Docker not accessible and ALLOW_NO_DOCKER=1; skipping 'docker compose $*' and continuing." | tee -a "$EVID_DIR/summary.txt"
+    return 0
   else
     echo "[ERROR] Cannot access Docker daemon (permission denied)." | tee -a "$EVID_DIR/summary.txt"
     echo "        Fix by adding your user to the 'docker' group and re-login, or rerun with ALLOW_SUDO=1." | tee -a "$EVID_DIR/summary.txt"
     echo "        Example: ALLOW_SUDO=1 REDIS_VERIFY=1 bash scripts/ops/local_health_snapshot.sh" | tee -a "$EVID_DIR/summary.txt"
+    echo "        Or allow soft-fail: ALLOW_NO_DOCKER=1 bash scripts/ops/local_health_snapshot.sh" | tee -a "$EVID_DIR/summary.txt"
     exit 1
   fi
 }
@@ -44,7 +52,7 @@ echo "[INFO] Using compose file: $COMPOSE_FILE"
 echo "[INFO] Evidence dir: $EVID_DIR"
 
 echo "[STEP] Compose ps (prod-like)" | tee -a "$EVID_DIR/summary.txt"
-run_compose ps | tee -a "$EVID_DIR/summary.txt"
+run_compose ps | tee -a "$EVID_DIR/summary.txt" || true
 echo >> "$EVID_DIR/summary.txt"
 
 echo "[STEP] Nginx health (${HEALTH_URL})" | tee -a "$EVID_DIR/summary.txt"
@@ -64,8 +72,10 @@ if [[ "${REDIS_VERIFY:-}" == "1" ]]; then
   elif [[ "${ALLOW_SUDO:-}" == "1" ]]; then
     sudo -E docker compose -f "$COMPOSE_FILE" exec backend sh -lc \
       'node dist/scripts/verifyRedis.js' | tee -a "$EVID_DIR/verify-redis.txt" || true
+  elif [[ "${ALLOW_NO_DOCKER:-}" == "1" ]]; then
+    echo "[WARN] Skipping Redis verification because Docker is unavailable (ALLOW_NO_DOCKER=1)." | tee -a "$EVID_DIR/verify-redis.txt"
   else
-    echo "[ERROR] Cannot access Docker to execute Redis verify. Re-run with ALLOW_SUDO=1 or fix Docker group." | tee -a "$EVID_DIR/verify-redis.txt"
+    echo "[ERROR] Cannot access Docker to execute Redis verify. Re-run with ALLOW_SUDO=1 or fix Docker group, or allow soft-fail with ALLOW_NO_DOCKER=1." | tee -a "$EVID_DIR/verify-redis.txt"
   fi
   echo "[NOTE] External nmap check should be executed from another machine: nmap <host-ip> -p 6379 (expect closed/filtered)" \
     >> "$EVID_DIR/verify-redis.txt"

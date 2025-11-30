@@ -11,30 +11,11 @@ This is the single, self-contained runbook to take the system to production on D
 - [X] Provisioning decisions documented (FRA1, droplet size 2 vCPU/4GB/80GB, DO Managed Postgres Basic/Dev)
 - [X] SSH keypair for deploy user created and stored in a local encrypted vault (KeePassXC or `pass`)
 - [X] GitHub repo secrets prepared (add when ready): `DROPLET_HOST`, `DEPLOY_USER`, `DEPLOY_SSH_KEY`
-- [ ] Production `.env` templates reviewed:
+- [X] Production `.env` templates reviewed:
   - Backend: `infrastructure/production/.env.backend.example` (requires `?sslmode=require`)
   - Console: `infrastructure/production/.env.console.example`
-- [ ] Evidence tooling verified locally: `scripts/ops/local_health_snapshot.sh`, `scripts/ops/do_tls_snapshot.sh`
-
-## Quick Start (DO)
-- [ ] Boot droplet via CLI and harden host using copy-ready commands in `docs/Internal/Deployment/DO_INITIAL_BOOT_COMMANDS.md`
-  ```bash
-  export DO_REGION=fra1
-  export DROPLET_NAME=Apex-project
-  export DROPLET_SIZE=s-2vcpu-4gb
-  export DROPLET_IMAGE=ubuntu-22-04-x64
-  export SSH_KEY_ID=$(doctl compute ssh-key list --format ID --no-header | head -n 1)
-  doctl compute droplet create "$DROPLET_NAME" \
-    --region "$DO_REGION" \
-    --size "$DROPLET_SIZE" \
-    --image "$DROPLET_IMAGE" \
-    --ssh-keys "$SSH_KEY_ID" \
-    --tag-names apex,production \
-    --wait
-  export DROPLET_IP=$(doctl compute droplet list "$DROPLET_NAME" --format PublicIPv4 --no-header)
-  ssh root@"$DROPLET_IP"
-  ```
-- [ ] Clone repo to `/opt/apex` on the droplet
+- [X] Evidence tooling verified locally: `scripts/ops/local_health_snapshot.sh`, `scripts/ops/do_tls_snapshot.sh`
+- [X] Clone repo to `/opt/apex` on the droplet
 - [ ] Materialize `.env` files from templates (do not commit secrets)
 - [ ] Start stack HTTP-only: `docker compose -f infrastructure/docker-compose.prod.yml up -d` and verify `http://<ip>/health`
 - [ ] Issue certs with certbot, mount `/etc/letsencrypt`, enable `infrastructure/nginx/apexmediation.ssl.conf`, expose 443

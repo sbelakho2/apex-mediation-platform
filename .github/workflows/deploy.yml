@@ -33,7 +33,6 @@ jobs:
               cd /opt/apex && git fetch --all && git reset --hard origin/main
             fi
             cd /opt/apex
-            # Optional: build or pull images if your compose file references a registry
-            docker compose -f infrastructure/docker-compose.prod.yml pull || true
-            docker compose -f infrastructure/docker-compose.prod.yml up -d
+            NGINX_PORT=80 docker compose -f infrastructure/docker-compose.prod.yml pull || true
+            NGINX_PORT=80 docker compose -f infrastructure/docker-compose.prod.yml up -d
           '

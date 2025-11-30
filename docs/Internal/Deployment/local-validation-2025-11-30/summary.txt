@@ -5,3 +5,10 @@
         Fix by adding your user to the 'docker' group and re-login, or rerun with ALLOW_SUDO=1.
         Example: ALLOW_SUDO=1 REDIS_VERIFY=1 bash scripts/ops/local_health_snapshot.sh
         Example: ALLOW_SUDO=1 REDIS_VERIFY=1 bash scripts/ops/local_health_snapshot.sh
+[STEP] Compose ps (prod-like)
+[WARN] Docker not accessible and ALLOW_NO_DOCKER=1; skipping 'docker compose ps' and continuing.
+[WARN] Docker not accessible and ALLOW_NO_DOCKER=1; skipping 'docker compose ps' and continuing.
+
+[STEP] Nginx health (http://localhost:8080/health)
+Health endpoint not reachable; ensure stack is up on port 8080.
+
