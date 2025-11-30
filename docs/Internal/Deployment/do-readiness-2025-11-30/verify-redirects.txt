@@ -1,0 +1,1 @@
+[STEP] HTTP→HTTPS redirect headers (http://api.apexmediation.ee)

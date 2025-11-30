@@ -10,7 +10,7 @@ This is the single, self-contained runbook to take the system to production on D
 - [X] Install and authenticate `doctl`: `brew install doctl && doctl auth init --context Apex-project`
 - [X] Provisioning decisions documented (FRA1, droplet size 2 vCPU/4GB/80GB, DO Managed Postgres Basic/Dev)
 - [X] SSH keypair for deploy user created and stored in a local encrypted vault (KeePassXC or `pass`)
-- [ ] GitHub repo secrets prepared (add when ready): `DROPLET_HOST`, `DEPLOY_USER`, `DEPLOY_SSH_KEY`
+- [X] GitHub repo secrets prepared (add when ready): `DROPLET_HOST`, `DEPLOY_USER`, `DEPLOY_SSH_KEY`
 - [ ] Production `.env` templates reviewed:
   - Backend: `infrastructure/production/.env.backend.example` (requires `?sslmode=require`)
   - Console: `infrastructure/production/.env.console.example`
@@ -20,7 +20,7 @@ This is the single, self-contained runbook to take the system to production on D
 - [ ] Boot droplet via CLI and harden host using copy-ready commands in `docs/Internal/Deployment/DO_INITIAL_BOOT_COMMANDS.md`
   ```bash
   export DO_REGION=fra1
-  export DROPLET_NAME=apex-core-1
+  export DROPLET_NAME=Apex-project
   export DROPLET_SIZE=s-2vcpu-4gb
   export DROPLET_IMAGE=ubuntu-22-04-x64
   export SSH_KEY_ID=$(doctl compute ssh-key list --format ID --no-header | head -n 1)

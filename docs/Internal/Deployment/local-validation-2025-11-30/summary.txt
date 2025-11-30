@@ -1,0 +1,7 @@
+[STEP] Compose ps (prod-like)
+[ERROR] Cannot access Docker daemon (permission denied).
+[ERROR] Cannot access Docker daemon (permission denied).
+        Fix by adding your user to the 'docker' group and re-login, or rerun with ALLOW_SUDO=1.
+        Fix by adding your user to the 'docker' group and re-login, or rerun with ALLOW_SUDO=1.
+        Example: ALLOW_SUDO=1 REDIS_VERIFY=1 bash scripts/ops/local_health_snapshot.sh
+        Example: ALLOW_SUDO=1 REDIS_VERIFY=1 bash scripts/ops/local_health_snapshot.sh

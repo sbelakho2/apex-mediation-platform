@@ -1,0 +1,28 @@
+# Backend production/staging template (no secrets) — copy to .env.backend on the droplet and fill values
+# Database (Managed Postgres on DO requires sslmode=require)
+DATABASE_URL=postgres://USERNAME:PASSWORD@HOST:5432/apexmediation?sslmode=require
+# Some services also read an explicit SSL toggle
+DATABASE_SSL=true
+
+# Redis (optional if backend uses cache)
+REDIS_URL=redis://:PASSWORD@HOST:6379/0
+REDIS_PASSWORD=
+
+# Secrets (must be strong random values in the real .env)
+JWT_SECRET=CHANGE_ME_STRONG_RANDOM
+COOKIE_SECRET=CHANGE_ME_STRONG_RANDOM
+
+# CORS and public URLs (adjust to your staging domain names)
+PUBLIC_API_BASE=https://api.apexmediation.ee
+CORS_ALLOWLIST=https://console.apexmediation.ee,https://apexmediation.ee
+
+# Email provider (Resend or SMTP)
+EMAIL_PROVIDER=Resend
+RESEND_API_KEY=
+# or SMTP_* variables if you use SMTP instead
+
+# Stripe (for billing sandbox later, optional at this stage)
+STRIPE_PUBLIC_KEY=
+STRIPE_SECRET_KEY=
+
+# Any other backend-required envs should be listed here with sample values
