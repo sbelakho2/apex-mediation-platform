@@ -5,11 +5,11 @@ This is the single, self-contained runbook to take the system to production on D
 > **DigitalOcean CLI policy:** All cloud interactions below must be executed from Bash using [`doctl`](https://docs.digitalocean.com/reference/doctl/) or the S3-compatible tooling called out in each section. Do not click through the DigitalOcean UI; if a step is missing a CLI, stop and add it here before proceeding.
 
 ## Prerequisites (one-time)
-- [ ] Domain configured: `api.apexmediation.ee`, `console.apexmediation.ee` (TTL 300s)
-- [ ] DigitalOcean account with billing enabled
-- [ ] Install and authenticate `doctl`: `brew install doctl && doctl auth init --context apex-prod`
-- [ ] Provisioning decisions documented (FRA1, droplet size 2 vCPU/4GB/80GB, DO Managed Postgres Basic/Dev)
-- [ ] SSH keypair for deploy user created and stored in a local encrypted vault (KeePassXC or `pass`)
+- [X] Domain configured: `api.apexmediation.ee`, `console.apexmediation.ee` (TTL 300s)
+- [X] DigitalOcean account with billing enabled
+- [X] Install and authenticate `doctl`: `brew install doctl && doctl auth init --context Apex-project`
+- [X] Provisioning decisions documented (FRA1, droplet size 2 vCPU/4GB/80GB, DO Managed Postgres Basic/Dev)
+- [X] SSH keypair for deploy user created and stored in a local encrypted vault (KeePassXC or `pass`)
 - [ ] GitHub repo secrets prepared (add when ready): `DROPLET_HOST`, `DEPLOY_USER`, `DEPLOY_SSH_KEY`
 - [ ] Production `.env` templates reviewed:
   - Backend: `infrastructure/production/.env.backend.example` (requires `?sslmode=require`)
@@ -50,12 +50,12 @@ This is the single, self-contained runbook to take the system to production on D
 - [ ] Issue staging logins (`owner@`, `dev@`, `finance@apex-sandbox.test`) and enable Stripe test mode with customer + card/ACH/SEPA methods.
 
 ### 0.0.2 Android Test App – Full E2E SDK Sandbox
-- [ ] Ship debug-only **ApexSandboxAndroid** with SDK status panel, Init/Load/Show buttons, GDPR/CCPA/LAT toggles, and rolling request log.
-- [ ] Pass happy-path flows: single initialize call, interstitial/rewarded load→show→callback order, banners refresh without layout issues.
-- [ ] Exercise error states: airplane mode, FakeNetworkB no-fill, FakeNetworkC timeout, and invalid placement IDs without crashes.
-- [ ] Stress lifecycle: rotation, background/foreground swaps, rapid Show spam → ensure one show at a time and consistent callbacks.
-- [ ] Flip consent/privacy toggles (GDPR, CCPA, COPPA, LAT, test mode) and confirm metadata in staging logs.
-- [ ] Run a 30-minute soak cycling placements; verify no ANRs, crashes, or runaway memory in Android Studio profiler.
+- [x] Ship debug-only **ApexSandboxAndroid** with SDK status panel, Init/Load/Show buttons, GDPR/CCPA/LAT toggles, and rolling request log.
+- [x] Pass happy-path flows: single initialize call, interstitial/rewarded load→show→callback order, banners refresh without layout issues.
+- [x] Exercise error states: airplane mode, FakeNetworkB no-fill, FakeNetworkC timeout, and invalid placement IDs without crashes.
+- [x] Stress lifecycle: rotation, background/foreground swaps, rapid Show spam → ensure one show at a time and consistent callbacks.
+- [x] Flip consent/privacy toggles (GDPR, CCPA, COPPA, LAT, test mode) and confirm metadata in staging logs.
+- [x] Run a 30-minute soak cycling placements; verify no ANRs, crashes, or runaway memory in Android Studio profiler.
 
 ### 0.0.3 iOS Test App – Full E2E SDK Sandbox
 - [ ] Build **ApexSandboxiOS** with Init/Load/Show buttons, consent/ATT toggles, and debug overlay (config version, request ID, last error).
@@ -168,95 +168,6 @@ This is the single, self-contained runbook to take the system to production on D
   - Basic Auth via `infrastructure/nginx/snippets/metrics-basic-auth.conf` and mounted `./nginx/htpasswd`
 - [ ] Cross‑link and follow: `docs/Internal/Infrastructure/DO_READINESS_CHECKLIST.md` → Section 12 (Phase 9)
 
-### 1.5 DigitalOcean Full Production Deployment Plan (End‑to‑End)
-
-This section consolidates the end‑to‑end steps to deploy the production stack on DigitalOcean. It references detailed runbooks elsewhere in this repo and acts as a single sign‑off checklist for going live.
-
-Pre‑flight
-- [ ] DNS prepared: `api.apexmediation.ee`, `console.apexmediation.ee` (TTL 300s)
-  ```bash
-  doctl compute domain create apexmediation.ee || true
-  # Requires apex-core-1 to be created; otherwise set DROPLET_IP manually
-  export DROPLET_IP=$(doctl compute droplet list apex-core-1 --format PublicIPv4 --no-header)
-  doctl compute domain records create apexmediation.ee \
-    --record-type A \
-    --record-name api \
-    --record-data "$DROPLET_IP" \
-    --record-ttl 300
-  doctl compute domain records create apexmediation.ee \
-    --record-type A \
-    --record-name console \
-    --record-data "$DROPLET_IP" \
-    --record-ttl 300
-  ```
-- [ ] GitHub Actions deploy workflow prepared with DO secrets but kept manual-only until cutover
-- [ ] Production environment variables prepared (see `infrastructure/production/.env.backend.example` and `.env.console.example`)
-
-Build & Publish
-- [ ] Build backend and console images in CI and push to container registry (GHCR or DOCR)
-- [ ] Tag images with immutable version (e.g., git SHA) and “prod” channel
-
-Provision & Harden Droplet
-- [ ] Create `apex-core-1` in FRA1 (2 vCPU / 4GB / 80GB)
-  ```bash
-  export DO_REGION=fra1
-  export DROPLET_NAME=apex-core-1
-  export DROPLET_SIZE=s-2vcpu-4gb
-  export DROPLET_IMAGE=ubuntu-22-04-x64
-  export SSH_KEY_ID=$(doctl compute ssh-key list --format ID --no-header | head -n 1)
-  doctl compute droplet create "$DROPLET_NAME" \
-    --region "$DO_REGION" \
-    --size "$DROPLET_SIZE" \
-    --image "$DROPLET_IMAGE" \
-    --ssh-keys "$SSH_KEY_ID" \
-    --tag-names apex,production \
-    --wait
-  ```
-- [ ] Create non-root `deploy` user; harden SSH (key-only); enable UFW (22/80/443)
-- [ ] Install Docker + docker compose; clone repo to `/opt/apex`
-
-Environment Materialization
-- [ ] Materialize `.env` files on droplet (backend/console) without committing secrets
-- [ ] Set `DATABASE_URL` for DO Managed Postgres with `?sslmode=require`
-- [ ] Set `REDIS_URL` to private bridge host with password (no public exposure)
-
-Start Stack (HTTP only initially)
-- [ ] `docker compose -f infrastructure/docker-compose.prod.yml up -d`
-- [ ] Verify `GET http://<droplet-ip>/health` via port 80 → 200 OK proxied to backend
-
-Enable HTTPS & Gate HSTS
-- [ ] Issue certs with certbot for API/Console on droplet; mount `/etc/letsencrypt`
-- [ ] Mount `infrastructure/nginx/apexmediation.ssl.conf` and expose `443` in compose
-- [ ] Reload Nginx; verify HTTP→HTTPS redirects and HTTPS headers using `scripts/ops/do_tls_snapshot.sh`
-- [ ] Keep HSTS commented until SSL Labs grade A/A+; then enable and verify
-
-Data Plane Verification
-- [ ] Database TLS: run `npm run verify:db --workspace backend` and then migrations
-- [ ] Redis isolation: `npm run verify:redis --workspace backend` and external `nmap` on `6379` (expect closed/filtered)
-- [ ] Protect `/metrics` (Basic Auth or IP allowlist) and capture 401/403 proof
-
-Evidence & Changelog
-- [ ] Store evidence under `docs/Internal/Deployment/do-readiness-YYYY-MM-DD/`
-- [ ] Add top entry to `CHANGELOG.md` linking the evidence and summarizing verification
-
-Rollback Preparedness
-- [ ] Define 5‑minute TTL DNS rollback to previous infra
-- [ ] Document clear rollback triggers (latency/error rate/downtime) and operator steps
-
-References
-- `docs/Internal/Infrastructure/DO_READINESS_CHECKLIST.md`
-- `scripts/ops/do_tls_snapshot.sh`, `scripts/ops/local_health_snapshot.sh`
-- `infrastructure/docker-compose.prod.yml`, `infrastructure/nginx/*`
-
-## Final Sign‑off (Go‑Live Gate)
-- [ ] HTTPS validated with SSL Labs grade A/A+; HSTS enabled and verified
-- [ ] `DATABASE_URL` enforces TLS (`?sslmode=require`) and migrations applied successfully
-- [ ] Redis not publicly reachable (external nmap shows 6379 closed/filtered); in-cluster AUTH verified
-- [ ] `/metrics` protected (401 Basic or 403 IP allowlist) from public Internet
-- [ ] Evidence bundle stored under `docs/Internal/Deployment/do-readiness-YYYY-MM-DD/` and referenced in `CHANGELOG.md`
-- [ ] CI “policy guard” green: provider content guard and infra plan tests pass (`npm run test:infra`)
-
-
 ### 1.2 Database — Managed PostgreSQL
 - [ ] Create DigitalOcean Managed PostgreSQL cluster (Basic/Dev plan, same region, 10–20 GB storage) via CLI:
   ```bash
@@ -319,7 +230,107 @@ References
 - [ ] Enforce signed URLs and lifecycle rules (30–90 days for intermediates) on both targets if used.
 - [ ] Schedule weekly/monthly DB exports to MinIO (encrypted) and test restore path.
 
-### 1.5 Budget Check
+### 1.5 DigitalOcean Full Production Deployment Plan (End‑to‑End)
+
+This section consolidates the end‑to‑end steps to deploy the production stack on DigitalOcean. It references detailed runbooks elsewhere in this repo and acts as a single sign‑off checklist for going live.
+
+Pre‑flight
+- [ ] DNS prepared: `api.apexmediation.ee`, `console.apexmediation.ee` (TTL 300s)
+  ```bash
+  doctl compute domain create apexmediation.ee || true
+  # Requires apex-core-1 to be created; otherwise set DROPLET_IP manually
+  export DROPLET_IP=$(doctl compute droplet list apex-core-1 --format PublicIPv4 --no-header)
+  doctl compute domain records create apexmediation.ee \
+    --record-type A \
+    --record-name api \
+    --record-data "$DROPLET_IP" \
+    --record-ttl 300
+  doctl compute domain records create apexmediation.ee \
+    --record-type A \
+    --record-name console \
+    --record-data "$DROPLET_IP" \
+    --record-ttl 300
+  ```
+- [ ] GitHub Actions deploy workflow prepared with DO secrets but kept manual-only until cutover
+- [ ] Pause all non-essential GitHub Actions via CLI until go-live:
+  ```bash
+  gh auth status --hostname github.com
+  for wf in .github/workflows/*.yml; do
+    gh workflow disable "$(basename "$wf")"
+  done
+  ```
+- [ ] Production environment variables prepared (see `infrastructure/production/.env.backend.example` and `.env.console.example`)
+
+Build & Publish
+- [ ] Build backend and console images in CI and push to container registry (GHCR or DOCR)
+- [ ] Tag images with immutable version (e.g., git SHA) and “prod” channel
+
+Provision & Harden Droplet
+- [ ] Create `apex-core-1` in FRA1 (2 vCPU / 4GB / 80GB)
+  ```bash
+  export DO_REGION=fra1
+  export DROPLET_NAME=apex-core-1
+  export DROPLET_SIZE=s-2vcpu-4gb
+  export DROPLET_IMAGE=ubuntu-22-04-x64
+  export SSH_KEY_ID=$(doctl compute ssh-key list --format ID --no-header | head -n 1)
+  doctl compute droplet create "$DROPLET_NAME" \
+    --region "$DO_REGION" \
+    --size "$DROPLET_SIZE" \
+    --image "$DROPLET_IMAGE" \
+    --ssh-keys "$SSH_KEY_ID" \
+    --tag-names apex,production \
+    --wait
+  ```
+- [ ] Create non-root `deploy` user; harden SSH (key-only); enable UFW (22/80/443)
+- [ ] Install Docker + docker compose; clone repo to `/opt/apex`
+
+Environment Materialization
+- [ ] Materialize `.env` files on droplet (backend/console) without committing secrets
+- [ ] Set `DATABASE_URL` for DO Managed Postgres with `?sslmode=require`
+- [ ] Set `REDIS_URL` to private bridge host with password (no public exposure)
+
+Start Stack (HTTP only initially)
+- [ ] `docker compose -f infrastructure/docker-compose.prod.yml up -d`
+- [ ] Verify `GET http://<droplet-ip>/health` via port 80 → 200 OK proxied to backend
+
+Enable HTTPS & Gate HSTS
+- [ ] Issue certs with certbot for API/Console on droplet; mount `/etc/letsencrypt`
+- [ ] Mount `infrastructure/nginx/apexmediation.ssl.conf` and expose `443` in compose
+- [ ] Reload Nginx; verify HTTP→HTTPS redirects and HTTPS headers using `scripts/ops/do_tls_snapshot.sh`
+- [ ] Keep HSTS commented until SSL Labs grade A/A+; then enable and verify
+
+Data Plane Verification
+- [ ] Database TLS: run `npm run verify:db --workspace backend` and then migrations
+- [ ] Redis isolation: `npm run verify:redis --workspace backend` and external `nmap` on `6379` (expect closed/filtered)
+- [ ] Protect `/metrics` (Basic Auth or IP allowlist) and capture 401/403 proof
+
+Evidence & Changelog
+- [ ] Store evidence under `docs/Internal/Deployment/do-readiness-YYYY-MM-DD/`
+- [ ] Add top entry to `CHANGELOG.md` linking the evidence and summarizing verification
+- [ ] Keep GitHub Actions paused until go-live approval, then re-enable targeted workflows only:
+  ```bash
+  gh workflow list --all
+  gh workflow enable deploy-production.yml
+  ```
+
+Rollback Preparedness
+- [ ] Define 5‑minute TTL DNS rollback to previous infra
+- [ ] Document clear rollback triggers (latency/error rate/downtime) and operator steps
+
+References
+- `docs/Internal/Infrastructure/DO_READINESS_CHECKLIST.md`
+- `scripts/ops/do_tls_snapshot.sh`, `scripts/ops/local_health_snapshot.sh`
+- `infrastructure/docker-compose.prod.yml`, `infrastructure/nginx/*`
+
+## Final Sign‑off (Go‑Live Gate)
+- [ ] HTTPS validated with SSL Labs grade A/A+; HSTS enabled and verified
+- [ ] `DATABASE_URL` enforces TLS (`?sslmode=require`) and migrations applied successfully
+- [ ] Redis not publicly reachable (external nmap shows 6379 closed/filtered); in-cluster AUTH verified
+- [ ] `/metrics` protected (401 Basic or 403 IP allowlist) from public Internet
+- [ ] Evidence bundle stored under `docs/Internal/Deployment/do-readiness-YYYY-MM-DD/` and referenced in `CHANGELOG.md`
+- [ ] CI “policy guard” green: provider content guard and infra plan tests pass (`npm run test:infra`)
+
+### 1.6 Budget Check
 - [ ] Confirm monthly infra spend (droplet ~$24 + Postgres ~$15 + storage ~$5 + misc $3–5 ≤ $50 target).
 
 ## 2. Monitoring & Observability

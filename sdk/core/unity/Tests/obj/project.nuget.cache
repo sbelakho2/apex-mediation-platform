@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "dgSpecHash": "/tugE+vxfxA=",
+  "dgSpecHash": "8CW4hwYnf+o=",
   "success": true,
   "projectFilePath": "/Users/sabelakhoua/IdeaProjects/Ad-Project/sdk/core/unity/Tests/ApexMediation.Tests.csproj",
   "expectedPackageFiles": [
@@ -18,8 +18,8 @@
     "/Users/sabelakhoua/.nuget/packages/xunit.extensibility.core/2.7.0/xunit.extensibility.core.2.7.0.nupkg.sha512",
     "/Users/sabelakhoua/.nuget/packages/xunit.extensibility.execution/2.7.0/xunit.extensibility.execution.2.7.0.nupkg.sha512",
     "/Users/sabelakhoua/.nuget/packages/xunit.runner.visualstudio/2.5.8/xunit.runner.visualstudio.2.5.8.nupkg.sha512",
-    "/Users/sabelakhoua/.nuget/packages/microsoft.netcore.app.ref/8.0.21/microsoft.netcore.app.ref.8.0.21.nupkg.sha512",
-    "/Users/sabelakhoua/.nuget/packages/microsoft.aspnetcore.app.ref/8.0.21/microsoft.aspnetcore.app.ref.8.0.21.nupkg.sha512"
+    "/Users/sabelakhoua/.nuget/packages/microsoft.netcore.app.ref/8.0.22/microsoft.netcore.app.ref.8.0.22.nupkg.sha512",
+    "/Users/sabelakhoua/.nuget/packages/microsoft.aspnetcore.app.ref/8.0.22/microsoft.aspnetcore.app.ref.8.0.22.nupkg.sha512"
   ],
   "logs": []
 }
