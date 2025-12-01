@@ -9,15 +9,7 @@ jest.mock('../../middleware/auth', () => ({
   }),
 }));
 
-// Mock ClickHouse utils used by proofs
-jest.mock('../../utils/clickhouse', () => ({
-  executeQuery: jest.fn(async (query: string) => {
-    const q = String(query).toLowerCase();
-    // Monthly digest select returns none to exercise not found path
-    if (q.includes('from proofs_monthly_digest')) return [];
-    return [];
-  }),
-}));
+jest.mock('../../services/vra/vraService');
 
 import vraRoutes from '../../routes/vra.routes';
 

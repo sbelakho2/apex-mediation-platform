@@ -1,28 +1,29 @@
 import { vraService } from '../vraService';
 
-// Mock ClickHouse helper to capture queries/params
-jest.mock('../../../utils/clickhouse', () => ({
-  executeQuery: jest.fn(async (query: string, params?: Record<string, unknown>) => {
-    if (typeof query === 'string' && query.toLowerCase().includes('count()')) {
-      return [{ total: '2' }];
+// Mock Postgres helper to capture queries/params
+jest.mock('../../../utils/postgres', () => ({
+  query: jest.fn(async (sql: string) => {
+    if (typeof sql === 'string' && sql.toLowerCase().includes('count(')) {
+      return { rows: [{ total: '2' }] };
     }
-    // Return a single synthetic row for the list query
-    return [
-      {
-        kind: 'underpay',
-        amount: '1.230000',
-        currency: 'USD',
-        reason_code: 'test',
-        window_start: '2025-11-01 00:00:00',
-        window_end: '2025-11-02 00:00:00',
-        evidence_id: 'ev-1',
-        confidence: '0.90',
-      },
-    ];
+    return {
+      rows: [
+        {
+          kind: 'underpay',
+          amount: '1.230000',
+          currency: 'USD',
+          reason_code: 'test',
+          window_start: '2025-11-01 00:00:00',
+          window_end: '2025-11-02 00:00:00',
+          evidence_id: 'ev-1',
+          confidence: '0.90',
+        },
+      ],
+    };
   }),
 }));
 
-const { executeQuery } = jest.requireMock('../../../utils/clickhouse');
+const { query } = jest.requireMock('../../../utils/postgres');
 
 describe('VRA Service — getDeltas pagination and ORDER BY stability', () => {
   beforeEach(() => {
@@ -38,14 +39,17 @@ describe('VRA Service — getDeltas pagination and ORDER BY stability', () => {
     expect(out.items.length).toBe(1);
 
     // Inspect second call (list query)
-    const calls = (executeQuery as jest.Mock).mock.calls;
+    const calls = (query as jest.Mock).mock.calls;
     // First call: count, Second call: list
     const listQuery: string = calls[1][0];
-    const listParams: Record<string, unknown> = calls[1][1] || {};
+    const listParams: unknown[] = calls[1][1] || [];
 
     expect(listQuery).toContain('ORDER BY window_start DESC, evidence_id ASC');
-    // LIMIT/OFFSET are passed as params
-    expect(listParams.limit).toBe(pageSize);
-    expect(listParams.offset).toBe((page - 1) * pageSize);
+    expect(listQuery).toContain('LIMIT $');
+    expect(Array.isArray(listParams)).toBe(true);
+    const limitParam = listParams[listParams.length - 2];
+    const offsetParam = listParams[listParams.length - 1];
+    expect(limitParam).toBe(pageSize);
+    expect(offsetParam).toBe((page - 1) * pageSize);
   });
 });

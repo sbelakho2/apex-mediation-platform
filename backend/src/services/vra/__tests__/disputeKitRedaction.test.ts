@@ -1,20 +1,22 @@
 import { buildDisputeKit, MemoryDisputeStorage } from '../disputeKitService';
 
-// Mock ClickHouse helper used by Dispute Kit builder
-jest.mock('../../../utils/clickhouse', () => ({
-  executeQuery: jest.fn(async (_q: string, _p?: Record<string, unknown>) => [
-    {
-      kind: 'underpay',
-      amount: '12.340000',
-      currency: 'USD',
-      // Include PII-like content to verify redaction paths
-      reason_code: 'email: bob@example.com token Bearer abc.def.ghi digits 4242424242424242',
-      window_start: '2025-11-01 00:00:00',
-      window_end: '2025-11-02 00:00:00',
-      evidence_id: 'ev-redact',
-      confidence: '0.91',
-    },
-  ]),
+// Mock Postgres helper used by Dispute Kit builder
+jest.mock('../../../utils/postgres', () => ({
+  query: jest.fn(async () => ({
+    rows: [
+      {
+        kind: 'underpay',
+        amount: '12.340000',
+        currency: 'USD',
+        // Include PII-like content to verify redaction paths
+        reason_code: 'email: bob@example.com token Bearer abc.def.ghi digits 4242424242424242',
+        window_start: '2025-11-01 00:00:00',
+        window_end: '2025-11-02 00:00:00',
+        evidence_id: 'ev-redact',
+        confidence: '0.91',
+      },
+    ],
+  })),
 }));
 
 describe('VRA Dispute Kit — redaction in CSV evidence', () => {

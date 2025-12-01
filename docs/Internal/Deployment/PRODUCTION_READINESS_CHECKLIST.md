@@ -29,6 +29,7 @@ This is the single, self-contained runbook to take the system to production on D
 - [ ] Give every app at least two interstitial placements, two rewarded placements, and one banner slot with consistent IDs.
 - [ ] Stand up FakeNetworkA (always fill), FakeNetworkB (random fill/no-fill), and FakeNetworkC (slow/timeout) plus Starter (~$3k), Growth (~$50k), and Scale (~$150k) revenue scripts.
 - [ ] Issue staging logins (`owner@`, `dev@`, `finance@apex-sandbox.test`) and enable Stripe test mode with customer + card/ACH/SEPA methods.
+- [ ] Ensure every SDK build (Android, iOS, Unity, tvOS/CTV, Web) ships adapters for every network API/SDK in scope (FakeNetworkA/B/C + partner networks) so request/response parity is validated end-to-end.
 
 ### 0.0.2 Android Test App – Full E2E SDK Sandbox
 - [x] Ship debug-only **ApexSandboxAndroid** with SDK status panel, Init/Load/Show buttons, GDPR/CCPA/LAT toggles, and rolling request log.
@@ -70,6 +71,7 @@ This is the single, self-contained runbook to take the system to production on D
 - [ ] Configure FakeNetworkA/B/C adapters (placeholders only), ensure secrets never log, and toggle per-placement enablement.
 - [ ] Validate dashboards: revenue/eCPM/fill charts show sandbox data, drill-down + time-range filters work, and widgets stay in sync.
 - [ ] Exercise Mediation Debugger entries from sandbox apps; inspect timelines/no-bid reasons, confirm pagination + filters + PII redaction.
+- [ ] Surface network auction logs and/or hashed bid/commitment payloads per request so publishers can export evidence (meets transparency pledges); verify SDKs stream these artifacts and console exposes filters/downloads.
 
 ### 0.0.8 Website / Landing Page Sandbox Tests
 - [] Deploy staging marketing site (e.g., `staging.apexmediation.ee`) and verify `/`, `/pricing`, `/docs`, `/legal/*` routes 
@@ -366,6 +368,7 @@ References
 ### Governance & Versioning
 - [ ] Adopt semantic versioning for all SDKs (Android, iOS, Unity, tvOS/CTV) with per-SDK `CHANGELOG` and upgrade notes.
 - [ ] Publish a Compatibility Matrix (SDK ↔ API version ↔ Console minimum) in docs.
+- [ ] Maintain adapter coverage tables: every SDK release must include adapters (or bridges) for each in-market network API/SDK with version pins and release notes when parity slips.
 
 ### Release Pipeline & Smoke Tests
 - [ ] Android: CI runs unit tests and interop smoke (see `sdk/core/android/`).
@@ -375,6 +378,7 @@ References
 - [ ] Unity: Verify Android/iOS exports build and callbacks fire once; attach minimal sample scene.
 - [ ] tvOS/CTV: Build verification for Apple TV/Android TV sample apps.
 - [ ] Tag releases and attach sample binaries where applicable.
+- [ ] CI smoke suites must validate every adapter invokes the corresponding network SDK/API, captures auction logs (win/lose reasons, clearing prices), and emits hashed commitments for transparency export.
 
 ### Samples & Integration Guides
 - [ ] Provide sample apps for Android, iOS, Unity, and CTV (staging endpoints pre-wired).

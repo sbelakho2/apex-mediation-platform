@@ -1,16 +1,12 @@
 import { parseCanonicalNormalizedCsv, ingestCanonicalCsvReport } from '../statementIngestionService';
 
-// Mock ClickHouse utils used by ingestion
-jest.mock('../../../../utils/clickhouse', () => {
-  return {
-    executeQuery: jest.fn(async (_q: string, _p?: Record<string, unknown>) => {
-      return [];
-    }),
-    insertBatch: jest.fn(async (_table: string, _rows: unknown[]) => {}),
-  };
-});
+// Mock Postgres utils used by ingestion
+jest.mock('../../../../utils/postgres', () => ({
+  query: jest.fn(async () => ({ rows: [] })),
+  insertMany: jest.fn(async () => {}),
+}));
 
-const { executeQuery, insertBatch } = jest.requireMock('../../../../utils/clickhouse');
+const { query, insertMany } = jest.requireMock('../../../../utils/postgres');
 
 describe('VRA Statement Ingestion - canonical CSV parser and ingest flow', () => {
   beforeEach(() => {
@@ -61,7 +57,9 @@ describe('VRA Statement Ingestion - canonical CSV parser and ingest flow', () =>
 
   it('ingestCanonicalCsvReport inserts raw+norm when not already loaded', async () => {
     // hasRawLoad -> 0
-    (executeQuery as jest.Mock).mockResolvedValueOnce([{ cnt: '0' }]);
+    (query as jest.Mock).mockResolvedValueOnce({ rows: [{ cnt: '0' }] });
+    // recordRawLoad success (rowCount=1)
+    (query as jest.Mock).mockResolvedValueOnce({ rowCount: 1 });
     const csv = [
       'event_date,app_id,ad_unit_id,country,format,currency,impressions,paid',
       '2025-11-01,com.app,unit1,US,interstitial,USD,100,12.3456',
@@ -78,14 +76,15 @@ describe('VRA Statement Ingestion - canonical CSV parser and ingest flow', () =>
 
     expect(out.skipped).toBe(false);
     expect(out.normalizedRows).toBe(2);
-    // Expect two inserts: one for raw, one for norm
-    const calls = (insertBatch as jest.Mock).mock.calls.map((c: any[]) => c[0]);
-    expect(calls).toContain('recon_statements_raw');
-    expect(calls).toContain('recon_statements_norm');
+    // Expect raw recorded via INSERT and normalized rows via insertMany
+    const tables = (insertMany as jest.Mock).mock.calls.map((c: any[]) => c[0]);
+    expect(tables).toContain('recon_statements_norm');
+    const sqls = (query as jest.Mock).mock.calls.map((call: unknown[]) => String(call[0] || ''));
+    expect(sqls.some((sql) => sql.includes('INSERT INTO recon_statements_raw'))).toBe(true);
   });
 
   it('ingestCanonicalCsvReport skips when already_loaded', async () => {
-    (executeQuery as jest.Mock).mockResolvedValueOnce([{ cnt: '1' }]);
+    (query as jest.Mock).mockResolvedValueOnce({ rows: [{ cnt: '1' }] });
     const csv = 'event_date,app_id,ad_unit_id,country,format,currency,impressions,paid\n2025-11-01,com.app,unit1,US,interstitial,USD,100,12.34';
 
     const out = await ingestCanonicalCsvReport({
@@ -98,6 +97,6 @@ describe('VRA Statement Ingestion - canonical CSV parser and ingest flow', () =>
 
     expect(out.skipped).toBe(true);
     expect(out.reason).toBe('already_loaded');
-    expect(insertBatch).not.toHaveBeenCalled();
+    expect(insertMany).not.toHaveBeenCalled();
   });
 });

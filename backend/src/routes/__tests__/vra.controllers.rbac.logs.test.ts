@@ -9,11 +9,7 @@ jest.mock('../../middleware/auth', () => ({
   }),
 }));
 
-// Mock ClickHouse helpers: executeQuery returns empty; insertBatch records calls
-jest.mock('../../utils/clickhouse', () => ({
-  executeQuery: jest.fn(async () => []),
-  insertBatch: jest.fn(async () => {}),
-}));
+jest.mock('../../utils/postgres');
 
 import vraRoutes from '../../routes/vra.routes';
 
@@ -31,12 +27,12 @@ describe('VRA Controllers — RBAC/logs spot-check', () => {
   });
 
   it('disputes in shadow mode do not write; logs can accept PII-like strings without throwing', async () => {
-    const { insertBatch } = jest.requireMock('../../utils/clickhouse');
+    const { insertMany } = jest.requireMock('../../utils/postgres');
     // Perform a shadow disputes call with PII-like content in body to exercise log paths
     await request(app)
       .post('/api/v1/recon/disputes')
       .send({ delta_ids: ['ev1'], network: 'unity', contact: 'ops@example.com' })
       .expect(202);
-    expect(insertBatch).not.toHaveBeenCalled();
+    expect(insertMany).not.toHaveBeenCalled();
   });
 });

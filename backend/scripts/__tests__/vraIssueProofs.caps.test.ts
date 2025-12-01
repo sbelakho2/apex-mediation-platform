@@ -4,7 +4,6 @@ describe('vraIssueProofs.js — guardrails and behaviors', () => {
   const scriptPath = path.resolve(__dirname, '..', 'vraIssueProofs.js');
 
   const originalArgv = process.argv.slice();
-  const originalExit = process.exit;
 
   beforeEach(() => {
     jest.resetModules();
@@ -13,8 +12,6 @@ describe('vraIssueProofs.js — guardrails and behaviors', () => {
 
   afterAll(() => {
     process.argv = originalArgv;
-    // @ts-ignore
-    process.exit = originalExit;
   });
 
   function mockDeps({ hasExisting = false } = {}) {
@@ -30,49 +27,25 @@ describe('vraIssueProofs.js — guardrails and behaviors', () => {
   it('rejects invalid --month → EXIT 20', async () => {
     mockDeps();
     process.argv = [process.execPath, scriptPath, '--month', '202511'];
-    const exitSpy = jest
-      .spyOn(process, 'exit')
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .mockImplementation(((code?: number) => { throw new Error(`EXIT ${code}`); }) as any);
-
-    await expect(import(scriptPath)).rejects.toThrow('EXIT 20');
-    exitSpy.mockRestore();
+    await expect(import(scriptPath)).rejects.toThrow('process.exit called with "20"');
   });
 
   it('dry-run path exits 10 (WARNINGS)', async () => {
     mockDeps();
     process.argv = [process.execPath, scriptPath, '--month', '2025-11', '--dry-run', 'true'];
-    const exitSpy = jest
-      .spyOn(process, 'exit')
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .mockImplementation(((code?: number) => { throw new Error(`EXIT ${code}`); }) as any);
-
-    await expect(import(scriptPath)).rejects.toThrow('EXIT 10');
-    exitSpy.mockRestore();
+    await expect(import(scriptPath)).rejects.toThrow('process.exit called with "10"');
   });
 
   it('create new month digest exits 0', async () => {
     mockDeps({ hasExisting: false });
     process.argv = [process.execPath, scriptPath, '--month', '2025-11'];
-    const exitSpy = jest
-      .spyOn(process, 'exit')
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .mockImplementation(((code?: number) => { throw new Error(`EXIT ${code}`); }) as any);
-
-    await expect(import(scriptPath)).rejects.toThrow('EXIT 0');
-    exitSpy.mockRestore();
+    await expect(import(scriptPath)).rejects.toThrow('process.exit called with "0"');
   });
 
   it('update existing month digest exits 0', async () => {
     mockDeps({ hasExisting: true });
     process.argv = [process.execPath, scriptPath, '--month', '2025-11'];
-    const exitSpy = jest
-      .spyOn(process, 'exit')
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .mockImplementation(((code?: number) => { throw new Error(`EXIT ${code}`); }) as any);
-
-    await expect(import(scriptPath)).rejects.toThrow('EXIT 0');
-    exitSpy.mockRestore();
+    await expect(import(scriptPath)).rejects.toThrow('process.exit called with "0"');
   });
 
   it('ClickHouse init failure → EXIT 20', async () => {
@@ -85,12 +58,6 @@ describe('vraIssueProofs.js — guardrails and behaviors', () => {
     }), { virtual: true });
 
     process.argv = [process.execPath, scriptPath, '--month', '2025-11'];
-    const exitSpy = jest
-      .spyOn(process, 'exit')
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .mockImplementation(((code?: number) => { throw new Error(`EXIT ${code}`); }) as any);
-
-    await expect(import(scriptPath)).rejects.toThrow('EXIT 20');
-    exitSpy.mockRestore();
+    await expect(import(scriptPath)).rejects.toThrow('process.exit called with "20"');
   });
 });

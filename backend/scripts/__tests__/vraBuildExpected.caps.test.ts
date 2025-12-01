@@ -4,7 +4,6 @@ describe('vraBuildExpected.js — safety caps and force bypass', () => {
   const scriptPath = path.resolve(__dirname, '..', 'vraBuildExpected.js');
 
   const originalArgv = process.argv.slice();
-  const originalExit = process.exit;
 
   beforeEach(() => {
     jest.resetModules();
@@ -13,8 +12,6 @@ describe('vraBuildExpected.js — safety caps and force bypass', () => {
 
   afterAll(() => {
     process.argv = originalArgv;
-    // @ts-ignore
-    process.exit = originalExit;
   });
 
   function mockDeps({ seen = 5, written = 5, skipped = 0 } = {}) {
@@ -50,19 +47,7 @@ describe('vraBuildExpected.js — safety caps and force bypass', () => {
       '--dry-run', 'true',
     ];
 
-    const exitSpy = jest
-      .spyOn(process, 'exit')
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .mockImplementation(((code?: number) => { throw new Error(`EXIT ${code}`); }) as any);
-
-    try {
-      await import(scriptPath);
-      throw new Error('expected process.exit');
-    } catch (e: any) {
-      expect(String(e.message)).toBe('EXIT 20');
-    } finally {
-      exitSpy.mockRestore();
-    }
+    await expect(import(scriptPath)).rejects.toThrow('process.exit called with "20"');
   });
 
   it('bypasses --limit cap with --force --yes; dry-run EXIT 0/10 based on rows', async () => {
@@ -80,19 +65,7 @@ describe('vraBuildExpected.js — safety caps and force bypass', () => {
       '--dry-run', 'true',
     ];
 
-    const exitSpy = jest
-      .spyOn(process, 'exit')
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .mockImplementation(((code?: number) => { throw new Error(`EXIT ${code}`); }) as any);
-
-    try {
-      await import(scriptPath);
-      throw new Error('expected process.exit');
-    } catch (e: any) {
-      expect(String(e.message)).toBe('EXIT 0');
-    } finally {
-      exitSpy.mockRestore();
-    }
+    await expect(import(scriptPath)).rejects.toThrow('process.exit called with "0"');
   });
 
   it('rejects invalid ISO timestamps → EXIT 20', async () => {
@@ -107,28 +80,11 @@ describe('vraBuildExpected.js — safety caps and force bypass', () => {
       '--dry-run', 'true',
     ];
 
-    const exitSpy = jest
-      .spyOn(process, 'exit')
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .mockImplementation(((code?: number) => { throw new Error(`EXIT ${code}`); }) as any);
-
-    try {
-      await import(scriptPath);
-      throw new Error('expected process.exit');
-    } catch (e: any) {
-      expect(String(e.message)).toBe('EXIT 20');
-    } finally {
-      exitSpy.mockRestore();
-    }
+    await expect(import(scriptPath)).rejects.toThrow('process.exit called with "20"');
   });
 
   it('rejects negative or zero --limit → EXIT 20', async () => {
     mockDeps();
-
-    const exitSpy = jest
-      .spyOn(process, 'exit')
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .mockImplementation(((code?: number) => { throw new Error(`EXIT ${code}`); }) as any);
 
     // negative limit
     process.argv = [
@@ -139,12 +95,7 @@ describe('vraBuildExpected.js — safety caps and force bypass', () => {
       '--limit', '-5',
       '--dry-run', 'true',
     ];
-    try {
-      await import(scriptPath);
-      throw new Error('expected process.exit');
-    } catch (e: any) {
-      expect(String(e.message)).toBe('EXIT 20');
-    }
+    await expect(import(scriptPath)).rejects.toThrow('process.exit called with "20"');
 
     jest.resetModules();
     // zero limit
@@ -156,13 +107,6 @@ describe('vraBuildExpected.js — safety caps and force bypass', () => {
       '--limit', '0',
       '--dry-run', 'true',
     ];
-    try {
-      await import(scriptPath);
-      throw new Error('expected process.exit');
-    } catch (e: any) {
-      expect(String(e.message)).toBe('EXIT 20');
-    } finally {
-      exitSpy.mockRestore();
-    }
+    await expect(import(scriptPath)).rejects.toThrow('process.exit called with "20"');
   });
 });

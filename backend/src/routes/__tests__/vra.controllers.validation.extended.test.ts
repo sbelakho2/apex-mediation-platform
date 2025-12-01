@@ -9,17 +9,8 @@ jest.mock('../../middleware/auth', () => ({
   }),
 }));
 
-// Mock ClickHouse helpers: executeQuery returns empty; insertBatch records calls
-jest.mock('../../utils/clickhouse', () => ({
-  executeQuery: jest.fn(async (query: string) => {
-    const q = String(query).toLowerCase();
-    if (q.includes('select round(sum(amount)')) {
-      return [{ amount: '0' }];
-    }
-    return [];
-  }),
-  insertBatch: jest.fn(async () => {}),
-}));
+jest.mock('../../utils/postgres');
+jest.mock('../../services/vra/vraService');
 
 import vraRoutes from '../../routes/vra.routes';
 
@@ -105,8 +96,9 @@ describe('VRA Controllers — query validation and non-shadow dispute path', () 
 
   it('creates a dispute (201) and writes when shadow mode is disabled', async () => {
     process.env.VRA_SHADOW_ONLY = 'false';
-    const { insertBatch } = jest.requireMock('../../utils/clickhouse');
-    (insertBatch as jest.Mock).mockClear();
+    const { query, insertMany } = jest.requireMock('../../utils/postgres');
+    (insertMany as jest.Mock).mockClear();
+    (query as jest.Mock).mockResolvedValueOnce({ rows: [{ amount: '0' }] });
 
     const res = await request(app)
       .post('/api/v1/recon/disputes')
@@ -114,8 +106,8 @@ describe('VRA Controllers — query validation and non-shadow dispute path', () 
       .expect(201);
     expect(res.body).toHaveProperty('success', true);
     // Ensure a write attempt to recon_disputes occurred
-    expect(insertBatch).toHaveBeenCalled();
-    const args = (insertBatch as jest.Mock).mock.calls[0] || [];
+    expect(insertMany).toHaveBeenCalled();
+    const args = (insertMany as jest.Mock).mock.calls[0] || [];
     expect(args[0]).toBe('recon_disputes');
   });
 });

@@ -83,6 +83,58 @@ export const query = <T extends QueryResultRow = QueryResultRow>(
 
 export const getClient = (): Promise<PoolClient> => pool.connect();
 
+type InsertManyOptions = {
+  /** Column names (or a named constraint) to apply in ON CONFLICT clause */
+  onConflictColumns?: ReadonlyArray<string>;
+  onConflictConstraint?: string;
+  ignoreConflicts?: boolean; // shorthand for DO NOTHING when columns/constraint provided
+};
+
+const quoteIdentifier = (identifier: string): string => `"${identifier.replace(/"/g, '""')}"`;
+
+const quoteTableName = (table: string): string =>
+  table
+    .split('.')
+    .map((segment) => quoteIdentifier(segment))
+    .join('.');
+
+export const insertMany = async (
+  table: string,
+  columns: ReadonlyArray<string>,
+  rows: ReadonlyArray<ReadonlyArray<unknown>>,
+  options?: InsertManyOptions
+): Promise<void> => {
+  if (!rows.length) return;
+
+  const quotedTable = quoteTableName(table);
+  const columnSql = columns.map((c) => quoteIdentifier(c)).join(', ');
+  const valuesSql: string[] = [];
+  const params: unknown[] = [];
+
+  rows.forEach((row, rowIdx) => {
+    if (row.length !== columns.length) {
+      throw new Error(`Row ${rowIdx} length (${row.length}) does not match columns length (${columns.length}) for ${table}`);
+    }
+    const placeholderOffset = rowIdx * columns.length;
+    const placeholders = row.map((_, colIdx) => `$${placeholderOffset + colIdx + 1}`);
+    valuesSql.push(`(${placeholders.join(', ')})`);
+    params.push(...row);
+  });
+
+  let conflictSql = '';
+  if (options?.ignoreConflicts) {
+    if (options.onConflictConstraint) {
+      conflictSql = ` ON CONFLICT ON CONSTRAINT ${quoteIdentifier(options.onConflictConstraint)} DO NOTHING`;
+    } else if (options.onConflictColumns?.length) {
+      const cols = options.onConflictColumns.map((c) => quoteIdentifier(c)).join(', ');
+      conflictSql = ` ON CONFLICT (${cols}) DO NOTHING`;
+    }
+  }
+
+  const sql = `INSERT INTO ${quotedTable} (${columnSql}) VALUES ${valuesSql.join(', ')}${conflictSql}`;
+  await query(sql, params);
+};
+
 export const initializeDatabase = async (): Promise<void> => {
   const client = await pool.connect();
 

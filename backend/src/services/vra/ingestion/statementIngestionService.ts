@@ -1,4 +1,4 @@
-import { insertBatch, executeQuery } from '../../../utils/clickhouse';
+import { insertMany, query } from '../../../utils/postgres';
 import logger from '../../../utils/logger';
 import { getFeatureFlags } from '../../../utils/featureFlags';
 import {
@@ -188,11 +188,15 @@ export async function recordRawLoad(params: {
 }): Promise<boolean> {
   const { network, schemaVer, loadId, rawBlob } = params;
   try {
-    await insertBatch('recon_statements_raw', [
-      { network, schema_ver: schemaVer, load_id: loadId, raw_blob: rawBlob },
-    ]);
+    const result = await query(
+      `INSERT INTO recon_statements_raw (network, schema_ver, load_id, raw_blob)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (network, load_id) DO NOTHING
+       RETURNING 1`,
+      [network, schemaVer, loadId, rawBlob]
+    );
     try { vraStatementsLoadsTotal.inc({ network, phase: 'raw' }); } catch {}
-    return true;
+    return (result.rowCount ?? 0) > 0;
   } catch (error) {
     logger.warn('VRA ingest: failed to write raw load', { network, loadId, error: (error as Error).message });
     try { vraStatementsLoadFailuresTotal.inc({ network, phase: 'raw', reason: 'insert_failed' }); } catch {}
@@ -202,11 +206,11 @@ export async function recordRawLoad(params: {
 
 export async function hasRawLoad(network: string, loadId: string): Promise<boolean> {
   try {
-    const res = await executeQuery<{ cnt: string }>(
-      'SELECT count() AS cnt FROM recon_statements_raw WHERE network = {network:String} AND load_id = {load_id:String}',
-      { network, load_id: loadId }
+    const res = await query<{ cnt: string }>(
+      'SELECT count(*) AS cnt FROM recon_statements_raw WHERE network = $1 AND load_id = $2',
+      [network, loadId]
     );
-    const n = Number(res[0]?.cnt || 0);
+    const n = Number(res.rows[0]?.cnt || 0);
     return n > 0;
   } catch (error) {
     logger.warn('VRA ingest: failed to check existing raw load (treat as not found)', { network, loadId, error: (error as Error).message });
@@ -218,7 +222,39 @@ export async function insertNormalizedRows(rows: NormalizedStatementRow[]): Prom
   if (rows.length === 0) return true;
   const network = rows[0]?.network || 'unknown';
   try {
-    await insertBatch('recon_statements_norm', rows);
+    await insertMany(
+      'recon_statements_norm',
+      [
+        'event_date',
+        'app_id',
+        'ad_unit_id',
+        'country',
+        'format',
+        'currency',
+        'impressions',
+        'clicks',
+        'paid',
+        'ivt_adjustments',
+        'report_id',
+        'network',
+        'schema_ver',
+      ],
+      rows.map((row) => [
+        row.event_date,
+        row.app_id,
+        row.ad_unit_id,
+        row.country,
+        row.format,
+        row.currency,
+        row.impressions,
+        row.clicks ?? null,
+        row.paid,
+        row.ivt_adjustments ?? null,
+        row.report_id,
+        row.network,
+        row.schema_ver,
+      ])
+    );
     try { vraStatementsLoadsTotal.inc({ network, phase: 'norm' }); } catch {}
     return true;
   } catch (error) {

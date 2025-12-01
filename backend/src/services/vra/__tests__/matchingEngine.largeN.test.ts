@@ -10,16 +10,6 @@ import { vraMatchCandidatesTotal, vraMatchAutoTotal, vraMatchReviewTotal, vraMat
  * - Keep CI budget modest by default (N≈400, M≈450); allow larger run via env VRA_LARGEN=1.
  */
 
-function readCounterTotal(c: any): number {
-  try {
-    const data = c.get();
-    if (!data || !Array.isArray(data.values)) return 0;
-    return data.values.reduce((sum: number, v: any) => sum + (typeof v.value === 'number' ? v.value : 0), 0);
-  } catch {
-    return 0;
-  }
-}
-
 describe('VRA Matching Engine — large-N performance sanity', () => {
   const isLarge = process.env.VRA_LARGEN === '1';
   const N = isLarge ? 2000 : 400; // statements
@@ -81,31 +71,39 @@ describe('VRA Matching Engine — large-N performance sanity', () => {
   it('produces partitioned outputs and increments counters under budget', () => {
     const { statements, expected } = genData();
 
-    const c0 = readCounterTotal(vraMatchCandidatesTotal);
-    const a0 = readCounterTotal(vraMatchAutoTotal);
-    const r0 = readCounterTotal(vraMatchReviewTotal);
-    const u0 = readCounterTotal(vraMatchUnmatchedTotal);
+    const candSpy = jest.spyOn(vraMatchCandidatesTotal, 'inc');
+    const autoSpy = jest.spyOn(vraMatchAutoTotal, 'inc');
+    const reviewSpy = jest.spyOn(vraMatchReviewTotal, 'inc');
+    const unmatchedSpy = jest.spyOn(vraMatchUnmatchedTotal, 'inc');
 
-    const out = matchStatementsToExpected(statements, expected, {
-      autoAcceptThreshold: 0.8,
-      reviewMinThreshold: 0.5,
-      wTime: 0.6,
-      wAmount: 0.25,
-      wUnit: 0.15,
-      timeWindowSec: 5 * 60,
-    });
+    try {
+      const out = matchStatementsToExpected(statements, expected, {
+        autoAcceptThreshold: 0.8,
+        reviewMinThreshold: 0.5,
+        wTime: 0.6,
+        wAmount: 0.25,
+        wUnit: 0.15,
+        timeWindowSec: 5 * 60,
+      });
 
-    // Basic partition sanity
-    expect(out.auto.length + out.review.length + out.unmatched.length).toBe(N);
+      // Basic partition sanity
+      expect(out.auto.length + out.review.length + out.unmatched.length).toBe(N);
 
-    const c1 = readCounterTotal(vraMatchCandidatesTotal);
-    const a1 = readCounterTotal(vraMatchAutoTotal);
-    const r1 = readCounterTotal(vraMatchReviewTotal);
-    const u1 = readCounterTotal(vraMatchUnmatchedTotal);
-
-    // Counters should increase
-    expect(c1).toBeGreaterThan(c0);
-    expect(a1 + r1 + (u1 - u0)).toBeGreaterThanOrEqual(out.auto.length + out.review.length); // unmatched may be lump sum
+      // Counters should fire alongside output partitions
+      expect(candSpy).toHaveBeenCalled();
+      expect(autoSpy).toHaveBeenCalledTimes(out.auto.length);
+      expect(reviewSpy).toHaveBeenCalledTimes(out.review.length);
+      if (out.unmatched.length > 0) {
+        expect(unmatchedSpy).toHaveBeenCalledWith(out.unmatched.length);
+      } else {
+        expect(unmatchedSpy).not.toHaveBeenCalled();
+      }
+    } finally {
+      candSpy.mockRestore();
+      autoSpy.mockRestore();
+      reviewSpy.mockRestore();
+      unmatchedSpy.mockRestore();
+    }
 
     // Keep a very loose upper bound to catch accidental blow-ups when VRA_LARGEN is off
     // We don't assert runtime directly, relying on Jest default timeout; this acts as a guardrail.

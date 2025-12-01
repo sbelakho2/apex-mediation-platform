@@ -1,8 +1,8 @@
 import { buildDisputeKit, MemoryDisputeStorage } from '../disputeKitService';
 
-// Mock ClickHouse helper used by Dispute Kit builder
-jest.mock('../../../utils/clickhouse', () => ({
-  executeQuery: jest.fn(async (_q: string, _p?: Record<string, unknown>) => {
+// Mock Postgres helper used by Dispute Kit builder
+jest.mock('../../../utils/postgres', () => ({
+  query: jest.fn(async () => {
     // Generate a large set of rows (~10k) to validate memory/streaming behavior
     const N = 10000; // keep within CI limits while exercising size
     const rows: any[] = new Array(N);
@@ -18,11 +18,9 @@ jest.mock('../../../utils/clickhouse', () => ({
         confidence: (0.5 + Math.random() * 0.5).toFixed(2),
       };
     }
-    return rows;
+    return { rows };
   }),
 }));
-
-const { executeQuery } = jest.requireMock('../../../utils/clickhouse');
 
 describe('VRA Dispute Kit — large evidence streaming/integrity', () => {
   beforeEach(() => {
@@ -44,7 +42,7 @@ describe('VRA Dispute Kit — large evidence streaming/integrity', () => {
     expect(json.metadata).toHaveProperty('checksum_sha256');
     expect(json.metadata).toHaveProperty('ttl_sec', 300);
     expect(json).toHaveProperty('files');
-    expect(json.files).toHaveProperty('evidence.csv');
+    expect(Object.prototype.hasOwnProperty.call(json.files, 'evidence.csv')).toBe(true);
 
     const csv = String(json.files['evidence.csv']);
     // Contains header and many lines

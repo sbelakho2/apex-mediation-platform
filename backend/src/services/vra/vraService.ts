@@ -1,22 +1,24 @@
-import { executeQuery } from '../../utils/clickhouse';
+import type { QueryResultRow } from 'pg';
+import { query } from '../../utils/postgres';
 import logger from '../../utils/logger';
 import { ReconOverviewParams, ReconOverviewResult, ReconDeltaQuery, ReconDeltaItem, ProofsMonthlyDigest } from './vraTypes';
 import { vraClickhouseFallbackTotal, vraEmptyResultsTotal, vraQueryDurationSeconds, vraCoveragePercent, vraVariancePercent } from '../../utils/prometheus';
 
 // Helper to time and safely execute CH queries returning empty arrays on failure (shadow-safe)
-async function safeQuery<T = any>(
+async function safeQuery<T extends QueryResultRow = QueryResultRow>(
   op: 'overview' | 'deltas_count' | 'deltas_list' | 'monthly_digest',
-  query: string,
-  params?: Record<string, unknown>
+  sql: string,
+  params?: ReadonlyArray<unknown>
 ): Promise<T[]> {
   const end = vraQueryDurationSeconds.startTimer({ op });
   try {
-    const result = await executeQuery<T>(query, params);
+    const result = await query<T>(sql, params);
+    const rows = result?.rows || [];
     end({ success: 'true' });
-    if (Array.isArray(result) && result.length === 0) {
+    if (rows.length === 0) {
       vraEmptyResultsTotal.inc({ op });
     }
-    return result;
+    return rows;
   } catch (err) {
     end({ success: 'false' });
     vraClickhouseFallbackTotal.inc({ op });
@@ -42,17 +44,17 @@ export class VraService {
       `
       SELECT
         adapter_name AS network,
-        toString(ad_format) AS format,
+        ad_format::text AS format,
         country_code AS country,
-        sumIf(1, revenue_type = 'impression') AS impressions,
-        round(sum(revenue_usd), 6) AS paid
+        SUM(CASE WHEN revenue_type = 'impression' THEN 1 ELSE 0 END)::bigint AS impressions,
+        ROUND(COALESCE(SUM(revenue_usd), 0)::numeric, 6)::text AS paid
       FROM revenue_events
-      WHERE timestamp >= parseDateTimeBestEffortOrZero({from:String})
-        AND timestamp < parseDateTimeBestEffortOrZero({to:String})
-      GROUP BY network, format, country
+      WHERE timestamp >= $1::timestamptz
+        AND timestamp <  $2::timestamptz
+      GROUP BY adapter_name, ad_format, country_code
       ORDER BY paid DESC
       `,
-      { from, to }
+      [from, to]
     );
 
     const byBreakdown = rows.map((r) => ({
@@ -115,14 +117,25 @@ export class VraService {
     const from = query.from ?? new Date(Date.now() - 7 * 86400000).toISOString();
     const to = query.to ?? new Date().toISOString();
 
-    const whereClauses = [`window_start >= parseDateTimeBestEffortOrZero({from:String})`, `window_end < parseDateTimeBestEffortOrZero({to:String})`];
-    const params: Record<string, unknown> = { from, to };
-    if (query.kind) { whereClauses.push(`kind = {kind:String}`); params.kind = query.kind; }
-    if (query.minConf != null) { whereClauses.push(`confidence >= {minConf:Float32}`); params.minConf = query.minConf; }
+    const whereClauses: string[] = [];
+    const whereParams: unknown[] = [];
+    const pushClause = (template: string, value: unknown) => {
+      whereParams.push(value);
+      const idx = whereParams.length;
+      whereClauses.push(template.replace('?', `$${idx}`));
+    };
+    pushClause('window_start >= ?::timestamptz', from);
+    pushClause('window_end < ?::timestamptz', to);
+    if (query.kind) pushClause('kind = ?', query.kind);
+    if (query.minConf != null) pushClause('confidence >= ?', query.minConf);
 
     const whereSql = whereClauses.length ? `WHERE ${whereClauses.join(' AND ')}` : '';
 
-    const countRows = await safeQuery<{ total: string }>('deltas_count', `SELECT count() AS total FROM recon_deltas ${whereSql}`, params);
+    const countRows = await safeQuery<{ total: string }>(
+      'deltas_count',
+      `SELECT COUNT(*)::bigint AS total FROM recon_deltas ${whereSql}`,
+      whereParams
+    );
     const total = Number(countRows[0]?.total || 0);
 
     const items = await safeQuery<{
@@ -137,13 +150,20 @@ export class VraService {
     }>(
       'deltas_list',
       `
-      SELECT kind, amount, currency, reason_code, toString(window_start) AS window_start, toString(window_end) AS window_end, evidence_id, confidence
-      FROM recon_deltas
-      ${whereSql}
-      ORDER BY window_start DESC, evidence_id ASC
-      LIMIT {limit:UInt32} OFFSET {offset:UInt32}
+      SELECT kind,
+             amount::text AS amount,
+             currency,
+             reason_code,
+             TO_CHAR(window_start, 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS window_start,
+             TO_CHAR(window_end, 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')   AS window_end,
+             evidence_id,
+             confidence::text AS confidence
+        FROM recon_deltas
+        ${whereSql}
+        ORDER BY window_start DESC, evidence_id ASC
+        LIMIT $${whereParams.length + 1} OFFSET $${whereParams.length + 2}
       `,
-      { ...params, limit: pageSize, offset: (page - 1) * pageSize }
+      [...whereParams, pageSize, (page - 1) * pageSize]
     );
 
     const mapped: ReconDeltaItem[] = items.map((r) => ({
@@ -169,8 +189,11 @@ export class VraService {
       notes: string;
     }>(
       'monthly_digest',
-      `SELECT month, digest, sig, toString(coverage_pct) AS coverage_pct, notes FROM proofs_monthly_digest WHERE month = {month:String} LIMIT 1`,
-      { month }
+      `SELECT month, digest, sig, coverage_pct::text AS coverage_pct, notes
+         FROM proofs_monthly_digest
+        WHERE month = $1
+        LIMIT 1`,
+      [month]
     );
     if (rows.length === 0) return null;
     return {

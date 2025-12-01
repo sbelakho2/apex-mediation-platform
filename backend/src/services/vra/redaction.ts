@@ -7,12 +7,14 @@
 export function redactString(val: string): string {
   if (!val) return '';
   let s = String(val);
-  // Email redaction
+  // Email redaction (plain + URL encoded)
   s = s.replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, '[REDACTED_EMAIL]');
+  s = s.replace(/[A-Z0-9._%+-]+%40[A-Z0-9.-]+(?:(?:%2E|\.)[A-Z]{2,})/gi, '[REDACTED_EMAIL]');
   // Authorization headers / Bearer tokens
   s = s.replace(/Bearer\s+[A-Za-z0-9._-]+/g, 'Bearer [REDACTED]');
   // JWT-like strings (three base64url segments)
-  s = s.replace(/eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/g, '[REDACTED_JWT]');
+  s = s.replace(/eyJ[A-Za-z0-9_-]{2,}\.[A-Za-z0-9_-]{2,}\.[A-Za-z0-9_-]{2,}/g, '[REDACTED_JWT]');
+  s = s.replace(/eyJ[A-Za-z0-9_%~-]{2,}(?:%2E|\.)[A-Za-z0-9_%~-]{2,}(?:%2E|\.)[A-Za-z0-9_%~-]{2,}/gi, '[REDACTED_JWT]');
   // Stripe keys
   s = s.replace(/sk_(test|live)_[A-Za-z0-9]+/g, 'sk_$1_[REDACTED]');
   // Potential card-like sequences (very conservative): 13-19 digits

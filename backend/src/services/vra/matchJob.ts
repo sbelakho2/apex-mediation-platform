@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import logger from '../../utils/logger';
-import { executeQuery, insertBatch } from '../../utils/clickhouse';
+import { query, insertMany } from '../../utils/postgres';
 import { ExpectedRowLite, StatementRowLite, matchStatementsToExpected, MatchingOptions } from './matchingEngine';
 import { vraMatchReviewPersistedTotal } from '../../utils/prometheus';
 
@@ -63,29 +63,43 @@ export async function runMatchingBatch(params: MatchBatchParams): Promise<{ auto
   };
 
   // Fetch statements (day-granular) and expected (timestamped) in the window
-  const stmtRows = await executeQuery<CHStatementRow>(
-    `
+  const stmtRowsResult = await query<CHStatementRow>
+    (
+      `
       SELECT 
-        toString(event_date) AS event_date, app_id, ad_unit_id, country, toString(format) AS format,
-        toString(paid) AS paid, currency, report_id, network
+        to_char(event_date, 'YYYY-MM-DD') AS event_date,
+        app_id,
+        ad_unit_id,
+        country,
+        format,
+        paid::text AS paid,
+        currency,
+        report_id,
+        network
       FROM recon_statements_norm
-      WHERE event_date >= toDate(parseDateTimeBestEffortOrZero({from:String}))
-        AND event_date <  toDate(parseDateTimeBestEffortOrZero({to:String}))
-      LIMIT {lim:UInt32}
+      WHERE event_date >= $1::date
+        AND event_date <  $2::date
+      ORDER BY event_date ASC
+      LIMIT $3
     `,
-    { from, to, lim: limitStatements }
-  );
+      [from, to, limitStatements]
+    );
+  const stmtRows = stmtRowsResult.rows;
 
-  const expRows = await executeQuery<CHExpectedRow>(
+  const expRowsResult = await query<CHExpectedRow>(
     `
-      SELECT request_id, toString(ts) AS ts, toString(expected_value) AS expected_value
-      FROM recon_expected
-      WHERE ts >= parseDateTimeBestEffortOrZero({from:String})
-        AND ts <  parseDateTimeBestEffortOrZero({to:String})
-      LIMIT {lim:UInt32}
+      SELECT request_id,
+             to_char(ts, 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS ts,
+             expected_value::text AS expected_value
+        FROM recon_expected
+       WHERE ts >= $1::timestamptz
+         AND ts <  $2::timestamptz
+       ORDER BY ts ASC
+       LIMIT $3
     `,
-    { from, to, lim: limitExpected }
+    [from, to, limitExpected]
   );
+  const expRows = expRowsResult.rows;
 
   if (stmtRows.length === 0 || expRows.length === 0) {
     return { auto: 0, review: 0, unmatched: stmtRows.length, inserted: 0, reviewPersisted: 0 };
@@ -114,14 +128,16 @@ export async function runMatchingBatch(params: MatchBatchParams): Promise<{ auto
   let reviewPersisted = 0;
   if (!dryRun && auto.length > 0) {
     try {
-      await insertBatch(
+      await insertMany(
         'recon_match',
-        auto.map((m) => ({
-          statement_id: m.statementId,
-          request_id: m.requestId,
-          link_confidence: Number(m.confidence.toFixed(2)),
-          keys_used: m.keysUsed,
-        }))
+        ['statement_id', 'request_id', 'link_confidence', 'keys_used'],
+        auto.map((m) => [
+          m.statementId,
+          m.requestId,
+          Number(m.confidence.toFixed(2)),
+          m.keysUsed,
+        ]),
+        { onConflictColumns: ['statement_id', 'request_id'], ignoreConflicts: true }
       );
       inserted = auto.length;
     } catch (e) {
@@ -133,15 +149,16 @@ export async function runMatchingBatch(params: MatchBatchParams): Promise<{ auto
   // Optionally persist review-band matches for analyst review
   if (!dryRun && params.persistReview && review.length > 0) {
     try {
-      await insertBatch(
+      await insertMany(
         'recon_match_review',
-        review.map((m) => ({
-          statement_id: m.statementId,
-          request_id: m.requestId,
-          link_confidence: Number(m.confidence.toFixed(2)),
-          keys_used: m.keysUsed,
-          reasons: JSON.stringify(m.reasons || {}),
-        }))
+        ['statement_id', 'request_id', 'link_confidence', 'keys_used', 'reasons'],
+        review.map((m) => [
+          m.statementId,
+          m.requestId,
+          Number(m.confidence.toFixed(2)),
+          m.keysUsed,
+          JSON.stringify(m.reasons || {}),
+        ])
       );
       reviewPersisted = review.length;
       try { vraMatchReviewPersistedTotal.inc(review.length); } catch {}

@@ -1,10 +1,11 @@
 import { Request, Response } from 'express';
 import { vraService } from '../services/vra/vraService';
 import { getFeatureFlags } from '../utils/featureFlags';
-import { executeQuery, insertBatch } from '../utils/clickhouse';
+import { query, insertMany } from '../utils/postgres';
 import logger from '../utils/logger';
 import { vraDisputeShadowAcksTotal, vraDisputesCreatedTotal } from '../utils/prometheus';
 import { redactString as redactCsvField } from '../services/vra/redaction';
+import { buildDisputeKit, resolveDisputeStorageFromEnv } from '../services/vra/disputeKitService';
 
 function parseNumber(v: string | undefined): number | undefined {
   if (v == null) return undefined;
@@ -58,7 +59,6 @@ function validateDeltasQuery(q: Record<string, string | undefined>): { ok: true 
   }
   return { ok: true };
 }
-import { buildDisputeKit, resolveDisputeStorageFromEnv } from '../services/vra/disputeKitService';
 
 export async function getReconOverview(req: Request, res: Response) {
   try {
@@ -165,7 +165,15 @@ export async function createDispute(req: Request, res: Response) {
   try {
     const flags = getFeatureFlags();
     const { delta_ids = [], network = '', contact = '' } = req.body || {};
-    if (!Array.isArray(delta_ids) || typeof network !== 'string') {
+    const normalizedNetwork = typeof network === 'string' ? network.trim() : '';
+    if (!Array.isArray(delta_ids) || delta_ids.length === 0) {
+      return res.status(400).json({ success: false, error: 'Invalid request body' });
+    }
+    if (!normalizedNetwork) {
+      return res.status(400).json({ success: false, error: 'Invalid request body' });
+    }
+    const ids = delta_ids.map((x: any) => String(x).trim()).filter(Boolean);
+    if (ids.length === 0) {
       return res.status(400).json({ success: false, error: 'Invalid request body' });
     }
 
@@ -173,8 +181,8 @@ export async function createDispute(req: Request, res: Response) {
     if (flags.vraShadowOnly) {
       const disputeId = `dry-${Date.now()}`;
       try {
-        if (network) {
-          vraDisputeShadowAcksTotal.inc({ network });
+        if (normalizedNetwork) {
+          vraDisputeShadowAcksTotal.inc({ network: normalizedNetwork });
         } else {
           vraDisputeShadowAcksTotal.inc({ network: 'unknown' });
         }
@@ -188,7 +196,7 @@ export async function createDispute(req: Request, res: Response) {
           status: 'draft',
           evidence_uri: 'shadow://not-written',
           amount: 0,
-          network,
+          network: normalizedNetwork,
           contact,
           shadow: true,
         },
@@ -196,23 +204,20 @@ export async function createDispute(req: Request, res: Response) {
     }
 
     // Sum amount from recon_deltas by evidence_id (delta_ids interpreted as evidence ids per VRA.md)
-    const ids = delta_ids.map((x: any) => String(x));
-    const placeholders = ids.map((_, i) => `{id${i}:String}`).join(',');
-    const params: Record<string, unknown> = {};
-    ids.forEach((v, i) => (params[`id${i}`] = v));
-
-    const sumRows = await executeQuery<{ amount: string }>(
-      `SELECT round(sum(amount),6) AS amount FROM recon_deltas WHERE evidence_id IN (${placeholders})`,
-      params
+    const sumRows = await query<{ amount: string }>(
+      `SELECT ROUND(COALESCE(SUM(amount), 0)::numeric, 6)::text AS amount
+         FROM recon_deltas
+        WHERE evidence_id = ANY($1::text[])`,
+      [ids]
     );
-    const amount = Number(sumRows[0]?.amount || 0);
+    const amount = Number(sumRows.rows[0]?.amount || 0);
     const disputeId = `disp_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
     // Attempt to build a Dispute Kit bundle and store it (shadow-first design; best-effort)
     let evidenceUri = `vra://disputes/${disputeId}`;
     try {
       const storage = resolveDisputeStorageFromEnv();
-      const kit = await buildDisputeKit(ids, { network, dryRun: false, storage });
+      const kit = await buildDisputeKit(ids, { network: normalizedNetwork, dryRun: false, storage });
       if (kit?.storageUri) {
         evidenceUri = kit.storageUri;
       }
@@ -221,18 +226,14 @@ export async function createDispute(req: Request, res: Response) {
       logger.warn('VRA createDispute: kit build failed, using placeholder URI', { error: (e as Error)?.message });
     }
 
-    await insertBatch('recon_disputes', [
-      {
-        dispute_id: disputeId,
-        network,
-        amount,
-        status: 'draft',
-        evidence_uri: evidenceUri,
-      },
-    ]);
+    await insertMany(
+      'recon_disputes',
+      ['dispute_id', 'network', 'amount', 'status', 'evidence_uri'],
+      [[disputeId, normalizedNetwork, amount, 'draft', evidenceUri]]
+    );
 
     try {
-      vraDisputesCreatedTotal.inc({ network: network || 'unknown' });
+      vraDisputesCreatedTotal.inc({ network: normalizedNetwork || 'unknown' });
     } catch (_) {
       // ignore metrics errors
     }

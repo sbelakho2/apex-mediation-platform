@@ -1,5 +1,5 @@
 import logger from '../../utils/logger';
-import { executeQuery, insertBatch } from '../../utils/clickhouse';
+import { query, insertMany } from '../../utils/postgres';
 import { vraReconcileDurationSeconds, vraReconcileRowsTotal } from '../../utils/prometheus';
 
 export interface ReconcileParams {
@@ -42,14 +42,14 @@ export async function reconcileWindow(params: ReconcileParams): Promise<Reconcil
   try {
     const { UNDERPAY_TOL, IVT_P95_BAND_PP, FX_BAND_PCT, VIEWABILITY_GAP_PP } = readReconTunables();
     // 1) Aggregate expected USD in window
-    const expectedRows = await executeQuery<{ expected_usd: string }>(
-      `SELECT toFloat64(sum(expected_value)) AS expected_usd
-       FROM recon_expected
-       WHERE ts >= parseDateTimeBestEffortOrZero({from:String})
-         AND ts <  parseDateTimeBestEffortOrZero({to:String})`,
-      { from, to }
+    const expectedRows = await query<{ expected_usd: string }>(
+      `SELECT COALESCE(SUM(expected_value), 0)::float8 AS expected_usd
+         FROM recon_expected
+        WHERE ts >= $1::timestamptz
+          AND ts <  $2::timestamptz`,
+      [from, to]
     );
-    const expectedUsd = Number(expectedRows[0]?.expected_usd || 0);
+    const expectedUsd = Number(expectedRows.rows[0]?.expected_usd || 0);
 
     if (expectedUsd <= 0) {
       end();
@@ -57,34 +57,37 @@ export async function reconcileWindow(params: ReconcileParams): Promise<Reconcil
     }
 
     // 2) Aggregate paid USD from revenue_events for only those request_ids referenced by recon_expected within the window
-    const paidRows = await executeQuery<{ paid_usd: string }>(
-      `SELECT toFloat64(sum(revenue_usd)) AS paid_usd
-       FROM revenue_events
-       WHERE timestamp >= parseDateTimeBestEffortOrZero({from:String})
-         AND timestamp <  parseDateTimeBestEffortOrZero({to:String})
-         AND request_id IN (
-           SELECT request_id FROM recon_expected
-           WHERE ts >= parseDateTimeBestEffortOrZero({from:String})
-             AND ts <  parseDateTimeBestEffortOrZero({to:String})
-         )`,
-      { from, to }
+    const paidRows = await query<{ paid_usd: string }>(
+      `SELECT COALESCE(SUM(revenue_usd), 0)::float8 AS paid_usd
+         FROM revenue_events
+        WHERE timestamp >= $1::timestamptz
+          AND timestamp <  $2::timestamptz
+          AND request_id IN (
+                SELECT request_id
+                  FROM recon_expected
+                 WHERE ts >= $1::timestamptz
+                   AND ts <  $2::timestamptz
+          )`,
+      [from, to]
     );
-    const paidUsd = Number(paidRows[0]?.paid_usd || 0);
+    const paidUsd = Number(paidRows.rows[0]?.paid_usd || 0);
 
     // 3) Unmatched expected (timing lag candidate): expected rows with no paid event in the window
-    const unmatchedRows = await executeQuery<{ unmatched_usd: string }>(
-      `SELECT toFloat64(sum(e.expected_value)) AS unmatched_usd
-       FROM recon_expected e
-       WHERE e.ts >= parseDateTimeBestEffortOrZero({from:String})
-         AND e.ts <  parseDateTimeBestEffortOrZero({to:String})
-         AND e.request_id NOT IN (
-           SELECT DISTINCT request_id FROM revenue_events
-           WHERE timestamp >= parseDateTimeBestEffortOrZero({from:String})
-             AND timestamp <  parseDateTimeBestEffortOrZero({to:String})
-         )`,
-      { from, to }
+    const unmatchedRows = await query<{ unmatched_usd: string }>(
+      `SELECT COALESCE(SUM(e.expected_value), 0)::float8 AS unmatched_usd
+         FROM recon_expected e
+        WHERE e.ts >= $1::timestamptz
+          AND e.ts <  $2::timestamptz
+          AND NOT EXISTS (
+                SELECT 1
+                  FROM revenue_events r
+                 WHERE r.request_id = e.request_id
+                   AND r.timestamp >= $1::timestamptz
+                   AND r.timestamp <  $2::timestamptz
+          )`,
+      [from, to]
     );
-    const unmatchedUsd = Number(unmatchedRows[0]?.unmatched_usd || 0);
+    const unmatchedUsd = Number(unmatchedRows.rows[0]?.unmatched_usd || 0);
 
     // 4) Classify deltas (coarse aggregate pass)
     const gap = Math.max(0, expectedUsd - paidUsd);
@@ -134,38 +137,46 @@ export async function reconcileWindow(params: ReconcileParams): Promise<Reconcil
     try {
       const band = Math.max(0, IVT_P95_BAND_PP) / 100; // convert pp -> fraction
       // Baseline p95 over the 30 days before window start
-      const baselineRows = await executeQuery<{ p95: string }>(
-        `SELECT quantileExact(0.95)(rate) AS p95
-         FROM (
-           SELECT if(sum(paid)=0, 0, sum(ifNull(ivt_adjustments,0)) / sum(paid)) AS rate
-           FROM recon_statements_norm
-           WHERE event_date >= toDate(parseDateTimeBestEffortOrZero({from:String}) - INTERVAL 30 DAY)
-             AND event_date <  toDate(parseDateTimeBestEffortOrZero({from:String}))
-           GROUP BY event_date
-         )`,
-        { from }
+      const baselineRows = await query<{ p95: string; cnt: string }>(
+        `WITH daily AS (
+             SELECT event_date,
+                    CASE WHEN SUM(paid) = 0 THEN 0::float8
+                         ELSE SUM(COALESCE(ivt_adjustments, 0)) / SUM(paid)
+                    END AS rate
+               FROM recon_statements_norm
+              WHERE event_date >= (date($1::timestamptz) - INTERVAL '30 days')
+                AND event_date <  date($1::timestamptz)
+              GROUP BY event_date)
+         SELECT COALESCE(percentile_disc(0.95) WITHIN GROUP (ORDER BY rate), 0)::float8 AS p95,
+                COUNT(*)::bigint AS cnt
+           FROM daily`,
+        [from]
       );
-      const p95 = Number(baselineRows[0]?.p95 ?? 0);
-
-      const currentRows = await executeQuery<{ rate: string }>(
-        `SELECT if(sum(paid)=0, 0, sum(ifNull(ivt_adjustments,0)) / sum(paid)) AS rate
-         FROM recon_statements_norm
-         WHERE event_date >= toDate(parseDateTimeBestEffortOrZero({from:String}))
-           AND event_date <  toDate(parseDateTimeBestEffortOrZero({to:String}))`,
-        { from, to }
-      );
-      const currentRate = Number(currentRows[0]?.rate ?? 0);
-      if (currentRate > p95 + band) {
-        rows.push({
-          kind: 'ivt_outlier',
-          amount: 0.0, // classification without monetary assignment
-          currency: 'USD',
-          reason_code: 'ivt_p95_band_exceeded',
-          window_start: from,
-          window_end: to,
-          evidence_id: `${evidenceBase}:ivt`,
-          confidence: 0.6,
-        });
+      const baselineCount = Number(baselineRows.rows[0]?.cnt ?? 0);
+      if (baselineCount > 0) {
+        const p95 = Number(baselineRows.rows[0]?.p95 ?? 0);
+        const currentRows = await query<{ rate: string }>(
+          `SELECT CASE WHEN SUM(paid) = 0 THEN 0::float8
+                       ELSE SUM(COALESCE(ivt_adjustments, 0)) / SUM(paid)
+                  END AS rate
+             FROM recon_statements_norm
+            WHERE event_date >= date($1::timestamptz)
+              AND event_date <  date($2::timestamptz)`,
+          [from, to]
+        );
+        const currentRate = Number(currentRows.rows[0]?.rate ?? 0);
+        if (currentRate > p95 + band) {
+          rows.push({
+            kind: 'ivt_outlier',
+            amount: 0.0, // classification without monetary assignment
+            currency: 'USD',
+            reason_code: 'ivt_p95_band_exceeded',
+            window_start: from,
+            window_end: to,
+            evidence_id: `${evidenceBase}:ivt`,
+            confidence: 0.6,
+          });
+        }
       }
     } catch (e) {
       // if CH query fails, skip ivt rule silently (degrade to no insight)
@@ -175,29 +186,31 @@ export async function reconcileWindow(params: ReconcileParams): Promise<Reconcil
     try {
       const band = Math.max(0, FX_BAND_PCT) / 100; // convert percent -> fraction
       // Baseline median exchange rates per currency over 30 days before window start
-      const fxBaseline = await executeQuery<{ cur: string; med_rate: string }>(
-        `SELECT revenue_currency AS cur, quantileExact(0.5)(exchange_rate) AS med_rate
-         FROM revenue_events
-         WHERE timestamp >= (parseDateTimeBestEffortOrZero({from:String}) - INTERVAL 30 DAY)
-           AND timestamp <  parseDateTimeBestEffortOrZero({from:String})
-           AND revenue_currency != 'USD'
-         GROUP BY cur`,
-        { from }
+      const fxBaseline = await query<{ cur: string; med_rate: string }>(
+        `SELECT revenue_currency AS cur,
+                COALESCE(percentile_disc(0.5) WITHIN GROUP (ORDER BY exchange_rate), 0)::float8 AS med_rate
+           FROM revenue_events
+          WHERE timestamp >= ($1::timestamptz - INTERVAL '30 days')
+            AND timestamp <  $1::timestamptz
+            AND revenue_currency <> 'USD'
+          GROUP BY cur`,
+        [from]
       );
       const baseMap = new Map<string, number>();
-      for (const r of fxBaseline) baseMap.set(r.cur, Number(r.med_rate));
+      for (const r of fxBaseline.rows) baseMap.set(r.cur, Number(r.med_rate));
 
       if (baseMap.size > 0) {
-        const fxCurrent = await executeQuery<{ cur: string; avg_rate: string }>(
-          `SELECT revenue_currency AS cur, avg(exchange_rate) AS avg_rate
-           FROM revenue_events
-           WHERE timestamp >= parseDateTimeBestEffortOrZero({from:String})
-             AND timestamp <  parseDateTimeBestEffortOrZero({to:String})
-             AND revenue_currency != 'USD'
-           GROUP BY cur`,
-          { from, to }
+        const fxCurrent = await query<{ cur: string; avg_rate: string }>(
+          `SELECT revenue_currency AS cur,
+                  AVG(exchange_rate)::float8 AS avg_rate
+             FROM revenue_events
+            WHERE timestamp >= $1::timestamptz
+              AND timestamp <  $2::timestamptz
+              AND revenue_currency <> 'USD'
+            GROUP BY cur`,
+          [from, to]
         );
-        for (const r of fxCurrent) {
+        for (const r of fxCurrent.rows) {
           const cur = r.cur;
           const base = baseMap.get(cur);
           const avg = Number(r.avg_rate);
@@ -226,17 +239,27 @@ export async function reconcileWindow(params: ReconcileParams): Promise<Reconcil
     // 7) Viewability gap rule (requires viewability payloads populated in recon_expected)
     try {
       const gap = Math.max(0, VIEWABILITY_GAP_PP) / 100; // convert pp -> fraction
-      const rowsView = await executeQuery<{ om: string; stmt: string }>(
+      const rowsView = await query<{ om: string; stmt: string }>(
         `SELECT 
-           toFloat64(avgOrNull(JSONExtractFloat(viewability, 'om_viewable_pct'))) AS om,
-           toFloat64(avgOrNull(JSONExtractFloat(viewability, 'statement_viewable_pct'))) AS stmt
-         FROM recon_expected
-         WHERE ts >= parseDateTimeBestEffortOrZero({from:String})
-           AND ts <  parseDateTimeBestEffortOrZero({to:String})`,
-        { from, to }
+             AVG(
+               CASE WHEN viewability ? 'om_viewable_pct'
+                    THEN (viewability->>'om_viewable_pct')::float8
+                    ELSE NULL
+               END
+             ) AS om,
+             AVG(
+               CASE WHEN viewability ? 'statement_viewable_pct'
+                    THEN (viewability->>'statement_viewable_pct')::float8
+                    ELSE NULL
+               END
+             ) AS stmt
+           FROM recon_expected
+          WHERE ts >= $1::timestamptz
+            AND ts <  $2::timestamptz`,
+        [from, to]
       );
-      const om = Number(rowsView[0]?.om ?? NaN);
-      const stmt = Number(rowsView[0]?.stmt ?? NaN);
+      const om = Number(rowsView.rows[0]?.om ?? NaN);
+      const stmt = Number(rowsView.rows[0]?.stmt ?? NaN);
       if (Number.isFinite(om) && Number.isFinite(stmt)) {
         // Use epsilon to avoid emitting when exactly on threshold due to float drift
         const EPS = 1e-9;
@@ -264,16 +287,21 @@ export async function reconcileWindow(params: ReconcileParams): Promise<Reconcil
 
     if (!dryRun && rows.length > 0) {
       try {
-        await insertBatch('recon_deltas', rows.map((r) => ({
-          kind: r.kind,
-          amount: r.amount,
-          currency: r.currency,
-          reason_code: r.reason_code,
-          window_start: r.window_start,
-          window_end: r.window_end,
-          evidence_id: r.evidence_id,
-          confidence: r.confidence,
-        })));
+        await insertMany(
+          'recon_deltas',
+          ['kind', 'amount', 'currency', 'reason_code', 'window_start', 'window_end', 'evidence_id', 'confidence'],
+          rows.map((r) => [
+            r.kind,
+            r.amount,
+            r.currency,
+            r.reason_code,
+            r.window_start,
+            r.window_end,
+            r.evidence_id,
+            r.confidence,
+          ]),
+          { onConflictColumns: ['evidence_id'], ignoreConflicts: true }
+        );
       } catch (e) {
         logger.warn('VRA Reconcile: failed to insert recon_deltas', { error: (e as Error)?.message, rows: rows.length });
         end();

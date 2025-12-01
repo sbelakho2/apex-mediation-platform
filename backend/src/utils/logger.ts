@@ -29,15 +29,19 @@ const contextFormat = winston.format((info) => {
 
 const redactString = (val: string): string => {
   let s = val;
-  // Email redaction
+  // Email redaction (plain)
   s = s.replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, '[REDACTED_EMAIL]');
+  // Email redaction (URL encoded form)
+  s = s.replace(/[A-Z0-9._%+-]+%40[A-Z0-9.-]+(?:(?:%2E|\.)[A-Z]{2,})/gi, '[REDACTED_EMAIL]');
   // Authorization headers / Bearer tokens (inline)
   s = s.replace(/(authorization"?\s*:\s*")Bearer\s+[^"\s]+/gi, '$1Bearer [REDACTED]');
   s = s.replace(/Bearer\s+[A-Za-z0-9._-]+/g, 'Bearer [REDACTED]');
-  // OAuth-style tokens in query/body
+  // JWT-like strings (3 base64url segments, allow short segments)
+  s = s.replace(/eyJ[A-Za-z0-9_-]{2,}\.[A-Za-z0-9_-]{2,}\.[A-Za-z0-9_-]{2,}/g, '[REDACTED_JWT]');
+  s = s.replace(/eyJ[A-Za-z0-9_%~-]{2,}(?:%2E|\.)[A-Za-z0-9_%~-]{2,}(?:%2E|\.)[A-Za-z0-9_%~-]{2,}/gi, '[REDACTED_JWT]');
+  // OAuth-style tokens in query/body (literal or URL encoded)
   s = s.replace(/(token|access_token|id_token)=([A-Za-z0-9._-]+)/gi, (_m, k) => `${k}=[REDACTED]`);
-  // JWT-like strings (3 base64url segments)
-  s = s.replace(/eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/g, '[REDACTED_JWT]');
+  s = s.replace(/(token|access_token|id_token)=(?:[A-Za-z0-9._-]|%2E|%2e)+/gi, (_m, k) => `${k}=[REDACTED]`);
   // Stripe keys
   s = s.replace(/sk_live_[A-Za-z0-9]+/g, 'sk_live_[REDACTED]');
   s = s.replace(/sk_test_[A-Za-z0-9]+/g, 'sk_test_[REDACTED]');
@@ -53,6 +57,8 @@ const SENSITIVE_KEYS = new Set([
   'auth',
   'token',
   'accessToken',
+  'access_token',
+  'id_token',
   'refreshToken',
   'apiKey',
   'stripeSecretKey',

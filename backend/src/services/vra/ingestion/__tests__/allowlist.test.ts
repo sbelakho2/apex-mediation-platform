@@ -1,9 +1,9 @@
 import { ingestCanonicalCsvReport } from '../statementIngestionService';
 
-// Mock ClickHouse utils used by ingestion
-jest.mock('../../../../utils/clickhouse', () => ({
-  executeQuery: jest.fn(async () => [{ cnt: '0' }]), // hasRawLoad => false
-  insertBatch: jest.fn(async () => {}),
+// Mock Postgres helpers used by ingestion
+jest.mock('../../../../utils/postgres', () => ({
+  query: jest.fn(async () => ({ rows: [{ cnt: '0' }] })),
+  insertMany: jest.fn(async () => {}),
 }));
 
 describe('VRA ingestion — network allowlist', () => {

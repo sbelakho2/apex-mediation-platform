@@ -1,11 +1,11 @@
 import { vraService } from '../vraService';
 
-// Mock ClickHouse helper
-jest.mock('../../../utils/clickhouse', () => ({
-  executeQuery: jest.fn(async (_query: string, _params?: Record<string, unknown>) => []),
+// Mock Postgres helper
+jest.mock('../../../utils/postgres', () => ({
+  query: jest.fn(async () => ({ rows: [] })),
 }));
 
-const { executeQuery } = jest.requireMock('../../../utils/clickhouse');
+const { query } = jest.requireMock('../../../utils/postgres');
 
 describe('VRA Service — getMonthlyDigest', () => {
   beforeEach(() => {
@@ -13,15 +13,15 @@ describe('VRA Service — getMonthlyDigest', () => {
   });
 
   it('returns null when no digest row present', async () => {
-    (executeQuery as jest.Mock).mockResolvedValueOnce([]);
+    (query as jest.Mock).mockResolvedValueOnce({ rows: [] });
     const out = await vraService.getMonthlyDigest('2025-11');
     expect(out).toBeNull();
   });
 
   it('maps digest row fields correctly', async () => {
-    (executeQuery as jest.Mock).mockResolvedValueOnce([
+    (query as jest.Mock).mockResolvedValueOnce({ rows: [
       { month: '2025-11', digest: 'deadbeef', sig: 'cafebabe', coverage_pct: '95.0', notes: 'ok' },
-    ]);
+    ] });
     const out = await vraService.getMonthlyDigest('2025-11');
     expect(out).not.toBeNull();
     expect(out!.month).toBe('2025-11');

@@ -9,16 +9,16 @@ jest.mock('../../middleware/auth', () => ({
   }),
 }));
 
-// Mock CH client usage in executeQuery/insertBatch
-jest.mock('../../utils/clickhouse', () => ({
-  executeQuery: jest.fn(async (query: string) => {
-    const q = String(query).toLowerCase();
-    if (q.includes('select count()')) {
-      return [{ total: '1' }];
+// Mock Postgres helper usage in query/insertMany
+jest.mock('../../utils/postgres', () => ({
+  query: jest.fn(async (sql: string) => {
+    const q = String(sql).toLowerCase();
+    if (q.includes('count(')) {
+      return { rows: [{ total: '1' }] };
     }
-    return [];
+    return { rows: [] };
   }),
-  insertBatch: jest.fn(async () => {}),
+  insertMany: jest.fn(async () => {}),
 }));
 
 import vraRoutes from '../../routes/vra.routes';
@@ -58,8 +58,8 @@ describe('VRA Routes', () => {
   it('POST /recon/disputes responds with 202 in shadow mode', async () => {
     process.env.VRA_ENABLED = 'true';
     process.env.VRA_SHADOW_ONLY = 'true';
-    const { insertBatch } = jest.requireMock('../../utils/clickhouse');
-    (insertBatch as jest.Mock).mockClear();
+    const { insertMany } = jest.requireMock('../../utils/postgres');
+    (insertMany as jest.Mock).mockClear();
     const res = await request(app)
       .post('/api/v1/recon/disputes')
       .send({ delta_ids: ['e1','e2'], network: 'unity', contact: 'ops@example.com' })
@@ -67,7 +67,7 @@ describe('VRA Routes', () => {
     expect(res.body).toHaveProperty('success', true);
     expect(res.body.data).toHaveProperty('shadow', true);
     // Ensure no writes performed in shadow mode
-    expect(insertBatch).not.toHaveBeenCalled();
+    expect(insertMany).not.toHaveBeenCalled();
   });
 
   it('GET /proofs/revenue_digest with bad month returns 400', async () => {
@@ -80,9 +80,9 @@ describe('VRA Routes', () => {
 
   it('GET /proofs/revenue_digest returns 404 when digest not found', async () => {
     process.env.VRA_ENABLED = 'true';
-    const { executeQuery } = jest.requireMock('../../utils/clickhouse');
+    const { query } = jest.requireMock('../../utils/postgres');
     // Mock monthly digest select to return empty list
-    (executeQuery as jest.Mock).mockImplementationOnce(async () => []);
+    (query as jest.Mock).mockResolvedValueOnce({ rows: [] });
     const res = await request(app)
       .get('/api/v1/proofs/revenue_digest?month=2025-11')
       .expect(404);
@@ -92,15 +92,15 @@ describe('VRA Routes', () => {
 
   it('GET /proofs/revenue_digest returns 200 with digest payload', async () => {
     process.env.VRA_ENABLED = 'true';
-    const { executeQuery } = jest.requireMock('../../utils/clickhouse');
+    const { query } = jest.requireMock('../../utils/postgres');
     // Monthly digest select returns one row
-    (executeQuery as jest.Mock).mockImplementationOnce(async () => ([{
+    (query as jest.Mock).mockResolvedValueOnce({ rows: [{
       month: '2025-11',
       digest: 'deadbeef',
       sig: 'cafebabe',
       coverage_pct: '97.5',
       notes: 'ok',
-    }]));
+    }] });
     const res = await request(app)
       .get('/api/v1/proofs/revenue_digest?month=2025-11')
       .expect(200);
@@ -151,10 +151,10 @@ describe('VRA Routes', () => {
 
   it('GET /recon/deltas.csv redacts PII/secrets in reason_code', async () => {
     process.env.VRA_ENABLED = 'true';
-    const { executeQuery } = jest.requireMock('../../utils/clickhouse');
+    const { query } = jest.requireMock('../../utils/postgres');
     // First call: count -> already covered by default mock. Second call: list rows
-    (executeQuery as jest.Mock).mockImplementationOnce(async () => [{ total: '1' }]);
-    ;(executeQuery as jest.Mock).mockImplementationOnce(async () => ([{
+    (query as jest.Mock).mockResolvedValueOnce({ rows: [{ total: '1' }] });
+    ;(query as jest.Mock).mockResolvedValueOnce({ rows: [{
       kind: 'underpay',
       amount: '12.340000',
       currency: 'USD',
@@ -163,7 +163,7 @@ describe('VRA Routes', () => {
       window_end: '2025-11-02 00:00:00',
       evidence_id: 'ev1',
       confidence: '0.91',
-    }]));
+    }] });
 
     const res = await request(app).get('/api/v1/recon/deltas.csv').expect(200);
     const lines = (res.text || '').split('\n');
@@ -177,11 +177,11 @@ describe('VRA Routes', () => {
 
   it('GET /recon/deltas.csv escapes quotes/newlines/commas in reason_code for stable CSV', async () => {
     process.env.VRA_ENABLED = 'true';
-    const { executeQuery } = jest.requireMock('../../utils/clickhouse');
+    const { query } = jest.requireMock('../../utils/postgres');
     // First call: count
-    (executeQuery as jest.Mock).mockImplementationOnce(async () => [{ total: '1' }]);
+    (query as jest.Mock).mockResolvedValueOnce({ rows: [{ total: '1' }] });
     // Second call: list row with messy reason_code
-    (executeQuery as jest.Mock).mockImplementationOnce(async () => ([{
+    (query as jest.Mock).mockResolvedValueOnce({ rows: [{
       kind: 'underpay',
       amount: '1.230000',
       currency: 'USD',
@@ -190,7 +190,7 @@ describe('VRA Routes', () => {
       window_end: '2025-11-02 00:00:00',
       evidence_id: 'ev-xyz',
       confidence: '0.75',
-    }]));
+    }] });
 
     const res = await request(app).get('/api/v1/recon/deltas.csv').expect(200);
     const lines = (res.text || '').split('\n');

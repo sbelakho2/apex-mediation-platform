@@ -9,10 +9,10 @@ jest.mock('../../middleware/auth', () => ({
   }),
 }));
 
-// Mock ClickHouse helpers
-jest.mock('../../utils/clickhouse', () => ({
-  executeQuery: jest.fn(async () => []),
-  insertBatch: jest.fn(async () => {}),
+// Mock Postgres helpers
+jest.mock('../../utils/postgres', () => ({
+  query: jest.fn(async () => ({ rows: [] })),
+  insertMany: jest.fn(async () => {}),
 }));
 
 import vraRoutes from '../../routes/vra.routes';
@@ -29,29 +29,28 @@ describe('VRA routes — read-only GET endpoints perform no writes', () => {
   });
 
   it('GET /recon/overview does not call insertBatch', async () => {
-    const { insertBatch } = jest.requireMock('../../utils/clickhouse');
+    const { insertMany } = jest.requireMock('../../utils/postgres');
     await request(app).get('/api/v1/recon/overview').expect(200);
-    expect(insertBatch).not.toHaveBeenCalled();
+    expect(insertMany).not.toHaveBeenCalled();
   });
 
   it('GET /recon/deltas does not call insertBatch', async () => {
-    const { insertBatch } = jest.requireMock('../../utils/clickhouse');
+    const { insertMany } = jest.requireMock('../../utils/postgres');
     await request(app).get('/api/v1/recon/deltas').expect(200);
-    expect(insertBatch).not.toHaveBeenCalled();
+    expect(insertMany).not.toHaveBeenCalled();
   });
 
   it('GET /recon/deltas.csv does not call insertBatch', async () => {
-    const { insertBatch } = jest.requireMock('../../utils/clickhouse');
+    const { insertMany } = jest.requireMock('../../utils/postgres');
     await request(app).get('/api/v1/recon/deltas.csv').expect(200);
-    expect(insertBatch).not.toHaveBeenCalled();
+    expect(insertMany).not.toHaveBeenCalled();
   });
 
   it('GET /proofs/revenue_digest does not call insertBatch', async () => {
-    const { insertBatch } = jest.requireMock('../../utils/clickhouse');
-    const { executeQuery } = jest.requireMock('../../utils/clickhouse');
+    const { insertMany, query } = jest.requireMock('../../utils/postgres');
     // Return a digest so endpoint returns 200
-    (executeQuery as jest.Mock).mockResolvedValueOnce([{ month: '2025-11', digest: 'deadbeef', sig: 'cafebabe', coverage_pct: '99.0', notes: '' }]);
+    (query as jest.Mock).mockResolvedValueOnce({ rows: [{ month: '2025-11', digest: 'deadbeef', sig: 'cafebabe', coverage_pct: '99.0', notes: '' }] });
     await request(app).get('/api/v1/proofs/revenue_digest?month=2025-11').expect(200);
-    expect(insertBatch).not.toHaveBeenCalled();
+    expect(insertMany).not.toHaveBeenCalled();
   });
 });

@@ -1,12 +1,12 @@
 import { normalizeNetworkCsvReport, ingestNetworkCsvReport } from '../networkNormalizers';
 
-// Mock ClickHouse insert/select used in ingestion
-jest.mock('../../../../utils/clickhouse', () => ({
-  executeQuery: jest.fn(async () => [{ cnt: '0' }]), // hasRawLoad => false
-  insertBatch: jest.fn(async () => {}),
+// Mock Postgres helpers used in ingestion
+jest.mock('../../../../utils/postgres', () => ({
+  query: jest.fn(async () => ({ rows: [{ cnt: '0' }] })),
+  insertMany: jest.fn(async () => {}),
 }));
 
-const { insertBatch } = jest.requireMock('../../../../utils/clickhouse');
+const { insertMany, query } = jest.requireMock('../../../../utils/postgres');
 
 describe('VRA Network CSV Normalizers', () => {
   beforeEach(() => {
@@ -76,6 +76,8 @@ describe('VRA Network CSV Normalizers', () => {
   });
 
   it('AppLovin: maps zone id to ad_unit_id and earnings to paid; ingest inserts raw and norm', async () => {
+    (query as jest.Mock).mockResolvedValueOnce({ rows: [{ cnt: '0' }] });
+    (query as jest.Mock).mockResolvedValueOnce({ rowCount: 1 });
     const csv = [
       'Date,Package Name,Zone ID,Country Code,Ad Format,Currency,Impressions,Clicks,Earnings',
       '2025-11-02,com.demo,ZONE-1,US,interstitial,USD,200,3,8.765432',
@@ -91,9 +93,10 @@ describe('VRA Network CSV Normalizers', () => {
 
     expect(out.skipped).toBe(false);
     expect(out.normalizedRows).toBe(1);
-    const tables = (insertBatch as jest.Mock).mock.calls.map((c: any[]) => c[0]);
-    expect(tables).toContain('recon_statements_raw');
+    const tables = (insertMany as jest.Mock).mock.calls.map((c: any[]) => c[0]);
     expect(tables).toContain('recon_statements_norm');
+    const rawSqls = (query as jest.Mock).mock.calls.map((call: unknown[]) => String(call[0] || ''));
+    expect(rawSqls.some((sql) => sql.includes('recon_statements_raw'))).toBe(true);
   });
 
   it('ironSource: maps instance id and ad unit type, earnings to paid', () => {

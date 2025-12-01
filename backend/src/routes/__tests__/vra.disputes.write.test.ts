@@ -9,17 +9,8 @@ jest.mock('../../middleware/auth', () => ({
   }),
 }));
 
-// Mock ClickHouse helpers
-jest.mock('../../utils/clickhouse', () => ({
-  executeQuery: jest.fn(async (query: string) => {
-    const q = String(query).toLowerCase();
-    if (q.includes('select round(sum(amount)')) {
-      return [{ amount: '12.340000' }];
-    }
-    return [];
-  }),
-  insertBatch: jest.fn(async () => {}),
-}));
+jest.mock('../../utils/postgres');
+jest.mock('../../services/vra/vraService');
 
 import vraRoutes from '../../routes/vra.routes';
 
@@ -36,7 +27,9 @@ describe('VRA Disputes — non-shadow write path', () => {
   });
 
   it('creates a dispute (201) and writes to recon_disputes when shadow is disabled', async () => {
-    const { insertBatch } = jest.requireMock('../../utils/clickhouse');
+    const { query, insertMany } = jest.requireMock('../../utils/postgres');
+    (query as jest.Mock).mockResolvedValueOnce({ rows: [{ amount: '12.340000' }] });
+
     const res = await request(app)
       .post('/api/v1/recon/disputes')
       .send({ delta_ids: ['ev1','ev2'], network: 'unity', contact: 'ops@example.com' })
@@ -52,12 +45,14 @@ describe('VRA Disputes — non-shadow write path', () => {
     expect(String(res.body.data.evidence_uri)).toContain('mem://');
 
     // Insert called with recon_disputes
-    expect(insertBatch).toHaveBeenCalled();
-    const args = (insertBatch as jest.Mock).mock.calls[0];
+    expect(insertMany).toHaveBeenCalled();
+    const args = (insertMany as jest.Mock).mock.calls[0];
     expect(args[0]).toBe('recon_disputes');
-    const row = args[1][0];
-    expect(row).toHaveProperty('dispute_id');
-    expect(row).toHaveProperty('network', 'unity');
-    expect(row).toHaveProperty('status', 'draft');
+    const columns = args[1];
+    const rows = args[2];
+    const payload = Object.fromEntries(columns.map((col: string, idx: number) => [col, rows[0][idx]]));
+    expect(payload).toHaveProperty('dispute_id');
+    expect(payload).toHaveProperty('network', 'unity');
+    expect(payload).toHaveProperty('status', 'draft');
   });
 });

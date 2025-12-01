@@ -9,11 +9,8 @@ jest.mock('../../middleware/auth', () => ({
   }),
 }));
 
-// Mock ClickHouse helpers
-jest.mock('../../utils/clickhouse', () => ({
-  executeQuery: jest.fn(async () => [{ amount: '0' }]),
-  insertBatch: jest.fn(async () => {}),
-}));
+jest.mock('../../utils/postgres');
+jest.mock('../../services/vra/vraService');
 
 import vraRoutes from '../../routes/vra.routes';
 

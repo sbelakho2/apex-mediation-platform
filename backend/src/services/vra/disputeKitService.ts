@@ -1,4 +1,4 @@
-import { executeQuery } from '../../utils/clickhouse';
+import { query } from '../../utils/postgres';
 import logger from '../../utils/logger';
 import { vraDisputeKitsBuiltTotal, vraDisputeKitFailuresTotal } from '../../utils/prometheus';
 import * as fs from 'node:fs';
@@ -176,13 +176,21 @@ export async function buildDisputeKit(deltaIds: string[], opts?: DisputeKitOptio
     }
 
     // Fetch delta rows for given evidence IDs
-    const rows = await executeQuery<DeltaRow>(
-      `SELECT kind, toString(amount) AS amount, currency, reason_code, toString(window_start) AS window_start, toString(window_end) AS window_end, evidence_id, toString(confidence) AS confidence
-       FROM recon_deltas
-       WHERE evidence_id IN ({ids:Array(String)})
-       ORDER BY window_start ASC`,
-      { ids: deltaIds }
+    const rowsResult = await query<DeltaRow>(
+      `SELECT kind,
+              amount::text AS amount,
+              currency,
+              reason_code,
+              window_start::text,
+              window_end::text,
+              evidence_id,
+              confidence::text
+         FROM recon_deltas
+        WHERE evidence_id = ANY($1::text[])
+        ORDER BY window_start ASC`,
+      [deltaIds]
     );
+    const rows = rowsResult.rows;
 
     // Prepare CSV evidence
     const evidenceCsv = redactCsv(toCsv(rows));

@@ -4,7 +4,6 @@ describe('vraBuildExpected.js — dry-run and exit semantics', () => {
   const scriptPath = path.resolve(__dirname, '..', 'vraBuildExpected.js');
 
   const originalArgv = process.argv.slice();
-  const originalExit = process.exit;
 
   beforeEach(() => {
     jest.resetModules();
@@ -13,8 +12,6 @@ describe('vraBuildExpected.js — dry-run and exit semantics', () => {
 
   afterAll(() => {
     process.argv = originalArgv;
-    // @ts-ignore
-    process.exit = originalExit;
   });
 
   function mockDeps({ seen = 5, written = 5, skipped = 0 } = {}) {
@@ -50,19 +47,7 @@ describe('vraBuildExpected.js — dry-run and exit semantics', () => {
       '--dry-run', 'true',
     ];
 
-    const exitSpy = jest
-      .spyOn(process, 'exit')
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .mockImplementation(((code?: number) => { throw new Error(`EXIT ${code}`); }) as any);
-
-    try {
-      await import(scriptPath);
-      throw new Error('expected process.exit');
-    } catch (e: any) {
-      expect(String(e.message)).toBe('EXIT 0');
-    } finally {
-      exitSpy.mockRestore();
-    }
+    await expect(import(scriptPath)).rejects.toThrow('process.exit called with "0"');
   });
 
   it('exits with WARNINGS (10) when no rows written/seen', async () => {
@@ -76,18 +61,6 @@ describe('vraBuildExpected.js — dry-run and exit semantics', () => {
       '--dry-run', 'true',
     ];
 
-    const exitSpy = jest
-      .spyOn(process, 'exit')
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .mockImplementation(((code?: number) => { throw new Error(`EXIT ${code}`); }) as any);
-
-    try {
-      await import(scriptPath);
-      throw new Error('expected process.exit');
-    } catch (e: any) {
-      expect(String(e.message)).toBe('EXIT 10');
-    } finally {
-      exitSpy.mockRestore();
-    }
+    await expect(import(scriptPath)).rejects.toThrow('process.exit called with "10"');
   });
 });

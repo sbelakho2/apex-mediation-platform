@@ -1,23 +1,23 @@
 import { buildDisputeKit, MemoryDisputeStorage } from '../disputeKitService';
 
-// Mock ClickHouse helper used by Dispute Kit builder
-jest.mock('../../../utils/clickhouse', () => ({
-  executeQuery: jest.fn(async (_q: string, _p?: Record<string, unknown>) => [
-    {
-      kind: 'underpay',
-      amount: '12.340000',
-      currency: 'USD',
-      // Intentionally include PII-like content to verify redaction
-      reason_code: 'contact: alice@example.com, token: Bearer abc.def.ghi, digits: 4242424242424242',
-      window_start: '2025-11-01 00:00:00',
-      window_end: '2025-11-02 00:00:00',
-      evidence_id: 'ev1',
-      confidence: '0.91',
-    },
-  ]),
+// Mock Postgres helper used by Dispute Kit builder
+jest.mock('../../../utils/postgres', () => ({
+  query: jest.fn(async () => ({
+    rows: [
+      {
+        kind: 'underpay',
+        amount: '12.340000',
+        currency: 'USD',
+        // Intentionally include PII-like content to verify redaction
+        reason_code: 'contact: alice@example.com, token: Bearer abc.def.ghi, digits: 4242424242424242',
+        window_start: '2025-11-01 00:00:00',
+        window_end: '2025-11-02 00:00:00',
+        evidence_id: 'ev1',
+        confidence: '0.91',
+      },
+    ],
+  })),
 }));
-
-const { executeQuery } = jest.requireMock('../../../utils/clickhouse');
 
 describe('VRA Dispute Kit Builder', () => {
   beforeEach(() => {
@@ -49,7 +49,7 @@ describe('VRA Dispute Kit Builder', () => {
     const json = JSON.parse(buf.toString('utf8'));
     expect(json).toHaveProperty('metadata');
     expect(json).toHaveProperty('files');
-    expect(json.files).toHaveProperty('evidence.csv');
+    expect(Object.prototype.hasOwnProperty.call(json.files, 'evidence.csv')).toBe(true);
     // Ensure CSV content is redacted
     expect(String(json.files['evidence.csv'])).toContain('[REDACTED_EMAIL]');
     expect(String(json.files['evidence.csv'])).toContain('Bearer [REDACTED]');

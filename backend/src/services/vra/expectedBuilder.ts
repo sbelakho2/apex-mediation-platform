@@ -1,6 +1,5 @@
 import { Pool } from 'pg';
 import logger from '../../utils/logger';
-import { executeQuery, insertBatch } from '../../utils/clickhouse';
 import {
   vraExpectedBuildDurationSeconds,
   vraExpectedSeenTotal,
@@ -25,15 +24,6 @@ type PaidEventRow = {
   revenue_currency?: string; // e.g., USD
   revenue_original?: string; // Decimal as string
 };
-
-async function safeCH<T = any>(query: string, params?: Record<string, unknown>): Promise<T[]> {
-  try {
-    return await executeQuery<T>(query, params);
-  } catch (err) {
-    logger.warn('VRA ExpectedBuilder: ClickHouse query failed, degrading to empty', { error: (err as Error)?.message });
-    return [] as T[];
-  }
-}
 
 export interface BuildExpectedParams {
   from: string; // ISO
@@ -70,7 +60,7 @@ export async function buildReconExpected(
 
   let receipts: ReceiptRow[] = [];
   try {
-    const r = await pgPool.query(sql, [from, to, limit]);
+    const r = await pgPool.query(sql.trim(), [from, to, limit]);
     receipts = (r.rows || []) as ReceiptRow[];
   } catch (err) {
     logger.warn('VRA ExpectedBuilder: failed to read receipts from Postgres (treat as none)', { error: (err as Error)?.message });
@@ -100,11 +90,16 @@ export async function buildReconExpected(
   }
 
   // 3) Determine which ones already exist in recon_expected to keep idempotency
-  const existing = await safeCH<{ request_id: string }>(
-    `SELECT request_id FROM recon_expected WHERE request_id IN ({rids:Array(String)})`,
-    { rids: reqIds }
-  );
-  const existingSet = new Set(existing.map((x) => x.request_id));
+  let existingSet = new Set<string>();
+  try {
+    const existing = await pgPool.query<{ request_id: string }>(
+      `SELECT request_id FROM recon_expected WHERE request_id = ANY($1::text[])`,
+      [reqIds]
+    );
+    existingSet = new Set(existing.rows.map((x) => x.request_id));
+  } catch (err) {
+    logger.warn('VRA ExpectedBuilder: failed to read existing recon_expected rows', { error: (err as Error)?.message });
+  }
 
   const candidates = receipts.filter((r) => !existingSet.has(r.request_id));
   if (candidates.length === 0) {
@@ -119,22 +114,25 @@ export async function buildReconExpected(
   }
 
   // 4) Fetch paid events from ClickHouse within the same window for the request_ids
-  const paidEvents = await safeCH<PaidEventRow>(
-    `
-      SELECT 
-        request_id,
-        toString(timestamp) AS ts,
-        toString(revenue_usd) AS revenue_usd,
-        toString(revenue_original) AS revenue_original,
-        revenue_currency AS revenue_currency
-      FROM revenue_events
-      WHERE timestamp >= parseDateTimeBestEffortOrZero({from:String})
-        AND timestamp <  parseDateTimeBestEffortOrZero({to:String})
-        AND request_id IN ({rids:Array(String)})
-        AND revenue_usd > 0
-    `,
-    { from, to, rids: candidates.map((c) => c.request_id) }
-  );
+  let paidEvents: PaidEventRow[] = [];
+  try {
+    const res = await pgPool.query<PaidEventRow>(
+      `SELECT request_id,
+              to_char(timestamp, 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS ts,
+              revenue_usd::text AS revenue_usd,
+              revenue_original::text AS revenue_original,
+              revenue_currency
+         FROM revenue_events
+        WHERE timestamp >= $1::timestamptz
+          AND timestamp <  $2::timestamptz
+          AND request_id = ANY($3::text[])
+          AND revenue_usd > 0`,
+      [from, to, candidates.map((c) => c.request_id)]
+    );
+    paidEvents = res.rows;
+  } catch (err) {
+    logger.warn('VRA ExpectedBuilder: failed to read paid events from Postgres (treat as none)', { error: (err as Error)?.message });
+  }
   const paidByReq = new Map<string, PaidEventRow>();
   for (const p of paidEvents) {
     if (!paidByReq.has(p.request_id)) paidByReq.set(p.request_id, p);
@@ -187,8 +185,37 @@ export async function buildReconExpected(
   let written = 0;
   if (!dryRun) {
     try {
-      await insertBatch('recon_expected', rows);
-      written = rows.length;
+      const columns = [
+        'event_date',
+        'request_id',
+        'placement_id',
+        'expected_value',
+        'currency',
+        'floors',
+        'receipt_hash',
+        'viewability',
+        'ts',
+      ];
+      const values: string[] = [];
+      const params: unknown[] = [];
+      rows.forEach((row, idx) => {
+        const base = idx * columns.length;
+        values.push(`($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}, $${base + 6}, $${base + 7}, $${base + 8}, $${base + 9})`);
+        params.push(
+          row.event_date,
+          row.request_id,
+          row.placement_id,
+          row.expected_value,
+          row.currency,
+          row.floors,
+          row.receipt_hash,
+          row.viewability,
+          row.ts
+        );
+      });
+      const sql = `INSERT INTO recon_expected (${columns.join(', ')}) VALUES ${values.join(', ')} ON CONFLICT (request_id) DO NOTHING`;
+      const res = await pgPool.query(sql, params);
+      written = res.rowCount ?? rows.length;
     } catch (err) {
       logger.warn('VRA ExpectedBuilder: failed to insert recon_expected rows', {
         error: (err as Error)?.message,

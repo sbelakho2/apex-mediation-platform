@@ -9,49 +9,7 @@ jest.mock('../../middleware/auth', () => ({
   }),
 }));
 
-// Mock CH client usage in executeQuery/insertBatch
-jest.mock('../../utils/clickhouse', () => ({
-  executeQuery: jest.fn(async (query: string) => {
-    const q = String(query).toLowerCase();
-    if (q.includes('select count()')) {
-      return [{ total: '3' }];
-    }
-    // Return 3 rows with mixed PII-like patterns in reason_code
-    return [
-      {
-        kind: 'underpay',
-        amount: '1.000000',
-        currency: 'USD',
-        reason_code: 'email: test.user@example.com',
-        window_start: '2025-11-01 00:00:00',
-        window_end: '2025-11-02 00:00:00',
-        evidence_id: 'ev-a',
-        confidence: '0.90',
-      },
-      {
-        kind: 'fx_mismatch',
-        amount: '0.000000',
-        currency: 'USD',
-        reason_code: 'token Bearer abc.def.ghi',
-        window_start: '2025-11-01 00:00:00',
-        window_end: '2025-11-02 00:00:00',
-        evidence_id: 'ev-b',
-        confidence: '0.60',
-      },
-      {
-        kind: 'timing_lag',
-        amount: '0.000000',
-        currency: 'USD',
-        reason_code: 'digits 4242424242424242 inside',
-        window_start: '2025-11-01 00:00:00',
-        window_end: '2025-11-02 00:00:00',
-        evidence_id: 'ev-c',
-        confidence: '0.50',
-      },
-    ];
-  }),
-  insertBatch: jest.fn(async () => {}),
-}));
+jest.mock('../../services/vra/vraService');
 
 import vraRoutes from '../../routes/vra.routes';
 
@@ -66,6 +24,45 @@ describe('VRA Routes — CSV redaction E2E', () => {
   });
 
   it('CSV response redacts emails, bearer tokens, and long numerics', async () => {
+    const { vraService } = jest.requireMock('../../services/vra/vraService');
+    (vraService.getDeltas as jest.Mock).mockResolvedValueOnce({
+      items: [
+        {
+          kind: 'underpay',
+          amount: 1,
+          currency: 'USD',
+          reasonCode: 'email: test.user@example.com',
+          windowStart: '2025-11-01 00:00:00',
+          windowEnd: '2025-11-02 00:00:00',
+          evidenceId: 'ev-a',
+          confidence: 0.9,
+        },
+        {
+          kind: 'fx_mismatch',
+          amount: 0,
+          currency: 'USD',
+          reasonCode: 'token Bearer abc.def.ghi',
+          windowStart: '2025-11-01 00:00:00',
+          windowEnd: '2025-11-02 00:00:00',
+          evidenceId: 'ev-b',
+          confidence: 0.6,
+        },
+        {
+          kind: 'timing_lag',
+          amount: 0,
+          currency: 'USD',
+          reasonCode: 'digits 4242424242424242 inside',
+          windowStart: '2025-11-01 00:00:00',
+          windowEnd: '2025-11-02 00:00:00',
+          evidenceId: 'ev-c',
+          confidence: 0.5,
+        },
+      ],
+      page: 1,
+      pageSize: 500,
+      total: 3,
+    });
+
     const res = await request(app)
       .get('/api/v1/recon/deltas.csv?from=2025-11-01T00:00:00Z&to=2025-11-02T00:00:00Z&page=1&page_size=500')
       .expect(200);

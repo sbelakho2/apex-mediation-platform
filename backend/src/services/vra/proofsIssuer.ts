@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import logger from '../../utils/logger';
-import { executeQuery, insertBatch } from '../../utils/clickhouse';
+import { query, insertMany } from '../../utils/postgres';
 import { vraProofsCoveragePct, vraProofsIssuanceDurationSeconds, vraProofsVerifyFailuresTotal } from '../../utils/prometheus';
 
 type CHExpectedRow = { receipt_hash?: string; request_id: string };
@@ -68,10 +68,11 @@ export async function issueDailyRoot(day: string, opts?: { dryRun?: boolean }): 
   const dryRun = opts?.dryRun === true;
   try {
     // Fetch all recon_expected rows for the given day
-    const rows = await executeQuery<CHExpectedRow>(
-      `SELECT receipt_hash, request_id FROM recon_expected WHERE toDate(ts) = toDate(parseDateTimeBestEffortOrZero({day:String}))`,
-      { day }
+    const rowsResult = await query<CHExpectedRow>(
+      `SELECT receipt_hash, request_id FROM recon_expected WHERE ts::date = $1::date`,
+      [day]
     );
+    const rows = rowsResult.rows;
     const total = rows.length;
     // Convert to hashes — prefer receipt_hash, fallback to sha256(request_id)
     const hashes = rows.map((r) => (r.receipt_hash && /^[0-9a-fA-F]+$/.test(r.receipt_hash) ? r.receipt_hash : sha256Hex(r.request_id)));
@@ -84,7 +85,12 @@ export async function issueDailyRoot(day: string, opts?: { dryRun?: boolean }): 
     try { vraProofsCoveragePct.set({ day }, Number(coveragePct.toFixed(2))); } catch {}
 
     if (!dryRun) {
-      await insertBatch('proofs_daily_roots', [ { day, merkle_root: root, sig } ]);
+      await insertMany(
+        'proofs_daily_roots',
+        ['day', 'merkle_root', 'sig'],
+        [[day, root, sig]],
+        { onConflictColumns: ['day'], ignoreConflicts: true }
+      );
     }
     end();
     return { day, root, sig, coveragePct, written: !dryRun };
@@ -100,17 +106,26 @@ export async function issueMonthlyDigest(month: string, opts?: { dryRun?: boolea
   const end = vraProofsIssuanceDurationSeconds.startTimer();
   const dryRun = opts?.dryRun === true;
   try {
-    const roots = await executeQuery<CHDailyRootRow>(
-      `SELECT toString(day) AS day, merkle_root FROM proofs_daily_roots WHERE formatDateTime(day, '%Y-%m') = {month:String} ORDER BY day ASC`,
-      { month }
+    const rootsResult = await query<CHDailyRootRow>(
+      `SELECT to_char(day, 'YYYY-MM-DD') AS day, merkle_root
+         FROM proofs_daily_roots
+        WHERE to_char(day, 'YYYY-MM') = $1
+        ORDER BY day ASC`,
+      [month]
     );
+    const roots = rootsResult.rows;
     const rootList = roots.map((r) => r.merkle_root);
     const digest = computeMerkleRoot(rootList);
     const coveragePct = roots.length > 0 ? 100 : 0; // simplistic until we track expected days
     const messageHex = sha256Hex(Buffer.from(`monthly_digest:${month}:${digest}`));
     const sig = tryEd25519SignHex(messageHex) || '';
     if (!dryRun) {
-      await insertBatch('proofs_monthly_digest', [ { month, digest, sig, coverage_pct: Number(coveragePct.toFixed(2)), notes: '' } ]);
+      await insertMany(
+        'proofs_monthly_digest',
+        ['month', 'digest', 'sig', 'coverage_pct', 'notes'],
+        [[month, digest, sig, Number(coveragePct.toFixed(2)), '']],
+        { onConflictColumns: ['month'], ignoreConflicts: true }
+      );
     }
     end();
     return { month, digest, sig, coveragePct, written: !dryRun };
@@ -124,17 +139,22 @@ export async function issueMonthlyDigest(month: string, opts?: { dryRun?: boolea
 export async function verifyMonthlyDigest(month: string): Promise<{ month: string; ok: boolean; reason?: string }>{
   try {
     // Fetch stored digest
-    const rows = await executeQuery<{ month: string; digest: string; sig: string }>(
-      `SELECT month, digest, sig FROM proofs_monthly_digest WHERE month = {month:String} LIMIT 1`,
-      { month }
+    const rowsResult = await query<{ month: string; digest: string; sig: string }>(
+      `SELECT month, digest, sig FROM proofs_monthly_digest WHERE month = $1 LIMIT 1`,
+      [month]
     );
+    const rows = rowsResult.rows;
     if (!rows.length) return { month, ok: false, reason: 'not_found' };
     const { digest, sig } = rows[0];
     // Recompute expected digest from daily roots
-    const days = await executeQuery<CHDailyRootRow>(
-      `SELECT toString(day) AS day, merkle_root FROM proofs_daily_roots WHERE formatDateTime(day, '%Y-%m') = {month:String} ORDER BY day ASC`,
-      { month }
+    const daysResult = await query<CHDailyRootRow>(
+      `SELECT to_char(day, 'YYYY-MM-DD') AS day, merkle_root
+         FROM proofs_daily_roots
+        WHERE to_char(day, 'YYYY-MM') = $1
+        ORDER BY day ASC`,
+      [month]
     );
+    const days = daysResult.rows;
     const recomputed = computeMerkleRoot(days.map((d) => d.merkle_root));
     if (recomputed !== digest) {
       vraProofsVerifyFailuresTotal.inc();

@@ -4,7 +4,6 @@ describe('vraReconcile.js — dry-run semantics and safety caps', () => {
   const scriptPath = path.resolve(__dirname, '..', 'vraReconcile.js');
 
   const originalArgv = process.argv.slice();
-  const originalExit = process.exit;
 
   beforeEach(() => {
     jest.resetModules();
@@ -13,8 +12,6 @@ describe('vraReconcile.js — dry-run semantics and safety caps', () => {
 
   afterAll(() => {
     process.argv = originalArgv;
-    // @ts-ignore
-    process.exit = originalExit;
   });
 
   function mockDeps({ deltas = 2, inserted = 0 } = {}) {
@@ -44,19 +41,7 @@ describe('vraReconcile.js — dry-run semantics and safety caps', () => {
       '--dry-run', 'true',
     ];
 
-    const exitSpy = jest
-      .spyOn(process, 'exit')
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .mockImplementation(((code?: number) => { throw new Error(`EXIT ${code}`); }) as any);
-
-    try {
-      await import(scriptPath);
-      throw new Error('expected process.exit');
-    } catch (e: any) {
-      expect(String(e.message)).toBe('EXIT 10');
-    } finally {
-      exitSpy.mockRestore();
-    }
+    await expect(import(scriptPath)).rejects.toThrow('process.exit called with "10"');
   });
 
   it('enforces 3-day window cap without --force --yes (EXIT 20)', async () => {
@@ -70,19 +55,7 @@ describe('vraReconcile.js — dry-run semantics and safety caps', () => {
       '--dry-run', 'true',
     ];
 
-    const exitSpy = jest
-      .spyOn(process, 'exit')
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .mockImplementation(((code?: number) => { throw new Error(`EXIT ${code}`); }) as any);
-
-    try {
-      await import(scriptPath);
-      throw new Error('expected process.exit');
-    } catch (e: any) {
-      expect(String(e.message)).toBe('EXIT 20');
-    } finally {
-      exitSpy.mockRestore();
-    }
+    await expect(import(scriptPath)).rejects.toThrow('process.exit called with "20"');
   });
 
   it('allows long window with --force --yes (EXIT 10 acceptable on dry-run)', async () => {
@@ -98,20 +71,7 @@ describe('vraReconcile.js — dry-run semantics and safety caps', () => {
       '--yes', 'true',
     ];
 
-    const exitSpy = jest
-      .spyOn(process, 'exit')
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .mockImplementation(((code?: number) => { throw new Error(`EXIT ${code}`); }) as any);
-
-    try {
-      await import(scriptPath);
-      throw new Error('expected process.exit');
-    } catch (e: any) {
-      // dry-run yields inserted=0 → WARNINGS(10)
-      expect(String(e.message)).toBe('EXIT 10');
-    } finally {
-      exitSpy.mockRestore();
-    }
+    await expect(import(scriptPath)).rejects.toThrow('process.exit called with "10"');
   });
 
   it('allows exactly 3-day window without force (boundary OK)', async () => {
@@ -126,19 +86,6 @@ describe('vraReconcile.js — dry-run semantics and safety caps', () => {
       '--dry-run', 'true',
     ];
 
-    const exitSpy = jest
-      .spyOn(process, 'exit')
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .mockImplementation(((code?: number) => { throw new Error(`EXIT ${code}`); }) as any);
-
-    try {
-      await import(scriptPath);
-      throw new Error('expected process.exit');
-    } catch (e: any) {
-      // inserted=0 in dry-run → WARNINGS(10), but boundary window should not error out
-      expect(String(e.message)).toBe('EXIT 10');
-    } finally {
-      exitSpy.mockRestore();
-    }
+    await expect(import(scriptPath)).rejects.toThrow('process.exit called with "10"');
   });
 });

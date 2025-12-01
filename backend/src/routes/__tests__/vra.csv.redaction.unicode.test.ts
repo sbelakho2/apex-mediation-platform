@@ -9,17 +9,7 @@ jest.mock('../../middleware/auth', () => ({
   }),
 }));
 
-// Mock CH client usage in executeQuery/insertBatch
-jest.mock('../../utils/clickhouse', () => ({
-  executeQuery: jest.fn(async (query: string) => {
-    const q = String(query).toLowerCase();
-    if (q.includes('select count()')) {
-      return [{ total: '1' }];
-    }
-    return [];
-  }),
-  insertBatch: jest.fn(async () => {}),
-}));
+jest.mock('../../services/vra/vraService');
 
 import vraRoutes from '../../routes/vra.routes';
 
@@ -36,23 +26,26 @@ describe('VRA CSV redaction/escaping — Unicode and emoji stability', () => {
 
   it('preserves Unicode/emoji while removing commas/newlines and escaping quotes in reason_code', async () => {
     process.env.VRA_ENABLED = 'true';
-    const { executeQuery } = jest.requireMock('../../utils/clickhouse');
+    const { vraService } = jest.requireMock('../../services/vra/vraService');
 
-    // First call: count
-    (executeQuery as jest.Mock).mockImplementationOnce(async () => [{ total: '1' }]);
-
-    // Second call: list with unicode + emoji + quotes + comma + newline + tab
     const unicodeReason = 'Δelta reason — revenue “mismatch”, line1\nline2\t🙂 "quoted"';
-    (executeQuery as jest.Mock).mockImplementationOnce(async () => ([{
-      kind: 'underpay',
-      amount: '3.141593',
-      currency: 'USD',
-      reason_code: unicodeReason,
-      window_start: '2025-11-01 00:00:00',
-      window_end: '2025-11-02 00:00:00',
-      evidence_id: 'ev-unicode',
-      confidence: '0.88',
-    }]));
+    (vraService.getDeltas as jest.Mock).mockResolvedValueOnce({
+      items: [
+        {
+          kind: 'underpay',
+          amount: 3.141593,
+          currency: 'USD',
+          reasonCode: unicodeReason,
+          windowStart: '2025-11-01 00:00:00',
+          windowEnd: '2025-11-02 00:00:00',
+          evidenceId: 'ev-unicode',
+          confidence: 0.88,
+        },
+      ],
+      page: 1,
+      pageSize: 100,
+      total: 1,
+    });
 
     const res = await request(app).get('/api/v1/recon/deltas.csv').expect(200);
     const lines = (res.text || '').split('\n');
