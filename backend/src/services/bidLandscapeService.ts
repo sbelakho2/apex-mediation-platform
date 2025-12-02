@@ -6,13 +6,83 @@
  * into adapter performance, bid pricing, and auction mechanics.
  */
 
-import { getClickHouseClient } from '../utils/clickhouse';
-import type { 
-  OpenRTBBidRequest, 
+import { insertMany, query } from '../utils/postgres';
+import type {
+  OpenRTBBidRequest,
   OpenRTBBidResponse,
-  Bid 
+  Bid,
 } from '../types/openrtb.types';
 import logger from '../utils/logger';
+
+const LANDSCAPE_STAGE_TABLE = 'analytics_bid_landscape_stage';
+const LANDSCAPE_TARGET_TABLE = 'analytics_bid_landscape';
+const LANDSCAPE_COLUMNS = [
+  'observed_at',
+  'auction_id',
+  'request_id',
+  'publisher_id',
+  'app_id',
+  'placement_id',
+  'adapter_id',
+  'adapter_name',
+  'imp_id',
+  'bid_id',
+  'bid_price',
+  'bid_currency',
+  'creative_id',
+  'advertiser_domain',
+  'won',
+  'clearing_price',
+  'second_price',
+  'auction_duration_ms',
+  'total_bids',
+] as const;
+
+type BidLandscapeRow = {
+  observed_at: Date;
+  auction_id: string;
+  request_id: string;
+  publisher_id: string;
+  app_id: string;
+  placement_id: string;
+  adapter_id: string;
+  adapter_name: string;
+  imp_id: string;
+  bid_id: string;
+  bid_price: number;
+  bid_currency: string;
+  creative_id: string;
+  advertiser_domain: string;
+  won: boolean;
+  clearing_price: number;
+  second_price: number;
+  auction_duration_ms: number;
+  total_bids: number;
+};
+
+const quoteIdentifier = (identifier: string): string => `"${identifier.replace(/"/g, '""')}"`;
+
+const toRow = (entry: BidLandscapeRow): unknown[] => [
+  entry.observed_at,
+  entry.auction_id,
+  entry.request_id,
+  entry.publisher_id,
+  entry.app_id,
+  entry.placement_id,
+  entry.adapter_id,
+  entry.adapter_name,
+  entry.imp_id,
+  entry.bid_id,
+  entry.bid_price,
+  entry.bid_currency,
+  entry.creative_id,
+  entry.advertiser_domain,
+  entry.won,
+  entry.clearing_price,
+  entry.second_price,
+  entry.auction_duration_ms,
+  entry.total_bids,
+];
 
 interface AuctionResult {
   success: boolean;
@@ -33,42 +103,7 @@ interface AuctionResult {
   }>;
 }
 
-interface BidLandscapeEntry {
-  auction_id: string;
-  request_id: string;
-  timestamp: string;
-  publisher_id: string;
-  app_id: string;
-  placement_id: string;
-  adapter_id: string;
-  adapter_name: string;
-  imp_id: string;
-  bid_price: number;
-  bid_currency: string;
-  creative_id: string;
-  advertiser_domain: string;
-  won: 0 | 1;
-  clearing_price: number;
-  second_price: number;
-  auction_duration_ms: number;
-  total_bids: number;
-}
-
 export class BidLandscapeService {
-  private warnedNoClient = false;
-
-  private getClient() {
-    try {
-      return getClickHouseClient();
-    } catch (error) {
-      if (!this.warnedNoClient) {
-        logger.warn('BidLandscapeService: ClickHouse client not available; bid landscape logging disabled', { error });
-        this.warnedNoClient = true;
-      }
-      return null;
-    }
-  }
-
   /**
    * Log complete auction results including all bids received
    * Provides transparency into bid pricing and adapter performance
@@ -77,16 +112,14 @@ export class BidLandscapeService {
     request: OpenRTBBidRequest,
     result: AuctionResult
   ): Promise<void> {
-    const ch = this.getClient();
-    if (!ch) {
-      return;
-    }
-
     try {
+      const observedAt = new Date();
       // Extract IDs from request
       const publisherId = request.site?.publisher?.id || request.app?.publisher?.id || 'unknown';
       const appId = request.app?.id || request.site?.id || 'unknown';
       const placementId = request.imp[0]?.tagid || 'unknown';
+      const requestId = request.id || 'unknown';
+      const currency = (request.imp[0]?.bidfloorcur || 'USD').toUpperCase().slice(0, 3);
 
       // Calculate clearing price (what winner pays in second-price auction)
       let clearingPrice = 0;
@@ -110,29 +143,30 @@ export class BidLandscapeService {
         }
       }
 
-      // Create entries for all bids received
-      const entries: BidLandscapeEntry[] = result.allBids.map((bidData) => {
-        const isWinner = result.success && 
-                        result.response?.seatbid?.[0]?.bid?.[0]?.id === bidData.bid.id;
-
-        // Get currency from impression bid floor currency or default to USD
-        const currency = request.imp[0]?.bidfloorcur || 'USD';
+      const entries: BidLandscapeRow[] = result.allBids.map((bidData) => {
+        const bidPrice = Number(bidData.bid.price) || 0;
+        const isWinner =
+          result.success &&
+          result.response?.seatbid?.[0]?.bid?.[0]?.id === bidData.bid.id;
+        const impId = bidData.bid.impid || request.imp[0]?.id || 'unknown';
+        const bidId = this.buildBidId(bidData.bid, bidData.adapter.id, impId, bidPrice);
 
         return {
-          auction_id: request.id,
-          request_id: request.id,
-          timestamp: new Date().toISOString(),
+          observed_at: observedAt,
+          auction_id: requestId,
+          request_id: requestId,
           publisher_id: publisherId,
           app_id: appId,
           placement_id: placementId,
           adapter_id: bidData.adapter.id,
           adapter_name: bidData.adapter.name,
-          imp_id: bidData.bid.impid,
-          bid_price: bidData.bid.price,
+          imp_id: impId,
+          bid_id: bidId,
+          bid_price: bidPrice,
           bid_currency: currency,
           creative_id: bidData.bid.crid || bidData.bid.cid || '',
           advertiser_domain: bidData.bid.adomain?.[0] || '',
-          won: isWinner ? 1 : 0,
+          won: isWinner,
           clearing_price: isWinner ? clearingPrice : 0,
           second_price: isWinner ? secondPrice : 0,
           auction_duration_ms: result.metrics.auctionDuration,
@@ -141,24 +175,22 @@ export class BidLandscapeService {
       });
 
       if (entries.length === 0) {
-        // Log no-bid auctions as well
-        const currency = request.imp[0]?.bidfloorcur || 'USD';
-        
         entries.push({
-          auction_id: request.id,
-          request_id: request.id,
-          timestamp: new Date().toISOString(),
+          observed_at: observedAt,
+          auction_id: requestId,
+          request_id: requestId,
           publisher_id: publisherId,
           app_id: appId,
           placement_id: placementId,
           adapter_id: 'none',
           adapter_name: 'no_bid',
           imp_id: request.imp[0]?.id || 'unknown',
+          bid_id: `${requestId}-no-bid`,
           bid_price: 0,
           bid_currency: currency,
           creative_id: '',
           advertiser_domain: '',
-          won: 0,
+          won: false,
           clearing_price: 0,
           second_price: 0,
           auction_duration_ms: result.metrics.auctionDuration,
@@ -166,17 +198,12 @@ export class BidLandscapeService {
         });
       }
 
-      // Batch insert all bids
-      await ch.insert({
-        table: 'bid_landscape',
-        values: entries,
-        format: 'JSONEachRow',
-      });
+      await this.persistEntries(entries);
 
       logger.debug('Bid landscape logged', {
         auction_id: request.id,
         total_bids: entries.length,
-        winner: entries.find(e => e.won === 1)?.adapter_name || 'none',
+        winner: entries.find((e) => e.won)?.adapter_name || 'none',
         clearing_price: clearingPrice,
       });
 
@@ -198,43 +225,31 @@ export class BidLandscapeService {
     startDate: Date,
     endDate: Date
   ): Promise<Array<Record<string, unknown>>> {
-    const ch = this.getClient();
-    if (!ch) {
-      throw new Error('BidLandscapeService not available');
-    }
-
-    const query = `
+    const sql = `
       SELECT
         adapter_name,
-        count() as total_bids,
-        sum(won) as wins,
-        round(sum(won) * 100.0 / count(), 2) as win_rate_pct,
-        round(avg(bid_price), 4) as avg_bid_price,
-        round(avg(IF(won = 1, clearing_price, 0)), 4) as avg_clearing_price,
-        round(quantile(0.5)(bid_price), 4) as median_bid_price,
-        round(quantile(0.9)(bid_price), 4) as p90_bid_price,
-        round(quantile(0.99)(bid_price), 4) as p99_bid_price
-      FROM bid_landscape
-      WHERE publisher_id = {publisherId:String}
-        AND timestamp >= {startDate:DateTime}
-        AND timestamp < {endDate:DateTime}
-        AND adapter_id != 'none'
+        COUNT(*) AS total_bids,
+        SUM(CASE WHEN won THEN 1 ELSE 0 END) AS wins,
+        ROUND(SUM(CASE WHEN won THEN 1 ELSE 0 END)::numeric * 100 / NULLIF(COUNT(*), 0), 2) AS win_rate_pct,
+        ROUND(AVG(bid_price)::numeric, 4) AS avg_bid_price,
+        ROUND(AVG(CASE WHEN won THEN clearing_price END)::numeric, 4) AS avg_clearing_price,
+        ROUND(percentile_cont(0.5) WITHIN GROUP (ORDER BY bid_price)::numeric, 4) AS median_bid_price,
+        ROUND(percentile_cont(0.9) WITHIN GROUP (ORDER BY bid_price)::numeric, 4) AS p90_bid_price,
+        ROUND(percentile_cont(0.99) WITHIN GROUP (ORDER BY bid_price)::numeric, 4) AS p99_bid_price
+      FROM ${quoteIdentifier(LANDSCAPE_TARGET_TABLE)}
+      WHERE publisher_id = $1
+        AND observed_at >= $2
+        AND observed_at < $3
+        AND adapter_id <> 'none'
       GROUP BY adapter_name
       ORDER BY total_bids DESC
     `;
 
-    const resultSet = await ch.query({
-      query,
-      query_params: {
-        publisherId,
-        startDate: startDate.toISOString().slice(0, 19).replace('T', ' '),
-        endDate: endDate.toISOString().slice(0, 19).replace('T', ' '),
-      },
-      format: 'JSONEachRow',
+    const result = await query(sql, [publisherId, startDate, endDate], {
+      replica: true,
+      label: 'BID_LANDSCAPE_PUBLISHER',
     });
-
-    const json = await resultSet.json();
-    return json as Array<Record<string, unknown>>;
+    return result.rows as Array<Record<string, unknown>>;
   }
 
   /**
@@ -246,55 +261,73 @@ export class BidLandscapeService {
     endDate: Date,
     intervalMinutes: number = 60
   ): Promise<Array<Record<string, unknown>>> {
-    const ch = this.getClient();
-    if (!ch) {
-      throw new Error('BidLandscapeService not available');
-    }
-
-    const query = `
+    const sql = `
       SELECT
-        toStartOfInterval(timestamp, INTERVAL {interval:UInt32} MINUTE) as time_bucket,
-        count(DISTINCT auction_id) as total_auctions,
-        sum(IF(total_bids > 0, 1, 0)) as auctions_with_bids,
-        sum(IF(won = 1, 1, 0)) as won_auctions,
-        round(avg(total_bids), 2) as avg_bids_per_auction,
-        round(avg(IF(won = 1, clearing_price, 0)), 4) as avg_clearing_price,
-        round(avg(auction_duration_ms), 2) as avg_auction_duration_ms
-      FROM bid_landscape
-      WHERE publisher_id = {publisherId:String}
-        AND timestamp >= {startDate:DateTime}
-        AND timestamp < {endDate:DateTime}
+        to_timestamp(floor(extract(epoch FROM observed_at) / ($4::int * 60)) * ($4::int * 60)) AS time_bucket,
+        COUNT(DISTINCT auction_id) AS total_auctions,
+        SUM(CASE WHEN total_bids > 0 THEN 1 ELSE 0 END) AS auctions_with_bids,
+        SUM(CASE WHEN won THEN 1 ELSE 0 END) AS won_auctions,
+        ROUND(AVG(total_bids)::numeric, 2) AS avg_bids_per_auction,
+        ROUND(AVG(CASE WHEN won THEN clearing_price END)::numeric, 4) AS avg_clearing_price,
+        ROUND(AVG(auction_duration_ms)::numeric, 2) AS avg_auction_duration_ms
+      FROM ${quoteIdentifier(LANDSCAPE_TARGET_TABLE)}
+      WHERE publisher_id = $1
+        AND observed_at >= $2
+        AND observed_at < $3
       GROUP BY time_bucket
       ORDER BY time_bucket
     `;
 
-    const resultSet = await ch.query({
-      query,
-      query_params: {
-        publisherId,
-        startDate: startDate.toISOString().slice(0, 19).replace('T', ' '),
-        endDate: endDate.toISOString().slice(0, 19).replace('T', ' '),
-        interval: intervalMinutes,
-      },
-      format: 'JSONEachRow',
+    const result = await query(sql, [publisherId, startDate, endDate, intervalMinutes], {
+      replica: true,
+      label: 'BID_LANDSCAPE_TIMELINE',
     });
-
-    const json = await resultSet.json();
-    return json as Array<Record<string, unknown>>;
+    return result.rows as Array<Record<string, unknown>>;
   }
 
   /**
    * Check service health
    */
   isEnabled(): boolean {
-    return this.getClient() !== null;
+    return true;
   }
 
   /**
-   * Close ClickHouse connection (no-op; lifecycle managed elsewhere)
+   * Close service resources (pg pool lifecycle handled centrally)
    */
   async close(): Promise<void> {
-    // Intentionally no-op. Connection lifecycle is managed by utils/clickhouse.
+    // Intentionally no-op. Connection lifecycle handled by pg Pool.
+  }
+
+  private async persistEntries(entries: BidLandscapeRow[]): Promise<void> {
+    if (entries.length === 0) {
+      return;
+    }
+
+    const rows = entries.map(toRow);
+    await insertMany(LANDSCAPE_STAGE_TABLE, [...LANDSCAPE_COLUMNS], rows);
+    await this.mergeStageIntoTarget();
+  }
+
+  private async mergeStageIntoTarget(): Promise<void> {
+    const columnSql = LANDSCAPE_COLUMNS.map(quoteIdentifier).join(', ');
+    const conflictSql = ['observed_at', 'auction_id', 'adapter_id', 'bid_id']
+      .map(quoteIdentifier)
+      .join(', ');
+
+    await query(
+      `INSERT INTO ${quoteIdentifier(LANDSCAPE_TARGET_TABLE)} (${columnSql})
+       SELECT ${columnSql} FROM ${quoteIdentifier(LANDSCAPE_STAGE_TABLE)}
+       ON CONFLICT (${conflictSql}) DO NOTHING`
+    );
+    await query(`TRUNCATE ${quoteIdentifier(LANDSCAPE_STAGE_TABLE)}`);
+  }
+
+  private buildBidId(bid: Bid, adapterId: string, impId: string, bidPrice: number): string {
+    if (bid.id) {
+      return bid.id;
+    }
+    return `${adapterId}-${impId}-${Math.round(bidPrice * 1_000_000)}`;
   }
 }
 

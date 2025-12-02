@@ -23,13 +23,13 @@ describe('vraIssueProofs.js — guardrails and behaviors', () => {
   });
 
   function mockDeps({ hasExisting = false } = {}) {
-    // Mock ClickHouse utils
-    jest.doMock('../src/utils/clickhouse', () => ({
-      initializeClickHouse: jest.fn(async () => {}),
-      closeClickHouse: jest.fn(async () => {}),
-      executeQuery: jest.fn(async () => (hasExisting ? [{ month: '2025-11', digest: 'old' }] : [])),
-      insertBatch: jest.fn(async () => {}),
-    }), { virtual: true });
+    const lookupResult = hasExisting ? { rowCount: 1, rows: [{ month: '2025-11', digest: 'old' }] } : { rowCount: 0, rows: [] };
+    const query = jest
+      .fn()
+      .mockResolvedValueOnce(lookupResult)
+      .mockResolvedValue({ rowCount: 1 });
+
+    jest.doMock('../src/utils/postgres', () => ({ query }), { virtual: true });
   }
 
   async function runCli() {
@@ -80,13 +80,9 @@ describe('vraIssueProofs.js — guardrails and behaviors', () => {
     await expectExit(0);
   });
 
-  it('ClickHouse init failure → EXIT 20', async () => {
-    // Override init to throw
-    jest.doMock('../src/utils/clickhouse', () => ({
-      initializeClickHouse: jest.fn(async () => { throw new Error('boom'); }),
-      closeClickHouse: jest.fn(async () => {}),
-      executeQuery: jest.fn(async () => []),
-      insertBatch: jest.fn(async () => {}),
+  it('Postgres query failure → EXIT 20', async () => {
+    jest.doMock('../src/utils/postgres', () => ({
+      query: jest.fn(async () => { throw new Error('boom'); }),
     }), { virtual: true });
 
     process.argv = [process.execPath, scriptPath, '--month', '2025-11'];

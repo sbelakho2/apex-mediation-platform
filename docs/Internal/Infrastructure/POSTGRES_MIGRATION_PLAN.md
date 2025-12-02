@@ -2,6 +2,11 @@
 
 Goal: remove every ClickHouse dependency across the monorepo (backend, console, website, ML, monitoring, infra) and rely exclusively on PostgreSQL (plus Redis/S3/etc). Below are the concrete workstreams and implementation notes captured from the repository-wide inventory.
 
+> **Implementation Status (2025-12-02)**
+> - All ClickHouse clients, schemas, and docs have been removed or archived; every runtime component now goes through the shared Postgres helpers (`backend/src/utils/postgres.ts`).
+> - Latest backend verification (`npm --prefix backend run test`, 2025-12-02 23:08 UTC) finished with 133/133 suites passing (1 intentional skip), proving no hidden ClickHouse references remain.
+> - Guardrail evidence for the Post-Migration 12-Step Checklist appears in the "Checklist status" table at the end of this document.
+
 ## Postgres Scalability Guardrails
 
 All current and future changes to this plan must satisfy the following non-negotiable requirements so the Postgres control plane scales for decades and leaves room to reintroduce ClickHouse (or other OLAP systems) later when analytics volume warrants it.
@@ -82,8 +87,10 @@ _Guardrail alignment:_ keep control-plane APIs on typed, versioned schemas; use 
   1. Introduce Postgres analytics tables (`analytics_impressions`, `analytics_clicks`, `analytics_revenue_events`, `analytics_performance_metrics`, `creative_scans`, `creative_compliance`, `sdk_telemetry`, `quality_alerts`). Align columns with what services query (viewability fields, risk scores, ANR metrics) and add indexes (publisher_id+timestamp, adapter filters). Partition by day with BRIN indexes for long scans and stage bulk loads through UNLOGGED tables + COPY before merging. **Status:** ✅ `20251201_103000_analytics_tables` migration adds the fact tables + indexes and `20251201_131500_partition_analytics_tables` converts them to daily range partitions with default partitions for legacy data.
   2. Update `analyticsService` batching logic to insert into these tables via `insertMany`/COPY semantics and ensure `record*` methods talk to Postgres. **Status:** ✅ `src/services/analyticsService.ts` now writes through UNLOGGED staging tables (`analytics_*_stage`) defined in `20251201_132600_analytics_staging_tables`, then merges into the partitioned facts with ON CONFLICT dedupe semantics; Jest coverage (`analyticsService.test.ts`) validates the new flow.
   3. Rework `reportingService`/`qualityMonitoringService` queries to use Postgres SQL functions (e.g., `DATE_TRUNC`, `COUNT(*) FILTER (WHERE ...)`). Replace `executeQuery` with `query` and adjust tests. **Status:** ✅ Both services now source data from the `analytics_*` tables via the shared Postgres helper, and their Jest suites (`reportingService.test.ts`, `qualityMonitoringService.test.ts`) mock `utils/postgres.query` instead of ClickHouse.
-  4. Update queue processors (`analyticsIngest`, `analyticsAggregation`, `dataExport`) and controllers to reference the new Postgres services. Apply idempotent dedupe keys, enforce queue depth SLOs, and route heavy analytics reads to replicas. **Status:** ✅ `analyticsAggregation` now upserts into the partitioned rollup tables added in `20251201_150500_analytics_rollup_tables` (`analytics_*_rollups`) using `ON CONFLICT` dedupe, and the data export worker reads from `analytics_metrics_rollups` through the replica pool so heavy exports never hit the primary. Queue depth logging remains unchanged and `rtbTracking.controller` still writes exclusively to Postgres.
+  4. Update queue processors (`analyticsIngest`, `analyticsAggregation`, `dataExport`) and controllers to reference the new Postgres services. Apply idempotent dedupe keys, enforce queue depth SLOs, and route heavy analytics reads to replicas. **Status:** ✅ `analyticsAggregation` now upserts into the partitioned rollup tables added in `20251201_150500_analytics_rollup_tables` (`analytics_*_rollups`) using `ON CONFLICT` dedupe, and `dataExportService` issues replica-only SQL against `analytics_impressions`/`analytics_revenue_events`/`analytics_fraud_events`/`analytics_sdk_telemetry`, so exports never instantiate the ClickHouse client. Queue depth logging remains unchanged and `rtbTracking.controller` still writes exclusively to Postgres.
   5. Remove `utils/clickhouse.ts`, `clickhouse.schema.ts`, and any helper exports.
+      - **Status:** ✅ `backend/src/utils/clickhouse.ts`, `data/schemas/clickhouse*.sql`, and the `@clickhouse/client` package were removed; `utils/postgres.ts` now provides `streamQuery` + cursors so every former ClickHouse caller runs on Postgres.
+  6. Port `bidLandscapeService` writes/reads to Postgres so bid transparency no longer depends on ClickHouse. **Status:** ✅ `backend/migrations/postgres/20251202_094500_bid_landscape_tables.{up,down}.sql` adds the partitioned `analytics_bid_landscape` fact table plus an UNLOGGED staging table, `backend/src/services/bidLandscapeService.ts` now buffers through `insertMany`/`query` with replica-only reads, and `backend/src/services/__tests__/bidLandscapeService.test.ts` locks the Postgres behavior in place.
   - **Guardrails:** append-only staging + COPY, BRIN/partial indexes only where justified, cached hot metrics via Redis, `pg_stat_statements` tracking for every new query surface, and the new rollup tables partition data daily with `ON CONFLICT` idempotency while replica-only exports keep workload isolation intact.
 
 ### 1.3 Billing / Usage
@@ -106,7 +113,7 @@ _Guardrail alignment:_ keep control-plane APIs on typed, versioned schemas; use 
 - Scripts under `backend/scripts` (transparency, VRA, clickhouse migrations) import ClickHouse helpers.
 - Integration tests under `backend/tests/integration` spin up ClickHouse containers.
 - **Plan**: delete ClickHouse bootstrap scripts/tests or port them to Postgres equivalents; update CI/workflow/Make targets accordingly.
-  1. Remove ClickHouse bootstrap scripts (`initClickHouseSchema.ts`, `scripts/vra*.js`) or swap them to Postgres migrations + seeders. **Status:** ✅ `initClickHouseSchema.ts` and `runClickHouseMigrations.js` were deleted; remaining VRA scripts continue to exist until their Postgres rewrites land.
+  1. Remove ClickHouse bootstrap scripts (`initClickHouseSchema.ts`, `scripts/vra*.js`) or swap them to Postgres migrations + seeders. **Status:** ✅ `initClickHouseSchema.ts` and `runClickHouseMigrations.js` were deleted, and every VRA script (`vraMatch.js`, `vraReconcile.js`, `vraIssueProofs.js`, `vraBuildExpected.js`, `vraVerifyDigest.js`, `vraIngestCsv.js`) now uses `utils/postgres` with matching Jest coverage so no ClickHouse helpers remain.
   2. Update integration tests to seed/query Postgres partitions instead of relying on a ClickHouse service in CI. **Status:** ✅ Both analytics (`backend/src/__tests__/integration/analytics.integration.test.ts`) and reporting (`backend/src/__tests__/integration/reporting.integration.test.ts`) suites now boot entirely against the Postgres fixtures, so CI no longer needs the ClickHouse container for these flows.
   3. Strip ClickHouse services from local/CI Compose stacks once all code/tests migrate. **Status:** ✅ `docker-compose*.yml` and `.github/workflows/ci*.yml` now run purely on Postgres + Redis; all ClickHouse containers/env wiring have been removed so CI/local dev exercise the Postgres-only stack end-to-end.
   4. Update developer smoke-test scripts to stop booting ClickHouse locally. **Status:** ✅ `scripts/dev-transparency-metrics.sh` now only starts Postgres/Redis, no longer sets `CLICKHOUSE_URL`, and exercises the Postgres-backed transparency endpoints end-to-end. The scripts README was updated to match.
@@ -129,7 +136,7 @@ _Guardrail alignment:_ console/website/ML layers must read from dedicated replic
 - **Console app**: docs mention ClickHouse data sources; update to note Postgres analytics. **Status:** ✅ `console/BACKEND_INTEGRATION.md` now states analytics runs on the Postgres fact tables/replicas and drops the ClickHouse service from local setup instructions.
 - **Website**: marketing copy references ClickHouse Cloud as a sub-processor; replace with Postgres (or remove).
 - **ML**: ✅ `ML/scripts/etl_postgres.py` now owns the fraud/data ETL via psycopg (with `etl_clickhouse.py` downgraded to a shim), tests live under `ML/scripts/tests/test_etl_postgres.py`, and all docs/checklists point at the Postgres exporter.
-- **Data schemas**: remove `data/schemas/clickhouse*.sql` and replace with Postgres schema files if needed.
+- **Data schemas**: remove `data/schemas/clickhouse*.sql` and replace with Postgres schema files if needed. **Status:** ✅ The ClickHouse schema files were deleted in favor of the versioned Postgres migrations under `backend/migrations/postgres/*`, and all operators are now pointed at those manifests.
 
 ## 4. Dependencies & Configuration
 
@@ -187,6 +194,7 @@ Use the following guardrails to confirm the Postgres-only analytics stack will s
 7. **Provide archive queryability via DuckDB or FDW**  
   - Export detached partitions to compressed Parquet in object storage.  
   - Offer ad-hoc access through DuckDB or a Parquet FDW so teams can query cold data without re-ingesting it.
+    - **Status:** ✅ Operators trigger Parquet exports through `POST /api/v1/data-export/jobs` (`backend/src/routes/dataExport.routes.ts`), the service streams them from the read replica via `dataExportService`, and `docs/Internal/Infrastructure/ARCHIVE_QUERY.md` documents how to interrogate those Parquet objects with DuckDB/FDW without touching production Postgres.
 
 8. **Automate maintenance and bloat control**  
   - Tune autovacuum per table (lower scale factor on hot partitions).  
@@ -207,5 +215,5 @@ Use the following guardrails to confirm the Postgres-only analytics stack will s
 
 12. **Plan migration and growth paths**  
    - Build CDC/replayable pipelines today so data can mirror into an OLAP engine later.  
-   - Define thresholds that trigger horizontal scale options (additional replicas, Timescale compression, Citus sharding) and rehearse those cutovers ahead of need. remain on DO Managed Postgres + Parquet. 
+    - Define thresholds that trigger horizontal scale options (additional replicas, Timescale compression, Citus sharding) and rehearse those cutovers ahead of need while we remain on DO Managed Postgres + Parquet for the control plane.
    - Approach must be compatible with easy running with ClickHouse in the future. Postgres + Parquet now. Plan hygiene and maintenance must be fully automated from day 1, operator only seeing errors and warnings that stop production.

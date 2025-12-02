@@ -413,7 +413,7 @@ export async function initializeQueues(): Promise<void> {
  * Register all workers
  */
 function registerWorkers(): void {
-  // Analytics Ingest Worker (batch writes to ClickHouse)
+  // Analytics Ingest Worker (batch writes through Postgres staging tables)
   queueManager.registerWorker(
     QueueName.ANALYTICS_INGEST,
     processAnalyticsIngest,

@@ -305,7 +305,7 @@ export const vraMatchExactTotal = new Counter({
   help: 'Total number of exact-key matches (confidence 1.0)',
 });
 
-// Review matches persisted to ClickHouse review table
+// Review matches persisted to the Postgres recon_match_review table
 export const vraMatchReviewPersistedTotal = new Counter({
   name: 'vra_match_review_persisted_total',
   help: 'Total number of review matches persisted to the Postgres recon_match_review table',

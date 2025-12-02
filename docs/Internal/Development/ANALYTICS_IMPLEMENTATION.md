@@ -95,7 +95,7 @@ Completed as part of continuous feature development sprint.
 - Warehouse sync: scheduled and manual triggers
 - Job management: async execution, status tracking
 
-Note: `services/dataExportService.ts` now imports and uses the real `executeQuery` from `utils/clickhouse`, and implements production-ready Parquet generation and real cloud uploads (S3, GCS, BigQuery).
+Note: `services/dataExportService.ts` now issues replica-only Postgres queries via `utils/postgres.query`, while still providing production-ready Parquet generation and real cloud uploads (S3, GCS, BigQuery).
 
 **API Endpoints:** 6 endpoints
 - `POST /api/data-export/jobs` - Create export job

@@ -1,14 +1,17 @@
 import twofaService from '../../services/twofa.service';
 
 // Mock repositories used by twofa.service
+const mockRepository = {
+  findOne: jest.fn(async () => null),
+  findOneBy: jest.fn(async () => ({ id: 'u1', email: 'user@example.com' })),
+  save: jest.fn(async (x: any) => x),
+  create: jest.fn((x: any) => x),
+};
+
 jest.mock('../../database', () => ({
   AppDataSource: {
-    getRepository: jest.fn(() => ({
-      findOne: jest.fn(async () => null),
-      findOneBy: jest.fn(async () => ({ id: 'u1', email: 'user@example.com' })),
-      save: jest.fn(async (x: any) => x),
-      create: jest.fn((x: any) => x),
-    })),
+    isInitialized: true,
+    getRepository: jest.fn(() => mockRepository),
   },
 }));
 

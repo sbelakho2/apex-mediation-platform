@@ -58,8 +58,8 @@ Bottom line: The platform can function in a controlled/dev environment, but seve
 - Reporting: backend/fraud/internal/reporting/*, FRAUD_REPORTING.md mention reporting flows.
 - Conclusion: Architecture is complete and production-friendly, but the provided “trained” model is not effective. Real-world training on labeled events and rigorous offline validation are required before enabling blocking in production.
 
-### 3) Data and Analytics
-- Schemas: data/schemas/clickhouse.sql and postgresql.sql
+-### 3) Data and Analytics
+- Schemas: backend/migrations/postgres/* and data/schemas/postgresql.sql
   - Include fraud_score, fraud_flags, is_fraudulent across event tables; fraud_events table with indices; fraud rules and alerts in Postgres.
   - Query examples and aggregation indices exist, showing intent for reporting and analysis.
 - Ingestion/ETL: Not exhaustively validated in this audit; backend/services folders include various services, but a dedicated ingestion service for ClickHouse isn’t highlighted here. Docker compose exists; more operational verification needed to claim real-time pipelines are production-ready.
@@ -85,7 +85,7 @@ Bottom line: The platform can function in a controlled/dev environment, but seve
 | Real-time fraud blocking | Partially Met | Scoring and thresholds exist; trained model is ineffective per artifact |
 | 99.7% fraud accuracy | Not Met | Current trained model has 0 precision/recall; claim unsubstantiated |
 | 5 fraud types detection | Partially Met | Data model supports types; rules/ML separation exists; coverage needs tests |
-| Real-time analytics (ClickHouse) | Partially Met | Schemas and queries exist; ingestion/runtime validation not shown |
+| Real-time analytics (Postgres) | Partially Met | Schemas and queries exist; ingestion/runtime validation not shown |
 | Full dashboards | Partially Met | Backend endpoints present; some front-end pages indicated as TODO |
 
 ---

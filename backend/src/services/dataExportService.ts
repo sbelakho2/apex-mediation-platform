@@ -7,13 +7,14 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { gzipSync } from 'zlib';
-// import { Readable } from 'stream';
+import { createGzip } from 'zlib';
+import { finished } from 'stream/promises';
+import type { QueryResultRow } from 'pg';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { Storage } from '@google-cloud/storage';
 import { BigQuery } from '@google-cloud/bigquery';
 import logger from '../utils/logger';
-import { executeQuery } from '../utils/clickhouse';
+import { streamQuery as pgStreamQuery } from '../utils/postgres';
 import * as dataExportRepository from '../repositories/dataExportRepository';
 
 type ExportRowPrimitive = string | number | boolean | Date | null;
@@ -111,8 +112,13 @@ export interface ParquetSchema {
   optional: boolean;
 }
 
+const DATA_EXPORT_MAX_ROWS = parseInt(process.env.DATA_EXPORT_MAX_ROWS || '1000000', 10);
+const DATA_EXPORT_STREAM_BATCH_SIZE = parseInt(process.env.DATA_EXPORT_STREAM_BATCH_SIZE || '5000', 10);
+
 export class DataExportService {
   private exportDir: string;
+  private readonly maxRawExportRows = DATA_EXPORT_MAX_ROWS;
+  private readonly streamBatchSize = DATA_EXPORT_STREAM_BATCH_SIZE;
 
   constructor() {
     this.exportDir = process.env.EXPORT_DIR || '/tmp/ad-exports';
@@ -178,11 +184,9 @@ export class DataExportService {
       job.status = 'running';
       await dataExportRepository.updateExportJob(job.id, { status: 'running' });
 
-      // Get data from ClickHouse
-      const data = await this.fetchDataForExport(job);
-
-      // Generate export file
-      const filePath = await this.generateExportFile(job, data, config);
+      const dataStream = this.fetchDataStream(job);
+      const { filePath, rowsWritten } = await this.generateExportFile(job, dataStream, config);
+      const fileSize = fs.statSync(filePath).size;
 
       // Upload to destination
       if (config.destination.type !== 'local') {
@@ -196,16 +200,16 @@ export class DataExportService {
       }
 
       job.status = 'completed';
-      job.location = filePath;
-      job.rowsExported = data.length;
-      job.fileSize = fs.statSync(filePath).size;
+      job.location = this.describeExportLocation(config.destination, filePath);
+      job.rowsExported = rowsWritten;
+      job.fileSize = fileSize;
       job.completedAt = new Date();
 
       await dataExportRepository.updateExportJob(job.id, {
         status: 'completed',
         rowsExported: job.rowsExported,
         fileSize: job.fileSize,
-        location: filePath,
+        location: job.location,
         completedAt: job.completedAt,
       });
 
@@ -225,132 +229,438 @@ export class DataExportService {
   }
 
   /**
-   * Fetch data from ClickHouse for export
+   * Fetch data for export by querying Postgres read replicas
    */
-  private async fetchDataForExport(job: ExportJob): Promise<ExportRow[]> {
-    try {
-      const startDate = job.startDate.toISOString().split('T')[0];
-      const endDate = job.endDate.toISOString().split('T')[0];
-
-      let query = '';
-
-      switch (job.dataType) {
-        case 'impressions':
-          query = `
-            SELECT
-              toDate(timestamp) as date,
-              publisher_id,
-              app_id,
-              adapter_name,
-              ad_format,
-              country,
-              count() as impressions,
-              sum(revenue) as revenue,
-              avg(latency) as avg_latency
-            FROM impressions
-            WHERE publisher_id = {publisherId:String}
-              AND toDate(timestamp) >= toDate(parseDateTimeBestEffort({start:String}))
-              AND toDate(timestamp) <= toDate(parseDateTimeBestEffort({end:String}))
-            GROUP BY date, publisher_id, app_id, adapter_name, ad_format, country
-            ORDER BY date, impressions DESC
-          `;
-          break;
-
-        case 'revenue':
-          query = `
-            SELECT
-              toDate(timestamp) as date,
-              publisher_id,
-              app_id,
-              adapter_name,
-              ad_format,
-              country,
-              sum(revenue_usd) as revenue,
-              countDistinct(impression_id) as impressions,
-              if(countDistinct(impression_id) > 0, sum(revenue_usd) / countDistinct(impression_id) * 1000, 0) as ecpm
-            FROM revenue_events
-            WHERE publisher_id = {publisherId:String}
-              AND toDate(timestamp) >= toDate(parseDateTimeBestEffort({start:String}))
-              AND toDate(timestamp) <= toDate(parseDateTimeBestEffort({end:String}))
-            GROUP BY date, publisher_id, app_id, adapter_name, ad_format, country
-            ORDER BY date, revenue DESC
-          `;
-          break;
-
-        case 'fraud_events':
-          query = `
-            SELECT
-              toDate(detected_at) as date,
-              publisher_id,
-              fraud_type,
-              risk_level,
-              count() as events,
-              sum(blocked_revenue) as blocked_revenue
-            FROM fraud_events
-            WHERE publisher_id = {publisherId:String}
-              AND toDate(detected_at) >= toDate(parseDateTimeBestEffort({start:String}))
-              AND toDate(detected_at) <= toDate(parseDateTimeBestEffort({end:String}))
-            GROUP BY date, publisher_id, fraud_type, risk_level
-            ORDER BY date, events DESC
-          `;
-          break;
-
-        case 'telemetry':
-          query = `
-            SELECT
-              toDate(timestamp) as date,
-              publisher_id,
-              app_id,
-              sdk_version,
-              os,
-              device_type,
-              count() as sessions,
-              avg(session_duration) as avg_session_duration,
-              sum(if(anr_detected = 1, 1, 0)) as anr_count,
-              sum(if(crash_detected = 1, 1, 0)) as crash_count
-            FROM sdk_telemetry
-            WHERE publisher_id = {publisherId:String}
-              AND toDate(timestamp) >= toDate(parseDateTimeBestEffort({start:String}))
-              AND toDate(timestamp) <= toDate(parseDateTimeBestEffort({end:String}))
-            GROUP BY date, publisher_id, app_id, sdk_version, os, device_type
-            ORDER BY date, sessions DESC
-          `;
-          break;
-
-        case 'all':
-          // Export all tables - caution with size
-          query = `
-            SELECT * FROM impressions
-            WHERE publisher_id = {publisherId:String}
-              AND toDate(timestamp) >= toDate(parseDateTimeBestEffort({start:String}))
-              AND toDate(timestamp) <= toDate(parseDateTimeBestEffort({end:String}))
-            LIMIT 1000000
-          `;
-          break;
-
-        default:
-          throw new Error(`Unknown data type: ${job.dataType}`);
-      }
-
-      const params = { publisherId: job.publisherId, start: startDate, end: endDate };
-      switch (job.dataType) {
-        case 'impressions':
-          return executeQuery<ImpressionsExportRow>(query, params);
-        case 'revenue':
-          return executeQuery<RevenueExportRow>(query, params);
-        case 'fraud_events':
-          return executeQuery<FraudEventExportRow>(query, params);
-        case 'telemetry':
-          return executeQuery<TelemetryExportRow>(query, params);
-        case 'all':
-          return executeQuery<ExportRow>(query, params);
-      }
-
-      throw new Error(`Unhandled export data type: ${job.dataType}`);
-    } catch (error) {
-      logger.error('Failed to fetch export data', { error, jobId: job.id });
-      throw error;
+  private fetchDataStream(job: ExportJob): AsyncGenerator<ExportRow> {
+    const { from, to } = this.getDateBounds(job.startDate, job.endDate);
+    switch (job.dataType) {
+      case 'impressions':
+        return this.fetchImpressionExportStream(job.publisherId, from, to);
+      case 'revenue':
+        return this.fetchRevenueExportStream(job.publisherId, from, to);
+      case 'fraud_events':
+        return this.fetchFraudExportStream(job.publisherId, from, to);
+      case 'telemetry':
+        return this.fetchTelemetryExportStream(job.publisherId, from, to);
+      case 'all':
+        return this.fetchRawImpressionExportStream(job.publisherId, from, to);
+      default:
+        throw new Error(`Unknown data type: ${job.dataType}`);
     }
+  }
+
+  private fetchImpressionExportStream(
+    publisherId: string,
+    from: Date,
+    to: Date
+  ): AsyncGenerator<ImpressionsExportRow> {
+    type Row = {
+      date: string;
+      publisher_id: string;
+      app_id: string | null;
+      adapter_name: string | null;
+      ad_format: string | null;
+      country: string | null;
+      impressions: string | number;
+      revenue: string | number;
+      avg_latency: string | number | null;
+    };
+
+    const sql = `
+      SELECT
+        date_trunc('day', observed_at)::date AS date,
+        publisher_id,
+        COALESCE(app_id, '') AS app_id,
+        COALESCE(adapter_name, '') AS adapter_name,
+        COALESCE(ad_format, '') AS ad_format,
+        COALESCE(country_code, 'ZZ') AS country,
+        COUNT(*) AS impressions,
+        COALESCE(SUM(revenue_usd)::numeric, 0) AS revenue,
+        COALESCE(AVG(latency_ms)::numeric, 0) AS avg_latency
+      FROM analytics_impressions
+      WHERE publisher_id = $1
+        AND observed_at >= $2
+        AND observed_at < $3
+      GROUP BY 1,2,3,4,5,6
+      ORDER BY date ASC, impressions DESC
+    `;
+
+    const iterator = this.streamReplicaQuery<Row>(sql, [publisherId, from, to], 'EXPORT_IMPRESSIONS');
+    const self = this;
+    return (async function* () {
+      for await (const row of iterator) {
+        yield {
+          date: row.date,
+          publisher_id: row.publisher_id,
+          app_id: row.app_id ?? '',
+          adapter_name: row.adapter_name ?? '',
+          ad_format: row.ad_format ?? '',
+          country: row.country ?? 'ZZ',
+          impressions: self.toSafeNumber(row.impressions),
+          revenue: self.toSafeNumber(row.revenue),
+          avg_latency: self.toSafeNumber(row.avg_latency),
+        };
+      }
+    })();
+  }
+
+  private fetchRevenueExportStream(
+    publisherId: string,
+    from: Date,
+    to: Date
+  ): AsyncGenerator<RevenueExportRow> {
+    type Row = {
+      date: string;
+      publisher_id: string;
+      app_id: string | null;
+      adapter_name: string | null;
+      ad_format: string | null;
+      country: string | null;
+      revenue: string | number;
+      impressions: string | number;
+      ecpm: string | number;
+    };
+
+    const sql = `
+      SELECT
+        date_trunc('day', observed_at)::date AS date,
+        publisher_id,
+        COALESCE(app_id, '') AS app_id,
+        COALESCE(adapter_name, '') AS adapter_name,
+        COALESCE(ad_format, '') AS ad_format,
+        COALESCE(country_code, 'ZZ') AS country,
+        COALESCE(SUM(revenue_usd)::numeric, 0) AS revenue,
+        COUNT(DISTINCT impression_id) AS impressions,
+        CASE
+          WHEN COUNT(DISTINCT impression_id) > 0 THEN (COALESCE(SUM(revenue_usd)::numeric, 0) / COUNT(DISTINCT impression_id)) * 1000
+          ELSE 0
+        END AS ecpm
+      FROM analytics_revenue_events
+      WHERE publisher_id = $1
+        AND observed_at >= $2
+        AND observed_at < $3
+      GROUP BY 1,2,3,4,5,6
+      ORDER BY date ASC, revenue DESC
+    `;
+
+    const iterator = this.streamReplicaQuery<Row>(sql, [publisherId, from, to], 'EXPORT_REVENUE');
+    const self = this;
+    return (async function* () {
+      for await (const row of iterator) {
+        yield {
+          date: row.date,
+          publisher_id: row.publisher_id,
+          app_id: row.app_id ?? '',
+          adapter_name: row.adapter_name ?? '',
+          ad_format: row.ad_format ?? '',
+          country: row.country ?? 'ZZ',
+          revenue: self.toSafeNumber(row.revenue),
+          impressions: self.toSafeNumber(row.impressions),
+          ecpm: self.toSafeNumber(row.ecpm),
+        };
+      }
+    })();
+  }
+
+  private fetchFraudExportStream(
+    publisherId: string,
+    from: Date,
+    to: Date
+  ): AsyncGenerator<FraudEventExportRow> {
+    type Row = {
+      date: string;
+      publisher_id: string;
+      fraud_type: string | null;
+      risk_level: string | null;
+      events: string | number;
+      blocked_revenue: string | number;
+    };
+
+    const sql = `
+      SELECT
+        date_trunc('day', observed_at)::date AS date,
+        publisher_id,
+        COALESCE(fraud_type, 'unknown') AS fraud_type,
+        COALESCE(details->>'risk_level', CASE WHEN blocked THEN 'blocked' ELSE 'info' END) AS risk_level,
+        COUNT(*) AS events,
+        COALESCE(SUM(revenue_blocked_cents)::numeric, 0) AS blocked_revenue
+      FROM analytics_fraud_events
+      WHERE publisher_id = $1
+        AND observed_at >= $2
+        AND observed_at < $3
+      GROUP BY 1,2,3,4
+      ORDER BY date ASC, events DESC
+    `;
+
+    const iterator = this.streamReplicaQuery<Row>(sql, [publisherId, from, to], 'EXPORT_FRAUD');
+    const self = this;
+    return (async function* () {
+      for await (const row of iterator) {
+        yield {
+          date: row.date,
+          publisher_id: row.publisher_id,
+          fraud_type: row.fraud_type ?? 'unknown',
+          risk_level: row.risk_level ?? 'info',
+          events: self.toSafeNumber(row.events),
+          blocked_revenue: self.toSafeNumber(row.blocked_revenue) / 100,
+        };
+      }
+    })();
+  }
+
+  private fetchTelemetryExportStream(
+    publisherId: string,
+    from: Date,
+    to: Date
+  ): AsyncGenerator<TelemetryExportRow> {
+    type Row = {
+      date: string;
+      publisher_id: string;
+      app_id: string | null;
+      sdk_version: string | null;
+      os: string | null;
+      device_type: string | null;
+      sessions: string | number;
+      avg_session_duration: string | number | null;
+      anr_count: string | number;
+      crash_count: string | number;
+    };
+
+    const sql = `
+      SELECT
+        date_trunc('day', observed_at)::date AS date,
+        publisher_id,
+        COALESCE(payload->>'app_id', payload->>'application_id', '') AS app_id,
+        COALESCE(payload->>'sdk_version', payload->>'sdkVersion', '') AS sdk_version,
+        COALESCE(payload->>'os', payload->>'platform', '') AS os,
+        COALESCE(payload->>'device_type', payload->>'deviceType', 'unknown') AS device_type,
+        COUNT(DISTINCT NULLIF(payload->>'session_id', '')) AS sessions,
+        COALESCE(
+          AVG(
+            CASE
+              WHEN (payload->>'session_duration_ms') ~ '^[0-9]+$' THEN (payload->>'session_duration_ms')::numeric / 1000
+              WHEN (payload->>'session_duration_sec') ~ '^[0-9]+(\\.[0-9]+)?$' THEN (payload->>'session_duration_sec')::numeric
+              ELSE NULL
+            END
+          ),
+          0
+        ) AS avg_session_duration,
+        SUM(CASE WHEN event_type = 'anr' THEN 1 ELSE 0 END) AS anr_count,
+        SUM(CASE WHEN event_type = 'crash' THEN 1 ELSE 0 END) AS crash_count
+      FROM analytics_sdk_telemetry
+      WHERE publisher_id = $1
+        AND observed_at >= $2
+        AND observed_at < $3
+      GROUP BY 1,2,3,4,5,6
+      ORDER BY date ASC, sessions DESC
+    `;
+
+    const iterator = this.streamReplicaQuery<Row>(sql, [publisherId, from, to], 'EXPORT_TELEMETRY');
+    const self = this;
+    return (async function* () {
+      for await (const row of iterator) {
+        yield {
+          date: row.date,
+          publisher_id: row.publisher_id,
+          app_id: row.app_id ?? '',
+          sdk_version: row.sdk_version ?? '',
+          os: row.os ?? '',
+          device_type: row.device_type ?? 'unknown',
+          sessions: self.toSafeNumber(row.sessions),
+          avg_session_duration: self.toSafeNumber(row.avg_session_duration),
+          anr_count: self.toSafeNumber(row.anr_count),
+          crash_count: self.toSafeNumber(row.crash_count),
+        };
+      }
+    })();
+  }
+
+  private fetchRawImpressionExportStream(
+    publisherId: string,
+    from: Date,
+    to: Date
+  ): AsyncGenerator<ExportRow> {
+    type Row = {
+      id: string;
+      event_id: string;
+      observed_at: Date;
+      publisher_id: string;
+      app_id: string | null;
+      placement_id: string | null;
+      adapter_id: string | null;
+      adapter_name: string | null;
+      ad_unit_id: string | null;
+      ad_format: string | null;
+      country_code: string | null;
+      device_type: string | null;
+      os: string | null;
+      os_version: string | null;
+      session_id: string | null;
+      user_id: string | null;
+      request_id: string | null;
+      status: string | null;
+      filled: boolean;
+      viewable: boolean;
+      measurable: boolean;
+      view_duration_ms: number | string | null;
+      latency_ms: number | string | null;
+      revenue_usd: string | number | null;
+      is_test_mode: boolean;
+      meta_json: string | null;
+      created_at: Date;
+    };
+
+    const sql = `
+      SELECT
+        id::text AS id,
+        event_id::text AS event_id,
+        observed_at,
+        publisher_id,
+        COALESCE(app_id, '') AS app_id,
+        COALESCE(placement_id, '') AS placement_id,
+        COALESCE(adapter_id, '') AS adapter_id,
+        COALESCE(adapter_name, '') AS adapter_name,
+        COALESCE(ad_unit_id, '') AS ad_unit_id,
+        COALESCE(ad_format, '') AS ad_format,
+        COALESCE(country_code, 'ZZ') AS country_code,
+        COALESCE(device_type, 'unknown') AS device_type,
+        COALESCE(os, 'unknown') AS os,
+        COALESCE(os_version, '') AS os_version,
+        COALESCE(session_id, '') AS session_id,
+        COALESCE(user_id, '') AS user_id,
+        COALESCE(request_id, '') AS request_id,
+        COALESCE(status, '') AS status,
+        filled,
+        viewable,
+        measurable,
+        view_duration_ms,
+        latency_ms,
+        COALESCE(revenue_usd, 0) AS revenue_usd,
+        is_test_mode,
+        COALESCE(meta::text, '{}') AS meta_json,
+        created_at
+      FROM analytics_impressions
+      WHERE publisher_id = $1
+        AND observed_at >= $2
+        AND observed_at < $3
+      ORDER BY observed_at ASC
+      LIMIT $4
+    `;
+
+    const iterator = this.streamReplicaQuery<Row>(
+      sql,
+      [publisherId, from, to, this.maxRawExportRows],
+      'EXPORT_ALL_IMPRESSIONS'
+    );
+    const self = this;
+    return (async function* () {
+      for await (const row of iterator) {
+        yield {
+          id: row.id,
+          event_id: row.event_id,
+          observed_at: row.observed_at instanceof Date ? row.observed_at : new Date(row.observed_at),
+          publisher_id: row.publisher_id,
+          app_id: row.app_id ?? '',
+          placement_id: row.placement_id ?? '',
+          adapter_id: row.adapter_id ?? '',
+          adapter_name: row.adapter_name ?? '',
+          ad_unit_id: row.ad_unit_id ?? '',
+          ad_format: row.ad_format ?? '',
+          country_code: row.country_code ?? 'ZZ',
+          device_type: row.device_type ?? 'unknown',
+          os: row.os ?? 'unknown',
+          os_version: row.os_version ?? '',
+          session_id: row.session_id ?? '',
+          user_id: row.user_id ?? '',
+          request_id: row.request_id ?? '',
+          status: row.status ?? '',
+          filled: row.filled,
+          viewable: row.viewable,
+          measurable: row.measurable,
+          view_duration_ms: self.toSafeNumber(row.view_duration_ms),
+          latency_ms: self.toSafeNumber(row.latency_ms),
+          revenue_usd: self.toSafeNumber(row.revenue_usd),
+          is_test_mode: row.is_test_mode,
+          meta_json: row.meta_json ?? '{}',
+          created_at: row.created_at instanceof Date ? row.created_at : new Date(row.created_at),
+        };
+      }
+    })();
+  }
+
+  private truncateToUtcStart(date: Date): Date {
+    const clone = new Date(date);
+    return new Date(Date.UTC(clone.getUTCFullYear(), clone.getUTCMonth(), clone.getUTCDate()));
+  }
+
+  private getDateBounds(startDate: Date, endDate: Date): { from: Date; to: Date } {
+    const from = this.truncateToUtcStart(startDate);
+    const toStart = this.truncateToUtcStart(endDate);
+    const to = new Date(toStart.getTime());
+    to.setUTCDate(to.getUTCDate() + 1);
+    return { from, to };
+  }
+
+  private streamReplicaQuery<T extends QueryResultRow = QueryResultRow>(
+    sql: string,
+    params: ReadonlyArray<unknown>,
+    label: string
+  ): AsyncGenerator<T> {
+    return pgStreamQuery<T>(sql, params, { replica: true, label, batchSize: this.streamBatchSize });
+  }
+
+  private toSafeNumber(value: string | number | null | undefined): number {
+    if (value === null || value === undefined) {
+      return 0;
+    }
+    if (typeof value === 'number') {
+      return Number.isFinite(value) ? value : 0;
+    }
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  private createWritableTarget(filePath: string, compress: boolean): {
+    target: NodeJS.WritableStream;
+    output: fs.WriteStream;
+  } {
+    const output = fs.createWriteStream(filePath);
+    if (compress) {
+      const gzip = createGzip();
+      gzip.pipe(output);
+      return { target: gzip, output };
+    }
+    return { target: output, output };
+  }
+
+  private formatCsvValue(value: ExportRowPrimitive | undefined): string {
+    if (value === null || value === undefined) {
+      return '';
+    }
+    if (value instanceof Date) {
+      return value.toISOString();
+    }
+    if (typeof value === 'string') {
+      return `"${value.replace(/"/g, '""')}"`;
+    }
+    return String(value);
+  }
+
+  private buildParquetSchema(firstRow: ExportRow): Record<string, { type: string; optional: boolean }> {
+    const schemaDef: Record<string, { type: string; optional: boolean }> = {};
+    Object.keys(firstRow).forEach((key) => {
+      const val = firstRow[key];
+      if (typeof val === 'number') {
+        schemaDef[key] = { type: 'DOUBLE', optional: true };
+      } else if (typeof val === 'boolean') {
+        schemaDef[key] = { type: 'BOOLEAN', optional: true };
+      } else if (val instanceof Date) {
+        schemaDef[key] = { type: 'TIMESTAMP_MILLIS', optional: true };
+      } else {
+        schemaDef[key] = { type: 'UTF8', optional: true };
+      }
+    });
+    return schemaDef;
   }
 
   /**
@@ -358,31 +668,36 @@ export class DataExportService {
    */
   private async generateExportFile(
     job: ExportJob,
-  data: ExportRow[],
+    stream: AsyncGenerator<ExportRow>,
     config: ExportConfig
-  ): Promise<string> {
+  ): Promise<{ filePath: string; rowsWritten: number }> {
     try {
       const fileName = `${job.dataType}_${job.publisherId}_${Date.now()}.${config.format}${config.compression === 'gzip' ? '.gz' : ''}`;
       const filePath = path.join(this.exportDir, fileName);
+      const first = await stream.next();
+      if (first.done || !first.value) {
+        throw new Error('No data to export');
+      }
 
+      let rowsWritten = 0;
       switch (config.format) {
         case 'csv':
-          await this.generateCSV(filePath, data, config.compression === 'gzip');
+          rowsWritten = await this.generateCSV(filePath, first.value, stream, config.compression === 'gzip');
           break;
 
         case 'json':
-          await this.generateJSON(filePath, data, config.compression === 'gzip');
+          rowsWritten = await this.generateJSON(filePath, first.value, stream, config.compression === 'gzip');
           break;
 
         case 'parquet':
-          await this.generateParquet(filePath, data);
+          rowsWritten = await this.generateParquet(filePath, first.value, stream);
           break;
 
         default:
           throw new Error(`Unsupported format: ${config.format}`);
       }
 
-      return filePath;
+      return { filePath, rowsWritten };
     } catch (error) {
       logger.error('Failed to generate export file', { error, jobId: job.id });
       throw error;
@@ -392,48 +707,49 @@ export class DataExportService {
   /**
    * Generate CSV file
    */
-  private async generateCSV(filePath: string, data: ExportRow[], compress: boolean): Promise<void> {
+  private async generateCSV(
+    filePath: string,
+    firstRow: ExportRow,
+    stream: AsyncGenerator<ExportRow>,
+    compress: boolean
+  ): Promise<number> {
+    const headers = Object.keys(firstRow);
+    const { target, output } = this.createWritableTarget(filePath, compress);
+    let closed = false;
+    const closeStream = async () => {
+      if (!closed) {
+        closed = true;
+        target.end();
+        try {
+          await finished(output);
+        } catch (e) {
+          logger.warn('Failed to finalize CSV stream', { filePath, error: (e as Error)?.message });
+        }
+      }
+    };
+
     try {
-      if (data.length === 0) {
-        throw new Error('No data to export');
+      target.write(headers.join(',') + '\n');
+
+      const writeRow = (row: ExportRow): void => {
+        const values = headers.map((header) => this.formatCsvValue(row[header]));
+        target.write(values.join(',') + '\n');
+      };
+
+      let rows = 0;
+      writeRow(firstRow);
+      rows += 1;
+
+      for await (const row of stream) {
+        writeRow(row);
+        rows += 1;
       }
 
-      // Get headers from first row
-      const headers = Object.keys(data[0]);
-
-      // Create CSV content
-      let csv = headers.join(',') + '\n';
-
-      for (const row of data) {
-        const values = headers.map((header) => {
-          const value = row[header];
-          if (value === null || value === undefined) {
-            return '';
-          }
-
-          if (value instanceof Date) {
-            return value.toISOString();
-          }
-
-          if (typeof value === 'string') {
-            return `"${value.replace(/"/g, '""')}"`;
-          }
-
-          return value;
-        });
-        csv += values.join(',') + '\n';
-      }
-
-      // Write to file
-      if (compress) {
-        const compressed = gzipSync(csv);
-        fs.writeFileSync(filePath, compressed);
-      } else {
-        fs.writeFileSync(filePath, csv);
-      }
-
-      logger.info('Generated CSV export', { filePath, rows: data.length });
+      await closeStream();
+      logger.info('Generated CSV export', { filePath, rows });
+      return rows;
     } catch (error) {
+      await closeStream();
       logger.error('Failed to generate CSV', { error, filePath });
       throw error;
     }
@@ -442,19 +758,44 @@ export class DataExportService {
   /**
    * Generate JSON file
    */
-  private async generateJSON(filePath: string, data: ExportRow[], compress: boolean): Promise<void> {
-    try {
-      const json = JSON.stringify(data, null, 2);
+  private async generateJSON(
+    filePath: string,
+    firstRow: ExportRow,
+    stream: AsyncGenerator<ExportRow>,
+    compress: boolean
+  ): Promise<number> {
+    const { target, output } = this.createWritableTarget(filePath, compress);
+    let closed = false;
+    const closeStream = async () => {
+      if (!closed) {
+        closed = true;
+        target.end();
+        try {
+          await finished(output);
+        } catch (e) {
+          logger.warn('Failed to finalize JSON stream', { filePath, error: (e as Error)?.message });
+        }
+      }
+    };
 
-      if (compress) {
-        const compressed = gzipSync(json);
-        fs.writeFileSync(filePath, compressed);
-      } else {
-        fs.writeFileSync(filePath, json);
+    try {
+      let rows = 0;
+      target.write('[\n');
+      target.write(`  ${JSON.stringify(firstRow)}`);
+      rows += 1;
+
+      for await (const row of stream) {
+        target.write(',\n');
+        target.write(`  ${JSON.stringify(row)}`);
+        rows += 1;
       }
 
-      logger.info('Generated JSON export', { filePath, rows: data.length });
+      target.write('\n]\n');
+      await closeStream();
+      logger.info('Generated JSON export', { filePath, rows });
+      return rows;
     } catch (error) {
+      await closeStream();
       logger.error('Failed to generate JSON', { error, filePath });
       throw error;
     }
@@ -463,39 +804,31 @@ export class DataExportService {
   /**
    * Generate Parquet file
    */
-  private async generateParquet(filePath: string, data: ExportRow[]): Promise<void> {
+  private async generateParquet(
+    filePath: string,
+    firstRow: ExportRow,
+    stream: AsyncGenerator<ExportRow>
+  ): Promise<number> {
     try {
-      if (data.length === 0) {
-        throw new Error('No data to export');
-      }
-
-      // Dynamically infer schema from first row
       const { ParquetSchema, ParquetWriter } = await import('parquetjs-lite');
-
-      const first = data[0];
-  const schemaDef: Record<string, { type: string; optional: boolean }> = {};
-      Object.keys(first).forEach((key) => {
-        const val = first[key];
-        if (typeof val === 'number') {
-          schemaDef[key] = { type: 'DOUBLE', optional: true };
-        } else if (typeof val === 'boolean') {
-          schemaDef[key] = { type: 'BOOLEAN', optional: true };
-        } else if (val instanceof Date) {
-          schemaDef[key] = { type: 'TIMESTAMP_MILLIS', optional: true };
-        } else {
-          schemaDef[key] = { type: 'UTF8', optional: true };
-        }
-      });
-
-      const schema = new ParquetSchema(schemaDef);
+      const schema = new ParquetSchema(this.buildParquetSchema(firstRow));
       const writer = await ParquetWriter.openFile(schema, filePath);
+      let rows = 0;
 
-      for (const row of data) {
-        await writer.appendRow(row);
+      try {
+        await writer.appendRow(firstRow);
+        rows += 1;
+
+        for await (const row of stream) {
+          await writer.appendRow(row);
+          rows += 1;
+        }
+      } finally {
+        await writer.close();
       }
 
-      await writer.close();
-      logger.info('Generated Parquet export', { filePath, rows: data.length });
+      logger.info('Generated Parquet export', { filePath, rows });
+      return rows;
     } catch (error) {
       logger.error('Failed to generate Parquet', { error, filePath });
       throw error;
@@ -530,6 +863,29 @@ export class DataExportService {
       logger.error('Failed to upload to destination', { error, destination });
       throw error;
     }
+  }
+
+  private describeExportLocation(destination: ExportConfig['destination'], localPath: string): string {
+    switch (destination.type) {
+      case 's3':
+        if (destination.bucket && destination.path) {
+          return `s3://${destination.bucket}/${destination.path}`;
+        }
+        break;
+      case 'gcs':
+        if (destination.bucket && destination.path) {
+          return `gs://${destination.bucket}/${destination.path}`;
+        }
+        break;
+      case 'bigquery':
+        if (destination.dataset && destination.table) {
+          return `bigquery://${destination.dataset}.${destination.table}`;
+        }
+        break;
+      default:
+        break;
+    }
+    return localPath;
   }
 
   /**

@@ -4,6 +4,13 @@ This is the single, self-contained runbook to take the system to production on D
 
 > **DigitalOcean CLI policy:** All cloud interactions below must be executed from Bash using [`doctl`](https://docs.digitalocean.com/reference/doctl/) or the S3-compatible tooling called out in each section. Do not click through the DigitalOcean UI; if a step is missing a CLI, stop and add it here before proceeding.
 
+## Outcomes by the end of this checklist
+- Staging stack is online behind Nginx with valid TLS (API required; Console optional) and HSTS enabled for API.
+- Backend health and readiness are green using Postgres + Redis only; migrations applied; no ClickHouse gates anywhere.
+- Evidence captured locally for TLS/HSTS and local health snapshot.
+- Sandbox org/apps/placements exist; Android test app validated end-to-end; matrix items progressed in order.
+- Load/soak, billing usage, and VRA tests planned and executable with clear acceptance criteria.
+
 ## Prerequisites (one-time)
 - [X] Domain configured: `api.apexmediation.ee`, `console.apexmediation.ee` (TTL 300s)
 - [X] DigitalOcean account with billing enabled
@@ -21,7 +28,21 @@ This is the single, self-contained runbook to take the system to production on D
 - [X] Issue certs with certbot, mount `/etc/letsencrypt`, enable `infrastructure/nginx/apexmediation.ssl.conf`, expose 443
 - [X] From your laptop run: `npm run do:tls` to capture TLS/HSTS evidence
 
-## 0.0 Full Sandbox Test Matrix (All SDKs + Console + Website + Billing + VRA)
+## 0.0 Staging Bring-up and Full Sandbox Matrix
+
+### 0.0.0 Staging Stack Online (HTTP → TLS/HSTS)
+- [x] Materialize runtime envs on droplet only (do not commit):
+  - `/home/deploy/Ad-Project/infrastructure/production/.env.backend` (Managed Postgres `?sslmode=require` or `no-verify` during staging), Redis URL, secrets (`JWT_SECRET`, `COOKIE_SECRET`, optional `CSRF_SECRET`).
+- [x] Start core services (backend, redis, postgres) behind Nginx on HTTP (port 80):
+  - `NGINX_PORT=80 docker compose -f infrastructure/docker-compose.prod.yml up -d`
+  - Verify `curl -i http://<ip>/health`.
+- [x] Enable TLS for API (and Console when ready):
+  - Stop Nginx container, issue certs with certbot on host; mount `/etc/letsencrypt` in Nginx; expose 443 via `docker-compose.override.yml`.
+  - Verify `curl -I https://api.apexmediation.ee/health`.
+  - Console TLS (when Console service is enabled): either reuse the API cert if SAN includes `console.apexmediation.ee`, or issue a dedicated console cert; verify `curl -I https://console.apexmediation.ee/`.
+- [x] Evidence capture: run `npm run do:tls` from laptop and archive artifacts under `docs/Internal/Deployment/do-readiness-YYYY-MM-DD`.
+- [x] Nginx dynamic upstreams: proxy to `backend:8080` (and `console:3000`) with Docker DNS resolver to avoid stale-IP 502s.
+- [x] Health/Readiness are Postgres + Redis only (no ClickHouse gates): `/health` OK; `/ready` relies on DB/Redis latency and basic cache checks.
 
 ### 0.0.1 Environments, Fixtures & Common Test Data
 - [ ] Provision dedicated staging endpoints (`STAGING_API_BASE`, `STAGING_CONSOLE_BASE`) and an isolated staging database
@@ -30,6 +51,11 @@ This is the single, self-contained runbook to take the system to production on D
 - [ ] Stand up FakeNetworkA (always fill), FakeNetworkB (random fill/no-fill), and FakeNetworkC (slow/timeout) plus Starter (~$3k), Growth (~$50k), and Scale (~$150k) revenue scripts.
 - [ ] Issue staging logins (`owner@`, `dev@`, `finance@apex-sandbox.test`) and enable Stripe test mode with customer + card/ACH/SEPA methods.
 - [ ] Ensure every SDK build (Android, iOS, Unity, tvOS/CTV, Web) ships adapters for every network API/SDK in scope (FakeNetworkA/B/C + partner networks) so request/response parity is validated end-to-end.
+
+Notes (data plane & migrations):
+- Migration plan is Postgres-first for analytics, reporting, transparency, and RTB tracking. Ensure migrations are applied before enabling dependent routes.
+- Run migrations via backend container (Prisma/TypeORM/SQL scripts) and re-run on schema changes.
+  - Readiness `/ready` must reflect Postgres + Redis health only (replica lag, DB/Redis latency, cache hit); remove ClickHouse checks.
 
 ### 0.0.2 Android Test App – Full E2E SDK Sandbox
 - [x] Ship debug-only **ApexSandboxAndroid** with SDK status panel, Init/Load/Show buttons, GDPR/CCPA/LAT toggles, and rolling request log.
@@ -73,6 +99,10 @@ This is the single, self-contained runbook to take the system to production on D
 - [ ] Exercise Mediation Debugger entries from sandbox apps; inspect timelines/no-bid reasons, confirm pagination + filters + PII redaction.
 - [ ] Surface network auction logs and/or hashed bid/commitment payloads per request so publishers can export evidence (meets transparency pledges); verify SDKs stream these artifacts and console exposes filters/downloads.
 
+Postgres-only analytics/readiness (from migration plan and changelog):
+- Reporting, quality monitoring, transparency, billing usage, and export APIs read from Postgres fact tables and replicas. No ClickHouse dependency.
+- `/ready` reports Postgres/Redis health (latency, replica lag, cache hit), not ClickHouse; alerts/dashboards track replica lag and query budgets.
+
 ### 0.0.8 Website / Landing Page Sandbox Tests
 - [] Deploy staging marketing site (e.g., `staging.apexmediation.ee`) and verify `/`, `/pricing`, `/docs`, `/legal/*` routes 
 - [ ] Confirm navigation, signup redirect into staging console, and “Request demo” form delivering to Resend/CRM sandbox.
@@ -102,9 +132,19 @@ This is the single, self-contained runbook to take the system to production on D
 ### 0.0.12 Light Load & Soak Test (End-to-End)
 - [ ] Drive 1–5 RPS `loadAd` + reporting traffic via script/k6/Gatling for ≥1 hour across sandbox apps.
 - [ ] Keep API p95 within targets, error rate <1%, low Sentry noise, and stable CPU/memory on staging droplet.
+- [ ] Capture heap/CPU snapshots and export Grafana/Prometheus panels for run evidence.
 
-## 1. Infrastructure Setup
-### 1.1 Compute — Main App Droplet (DigitalOcean)
+### 0.0.13 Final Readiness Gate (system operational + tested)
+- [ ] 0.0.0 complete: HTTP → TLS/HSTS (API), evidence archived; Console TLS verified or consciously deferred.
+- [ ] 0.0.1 seeded: org/apps/placements present; migrations applied; readiness `/ready` green (Postgres + Redis only).
+- [ ] 0.0.2 Android app green: happy path, errors, lifecycle, 30‑minute soak.
+- [ ] Website, Billing, VRA, Cron/Automation checkpoints planned or executed as applicable; any deferred items are tracked with owners/dates.
+- [ ] Rollback/runbook documented; on‑call dashboards and alerts show the new Postgres‑only signals (replica lag, cache hit, query p95).
+
+## Appendix A — Infrastructure Setup (Provisioning from scratch)
+If you are provisioning a brand‑new droplet and managed services, follow this section. If a droplet already exists, use 0.0.0 above and skip this appendix.
+
+### A.1 Compute — Main App Droplet (DigitalOcean)
 - [ ] Confirm CLI access (reuse the prerequisite step if already complete):
   ```bash
   export DIGITALOCEAN_CONTEXT=apex-prod
@@ -132,26 +172,12 @@ This is the single, self-contained runbook to take the system to production on D
 - [ ] Harden the server (non-root user, disable password SSH, key-only auth, enable UFW 22/80/443, install fail2ban, enable unattended-upgrades).
 - [ ] Install Docker and docker-compose.
 - [ ] Define `docker-compose.yml` with `api`, `console`, `redis`, `nginx` services; expose only Nginx on 80/443.
-- [ ] Configure Nginx routing for `api.apexmediation.ee`, `console.apexmediation.ee`, and reserve `status.apexmediation.ee`.
+- [ ] Configure Nginx routing for `api.apexmediation.ee`, `console.apexmediation.ee`.
 
-#### 1.1.1 Post‑DO HTTPS/HSTS Verification (Phase 9)
-- [ ] Issue certificates with certbot for `api.apexmediation.ee` and `console.apexmediation.ee` on the droplet
-  - Command reference: `docs/Internal/Deployment/DO_INITIAL_BOOT_COMMANDS.md`
-  - Mount `/etc/letsencrypt` into the Nginx container (compose already contains the volume)
-- [ ] Enable HTTPS server blocks by mounting `infrastructure/nginx/apexmediation.ssl.conf`
-- [ ] Expose 443 in Nginx service on the droplet only (`infrastructure/docker-compose.prod.yml`)
-- [ ] Verify HTTP→HTTPS redirects and HTTPS response headers
-  - From your laptop: `bash scripts/ops/do_tls_snapshot.sh api.apexmediation.ee`
-  - Save outputs under `docs/Internal/Deployment/do-readiness-YYYY-MM-DD/`
-- [ ] Gate and then enable HSTS after achieving SSL Labs grade A/A+
-  - Uncomment `Strict-Transport-Security` header in `infrastructure/nginx/snippets/ssl-params.conf`
-  - Verify with: `curl -Is https://api.apexmediation.ee/ | grep -i strict-transport-security`
-- [ ] Protect `/metrics` (choose one)
-  - IP allowlist in the HTTPS server block, or
-  - Basic Auth via `infrastructure/nginx/snippets/metrics-basic-auth.conf` and mounted `./nginx/htpasswd`
-- [ ] Cross‑link and follow: `docs/Internal/Infrastructure/DO_READINESS_CHECKLIST.md` → Section 12 (Phase 9)
+#### A.1.1 HTTPS/HSTS Verification
+Follow section 0.0.0 for TLS/HSTS enablement and evidence capture; do not duplicate steps here. Protect `/metrics` via IP allowlist or Basic Auth snippet as part of Nginx HTTPS server blocks.
 
-### 1.2 Database — Managed PostgreSQL
+### A.2 Database — Managed PostgreSQL
 - [ ] Create DigitalOcean Managed PostgreSQL cluster (Basic/Dev plan, same region, 10–20 GB storage) via CLI:
   ```bash
   export DB_NAME=apex-prod-db
@@ -186,7 +212,7 @@ This is the single, self-contained runbook to take the system to production on D
   psql "${CONN_URI}?sslmode=require" -c 'select current_timestamp;'
   ```
 
-### 1.3 Cache — Redis
+### A.3 Cache — Redis
 - [ ] Install Redis (docker `redis:6-alpine` or apt) bound to localhost/Docker network.
 - [ ] Configure 512 MB max memory, `allkeys-lru` eviction, `requirepass`, persistence (AOF/RDB).
 - [ ] Validate rate limiting, idempotency, and feature flag use cases.

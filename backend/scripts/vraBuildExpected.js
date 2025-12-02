@@ -2,7 +2,7 @@
 /*
  * VRA Expected Builder CLI (operator tool)
  *
- * Builds recon_expected by joining PG transparency receipts with ClickHouse revenue_events.
+ * Builds recon_expected by joining Postgres transparency receipts with Postgres revenue_events.
  *
  * Usage:
  *   node backend/scripts/vraBuildExpected.js \
@@ -13,7 +13,6 @@
  *
  * Env:
  *   DATABASE_URL=postgresql://user:pass@host:5432/db
- *   CLICKHOUSE_URL=http://localhost:8123 (or CLICKHOUSE_HOST/CLICKHOUSE_PORT)
  */
 
 require('dotenv/config');
@@ -26,7 +25,6 @@ try {
 } catch (_) {}
 
 const { Pool } = require('pg');
-const { initializeClickHouse, closeClickHouse } = require('../src/utils/clickhouse');
 const { buildReconExpected } = require('../src/services/vra/expectedBuilder');
 const config = require('../src/config/index').default;
 
@@ -111,14 +109,6 @@ async function main() {
   const pgPool = new Pool({ connectionString: databaseUrl });
 
   try {
-    await initializeClickHouse();
-  } catch (e) {
-    console.error('Failed to initialize ClickHouse:', e.message || e);
-    await pgPool.end().catch(()=>{});
-    process.exit(EXIT.ERROR);
-  }
-
-  try {
     const res = await buildReconExpected(pgPool, { from, to, limit }, { dryRun, collectMetrics: true });
     console.log('[VRA Expected] Window:', from, '→', to, 'limit:', limit ?? '(default)');
     console.log('[VRA Expected] Seen:', res.seen, 'Written:', res.written, 'Skipped:', res.skipped, dryRun ? '(dry-run)' : '');
@@ -132,7 +122,6 @@ async function main() {
     process.exit(EXIT.ERROR);
   } finally {
     try { await pgPool.end(); } catch (_) {}
-    try { await closeClickHouse(); } catch (_) {}
   }
 }
 

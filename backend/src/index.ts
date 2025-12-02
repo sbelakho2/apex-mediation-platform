@@ -9,7 +9,6 @@ import { errorHandler } from './middleware/errorHandler';
 import { requestContextMiddleware } from './middleware/requestContext';
 import apiRoutes from './routes';
 import { initializeDatabase } from './database';
-// ClickHouse is deprecated per the infra migration plan (Postgres-first). Do not initialize here.
 import { redis } from './utils/redis';
 import { initializeQueues, shutdownQueues, queueManager } from './queues/queueInitializer';
 import { promRegister, httpRequestDurationSeconds, httpRequestsTotal } from './utils/prometheus';

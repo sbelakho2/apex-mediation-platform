@@ -2,7 +2,7 @@
 /*
  * VRA Issue Proofs CLI (operator tool)
  *
- * Manages monthly digest entries in ClickHouse table `proofs_monthly_digest`.
+ * Manages monthly digest entries in the Postgres table `proofs_monthly_digest`.
  * Guardrails: validate --month YYYY-MM; exit codes 0 OK, 10 WARNINGS (no-op/dry-run), 20 ERROR.
  *
  * Usage:
@@ -14,7 +14,7 @@
 require('dotenv/config');
 try { require('ts-node/register/transpile-only'); } catch (_) {}
 
-const { initializeClickHouse, closeClickHouse, executeQuery, insertBatch } = require('../src/utils/clickhouse');
+const { query } = require('../src/utils/postgres');
 
 const EXIT = { OK: 0, WARNINGS: 10, ERROR: 20 };
 
@@ -51,41 +51,35 @@ async function main() {
   }
 
   try {
-    await initializeClickHouse();
-  } catch (e) {
-    console.error('Failed to initialize ClickHouse:', e && e.message ? e.message : String(e));
-    process.exit(EXIT.ERROR);
-  }
-
-  try {
     // Check if a digest already exists for the month
-    const rows = await executeQuery(
-      'SELECT month, digest FROM proofs_monthly_digest WHERE month = {m:String} LIMIT 1',
-      { m: month }
+    const existing = await query(
+      'SELECT month, digest FROM proofs_monthly_digest WHERE month = $1 LIMIT 1',
+      [month],
+      { label: 'VRA_PROOFS_DIGEST_LOOKUP' }
     );
 
-    let action = 'create';
-    if (Array.isArray(rows) && rows.length > 0) action = 'update';
+    const action = existing.rowCount && existing.rowCount > 0 ? 'update' : 'create';
 
     // Simple deterministic placeholder digest for scaffolding; real implementation would compute from daily roots
     const digest = `digest_${month}`;
     const sig = `sig_${month}`;
-    const coverage = '0.00';
+    const coveragePct = 0.0;
     const notes = dryRun ? 'dry-run' : '';
 
     console.log('[VRA Proofs]', action, 'monthly digest for', month, dryRun ? '(dry-run)' : '');
 
     if (!dryRun) {
-      if (action === 'create') {
-        await insertBatch('proofs_monthly_digest', [
-          { month, digest, sig, coverage_pct: Number(coverage), notes },
-        ]);
-      } else {
-        // ClickHouse has no UPDATE in MergeTree; emulate by re-insert (idempotent semantics are out of scope here)
-        await insertBatch('proofs_monthly_digest', [
-          { month, digest, sig, coverage_pct: Number(coverage), notes },
-        ]);
-      }
+      await query(
+        `INSERT INTO proofs_monthly_digest (month, digest, sig, coverage_pct, notes)
+         VALUES ($1, $2, $3, $4, $5)
+         ON CONFLICT (month) DO UPDATE
+            SET digest = EXCLUDED.digest,
+                sig = EXCLUDED.sig,
+                coverage_pct = EXCLUDED.coverage_pct,
+                notes = EXCLUDED.notes`,
+        [month, digest, sig, coveragePct, notes],
+        { label: 'VRA_PROOFS_DIGEST_UPSERT' }
+      );
     }
 
     // If we are dry-run or created/updated zero rows, return WARNINGS(10); treat insertBatch as success path
@@ -96,8 +90,6 @@ async function main() {
   } catch (e) {
     console.error('VRA Issue Proofs failed:', e && e.stack ? e.stack : String(e));
     process.exit(EXIT.ERROR);
-  } finally {
-    try { await closeClickHouse(); } catch (_) {}
   }
 }
 

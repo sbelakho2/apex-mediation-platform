@@ -1,6 +1,6 @@
 # ClickHouse Analytics Integration *(Legacy)*
 
-> **Note:** The ClickHouse bootstrap scripts were removed as part of the Postgres migration plan. This document is retained for archival reference only. If you still operate a ClickHouse cluster, seed schemas manually using the statements in `backend/src/utils/clickhouse.schema.ts`.
+> **Note:** The ClickHouse bootstrap scripts were removed as part of the Postgres migration plan. This document is retained for archival reference only. If you still operate a ClickHouse cluster, seed schemas manually using the statements under `backend/migrations/clickhouse/*.sql`.
 
 ## Overview
 
@@ -10,13 +10,13 @@ The ApexMediation backend now includes a comprehensive ClickHouse integration fo
 
 ### Components
 
-1. **ClickHouse Client** (`utils/clickhouse.ts`)
+1. **ClickHouse Client** (legacy helper formerly `utils/clickhouse.ts`)
    - Connection management with pooling
    - Health checks
    - Parameterized query execution
    - Batch insertion for performance
 
-2. **Database Schema** (`utils/clickhouse.schema.ts`)
+2. **Database Schema** (`backend/migrations/clickhouse/*.sql`)
    - `impressions` table - Ad impression events
    - `clicks` table - Click events
    - `revenue_events` table - Revenue tracking
@@ -385,7 +385,7 @@ CLICKHOUSE_MAX_CONNECTIONS=10
 
 3. **Initialize Schema**
 
-The previous helper script (`npm run clickhouse:init`) has been removed. To provision a legacy ClickHouse cluster, run the DDL statements from `backend/src/utils/clickhouse.schema.ts` manually (e.g., via `clickhouse-client` or your preferred migration tool). This step is no longer automated.
+The previous helper script (`npm run clickhouse:init`) has been removed. To provision a legacy ClickHouse cluster, run the DDL statements from `backend/migrations/clickhouse/*.sql` manually (e.g., via `clickhouse-client` or your preferred migration tool). This step is no longer automated.
 
 ### Verification
 

@@ -46,31 +46,27 @@ interface AuctionRequest {
 
 ### Location
 - **Service**: `src/services/bidLandscapeService.ts` (317 lines)
-- **Schema**: `utils/clickhouse.schema.ts` - `bid_landscape` table
-- **Tests**: ClickHouse integration tests (currently skipped without CH instance)
+- **Schema**: `backend/migrations/postgres/20251202_094500_bid_landscape_tables.up.sql` (partitioned `analytics_bid_landscape` fact table + staging table)
+- **Tests**: `src/services/__tests__/bidLandscapeService.test.ts` (mocks `utils/postgres` helpers)
 
 ### Implementation Details
-- **Storage**: ClickHouse column-oriented database
-- **Retention**: 180 days with automatic TTL
+- **Storage**: Postgres partitioned table `analytics_bid_landscape` plus an UNLOGGED staging table for buffered writes
+- **Retention**: Daily partitions trimmed after 180 days via the partition-detach cron (see migration + ops runbook)
 - **Async Logging**: Non-blocking auction logging
 - **Analytics**: Publisher bid landscape queries by adapter/geo/format
 
 ### Schema
 ```sql
-CREATE TABLE bid_landscape (
-  auction_id String,
-  placement_id UUID,
-  adapter_id String,
-  bid_price Decimal(12,2),
-  won Boolean,
-  geo String,
-  format String,
-  timestamp DateTime DEFAULT now(),
-  conversion_revenue Nullable(Decimal(12,2))
-) ENGINE = MergeTree()
-PARTITION BY toYYYYMM(timestamp)
-ORDER BY (auction_id, adapter_id, timestamp)
-TTL timestamp + INTERVAL 180 DAY;
+CREATE TABLE analytics_bid_landscape (
+  observed_at timestamptz NOT NULL,
+  auction_id text NOT NULL,
+  adapter_id text NOT NULL,
+  bid_id text NOT NULL,
+  bid_price numeric(18,6) NOT NULL DEFAULT 0,
+  won boolean NOT NULL DEFAULT false,
+  clearing_price numeric(18,6) NOT NULL DEFAULT 0,
+  total_bids integer NOT NULL DEFAULT 0
+) PARTITION BY RANGE (observed_at);
 ```
 
 ### Key Methods

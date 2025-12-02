@@ -1,3 +1,51 @@
+Changelog — Data Export Streaming + ClickHouse Client Removal (2025-12-02)
+
+Summary
+- Removed the unused ClickHouse client dependency and environment knobs so the backend no longer ships any ClickHouse runtime code.
+- Data export jobs now stream Postgres replica rows directly to CSV/JSON/Parquet writers, avoiding multi-GB in-memory buffers and keeping temporary files bounded.
+- Added unit tests that cover the new streaming helpers and verified the CSV writer flushes incrementally.
+
+What changed
+- Runtime: deleted `backend/src/utils/clickhouse.ts`, removed `@clickhouse/client` along with the `CLICKHOUSE_*` env schema entries, and added `pg-cursor` + `streamQuery` helper in `backend/src/utils/postgres.ts` for cursor-based reads.
+- Services: `backend/src/services/dataExportService.ts` now streams replica rows, writes gzip/CSV/JSON/Parquet incrementally, tracks remote locations, and frees temp files after uploads; new helper tests live in `backend/src/services/__tests__/dataExportService.test.ts`.
+- Tooling: `backend/package.json`/`package-lock.json` record the dependency swap and add `@types/pg-cursor` for TS coverage.
+
+Validation
+- `npx jest --config ./jest.config.cjs --runTestsByPath src/services/__tests__/dataExportService.test.ts`
+
+---
+
+Changelog — Data Export Service Postgres Cutover (2025-12-02)
+
+Summary
+- Data export jobs now read exclusively from Postgres analytics fact tables via replica-only queries, eliminating the last ClickHouse reader in the export/warehouse pipeline.
+- Telemetry/fraud/impression/revenue exports share the same guardrails as reporting/quality services (parameterized SQL, numeric coercion, replica metrics), and documentation reflects the new dependencies.
+
+What changed
+- Services: `backend/src/services/dataExportService.ts` dropped `executeQuery`/ClickHouse usage in favor of a local replica-query helper built on `utils/postgres.query`, new SQL for each export type (`analytics_impressions`, `analytics_revenue_events`, `analytics_fraud_events`, `analytics_sdk_telemetry`), UTC date-bound helpers, and safe numeric coercion before file generation.
+- Docs: `docs/Internal/Development/AD_PROJECT_FILE_ANALYSIS.md`, `docs/Internal/Development/ANALYTICS_IMPLEMENTATION.md`, `docs/Internal/Development/FIXES.md`, and `docs/Internal/Infrastructure/POSTGRES_MIGRATION_PLAN.md` now describe the Postgres-only export path and remaining risks (buffered exports, temp-file cleanup, telemetry JSON assumptions).
+
+Validation
+- Not run (service currently lacks automated coverage; manual verification pending follow-up tests)
+
+---
+
+Changelog — Bid Landscape Postgres Cutover (2025-12-02)
+
+Summary
+- Auction bid-landscape logging now writes to the partitioned `analytics_bid_landscape` Postgres table via UNLOGGED staging buffers, eliminating the last ClickHouse writer on the RTB path.
+- Publisher-facing bid landscape queries and timelines read exclusively from Postgres replicas, matching the migration guardrails.
+
+What changed
+- Database: `backend/migrations/postgres/20251202_094500_bid_landscape_tables.{up,down}.sql` introduce the `analytics_bid_landscape` fact + staging tables with daily partitions, covering indexes, and truncate-safe staging merges.
+- Services: `backend/src/services/bidLandscapeService.ts` now batches bid rows through `insertMany`/`query`, dedupes with `ON CONFLICT`, exposes Postgres SQL for publisher + timeline reads, and drops the ClickHouse client entirely.
+- Tests & docs: `backend/src/services/__tests__/bidLandscapeService.test.ts` verifies staging inserts/replica queries, and `docs/Internal/Infrastructure/POSTGRES_MIGRATION_PLAN.md` section 1.2 now marks the bid landscape cutover complete.
+
+Validation
+- `npm run test:backend -- src/services/__tests__/bidLandscapeService.test.ts`
+
+---
+
 Changelog — Reporting Integration Tests Postgres-Only (2025-12-02)
 
 Summary

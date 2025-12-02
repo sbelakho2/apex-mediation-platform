@@ -23,12 +23,6 @@ describe('vraReconcile.js — safety caps and dry-run/exit codes', () => {
   });
 
   function mockDeps({ deltas = 1, inserted = 1 } = {}) {
-    // Mock ClickHouse utils
-    jest.doMock('../src/utils/clickhouse', () => ({
-      initializeClickHouse: jest.fn(async () => {}),
-      closeClickHouse: jest.fn(async () => {}),
-    }), { virtual: true });
-
     // Mock reconcileWindow implementation
     jest.doMock('../src/services/vra/reconcile', () => ({
       reconcileWindow: jest.fn(async () => ({

@@ -11,8 +11,7 @@
  *     --file /path/to/unity_report.csv
  *
  * Notes:
- * - Initializes ClickHouse using env (CLICKHOUSE_URL or CLICKHOUSE_HOST/PORT)
- * - Writes to recon_statements_raw and recon_statements_norm tables
+ * - Writes to recon_statements_raw and recon_statements_norm tables in Postgres
  * - Safe and additive: does not touch serving/SDK paths; idempotent by (network, load_id)
  */
 
@@ -23,7 +22,6 @@ try { require('ts-node/register/transpile-only'); } catch (_) {}
 const fs = require('node:fs');
 const path = require('node:path');
 
-const { initializeClickHouse, closeClickHouse } = require('../src/utils/clickhouse');
 const { ingestNetworkCsvReport, normalizeNetworkCsvReport } = require('../src/services/vra/ingestion/networkNormalizers');
 
 function parseArgs(argv) {
@@ -147,13 +145,6 @@ async function main() {
   }
 
   try {
-    await initializeClickHouse();
-  } catch (e) {
-    console.error('Failed to initialize ClickHouse:', e.message);
-    process.exit(EXIT.ERROR);
-  }
-
-  try {
     if (dryRun) {
       const out = normalizeNetworkCsvReport({ network, schemaVer, reportId, csv });
       const warnCount = out.errors?.length || 0;
@@ -186,8 +177,6 @@ async function main() {
   } catch (e) {
     console.error('VRA ingestion failed:', e.message);
     process.exitCode = EXIT.ERROR;
-  } finally {
-    try { await closeClickHouse(); } catch (_) {}
   }
 }
 

@@ -33,7 +33,8 @@
     "capture:console": "bash scripts/capture-console.sh",
     "capture:all": "npm run capture:website && npm run capture:console",
     "local:health": "bash scripts/ops/local_health_snapshot.sh",
-    "do:tls": "bash scripts/ops/do_tls_snapshot.sh api.apexmediation.ee"
+    "do:tls": "bash scripts/ops/do_tls_snapshot.sh api.apexmediation.ee",
+    "dryrun:stripe:local": "bash scripts/stripe_dry_run_local.sh"
   },
   "devDependencies": {
     "@types/cookie-parser": "^1.4.10",

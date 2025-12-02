@@ -22,12 +22,7 @@ describe('vraReconcile.js — dry-run semantics and safety caps', () => {
     process.argv = originalArgv;
   });
 
-  function mockDeps({ deltas = 2, inserted = 0 } = {}) {
-    // Mock ClickHouse utils
-    jest.doMock('../src/utils/clickhouse', () => ({
-      initializeClickHouse: jest.fn(async () => {}),
-      closeClickHouse: jest.fn(async () => {}),
-    }), { virtual: true });
+  function mockDeps({ deltas = 1, inserted = 1 } = {}) {
     // Mock reconcile service
     jest.doMock('../src/services/vra/reconcile', () => ({
       reconcileWindow: jest.fn(async () => ({

@@ -1,12 +1,13 @@
 # Production Deployment Guide - ApexMediation
 
+> **Postgres-only update:** Sections that mention provisioning or validating ClickHouse are retained for historical reference but should be skipped for new deployments. The current production stack relies on PostgreSQL + Redis only; consult `docs/Internal/Infrastructure/POSTGRES_MIGRATION_PLAN.md` for the authoritative rollout flow.
+
 ## Prerequisites
 
 ### Infrastructure Requirements
 - **Kubernetes Cluster:** EKS 1.28+ (AWS) or GKE (Google Cloud)
 - **Databases:**
   - PostgreSQL 15+ (RDS or Cloud SQL)
-  - ClickHouse 23+ (self-hosted or Altinity Cloud)
   - Redis 7+ (ElastiCache or Cloud Memorystore)
 - **Container Registry:** ECR, GCR, or Docker Hub
 - **CDN:** CloudFront or Cloud CDN
@@ -94,20 +95,7 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO readonly;
 EOF
 ```
 
-### 2.2 ClickHouse Setup
-
-```bash
-# Create database
-clickhouse-client --host <clickhouse-host> --query "CREATE DATABASE IF NOT EXISTS analytics;"
-
-# Run schema
-clickhouse-client --host <clickhouse-host> --database analytics < data/schemas/clickhouse.sql
-
-# Verify tables
-clickhouse-client --host <clickhouse-host> --query "SHOW TABLES FROM analytics;"
-```
-
-### 2.3 Redis Setup
+### 2.2 Redis Setup
 
 ```bash
 # Test connection
@@ -130,15 +118,6 @@ kubectl create secret generic postgres-creds \
   --from-literal=port=5432 \
   --from-literal=database=rivalapexmediation \
   --from-literal=username=postgres \
-  --from-literal=password=<secure-password> \
-  -n rival
-
-# ClickHouse credentials
-kubectl create secret generic clickhouse-creds \
-  --from-literal=host=<clickhouse-endpoint> \
-  --from-literal=port=9000 \
-  --from-literal=database=analytics \
-  --from-literal=username=default \
   --from-literal=password=<secure-password> \
   -n rival
 

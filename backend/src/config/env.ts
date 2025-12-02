@@ -19,14 +19,6 @@ const envSchema = z.object({
   DB_POOL_MIN: z.string().regex(/^\d+$/).transform(Number).default('2'),
   DB_POOL_MAX: z.string().regex(/^\d+$/).transform(Number).default('10'),
   
-  // Database - ClickHouse
-  CLICKHOUSE_HOST: z.string().min(1, 'CLICKHOUSE_HOST is required').default('localhost'),
-  CLICKHOUSE_URL: z.string().url('CLICKHOUSE_URL must be a valid URL').optional(),
-  CLICKHOUSE_PORT: z.string().regex(/^\d+$/).transform(Number).default('8123'),
-  CLICKHOUSE_DATABASE: z.string().default('apexmediation'),
-  CLICKHOUSE_USER: z.string().optional(),
-  CLICKHOUSE_PASSWORD: z.string().optional(),
-  
   // Redis
   REDIS_HOST: z.string().default('localhost'),
   REDIS_PORT: z.string().regex(/^\d+$/).transform(Number).default('6379'),

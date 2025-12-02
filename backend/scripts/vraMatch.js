@@ -19,7 +19,6 @@ try { require('ts-node/register/transpile-only'); } catch (_) {}
 
 // For now, we import the TS matching library and exercise it minimally.
 const matching = require('../src/services/vra/matchingEngine');
-const { initializeClickHouse, closeClickHouse } = require('../src/utils/clickhouse');
 
 const EXIT = { OK: 0, WARNINGS: 10, ERROR: 20 };
 
@@ -91,13 +90,6 @@ async function main() {
   }
 
   try {
-    await initializeClickHouse();
-  } catch (e) {
-    console.error('Failed to initialize ClickHouse:', e && e.message ? e.message : String(e));
-    process.exit(EXIT.ERROR);
-  }
-
-  try {
     // Placeholder: exercise scoring with empty arrays to validate CLI plumbing + thresholds.
     const matches = matching.matchStatementsToExpected([], [], {
       timeWindowSec: 3600,
@@ -119,8 +111,6 @@ async function main() {
   } catch (e) {
     console.error('VRA Match failed:', e && e.stack ? e.stack : String(e));
     process.exit(EXIT.ERROR);
-  } finally {
-    try { await closeClickHouse(); } catch (_) {}
   }
 }
 

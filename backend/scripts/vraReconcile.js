@@ -2,7 +2,7 @@
 /*
  * VRA Reconcile CLI (operator tool)
  *
- * Computes reconcile deltas for a given window and optionally writes them to ClickHouse.
+ * Computes reconcile deltas for a given window using the Postgres recon tables.
  * Guardrails: max 3-day window unless --force --yes. Exit codes: 0 OK, 10 WARNINGS (no work/dry-run), 20 ERROR.
  *
  * Usage:
@@ -15,7 +15,6 @@
 require('dotenv/config');
 try { require('ts-node/register/transpile-only'); } catch (_) {}
 
-const { initializeClickHouse, closeClickHouse } = require('../src/utils/clickhouse');
 const { reconcileWindow } = require('../src/services/vra/reconcile');
 
 const EXIT = { OK: 0, WARNINGS: 10, ERROR: 20 };
@@ -75,13 +74,6 @@ async function main() {
   }
 
   try {
-    await initializeClickHouse();
-  } catch (e) {
-    console.error('Failed to initialize ClickHouse:', e && e.message ? e.message : String(e));
-    process.exit(EXIT.ERROR);
-  }
-
-  try {
     const res = await reconcileWindow({ from, to, dryRun });
     console.log('[VRA Reconcile] Window:', from, '→', to, dryRun ? '(dry-run)' : '');
     console.log('[VRA Reconcile] Deltas:', res.deltas, 'Inserted:', res.inserted);
@@ -92,8 +84,6 @@ async function main() {
   } catch (e) {
     console.error('VRA Reconcile failed:', e && e.stack ? e.stack : String(e));
     process.exit(EXIT.ERROR);
-  } finally {
-    try { await closeClickHouse(); } catch (_) {}
   }
 }
 

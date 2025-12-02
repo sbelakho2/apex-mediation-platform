@@ -266,7 +266,7 @@ To cancel: **Dashboard → Billing → Cancel Account**
 **Answer**: 
 - **Primary Storage**: **Estonia** (EU) - Hetzner data centers
 - **Backup Storage**: **Germany** (EU) - AWS Frankfurt
-- **Analytics Data**: **Netherlands** (EU) - ClickHouse Cloud
+- **Analytics Data**: **Netherlands** (EU) - Managed Postgres read replicas (no ClickHouse dependency)
 
 **No data** stored outside EU. Fully GDPR compliant.
 

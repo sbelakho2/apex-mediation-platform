@@ -1,5 +1,6 @@
 import dotenv from 'dotenv';
 import { Pool, PoolClient, QueryResult, QueryResultRow } from 'pg';
+import Cursor from 'pg-cursor';
 import logger from './logger';
 import { dbQueryDurationSeconds } from './prometheus';
 
@@ -77,6 +78,10 @@ type QueryOptions = {
   label?: string;
 };
 
+type StreamQueryOptions = QueryOptions & {
+  batchSize?: number;
+};
+
 export const query = <T extends QueryResultRow = QueryResultRow>(
   text: string,
   params?: ReadonlyArray<unknown>,
@@ -103,6 +108,59 @@ export const query = <T extends QueryResultRow = QueryResultRow>(
   .finally(() => {
     try { endTimer(); } catch { /* noop */ }
   });
+};
+
+const defaultStreamBatchSize = parseInt(process.env.DB_STREAM_BATCH_SIZE || '5000', 10);
+
+export const streamQuery = async function* <T extends QueryResultRow = QueryResultRow>(
+  text: string,
+  params?: ReadonlyArray<unknown>,
+  options: StreamQueryOptions = {}
+): AsyncGenerator<T> {
+  const batchSize = options.batchSize && options.batchSize > 0 ? options.batchSize : defaultStreamBatchSize;
+  const op = options.label || (text.split(/\s+/)[0] || 'QUERY').toUpperCase();
+  const endTimer = dbQueryDurationSeconds.startTimer({ operation: op, replica: options.replica ? 'true' : 'false' });
+
+  const targetPool = options.replica && replicaPool ? replicaPool : pool;
+  const client = await targetPool.connect();
+  let cursor: Cursor<T> | null = null;
+
+  try {
+    cursor = client.query(new Cursor(text, params ? [...params] : []));
+    while (true) {
+      const rows: T[] = await new Promise((resolve, reject) => {
+        cursor!.read(batchSize, (error?: Error | null, resultRows?: T[] | null) => {
+          if (error) {
+            reject(error);
+            return;
+          }
+          resolve(resultRows ?? []);
+        });
+      });
+
+      if (!rows.length) {
+        break;
+      }
+
+      for (const row of rows) {
+        yield row;
+      }
+    }
+  } finally {
+    await new Promise<void>((resolve) => {
+      if (!cursor) {
+        resolve();
+        return;
+      }
+      cursor.close(() => resolve());
+    });
+    client.release();
+    try {
+      endTimer();
+    } catch {
+      /* noop */
+    }
+  }
 };
 
 export const getClient = (): Promise<PoolClient> => pool.connect();

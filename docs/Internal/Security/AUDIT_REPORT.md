@@ -55,7 +55,7 @@
 - ✅ `console/src/app/login/page.tsx` - Login page header and demo email
 - ✅ `console/src/components/Navigation.tsx` - Sidebar logo and mobile header
 - ✅ `data/schemas/postgresql.sql` - Schema header comment
-- ✅ `data/schemas/clickhouse.sql` - Schema header comment
+- ✅ `backend/migrations/postgres/20251201_103000_analytics_tables.up.sql` - Schema header comment
 - ✅ `docs/production-deployment.md` - Deployment guide title and commands
 - ✅ `console/src/app/api/auth/[...nextauth]/route.ts` - Demo credentials
 
@@ -215,29 +215,32 @@ Route (app)                                Size     First Load JS
 - ✅ Timestamps with time zones
 - ✅ Updated_at triggers on 5 tables
 
-### 4.2 ClickHouse Schema ✅
+### 4.2 Analytics Postgres Schema ✅
 
-**File:** `data/schemas/clickhouse.sql` (273 lines)
+**Files:**
+- `backend/migrations/postgres/20251201_103000_analytics_tables.up.sql`
+- `backend/migrations/postgres/20251201_131500_partition_analytics_tables.up.sql`
+- `backend/migrations/postgres/20251201_132600_analytics_staging_tables.up.sql`
+- `backend/migrations/postgres/20251201_150500_analytics_rollup_tables.up.sql`
 
 **Fact Tables:** 5 high-volume tables
-1. ✅ `impressions` - ~40 columns, partitioned by month, 90-day TTL
-2. ✅ `clicks` - Click events with 15 columns, 90-day TTL
-3. ✅ `auctions` - Bid landscape arrays, 30-day TTL
-4. ✅ `fraud_events` - Fraud detection metadata, 180-day TTL
-5. ✅ `sdk_telemetry` - Performance metrics, 30-day TTL
+1. ✅ `analytics_impressions` - ~40 columns, partitioned by day, replica indexes
+2. ✅ `analytics_clicks` - Click events with impression linkage and partitioned PK
+3. ✅ `analytics_revenue_events` - Revenue attribution with currency + FX metadata
+4. ✅ `analytics_fraud_events` - Fraud detection metadata in Postgres
+5. ✅ `analytics_sdk_telemetry` - SDK telemetry stream with severity + payload JSONB
 
-**Materialized Views:** 4 aggregation views
-1. ✅ `revenue_hourly` - Hourly revenue aggregations
-2. ✅ `publisher_daily` - Per-publisher daily metrics
-3. ✅ `network_daily` - Per-network daily performance
-4. ✅ `fraud_by_type_daily` - Fraud type breakdowns
+**Supporting Structures:**
+1. ✅ UNLOGGED staging tables for bulk ingest (`analytics_*_stage`)
+2. ✅ Daily partitions + default catch-all partitions for warm data
+3. ✅ Rollup tables/materialized read models refreshed by workers (`analytics_*_rollups`)
+4. ✅ BRIN/covering indexes on publisher_id, adapter_id, observed_at for SLO compliance
 
 **Schema Quality:**
-- ✅ Proper partitioning strategy (monthly)
-- ✅ TTL configured for data lifecycle
-- ✅ SummingMergeTree for materialized views
-- ✅ Efficient indexes (minmax, set)
-- ✅ Columnar storage optimization
+- ✅ Guardrail-aligned retention via partition detach/export
+- ✅ `ON CONFLICT` dedupe keys on event_id scoped by partition
+- ✅ Replica-friendly query plans documented in migrations
+- ✅ JSONB limited to sparse metadata fields
 
 ### 4.3 Redis Cache Patterns ✅
 
@@ -276,7 +279,7 @@ Route (app)                                Size     First Load JS
 | Step | Section | Status | Details |
 |------|---------|--------|---------|
 | 1 | Infrastructure Setup | ✅ | Terraform init/apply, kubectl config, Istio/cert-manager |
-| 2 | Database Setup | ✅ | PostgreSQL migrations, ClickHouse tables, Redis configuration |
+| 2 | Database Setup | ✅ | PostgreSQL control + analytics migrations, Redis configuration |
 | 3 | Secrets Management | ✅ | kubectl secrets, External Secrets Operator, AWS Secrets Manager |
 | 4 | Docker Images | ✅ | Multi-stage builds, registry push commands |
 | 5 | Service Deployment | ✅ | Kubernetes manifests, rolling updates, replicas |
@@ -307,7 +310,7 @@ Route (app)                                Size     First Load JS
 
 1. **TestEndToEndAuctionFlow** ✅
    - SDK ad request → auction
-   - Track impression → ClickHouse verification
+   - Track impression → Postgres analytics verification
    - Track click → analytics update
    - Revenue attribution → dashboard display
 
@@ -490,7 +493,7 @@ ApexMediation has successfully passed comprehensive full-system audit covering:
 - ✅ Brand consistency (10+ files updated)
 - ✅ Console functionality (16 pages tested)
 - ✅ Code quality (TypeScript, ESLint, build)
-- ✅ Database schemas (PostgreSQL, ClickHouse, Redis)
+- ✅ Database schemas (PostgreSQL analytics + control planes, Redis)
 - ✅ Deployment documentation (12-step guide)
 - ✅ Integration tests (5 major flows)
 
@@ -530,7 +533,7 @@ ApexMediation has successfully passed comprehensive full-system audit covering:
 7. `/console/src/app/api/auth/[...nextauth]/route.ts` - Demo credentials, export fix
 8. `/console/.eslintrc.json` - Configuration fix
 9. `/data/schemas/postgresql.sql` - Schema header
-10. `/data/schemas/clickhouse.sql` - Schema header
+10. `/backend/migrations/postgres/20251201_103000_analytics_tables.up.sql` - Schema header
 11. `/docs/production-deployment.md` - Title and cluster names
 12. `/console/src/app/settings/compliance/page.tsx` - Apostrophe fix
 13. `/console/src/app/settings/payout(s)/page.tsx` - Apostrophe fix
@@ -564,7 +567,7 @@ done
 
 # Database schema validation
 grep "^CREATE TABLE" data/schemas/postgresql.sql
-grep "^CREATE TABLE" data/schemas/clickhouse.sql
+grep "^CREATE TABLE" backend/migrations/postgres/20251201_103000_analytics_tables.up.sql
 ```
 
 ---

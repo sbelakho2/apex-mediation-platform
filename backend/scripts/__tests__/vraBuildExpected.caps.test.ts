@@ -27,11 +27,6 @@ describe('vraBuildExpected.js — safety caps and force bypass', () => {
     jest.doMock('pg', () => ({
       Pool: class { async end() {} },
     }));
-    // Mock ClickHouse utils
-    jest.doMock('../src/utils/clickhouse', () => ({
-      initializeClickHouse: jest.fn(async () => {}),
-      closeClickHouse: jest.fn(async () => {}),
-    }), { virtual: true });
     // Mock config
     jest.doMock('../src/config/index', () => ({
       __esModule: true,

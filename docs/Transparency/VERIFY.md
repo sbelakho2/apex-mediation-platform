@@ -13,7 +13,7 @@ This guide explains how to verify auction integrity records end-to-end using:
 
 Prerequisites
 - Backend running with transparency enabled: `TRANSPARENCY_ENABLED=1` and `TRANSPARENCY_API_ENABLED=true`
-- ClickHouse initialized with the transparency tables (legacy instruction — `npm --prefix backend run clickhouse:init` was removed; seed tables manually only if you still operate a ClickHouse cluster)
+- Postgres migrations for transparency applied (see `backend/migrations/025_transparency_receipts.sql` and `backend/migrations/026_ed25519_keys.sql`). Legacy ClickHouse operators can still seed the archived DDL under `backend/migrations/clickhouse/` if needed.
 - An active Ed25519 key pair configured:
   - Private (server): `TRANSPARENCY_PRIVATE_KEY` (PKCS#8 PEM or DER Base64)
   - Public (verify): `TRANSPARENCY_KEY_ID`, `TRANSPARENCY_PUBLIC_KEY_BASE64` (PEM or SPKI DER Base64)
@@ -136,17 +136,17 @@ Troubleshooting
 Writer runtime behavior & metrics
 - Counters exposed: `writes_attempted`, `writes_succeeded`, `writes_failed`, `sampled`, `unsampled`, and `breaker_skipped`. Retrieve via `GET /api/v1/transparency/metrics` or scrape Prometheus names prefixed `transparency_writer_<counter>_total`.
 - Gauges: `transparency_writer_breaker_open` (0/1), `transparency_writer_failure_streak`, plus JSON fields `breaker_open` and `breaker_cooldown_remaining_ms` in the metrics endpoint for Console parity.
-- Retry/backoff: transient ClickHouse failures (HTTP 429/5xx, `ECONNRESET`, `ETIMEDOUT`, `EPIPE`, `ECONNREFUSED`) are retried up to `TRANSPARENCY_RETRY_ATTEMPTS` additional times with jitter between `TRANSPARENCY_RETRY_MIN_DELAY_MS` and `TRANSPARENCY_RETRY_MAX_DELAY_MS` (defaults 3 attempts, 50–250ms).
+- Retry/backoff: transient Postgres failures (SQLSTATE `08***`, `40001`, or transport errors such as `ECONNRESET`, `ETIMEDOUT`, `EPIPE`, `ECONNREFUSED`) are retried up to `TRANSPARENCY_RETRY_ATTEMPTS` additional times with jitter between `TRANSPARENCY_RETRY_MIN_DELAY_MS` and `TRANSPARENCY_RETRY_MAX_DELAY_MS` (defaults 3 attempts, 50–250ms).
 - Circuit breaker: after `TRANSPARENCY_BREAKER_THRESHOLD` consecutive failures (default 5) the writer pauses sampling writes for `TRANSPARENCY_BREAKER_COOLDOWN_MS` (default 60s). Breaker open/close emits a single WARN/INFO log respectively and increments `breaker_skipped` when dropping attempts.
 - Partial writes: if the `auctions` insert succeeds but `auction_candidates` fails, the auction row remains committed. The failure counter increments, breaker state updates, and the metrics endpoint and Prometheus counters reflect the partial error so operators can reconcile gaps without rollback.
 - Environment knobs: set `TRANSPARENCY_RETRY_*` and `TRANSPARENCY_BREAKER_*` in addition to `TRANSPARENCY_SAMPLE_BPS`, `TRANSPARENCY_PRIVATE_KEY`, `TRANSPARENCY_KEY_ID`, and `TRANSPARENCY_ENABLED` to tune runtime behavior.
 - Automation:
   - Local deterministic regression: `npm --prefix backend run transparency:metrics-check` walks transient success, breaker-open, breaker-skip, and cooldown scenarios while printing JSON + Prometheus samples.
-  - Full end-to-end smoke (Docker + API exercise, marked as test env): `npm --prefix backend run transparency:smoke` prepares Postgres/Redis/ClickHouse via `docker compose`, drives authenticated RTB bids, simulates ClickHouse outage, and asserts both `/metrics` and `/api/v1/transparency/metrics` include breaker/ retry signals before tearing everything down.
+  - Full end-to-end smoke (Docker + API exercise, marked as test env): `npm --prefix backend run transparency:smoke` prepares Postgres/Redis via `docker compose`, drives authenticated RTB bids, can toggle a Postgres outage, and asserts both `/metrics` and `/api/v1/transparency/metrics` include breaker/retry signals before teardown.
 
 References
 - Writer and canonicalizer: `backend/src/services/transparencyWriter.ts`
 - Controllers: `backend/src/controllers/transparency.controller.ts`
 - Routes: `backend/src/routes/transparency.routes.ts`
-- ClickHouse schema: `backend/src/utils/clickhouse.schema.ts`
+- Postgres schema: `backend/migrations/025_transparency_receipts.sql`, `backend/migrations/026_ed25519_keys.sql` (legacy ClickHouse DDL lives under `backend/migrations/clickhouse/`).
 - CLI: `backend/scripts/transparency-verify.ts`

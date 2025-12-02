@@ -1,5 +1,7 @@
 # ClickHouse Integration Plan
 
+> **Status:** Archived. The platform no longer provisions or depends on ClickHouse. This document is retained for historical context only—follow `docs/Internal/Infrastructure/POSTGRES_MIGRATION_PLAN.md` for the current Postgres-only analytics stack and ignore any implementation steps below unless explicitly reintroducing ClickHouse in the future.
+
 ## Overview
 
 ClickHouse is a columnar OLAP database optimized for real-time analytics queries on large datasets. This integration will move high-cardinality, time-series analytics from PostgreSQL to ClickHouse for better performance at scale.

@@ -112,10 +112,10 @@ Docs/
   - Database migration
   - Service architecture
 
-- **CLICKHOUSE_INTEGRATION.md** - ClickHouse analytics
-  - Schema design
-  - Query optimization
-  - Real-time analytics
+- **CLICKHOUSE_INTEGRATION.md** - Archived ClickHouse analytics plan (historical reference only; Postgres now primary)
+  - Schema design (legacy)
+  - Query optimization notes
+  - Real-time analytics assumptions prior to Postgres migration
 
 - **observability.md** - Monitoring and observability
   - Prometheus metrics

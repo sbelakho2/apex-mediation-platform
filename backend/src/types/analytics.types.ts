@@ -1,7 +1,7 @@
 /**
  * Analytics Event Types
  * 
- * Type definitions for ad events tracked in ClickHouse
+ * Type definitions for ad events tracked in Postgres analytics fact tables
  */
 
 export enum AdFormat {
