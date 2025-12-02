@@ -6,7 +6,7 @@ import datetime as _dt
 import hashlib
 import json
 import os
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Callable, Dict, Iterable, List, Mapping, MutableMapping, Optional, Sequence
 
@@ -338,6 +338,9 @@ def fetch_sources(
     session.headers.setdefault("User-Agent", "apexml-fetch-enrichment/1.0")
 
     for name, config in selected.items():
+        if name == "vpn" and not include_vpn_lists:
+            # Explicit opt-in required so we skip creating manifests or directories when disabled
+            continue
         ctx = FetchContext(force=force, include_vpn_lists=include_vpn_lists, resources=None)
         target_dir = base_output / name / resolved_date
         entries = config.fetch_fn(target_dir, session, ctx)
@@ -346,7 +349,7 @@ def fetch_sources(
             "version": BASE_VERSION,
             "runDate": resolved_date,
             "generatedAt": _now_iso(),
-            "entries": [entry.__dict__ for entry in entries],
+            "entries": [asdict(entry) for entry in entries],
         }
         manifest_path = target_dir / "manifest.json"
         _write_manifest(manifest_path, manifest_payload)

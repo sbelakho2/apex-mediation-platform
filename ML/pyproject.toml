@@ -9,7 +9,9 @@ description = "Apex Mediation ML pipelines and utilities"
 authors = [{name = "Bel Consulting OÜ"}]
 readme = "README.md"
 requires-python = ">=3.10"
-dependencies = []
+dependencies = [
+	"psycopg[binary]>=3.1",
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]

@@ -579,7 +579,7 @@ Acceptance:
   - [x] Deduplication rules (per request_id / impression_id / click_id)
   - [x] Privacy guard: drop direct identifiers; hash stable IDs; truncate IP (/24) & UA normalization
   - [x] Add ETL dry‑run + unit tests (golden queries, row counts, null checks)
-  - Evidence: ML/scripts/etl_clickhouse.py (hashing, partitioned parquet writer), ML/scripts/tests/test_etl_clickhouse.py (dry-run + CTIT/IP/privacy fixtures)
+  - Evidence: ML/scripts/etl_postgres.py (hashing, partitioned parquet writer backed by Postgres) with ML/scripts/etl_clickhouse.py retained only as a shim, plus ML/scripts/tests/test_etl_postgres.py (dry-run + CTIT/IP/privacy fixtures)
 
 - [x] Enrichment (cached locally; no external calls at runtime)
   - [x] IP intelligence: AbuseIPDB exports ingest (CSV), Tor exit list, cloud IP ranges (AWS/GCP/Azure) → local prefix index (backend/src/services/enrichment/enrichmentService.ts, ipRangeIndex.ts)
@@ -2050,22 +2050,22 @@ Impact on plan
 
 
 ## 2025-11-08 — ML Fraud ETL bring-up
-- Delivered end-to-end ClickHouse → Parquet pipeline aligned with DataContracts v1.0.0.
-  - `ML/scripts/etl_clickhouse.py` handles date windowing, dedupe rules, CTIT joins, adapter/IP aggregates, privacy hashing (`--hash-salt`), and partitioned parquet output with metadata manifest.
-  - `ML/scripts/tests/test_etl_clickhouse.py` provides offline coverage via a fake ClickHouse client (hash enforcement, CTIT computation, IP truncation, adapter latency/error stats, dry-run).
-  - `ML/requirements.txt` now includes `clickhouse-connect` to satisfy client creation.
+- Delivered end-to-end ClickHouse → Parquet pipeline aligned with DataContracts v1.0.0. (Superseded by the Postgres pipeline on 2025-11-27.)
+  - `ML/scripts/etl_postgres.py` is the maintained exporter (etl_clickhouse.py now imports it as a shim) and handles date windowing, dedupe rules, CTIT joins, adapter/IP aggregates, privacy hashing (`--hash-salt`), and partitioned parquet output with metadata manifest.
+  - `ML/scripts/tests/test_etl_postgres.py` provides offline coverage via a fake psycopg client (hash enforcement, CTIT computation, IP truncation, adapter latency/error stats, dry-run) while the old ClickHouse test remains as a compatibility import.
+  - `ML/requirements.txt` / `ML/pyproject.toml` now include `psycopg[binary]` to satisfy Postgres exports.
 - Checklist impact: `P0 › ML Fraud — Shadow Mode and Data Pipeline › ETL` marked complete with evidence links.
 - Follow-up actions (tracked separately): run nightly job wiring once ClickHouse credentials are supplied, extend tests for enrichment joins, and add Great Expectations profile once feature store stabilizes.
 
 
 ## 2025-11-08 — ML Fraud ETL: Parquet dependency audit
 - Why: Installing `ML/requirements.txt` on Python 3.13 failed on `pyarrow` (no wheel). Needed to confirm no other component depends on `pyarrow` before removing it.
-- Repository sweep: `grep -R "pyarrow"` across the workspace surfaced only the optional import in `ML/scripts/etl_clickhouse.py` and the reference in this checklist; no other services, SDKs, or infra pieces require it.
+- Repository sweep: `grep -R "pyarrow"` across the workspace surfaced only the optional import in the ETL pipeline (now `ML/scripts/etl_postgres.py`) and the reference in this checklist; no other services, SDKs, or infra pieces require it.
 - Changes applied:
-  - `ML/scripts/etl_clickhouse.py` now enforces `fastparquet` as the sole Parquet engine and raises a targeted error if the dependency is missing (removing the silent `pyarrow` fallback).
+  - ETL exporter enforces `fastparquet` as the sole Parquet engine and raises a targeted error if the dependency is missing (removing the silent `pyarrow` fallback).
   - Added `ML/pyproject.toml` with a `glue` optional extra so environments that still need `pyarrow` can opt in via `pip install -e "ML[glue]"`.
   - Updated dependency notes (`ML/requirements.txt`, `docs/Internal/ML/PIPELINE_README.md`) to match the fastparquet base + optional-extra story.
-- Validation: `python3.13 -m pytest ML/scripts/tests/test_etl_clickhouse.py` (passes, 2 tests).
+- Validation: `python3.13 -m pytest ML/scripts/tests/test_etl_postgres.py` (passes, 3 tests with hashing + dry-run coverage).
 - Next steps: If future environments require `pyarrow` (e.g., AWS Glue jobs), add it back under an optional extra (`ML[glue]`) with platform-specific install guidance.
 
 

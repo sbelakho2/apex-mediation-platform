@@ -105,6 +105,106 @@
       }
     },
     {
+      "type": "stat",
+      "title": "Replica Replay Lag (ms)",
+      "targets": [
+        {
+          "expr": "(max(pg_stat_replication_replay_lag) * 1000) or vector(0)",
+          "legendFormat": "replay"
+        }
+      ],
+      "gridPos": { "w": 6, "h": 4, "x": 0, "y": 4 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "value": null, "color": "green" },
+              { "value": 1000, "color": "yellow" },
+              { "value": 5000, "color": "red" }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Replica Write Lag (ms)",
+      "targets": [
+        {
+          "expr": "(max(pg_stat_replication_write_lag) * 1000) or vector(0)",
+          "legendFormat": "write"
+        }
+      ],
+      "gridPos": { "w": 6, "h": 4, "x": 6, "y": 4 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "value": null, "color": "green" },
+              { "value": 1000, "color": "yellow" },
+              { "value": 5000, "color": "red" }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Buffer Cache Hit (%)",
+      "targets": [
+        {
+          "expr": "clamp_max(clamp_min(100 * sum(pg_stat_database_blks_hit{datname!~\"template.*\"}) / sum(pg_stat_database_blks_hit{datname!~\"template.*\"} + pg_stat_database_blks_read{datname!~\"template.*\"}), 0), 100)",
+          "legendFormat": "hit%"
+        }
+      ],
+      "gridPos": { "w": 6, "h": 4, "x": 12, "y": 4 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 2,
+          "max": 100,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "value": null, "color": "red" },
+              { "value": 95, "color": "yellow" },
+              { "value": 98, "color": "green" }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Staging Rows Pending",
+      "targets": [
+        {
+          "expr": "(sum(pg_stat_user_tables_n_live_tup{relname=~\"analytics_.*_stage|transparency_.*_stage\"})) or vector(0)",
+          "legendFormat": "rows"
+        }
+      ],
+      "gridPos": { "w": 6, "h": 4, "x": 18, "y": 4 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "value": null, "color": "green" },
+              { "value": 250000, "color": "yellow" },
+              { "value": 500000, "color": "red" }
+            ]
+          }
+        }
+      }
+    },
+    {
       "type": "timeseries",
       "title": "DB Query Duration Percentiles",
       "targets": [
@@ -121,7 +221,7 @@
           "legendFormat": "p99"
         }
       ],
-      "gridPos": { "w": 12, "h": 8, "x": 0, "y": 4 },
+      "gridPos": { "w": 12, "h": 8, "x": 0, "y": 8 },
       "fieldConfig": {
         "defaults": {
           "unit": "s",
@@ -141,13 +241,53 @@
           "legendFormat": "{{operation}} p95"
         }
       ],
-      "gridPos": { "w": 12, "h": 8, "x": 12, "y": 4 },
+      "gridPos": { "w": 12, "h": 8, "x": 12, "y": 8 },
       "fieldConfig": {
         "defaults": {
           "unit": "s",
           "custom": {
             "lineWidth": 2,
             "fillOpacity": 0
+          }
+        }
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Replica Lag by Replica (ms)",
+      "targets": [
+        {
+          "expr": "sum by (application_name) (pg_stat_replication_replay_lag * 1000)",
+          "legendFormat": "{{application_name}}"
+        }
+      ],
+      "gridPos": { "w": 12, "h": 8, "x": 0, "y": 16 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10
+          }
+        }
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Staging Rows by Table",
+      "targets": [
+        {
+          "expr": "sum by (relname) (pg_stat_user_tables_n_live_tup{relname=~\"analytics_.*_stage|transparency_.*_stage\"})",
+          "legendFormat": "{{relname}}"
+        }
+      ],
+      "gridPos": { "w": 12, "h": 8, "x": 12, "y": 16 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 20
           }
         }
       }
@@ -163,7 +303,7 @@
           "instant": true
         }
       ],
-      "gridPos": { "w": 12, "h": 8, "x": 0, "y": 12 },
+      "gridPos": { "w": 12, "h": 8, "x": 0, "y": 24 },
       "transformations": [
         {
           "id": "organize",
@@ -186,7 +326,7 @@
           "legendFormat": "utilization %"
         }
       ],
-      "gridPos": { "w": 12, "h": 8, "x": 12, "y": 12 },
+      "gridPos": { "w": 12, "h": 8, "x": 12, "y": 24 },
       "fieldConfig": {
         "defaults": {
           "unit": "percent",
@@ -211,7 +351,7 @@
           "legendFormat": "{{queue}}"
         }
       ],
-      "gridPos": { "w": 12, "h": 8, "x": 0, "y": 20 },
+      "gridPos": { "w": 12, "h": 8, "x": 0, "y": 32 },
       "fieldConfig": {
         "defaults": {
           "unit": "short",
@@ -235,7 +375,7 @@
           "legendFormat": "{{queue}} failed"
         }
       ],
-      "gridPos": { "w": 12, "h": 8, "x": 12, "y": 20 },
+      "gridPos": { "w": 12, "h": 8, "x": 12, "y": 32 },
       "fieldConfig": {
         "defaults": {
           "unit": "reqps",
@@ -255,7 +395,7 @@
           "legendFormat": "{{queue}} growth rate"
         }
       ],
-      "gridPos": { "w": 24, "h": 8, "x": 0, "y": 28 },
+      "gridPos": { "w": 24, "h": 8, "x": 0, "y": 40 },
       "fieldConfig": {
         "defaults": {
           "unit": "short",
@@ -289,7 +429,7 @@
           "instant": true
         }
       ],
-      "gridPos": { "w": 24, "h": 8, "x": 0, "y": 36 },
+      "gridPos": { "w": 24, "h": 8, "x": 0, "y": 48 },
       "transformations": [
         {
           "id": "merge",
@@ -339,5 +479,5 @@
   "timezone": "",
   "title": "Database & Queue Health",
   "uid": "db-queue",
-  "version": 1
+  "version": 2
 }

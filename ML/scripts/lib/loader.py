@@ -151,7 +151,11 @@ def iter_parquet(path: Path | str, columns: Optional[List[str]] = None, filters:
     _filters = None
     if filters:
         _filters = [(c, op, v) for (c, op, v) in filters]
-    scanner = dataset.scan(columns=columns, filter=_filters, batch_size=batch_size or 64_000)
+    scanner_kwargs = {"columns": columns, "filter": _filters, "batch_size": batch_size or 64_000}
+    try:
+        scanner = dataset.scanner(**scanner_kwargs)
+    except AttributeError:
+        scanner = dataset.scan(**scanner_kwargs)
     for record_batch in scanner.to_batches():
         # Convert to pandas DataFrame for pipeline parity
         yield record_batch.to_pandas(types_mapper=None)  # default dtype mapping

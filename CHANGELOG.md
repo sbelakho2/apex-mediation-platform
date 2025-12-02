@@ -2682,7 +2682,7 @@ What changed
   - `backend/docs/CLICKHOUSE_ANALYTICS.md`
   - `docs/Internal/Infrastructure/CLICKHOUSE_INTEGRATION.md`
   - `data/schemas/clickhouse.sql`, `data/schemas/clickhouse_migration.sql`
-  - `ML/scripts/etl_clickhouse.py` (header comment)
+  - `ML/scripts/etl_postgres.py` (new Postgres ETL section + usage note) and `ML/scripts/etl_clickhouse.py` (shim header pointing to the new script)
   - `docs/Internal/Automation/ULTRA_LEAN_AUTOMATION.md` (Upstash notes marked superseded)
   - `monitoring/prometheus.yml` (Upstash metrics comment marked deprecated)
 

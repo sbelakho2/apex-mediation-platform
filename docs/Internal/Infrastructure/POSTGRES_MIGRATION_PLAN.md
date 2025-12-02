@@ -99,7 +99,7 @@ _Guardrail alignment:_ keep control-plane APIs on typed, versioned schemas; use 
 - **Plan**:
   1. Remove health-check dependency on ClickHouse client; base readiness purely on Postgres/Redis or new analytics tables. **Status:** ✅ `HealthCheckController` now issues direct Postgres probes (latency, replica lag via `pg_stat_replication`, staging pressure, cache hit ratio) and never instantiates the ClickHouse client; Redis remains a soft dependency.
   2. Rename metrics to `vra_query_fail_total` or similar to remove explicit ClickHouse terminology. **Status:** ✅ `backend/src/utils/prometheus.ts`, `monitoring/alerts/vra-alerts.yml`, Grafana dashboards, and the VRA runbook/summary docs now reference `vra_query_fail_total` while keeping the same alert thresholds.
-  3. Backfill dashboards/runbooks so Postgres replica lag, queue depth, cache hit rate, and staging pressure are graphed next to health-check status. **Status:** Pending — Grafana still needs the replica-lag panels, but the monitoring alerts + `docs/runbooks/analytics-postgres.md` now document the Postgres-only ingestion path.
+  3. Backfill dashboards/runbooks so Postgres replica lag, queue depth, cache hit rate, and staging pressure are graphed next to health-check status. **Status:** ✅ `monitoring/grafana/db-queue.json` now includes replica-lag, cache-hit, and staging-backlog panels alongside queue depth, and `docs/runbooks/analytics-postgres.md` walks responders through reading the new charts.
   - **Guardrails:** health probes must measure replica lag, queue depth, and cache hit SLIs in addition to base connectivity; alerts cannot rely on single-node signals and must prove replica isolation remains intact.
 
 ### 1.5 Scripts/tests/workers
@@ -128,7 +128,7 @@ _Guardrail alignment:_ console/website/ML layers must read from dedicated replic
 
 - **Console app**: docs mention ClickHouse data sources; update to note Postgres analytics. **Status:** ✅ `console/BACKEND_INTEGRATION.md` now states analytics runs on the Postgres fact tables/replicas and drops the ClickHouse service from local setup instructions.
 - **Website**: marketing copy references ClickHouse Cloud as a sub-processor; replace with Postgres (or remove).
-- **ML**: `ML/scripts/etl_clickhouse.py` + tests need to switch to Postgres (likely via psycopg) or be deprecated.
+- **ML**: ✅ `ML/scripts/etl_postgres.py` now owns the fraud/data ETL via psycopg (with `etl_clickhouse.py` downgraded to a shim), tests live under `ML/scripts/tests/test_etl_postgres.py`, and all docs/checklists point at the Postgres exporter.
 - **Data schemas**: remove `data/schemas/clickhouse*.sql` and replace with Postgres schema files if needed.
 
 ## 4. Dependencies & Configuration

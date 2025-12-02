@@ -6,6 +6,11 @@ set -e
 
 COMMAND=${1:-start}
 MONITORING_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ "$(uname -s)" == "Darwin" ]]; then
+  SED_INPLACE=(sed -i '')
+else
+  SED_INPLACE=(sed -i)
+fi
 ALERTMANAGER_RENDERED="$MONITORING_DIR/alertmanager.generated.yml"
 GRAFANA_DATASOURCES_RENDERED="$MONITORING_DIR/grafana-datasources.generated.yml"
 PROMETHEUS_RENDERED="$MONITORING_DIR/prometheus.generated.yml"
@@ -79,7 +84,7 @@ render_alertmanager_config() {
 
   strip_optional_alertmanager_block() {
     local marker="$1"
-    sed -i "/# OPTIONAL_${marker}_START/,/# OPTIONAL_${marker}_END/d" "$ALERTMANAGER_RENDERED"
+    "${SED_INPLACE[@]}" "/# OPTIONAL_${marker}_START/,/# OPTIONAL_${marker}_END/d" "$ALERTMANAGER_RENDERED"
   }
 
   if [ -z "$TWILIO_WEBHOOK_URL" ]; then

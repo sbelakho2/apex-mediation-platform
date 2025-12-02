@@ -17,7 +17,7 @@ This document defines the authoritative schemas, privacy guarantees, and version
 	- `pii_dropped`, `pii_retained_hash`, `pii_retained_truncated`
 	- `enrichment_snapshots` (map of feed → snapshot date)
 - Pipeline code validates that parquet key-value metadata also embed `schema_version` to guard against mismatches.
-- `ML/scripts/etl_clickhouse.py` enforces the salt requirement via `--hash-salt` / `ML_HASH_SALT`, hashes identifiers client-side, and writes the metadata payload per run.
+- `ML/scripts/etl_postgres.py` enforces the salt requirement via `--hash-salt` / `ML_HASH_SALT`, hashes identifiers client-side, and writes the metadata payload per run.
 
 Example metadata payload:
 ```json
@@ -156,7 +156,7 @@ Label artifacts (`data/labels/*.parquet`) store consolidated weak and human labe
 5. Tag the change in the next weekly ML fraud status update.
 
 ## 9. Reference Scripts
-- `ML/scripts/etl_clickhouse.py` — Materializes training datasets using the schema above.
+- `ML/scripts/etl_postgres.py` — Materializes training datasets using the schema above.
 - `ML/scripts/feature_builder.py` — Derives rolling aggregates and OMSDK features.
 - `ML/scripts/weak_labels.py` — Generates weak label flags described in the schema.
 - `ML/scripts/shadow_scoring.py` — Emits scoring payloads in shadow mode.

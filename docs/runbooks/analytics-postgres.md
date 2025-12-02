@@ -14,6 +14,9 @@ Purpose
   - `analytics_ingest_buffer_size` per event kind (staging backlog)
 - **Grafana › DB & Queue Health (`db-queue.json`)**
   - `db_query_duration_seconds` (label `operation=analytics_merge`)
+  - `pg_stat_replication_{replay,write}_lag` → Replica lag stats in ms
+  - `pg_stat_database_blks_hit` / `pg_stat_database_blks_read` → buffer cache hit %
+  - `pg_stat_user_tables_n_live_tup` scoped to `*_stage` tables → staging backlog
   - `queue_depth` for `analytics_ingest`
 - **/ready health check**
   - Shows Postgres replica lag, queue depth, cache hit rate.

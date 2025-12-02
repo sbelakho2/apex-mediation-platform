@@ -3,10 +3,12 @@ numpy==1.26.4
 pandas==2.2.2
 dask[dataframe]==2024.2.0
 pyarrow==14.0.2
+psycopg[binary]==3.1.18
 scikit-learn==1.4.0
 scipy==1.11.4
 requests==2.31.0
 responses==0.25.3
+pydantic==2.9.2
 pyod==1.1.2
 xgboost==2.0.3
 torch==2.5.1

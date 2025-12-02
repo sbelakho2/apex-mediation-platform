@@ -2840,8 +2840,8 @@
     "index": 264
   },
   {
-    "path": "ML/scripts/etl_clickhouse.py",
-    "risk": "Credentials pulled from env without fallback; SQL built via f-strings when dynamic filters used\u2014risk of injection if untrusted input; lacks retry/backpressure for large exports.",
+    "path": "ML/scripts/etl_postgres.py",
+    "risk": "Still pulls credentials from env/CLI only; loads entire day partitions into pandas before writing parquet so RAM spikes on large exports; no retry/backpressure when Postgres snapshots exceed RAM.",
     "top_level": "ML",
     "fix_id": "FIX-06",
     "fix_title": "Data & ML Pipeline Hardening",
@@ -3370,8 +3370,8 @@
     "index": 282
   },
   {
-    "path": "ML/scripts/tests/test_etl_clickhouse.py",
-    "risk": "Pure unit test\u2014doesn\u2019t run against real ClickHouse or large datasets; parquet assertions rely on `pyarrow` availability in test env.",
+    "path": "ML/scripts/tests/test_etl_postgres.py",
+    "risk": "Uses fake psycopg cursor only - no integration coverage against real Postgres or production datasets; parquet assertions rely on pandas+fastparquet availability in CI.",
     "top_level": "ML",
     "fix_id": "FIX-06",
     "fix_title": "Data & ML Pipeline Hardening",

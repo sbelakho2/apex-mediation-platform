@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import Any, Dict, Iterable, Iterator, Literal, Optional
 
 import math
+import numpy as np
 
 from pydantic import BaseModel, Field, ValidationError, StrictFloat, StrictInt, StrictStr, ConfigDict
 
@@ -79,10 +80,34 @@ def iter_validate_rows(
     n = min(total, limit) if (limit is not None and limit >= 0) else total
     for idx in range(n):
         try:
-            Model.model_validate(df.iloc[idx].to_dict())
+            row = df.iloc[idx].to_dict()
+            normalized = {
+                key: _normalize_value(value)
+                for key, value in row.items()
+            }
+            Model.model_validate(normalized)
             yield (idx, None)
         except ValidationError as e:  # noqa: PERF203 - small volume per sample
             yield (idx, e)
+
+
+def _normalize_value(value: Any) -> Any:
+    if isinstance(value, np.generic):
+        value = value.item()
+    if value is None:
+        return None
+    # pandas.NA type detection without importing pandas globally
+    if value.__class__.__name__ == "NAType":  # pragma: no cover - pandas optional
+        return None
+    if isinstance(value, float):
+        if math.isnan(value):
+            return None
+        return value
+    if isinstance(value, (np.floating,)):
+        if math.isnan(float(value)):
+            return None
+        return float(value)
+    return value
 
 
 def diagnostics(df) -> Dict[str, Dict[str, Any]]:

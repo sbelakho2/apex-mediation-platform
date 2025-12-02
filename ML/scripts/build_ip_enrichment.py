@@ -106,13 +106,14 @@ class BloomFilter:
         error_rate = float(payload.get("error_rate", 0.001))
         bloom = cls(capacity=max(1, capacity), error_rate=error_rate)
         bloom.hash_count = int(payload.get("hash_count", bloom.hash_count))
-        bloom.size_bits = int(payload.get("size_bits", bloom.size_bits))
+        stored_size_bits = int(payload.get("size_bits", bloom.size_bits))
+        bloom.size_bits = max(1, stored_size_bits)
         bloom.byte_length = (bloom.size_bits + 7) // 8
         data = base64.b64decode(payload.get("data_b64", ""), validate=True)
         if data:
-            bloom._bits = bytearray(data)
-            bloom.byte_length = len(data)
-            bloom.size_bits = len(data) * 8
+            if len(data) < bloom.byte_length:
+                data = data + b"\x00" * (bloom.byte_length - len(data))
+            bloom._bits = bytearray(data[: bloom.byte_length])
         return bloom
 
 
@@ -145,10 +146,10 @@ def load_abuseipdb(paths: Sequence[Path]) -> List[NetworkEntry]:
         with _open_text(path) as handle:
             reader = csv.DictReader(handle)
             column = None
-            headers = [h.lower() for h in reader.fieldnames or []]
+            headers = {h.lower(): h for h in reader.fieldnames or []}
             for candidate in ("ipaddress", "ip", "address"):
                 if candidate in headers:
-                    column = candidate
+                    column = headers[candidate]
                     break
             if column is None:
                 raise ValueError(f"{path} missing ip column")
