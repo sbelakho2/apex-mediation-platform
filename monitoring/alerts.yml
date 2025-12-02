@@ -326,32 +326,32 @@ groups:
           summary: "HTTP error budget burn (1h window)"
           description: "Error rate {{ $value | humanizePercentage }} is consistently elevated over the last hour."
 
-  # ClickHouse & Analytics alerts
-  - name: clickhouse_analytics
+  # Analytics (Postgres) alerts
+  - name: analytics_postgres
     interval: 1m
     rules:
-      - alert: ClickHouseWriteFailures
-        expr: sum(rate(analytics_events_failed_total{destination="clickhouse"}[5m])) > 10
+      - alert: AnalyticsWriteFailures
+        expr: sum(rate(analytics_events_failed_total[5m])) > 10
         for: 5m
         labels:
           severity: critical
           service: analytics
         annotations:
-          summary: "ClickHouse write failures detected"
-          description: "{{ $value }} write failures/s to ClickHouse. Check database health and connectivity."
-          runbook: "https://github.com/sbelakho2/Ad-Project/blob/main/docs/runbooks/clickhouse-write-failures.md"
+          summary: "Postgres analytics write failures detected"
+          description: "{{ $value }} write failures/s inserting into analytics tables. Check Postgres health, staging pressure, and recent migrations."
+          runbook: "https://github.com/sbelakho2/Ad-Project/blob/main/docs/runbooks/analytics-postgres.md"
           dashboard: "https://grafana.rival.com/d/tracking-ingest"
 
-      - alert: ClickHouseHighWriteLatency
-        expr: histogram_quantile(0.95, sum by (le) (rate(clickhouse_write_duration_seconds_bucket[5m]))) > 1.0
+      - alert: AnalyticsBufferGrowth
+        expr: max(analytics_ingest_buffer_size) > 5000
         for: 10m
         labels:
           severity: warning
           service: analytics
         annotations:
-          summary: "ClickHouse write latency elevated"
-          description: "ClickHouse write p95 latency is {{ $value }}s, above 1s threshold."
-          runbook: "https://github.com/sbelakho2/Ad-Project/blob/main/docs/runbooks/clickhouse-write-failures.md"
+          summary: "Analytics staging buffer growing"
+          description: "Analytics buffer holds {{ $value }} events (>5k). Workers may be lagging or merges stuck."
+          runbook: "https://github.com/sbelakho2/Ad-Project/blob/main/docs/runbooks/analytics-postgres.md"
           dashboard: "https://grafana.rival.com/d/tracking-ingest"
 
       - alert: AnalyticsPipelineBroken
@@ -362,8 +362,8 @@ groups:
           service: analytics
         annotations:
           summary: "Analytics pipeline backed up"
-          description: "Event lag rate is {{ $value }}/s. Queue may be blocked or ClickHouse unavailable."
-          runbook: "https://github.com/sbelakho2/Ad-Project/blob/main/docs/runbooks/analytics-pipeline-broken.md"
+          description: "Event lag rate is {{ $value }}/s. Queue may be blocked or Postgres merges unavailable."
+          runbook: "https://github.com/sbelakho2/Ad-Project/blob/main/docs/runbooks/analytics-postgres.md"
           dashboard: "https://grafana.rival.com/d/tracking-ingest"
 
   # Queue health alerts

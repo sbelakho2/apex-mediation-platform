@@ -8,7 +8,6 @@ services:
       - NODE_ENV=${NODE_ENV:-production}
       - DATABASE_URL=${DATABASE_URL:-postgresql://postgres:postgres@postgres:5432/apexmediation}
       - REDIS_URL=${REDIS_URL:-redis://redis:6379}
-      - CLICKHOUSE_URL=${CLICKHOUSE_URL:-http://clickhouse:8123}
       - JWT_SECRET=${JWT_SECRET:-dev-stack-secret-token-1234567890abcdef}
       - COOKIE_SECRET=${COOKIE_SECRET:-dev-cookie-secret-1234567890abcdef}
       - JWT_EXPIRES_IN=${JWT_EXPIRES_IN:-7d}
@@ -17,7 +16,6 @@ services:
     depends_on:
       - postgres
       - redis
-      - clickhouse
     networks:
       - ad-stack
     profiles:
@@ -91,21 +89,6 @@ services:
       - dev
       - full
 
-  clickhouse:
-    image: clickhouse/clickhouse-server:23.9
-    ports:
-      - "8123:8123"
-      - "9000:9000"
-    environment:
-      - CLICKHOUSE_DB=analytics
-      - CLICKHOUSE_USER=default
-      - CLICKHOUSE_PASSWORD=
-    volumes:
-      - clickhouse-data:/var/lib/clickhouse
-    networks:
-      - ad-stack
-    profiles:
-      - full
 
   ml-train:
     build:
@@ -146,4 +129,3 @@ networks:
 
 volumes:
   postgres-data:
-  clickhouse-data:

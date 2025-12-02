@@ -26,6 +26,9 @@ export const cleanDatabase = async (testPool: Pool): Promise<void> => {
   await testPool.query('TRUNCATE TABLE publishers RESTART IDENTITY CASCADE');
   await testPool.query('TRUNCATE TABLE publisher_bank_accounts RESTART IDENTITY CASCADE');
   await testPool.query('TRUNCATE TABLE adapters RESTART IDENTITY CASCADE');
+  await testPool.query('TRUNCATE TABLE analytics_revenue_events RESTART IDENTITY CASCADE');
+  await testPool.query('TRUNCATE TABLE analytics_impressions RESTART IDENTITY CASCADE');
+  await testPool.query('TRUNCATE TABLE analytics_sdk_telemetry RESTART IDENTITY CASCADE');
   
   // Clean A/B testing tables
   await testPool.query('TRUNCATE TABLE ab_events RESTART IDENTITY CASCADE');

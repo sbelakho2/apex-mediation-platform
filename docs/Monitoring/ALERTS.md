@@ -8,7 +8,7 @@ Complete guide to all Prometheus alert rules for the Rival ad platform.
 2. [Alert Groups](#alert-groups)
 3. [Severity Levels](#severity-levels)
 4. [RTB Auction Alerts](#rtb-auction-alerts)
-5. [ClickHouse Analytics Alerts](#clickhouse-analytics-alerts)
+5. [Analytics (Postgres) Alerts](#analytics-postgres-alerts)
 6. [Queue Health Alerts](#queue-health-alerts)
 7. [Testing Alerts](#testing-alerts)
 8. [Alertmanager Configuration](#alertmanager-configuration)
@@ -48,7 +48,7 @@ groups:
 | Group | Alerts | Purpose | File Location |
 |-------|--------|---------|---------------|
 | rtb_auction | 7 | RTB performance and adapter health | monitoring/alerts.yml |
-| clickhouse_analytics | 3 | Analytics pipeline issues | monitoring/alerts.yml |
+| analytics_postgres | 3 | Analytics pipeline (Postgres) issues | monitoring/alerts.yml |
 | queue_health | 4 | Background job queue monitoring | monitoring/alerts.yml |
 
 **Total Alerts:** 14
@@ -63,9 +63,9 @@ Monitor real-time bidding auction performance and adapter reliability.
 
 **Evaluation Interval:** 30s
 
-### ClickHouse Analytics (3 alerts)
+### Analytics (Postgres) (3 alerts)
 
-Monitor analytics event ingestion and ClickHouse write performance.
+Monitor analytics event ingestion, Postgres staging buffers, and write parity.
 
 **Evaluation Interval:** 30s
 
@@ -314,9 +314,9 @@ sum(rate(http_requests_total[1h]))
 
 ---
 
-## ClickHouse Analytics Alerts
+## Analytics (Postgres) Alerts
 
-### 1. ClickHouseWriteFailures
+### 1. AnalyticsWriteFailures
 
 **Severity:** Critical  
 **Threshold:** Write failure rate >10/s for 5 minutes  
@@ -328,57 +328,55 @@ sum(rate(analytics_events_failed_total[5m])) > 10
 ```
 
 **Symptoms:**
-- Events not appearing in analytics dashboard
-- Data gaps in reports
-- Queue backlog growth
+- Events never land in Postgres analytics tables
+- Data gaps in dashboards / reporting APIs
+- `analytics_events_failed_total` spikes for one or more kinds
 
 **Possible Causes:**
-- ClickHouse service down
-- Schema validation errors
-- Disk full on ClickHouse node
-- Network connectivity issues
+- Postgres migration deployed with incompatible schema
+- PgBouncer pool exhausted (transactions stuck in WAITING state)
+- Long-running merge holding locks on staging partitions
+- Network interruptions between ingest workers and Postgres
 
 **Immediate Actions:**
-1. Check ClickHouse status: `kubectl get pods -n analytics`
-2. Review ClickHouse logs: `kubectl logs -n analytics statefulset/clickhouse`
-3. Verify disk space: `df -h` on ClickHouse nodes
-4. Check network connectivity from analytics workers
-5. Pause writes if necessary to prevent queue overflow
+1. Grafana → Tracking & Ingest dashboard: confirm failing `kind`.
+2. Inspect backend logs for `analyticsEventsFailedTotal` details.
+3. Check staging table counts: `SELECT kind, COUNT(*) FROM analytics_events_stage GROUP BY 1;`
+4. Review `pg_stat_activity` for blocked `analytics_merge_*` queries.
+5. Pause ingest if necessary via `ANALYTICS_INGEST_ENABLED=false`, remediate, then resume.
 
-**Runbook:** [docs/runbooks/clickhouse-write-failures.md](../runbooks/clickhouse-write-failures.md)
+**Runbook:** [docs/runbooks/analytics-postgres.md](../runbooks/analytics-postgres.md)
 
 ---
 
-### 2. ClickHouseHighWriteLatency
+### 2. AnalyticsBufferGrowth
 
 **Severity:** Warning  
-**Threshold:** p95 write latency >1s for 10 minutes  
-**Impact:** Queue backlog, processing delays
+**Threshold:** Buffer size >5k rows for 10 minutes  
+**Impact:** Rising staging pressure and merge latency
 
 **Query:**
 ```promql
-histogram_quantile(0.95, 
-  sum by (le) (rate(clickhouse_write_duration_seconds_bucket[5m]))
-) > 1
+max(analytics_ingest_buffer_size) > 5000
 ```
 
 **Symptoms:**
-- Increasing queue lag
-- Slow dashboard queries
-- Event processing delays
+- `analytics_ingest_buffer_size` panel flatlines high
+- Merge workers stay busy with little throughput
+- Replica lag creeping upward
 
 **Possible Causes:**
-- High query load on ClickHouse
-- Large batch inserts
-- Insufficient ClickHouse resources
-- Too many concurrent merges
+- Merge jobs slowed by VACUUM/autovacuum
+- Primary Postgres under-provisioned (I/O waits)
+- Worker concurrency reduced (queue workers crashed)
 
 **Mitigation:**
-1. Check ClickHouse system metrics: `SELECT * FROM system.metrics`
-2. Review running queries: `SELECT * FROM system.processes`
-3. Kill long-running queries if necessary
-4. Increase batch size to reduce insert frequency
-5. Scale ClickHouse replicas
+1. Identify offending `kind` in Grafana (buffer chart).
+2. Inspect merge workers/logs for errors.
+3. Check Postgres for long-running analytics queries.
+4. Increase worker replicas or reduce batch sizes until buffer drains.
+
+**Runbook:** [docs/runbooks/analytics-postgres.md](../runbooks/analytics-postgres.md)
 
 ---
 
@@ -386,29 +384,29 @@ histogram_quantile(0.95,
 
 **Severity:** Critical  
 **Threshold:** Queue lag growing >100 events/s for 10 minutes  
-**Impact:** Complete pipeline failure
+**Impact:** Complete analytics outage
 
 **Query:**
 ```promql
-rate(analytics_events_enqueued_total[5m]) 
-- 
-rate(analytics_events_written_total[5m]) 
+sum(rate(analytics_events_enqueued_total[5m]))
+-
+sum(rate(analytics_events_written_total[5m]))
 > 100
 ```
 
 **Symptoms:**
-- Rapidly growing Redis queue
-- Events enqueued but not written
-- Dashboard data not updating
+- Events pile up in Redis/worker queue
+- Tracking dashboards stop updating
+- Postgres staging tables balloon
 
 **Immediate Actions:**
-1. Check analytics worker status: `kubectl get pods -n analytics`
-2. Verify ClickHouse availability
-3. Check Redis queue depth: `redis-cli LLEN analytics:events`
-4. Scale up workers: `kubectl scale deployment/analytics-worker --replicas=10`
-5. If queue >100K, consider draining to S3 backup
+1. Validate worker pods/processes are running.
+2. Check Redis/queue depth metrics.
+3. Confirm Postgres `/ready` probe shows low replica lag; if not, fail traffic back to primary temporarily.
+4. Inspect `analytics_ingest_buffer_size` to ensure merges resume after remediation.
+5. Document incident per operator checklist.
 
-**Runbook:** [docs/runbooks/analytics-pipeline-broken.md](../runbooks/analytics-pipeline-broken.md)
+**Runbook:** [docs/runbooks/analytics-postgres.md](../runbooks/analytics-postgres.md)
 
 ---
 
@@ -601,17 +599,17 @@ kubectl set env deployment/backend ERROR_INJECTION_RATE- -n staging
 
 **Verify:** Check `http_requests_total{status="500"}` in Prometheus
 
-##### 4. ClickHouseWriteFailures
+##### 4. AnalyticsWriteFailures
 
-**Simulate Method:** Break ClickHouse connectivity
+**Simulate Method:** Temporarily block Postgres analytics connectivity
 
 ```bash
-# Block ClickHouse port temporarily (requires network policy)
+# Block Postgres port temporarily (requires network policy)
 kubectl apply -f - <<EOF
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: block-clickhouse
+  name: block-analytics-postgres
   namespace: staging
 spec:
   podSelector:
@@ -623,15 +621,15 @@ spec:
   - to:
     - podSelector:
         matchLabels:
-          app: clickhouse
+          app: postgres
     ports:
     - protocol: TCP
-      port: 9999  # Non-existent port
+      port: 5432
 EOF
 
 # Wait 5 minutes for alert
 # Remove policy
-kubectl delete networkpolicy block-clickhouse -n staging
+kubectl delete networkpolicy block-analytics-postgres -n staging
 ```
 
 **Verify:** Check `analytics_events_failed_total` metric
@@ -659,20 +657,23 @@ kubectl scale deployment/queue-worker --replicas=3 -n staging
 
 ##### 6. AnalyticsPipelineBroken
 
-**Simulate Method:** Enqueue without writing
+**Simulate Method:** Pause analytics workers while continuing to enqueue events
 
 ```bash
-# Stop ClickHouse writes (but keep enqueuing)
-kubectl set env deployment/analytics-worker CLICKHOUSE_WRITES_ENABLED=false -n staging
+# Scale analytics workers to zero so enqueued events pile up
+kubectl scale deployment/analytics-worker --replicas=0 -n staging
 
 # Generate analytics events
 kubectl run load-test --image=curlimages/curl --rm -it --restart=Never -- \
-  sh -c 'while true; do curl -X POST http://backend:4000/api/v1/analytics/event \
+  sh -c 'for i in $(seq 1 10000); do curl -s -X POST \
+    http://backend:4000/api/v1/analytics/event \
+    -H "Content-Type: application/json" \
     -d "{\"kind\":\"impression\",\"placementId\":\"test\"}"; sleep 0.1; done'
 
 # Wait 10 minutes for queue lag to grow
-# Re-enable writes
-kubectl set env deployment/analytics-worker CLICKHOUSE_WRITES_ENABLED=true -n staging
+
+# Restore workers
+kubectl scale deployment/analytics-worker --replicas=3 -n staging
 ```
 
 **Verify:** Check queue lag: `redis_queue_lag_seconds` metric
@@ -831,11 +832,11 @@ inhibit_rules:
       alertname: 'AuctionLatencyP95Warning'
     equal: ['cluster']
   
-  # If ClickHouse is down, suppress write failure alerts
+  # If the pipeline is in a critical state, suppress secondary analytics warnings
   - source_match:
-      alertname: 'ClickHouseDown'
+      alertname: 'AnalyticsPipelineBroken'
     target_match_re:
-      alertname: 'ClickHouse.*'
+      alertname: 'AnalyticsBuffer.*'
     equal: ['cluster']
 ```
 
@@ -849,8 +850,9 @@ Detailed troubleshooting guides for each alert:
 |-------|---------|----------|
 | AuctionLatencyP95Critical | [rtb-critical-latency.md](../runbooks/rtb-critical-latency.md) | P1 |
 | HTTPErrorBudgetBurn | [http-error-spike.md](../runbooks/http-error-spike.md) | P1 |
-| AnalyticsPipelineBroken | [analytics-pipeline-broken.md](../runbooks/analytics-pipeline-broken.md) | P1 |
-| ClickHouseWriteFailures | [clickhouse-write-failures.md](../runbooks/clickhouse-write-failures.md) | P1 |
+| AnalyticsWriteFailures | [analytics-postgres.md](../runbooks/analytics-postgres.md) | P1 |
+| AnalyticsPipelineBroken | [analytics-postgres.md](../runbooks/analytics-postgres.md) | P1 |
+| AnalyticsBufferGrowth | [analytics-postgres.md](../runbooks/analytics-postgres.md) | P2 |
 | QueueDepthCritical | [queue-backlog.md](../runbooks/queue-backlog.md) | P2 |
 | AdapterTimeoutSpike | [adapter-timeouts.md](../runbooks/adapter-timeouts.md) | P2 |
 

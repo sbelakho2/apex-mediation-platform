@@ -301,7 +301,7 @@ class ReportingServiceImpl implements ReportingService {
           AND r.observed_at >= $2
           AND r.observed_at < $3
           AND r.is_test_mode = false
-        GROUP BY r.adapter_id, adapter_name
+        GROUP BY r.adapter_id, r.adapter_name
         ORDER BY revenue DESC
       `;
 

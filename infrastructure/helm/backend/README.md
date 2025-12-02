@@ -7,7 +7,7 @@ This chart deploys the ApexMediation backend API with blue/green deployments, HP
 | Capability | Requirement |
 | --- | --- |
 | Kubernetes | v1.25+ cluster with metrics-server installed for HPA support. |
-| Secrets | `backend-secrets` (or the name supplied via `secrets.name`) containing `DATABASE_URL`, `CLICKHOUSE_URL`, `REDIS_URL`, `JWT_SECRET`, and `JWT_REFRESH_SECRET`. The chart mounts this secret automatically when `secrets.mount=true`. |
+| Secrets | `backend-secrets` (or the name supplied via `secrets.name`) containing `DATABASE_URL`, `REDIS_URL`, `JWT_SECRET`, and `JWT_REFRESH_SECRET`. The chart mounts this secret automatically when `secrets.mount=true`. |
 | ServiceMonitor | Prometheus Operator CRDs (`monitoring.coreos.com/v1`) must exist in the target cluster before enabling `serviceMonitor.enabled`. Point `serviceMonitor.labels`/`namespace` at the operator’s namespace if it differs from the release namespace. |
 | NetworkPolicy | A CNI plugin that honors Kubernetes NetworkPolicy (Calico, Cilium, etc.). Enabling `networkPolicy.enabled` without a compatible CNI has no effect. |
 
@@ -25,4 +25,4 @@ When `serviceMonitor.enabled=true`, ensure Prometheus has permissions to scrape 
 
 ## Network Policy
 
-Network policies default to allowing traffic from the ingress-nginx namespace and egress to PostgreSQL, ClickHouse, and Redis. Adjust `networkPolicy.ingress`/`networkPolicy.egress` blocks to match your deployment topology.
+Network policies default to allowing traffic from the ingress-nginx namespace and egress to PostgreSQL and Redis. Adjust `networkPolicy.ingress`/`networkPolicy.egress` blocks to match your deployment topology.

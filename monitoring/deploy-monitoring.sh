@@ -35,10 +35,6 @@ DATABASE_URL=postgresql://...
 DB_USER=readonly_user
 DB_PASSWORD=...
 
-# ClickHouse (for analytics queries)
-CLICKHOUSE_URL=https://...
-CLICKHOUSE_PASSWORD=...
-
 # Optional: SMS alerts via Twilio
 TWILIO_WEBHOOK_URL=
 TWILIO_ACCOUNT_SID=
@@ -55,7 +51,6 @@ PROMETHEUS_CLUSTER_LABEL=apexmediation
 PROMETHEUS_ENVIRONMENT_LABEL=production
 BACKEND_METRICS_TARGET=apexmediation-backend.fly.dev:8080
 CONSOLE_METRICS_TARGET=apexmediation-console.fly.dev:3000
-CLICKHOUSE_METRICS_TARGET=clickhouse.cloud:8123
 REDIS_METRICS_TARGET=upstash-redis-exporter:9121
 EOF
   echo "⚠️  Please edit monitoring/.env with real credentials, then re-run ./deploy-monitoring.sh start"
@@ -64,7 +59,6 @@ fi
 
 BACKEND_METRICS_TARGET=${BACKEND_METRICS_TARGET:-apexmediation-backend.fly.dev:8080}
 CONSOLE_METRICS_TARGET=${CONSOLE_METRICS_TARGET:-apexmediation-console.fly.dev:3000}
-CLICKHOUSE_METRICS_TARGET=${CLICKHOUSE_METRICS_TARGET:-clickhouse.cloud:8123}
 REDIS_METRICS_TARGET=${REDIS_METRICS_TARGET:-upstash-redis-exporter:9121}
 PROMETHEUS_CLUSTER_LABEL=${PROMETHEUS_CLUSTER_LABEL:-apexmediation}
 PROMETHEUS_ENVIRONMENT_LABEL=${PROMETHEUS_ENVIRONMENT_LABEL:-production}
@@ -136,22 +130,6 @@ EOF
     echo "⚠️  Skipping PostgreSQL datasource — set DATABASE_URL, DB_USER, and DB_PASSWORD in monitoring/.env to enable it."
   fi
 
-  if [[ -n "$CLICKHOUSE_URL" && -n "$CLICKHOUSE_PASSWORD" ]]; then
-    cat >> "$GRAFANA_DATASOURCES_RENDERED" <<EOF
-  - name: ClickHouse
-    type: grafana-clickhouse-datasource
-    url: "$CLICKHOUSE_URL"
-    secureJsonData:
-      password: "$CLICKHOUSE_PASSWORD"
-    jsonData:
-      defaultDatabase: apexmediation
-      dialTimeout: 10
-      queryTimeout: 60
-EOF
-  else
-    echo "⚠️  Skipping ClickHouse datasource — set CLICKHOUSE_URL and CLICKHOUSE_PASSWORD in monitoring/.env to enable it."
-  fi
-
   chmod 600 "$GRAFANA_DATASOURCES_RENDERED"
   echo "✅ Rendered Grafana datasources -> $GRAFANA_DATASOURCES_RENDERED"
 }
@@ -162,7 +140,7 @@ render_prometheus_config() {
     exit 1
   fi
 
-  envsubst '$PROMETHEUS_CLUSTER_LABEL $PROMETHEUS_ENVIRONMENT_LABEL $BACKEND_METRICS_TARGET $CONSOLE_METRICS_TARGET $CLICKHOUSE_METRICS_TARGET $REDIS_METRICS_TARGET' \
+  envsubst '$PROMETHEUS_CLUSTER_LABEL $PROMETHEUS_ENVIRONMENT_LABEL $BACKEND_METRICS_TARGET $CONSOLE_METRICS_TARGET $REDIS_METRICS_TARGET' \
     < "$MONITORING_DIR/prometheus.yml" > "$PROMETHEUS_RENDERED"
   chmod 644 "$PROMETHEUS_RENDERED"
   echo "✅ Rendered Prometheus config -> $PROMETHEUS_RENDERED"

@@ -80,7 +80,6 @@ jobs:
             --set environment=${{ env.ENVIRONMENT }} \
             --set ingress.host=api-staging.rivalapexmediation.ee \
             --set database.url=${{ secrets.STAGING_DATABASE_URL }} \
-            --set clickhouse.url=${{ secrets.STAGING_CLICKHOUSE_URL }} \
             --set redis.url=${{ secrets.STAGING_REDIS_URL }} \
             --set jwt.secret=${{ secrets.STAGING_JWT_SECRET }} \
             --wait \

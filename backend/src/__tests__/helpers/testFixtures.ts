@@ -20,6 +20,10 @@ export interface TestAdapter {
   enabled: boolean;
 }
 
+export interface ReportingSeedOptions {
+  events?: number;
+}
+
 /**
  * Create a test publisher
  */
@@ -96,10 +100,11 @@ export const createTestApp = async (
   appId?: string
 ): Promise<string> => {
   const id = appId || randomUUID();
+  const bundleId = `com.test.app.${id.slice(0, 8)}`;
 
   await pool.query(
-    `INSERT INTO apps (id, publisher_id, name, platform) VALUES ($1, $2, $3, $4)`,
-    [id, publisherId, 'Test App', 'ios']
+    `INSERT INTO apps (id, publisher_id, name, bundle_id, platform) VALUES ($1, $2, $3, $4, $5)`,
+    [id, publisherId, 'Test App', bundleId, 'ios']
   );
 
   return id;
@@ -116,7 +121,7 @@ export const createTestPlacement = async (
   const id = placementId || randomUUID();
 
   await pool.query(
-    `INSERT INTO placements (id, app_id, name, ad_type) VALUES ($1, $2, $3, $4)`,
+    `INSERT INTO placements (id, app_id, name, type) VALUES ($1, $2, $3, $4)`,
     [id, appId, 'Test Placement', 'banner']
   );
 
@@ -140,4 +145,116 @@ export const createTestAdapterConfig = async (
   );
 
   return result.rows[0].id;
+};
+
+/**
+ * Seed analytics fact tables with deterministic test data so reporting endpoints can query them.
+ */
+export const seedReportingData = async (
+  pool: Pool,
+  publisherId: string,
+  options: ReportingSeedOptions = {}
+): Promise<void> => {
+  const events = Math.max(1, options.events ?? 6);
+  const appId = await createTestApp(pool, publisherId);
+  const placementId = await createTestPlacement(pool, appId);
+  const adapter = await createTestAdapter(pool, { name: 'Test Adapter Reporting' });
+  const now = Date.now();
+
+  for (let i = 0; i < events; i += 1) {
+    const observedAt = new Date(now - i * 60 * 60 * 1000);
+    const impressionEventId = randomUUID();
+    const metadata = JSON.stringify({ seed: 'reporting-test', index: i });
+
+    await pool.query(
+      `INSERT INTO analytics_impressions (
+        event_id,
+        observed_at,
+        publisher_id,
+        app_id,
+        placement_id,
+        adapter_id,
+        adapter_name,
+        request_id,
+        status,
+        filled,
+        latency_ms,
+        revenue_usd,
+        is_test_mode,
+        meta
+      ) VALUES (
+        $1,$2,$3,$4,$5,$6,$7,$8,$9,true,$10,$11,false,$12
+      )`,
+      [
+        impressionEventId,
+        observedAt,
+        publisherId,
+        appId,
+        placementId,
+        adapter.id,
+        adapter.name,
+        randomUUID(),
+        'success',
+        40 + i * 5,
+        (i + 1) * 0.01,
+        metadata,
+      ]
+    );
+
+    await pool.query(
+      `INSERT INTO analytics_revenue_events (
+        observed_at,
+        publisher_id,
+        app_id,
+        placement_id,
+        adapter_id,
+        adapter_name,
+        impression_id,
+        revenue_type,
+        revenue_usd,
+        revenue_currency,
+        revenue_original,
+        exchange_rate,
+        ecpm_usd,
+        country_code,
+        ad_format,
+        os,
+        is_test_mode,
+        metadata
+      ) VALUES (
+        $1,$2,$3,$4,$5,$6,$7,$8,$9,'USD',$10,$11,$12,$13,$14,$15,false,$16
+      )`,
+      [
+        observedAt,
+        publisherId,
+        appId,
+        placementId,
+        adapter.id,
+        adapter.name,
+        impressionEventId,
+        i % 3 === 0 ? 'click' : 'impression',
+        (i + 1) * 5,
+        (i + 1) * 5,
+        1,
+        (i + 1) * 5,
+        i % 2 === 0 ? 'US' : 'CA',
+        'banner',
+        i % 2 === 0 ? 'ios' : 'android',
+        metadata,
+      ]
+    );
+  }
+
+  await pool.query(
+    `INSERT INTO analytics_sdk_telemetry (
+      publisher_id,
+      adapter_id,
+      event_type,
+      message,
+      metadata
+    ) VALUES (
+      $1,$2,'info',$3,$4
+    )`,
+    [publisherId, adapter.id, 'Seeded reporting data', JSON.stringify({ seed: 'reporting-test' })]
+  );
 };

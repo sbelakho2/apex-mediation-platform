@@ -32,8 +32,9 @@ Each service can sit behind its own host/port combination. The example above mat
 
 Make sure your `.env.local` entries point to the correct hosts for your environment (Fly, Docker, or local dev). Supporting infrastructure usually includes:
 - PostgreSQL (port 5432)
-- ClickHouse (port 8123)
 - Redis (port 6379)
+
+Analytics queries now read exclusively from the Postgres analytics tables (backed by read replicas), so no ClickHouse service or credentials are required for local or remote environments.
 
 ## API Endpoints
 
@@ -170,7 +171,7 @@ export const fetchFraudStats = (publisherId: string) =>
 cd backend
 
 # Start databases (if using Docker)
-docker-compose up -d postgres clickhouse redis
+docker-compose up -d postgres redis
 
 # Install dependencies
 npm install
@@ -275,10 +276,10 @@ Backend CORS is configured to allow requests from http://localhost:3000 by defau
 ## Performance Considerations
 
 - Backend caching reduces database load by 90-95%
-- Analytics queries use ClickHouse for high-performance aggregations
+- Analytics queries run on the partitioned Postgres analytics tables and replica pool
 - Background jobs prevent blocking API requests
 - Redis used for session storage and caching
-- Connection pooling for PostgreSQL and ClickHouse
+- Connection pooling for PostgreSQL (PgBouncer)
 
 ## Security
 

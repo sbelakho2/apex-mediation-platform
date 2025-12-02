@@ -14,7 +14,7 @@ This directory contains the complete monitoring stack for Rival Ad Platform, inc
 
 ### Local Development
 
-> ⚠️ Before running any containers, create a `.env` file in this directory (or run `./deploy-monitoring.sh start` once to scaffold it) and replace every placeholder secret. Docker Compose automatically reads `.env`, so values such as `GRAFANA_PASSWORD`, `RESEND_API_KEY`, `DATABASE_URL`, and `CLICKHOUSE_URL` must be present before the stack boots.
+> ⚠️ Before running any containers, create a `.env` file in this directory (or run `./deploy-monitoring.sh start` once to scaffold it) and replace every placeholder secret. Docker Compose automatically reads `.env`, so values such as `GRAFANA_PASSWORD`, `RESEND_API_KEY`, `DATABASE_URL`, `DB_USER`, and `DB_PASSWORD` must be present before the stack boots.
 
 ```bash
 # Start the monitoring stack
@@ -38,7 +38,7 @@ Services will be available at:
 
 > 📝 When the deploy script creates `monitoring/.env` for you, it exits immediately—fill in every placeholder, then rerun `./deploy-monitoring.sh start` so the stack can boot. Use `./deploy-monitoring.sh backup` for validated Prometheus/Loki/Grafana archives (each gzip is checked after creation).
 
-> 🗂 Grafana now reads datasources from `grafana-datasources.generated.yml`, which `./deploy-monitoring.sh` renders each time you run `start`/`restart`. Postgres (`DATABASE_URL`/`DB_USER`/`DB_PASSWORD`) and ClickHouse (`CLICKHOUSE_URL`/`CLICKHOUSE_PASSWORD`) datasources are added only when all required variables exist in `.env`; otherwise Grafana still boots with Prometheus + Loki and prints a warning.
+> 🗂 Grafana now reads datasources from `grafana-datasources.generated.yml`, which `./deploy-monitoring.sh` renders each time you run `start`/`restart`. The Postgres datasource (pointing at the analytics replicas) is added only when `DATABASE_URL`, `DB_USER`, and `DB_PASSWORD` exist in `.env`; otherwise Grafana still boots with Prometheus + Loki and prints a warning.
 
 > 🧾 The `logs/` directory stays `.gitignore`d so raw JSONL files never leave your workstation. A sanitized schema sample lives in `docs/log-samples/error.sample.log` with usage notes in `docs/log-samples/README.md`. Update that sample (not the real logs) whenever the log format changes.
 

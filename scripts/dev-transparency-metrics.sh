@@ -20,7 +20,7 @@ Options:
 Environment:
   TRANSPARENCY_PRIVKEY        Private key content (alternative to --privkey-* options). [sensitive]
   TRANSPARENCY_PRIVKEY_FILE   Path to private key file. [sensitive]
-  POSTGRES_URL, CLICKHOUSE_URL, REDIS_URL  Override service URLs.
+  POSTGRES_URL, REDIS_URL       Override service URLs.
 
 Notes:
   - No private keys are printed. Logs redact sensitive values.
@@ -74,7 +74,6 @@ if [[ -z "$JWT_TOKEN" ]]; then
 fi
 
 POSTGRES_URL="${POSTGRES_URL:-postgresql://postgres:postgres@localhost:5432/apexmediation}"
-CLICKHOUSE_URL="${CLICKHOUSE_URL:-http://localhost:8123}"
 REDIS_URL="${REDIS_URL:-redis://localhost:6379}"
 
 # Resolve private key from file/env
@@ -115,8 +114,8 @@ resolve_privkey() {
 }
 
 if [[ "$DRY_RUN" -eq 1 ]]; then
-  echo "[DRY-RUN] Would start postgres/redis/clickhouse via docker compose"
-  echo "[DRY-RUN] Would run backend migrations and ClickHouse init"
+  echo "[DRY-RUN] Would start postgres/redis via docker compose"
+  echo "[DRY-RUN] Would run backend migrations"
   echo "[DRY-RUN] Would build and start backend with transparency enabled"
   echo "[DRY-RUN] Would send sample transparency requests with JWT (token not printed)"
   exit 0
@@ -169,7 +168,7 @@ echo "Resetting previous containers (if any)..."
 docker compose down --volumes --remove-orphans >/dev/null 2>&1 || true
 
 echo "Starting infrastructure containers..."
-docker compose up -d postgres redis clickhouse
+docker compose up -d postgres redis
 
 echo "Waiting for postgres on 5432..."
 wait_for_port "localhost" 5432
@@ -180,16 +179,11 @@ until docker compose exec -T postgres pg_isready -U postgres >/dev/null 2>&1; do
 done
 sleep 3
 
-echo "Waiting for clickhouse on 8123..."
-wait_for_port "localhost" 8123
-
 echo "Waiting for redis on 6379..."
 wait_for_port "localhost" 6379 "30"
 
 echo "Running database migrations..."
 DATABASE_URL="$POSTGRES_URL" npm --prefix "$BACKEND_DIR" run migrate
-
-echo "Skipping ClickHouse schema bootstrap (legacy script removed)."
 
 echo "Building backend..."
 npm --prefix "$BACKEND_DIR" run build > /dev/null
@@ -201,8 +195,6 @@ NODE_ENV=test \
 APP_ENV="$SMOKE_ENV_TAG" \
 API_VERSION=v1 \
 DATABASE_URL="$POSTGRES_URL" \
-CLICKHOUSE_URL="$CLICKHOUSE_URL" \
-CLICKHOUSE_DATABASE="apexmediation" \
 REDIS_URL="$REDIS_URL" \
 TRANSPARENCY_ENABLED=1 \
 TRANSPARENCY_API_ENABLED=true \
@@ -279,19 +271,6 @@ for n in 1 2 3; do
   fi
   sleep 0.5
 done
-
-echo "Simulating ClickHouse outage to trigger retries and breaker..."
-docker compose stop clickhouse >/dev/null
-sleep 2
-
-for n in 1 2 3; do
-  if ! send_bid "failure-${n}"; then
-    echo "Expected non-success recorded for failure-${n}" >&2
-  fi
-  sleep 0.5
-done
-
-sleep 2
 
 echo "Prometheus metrics snapshot:"
 PROM_METRICS=$(curl -sf -H "Authorization: Bearer $JWT_TOKEN" "http://localhost:4000/metrics")

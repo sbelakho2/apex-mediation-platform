@@ -22,7 +22,7 @@ const timeSeriesQuerySchema = dateRangeSchema.extend({
 });
 
 const countryQuerySchema = dateRangeSchema.extend({
-  limit: z.number().int().positive().max(50).optional(),
+  limit: z.coerce.number().int().positive().max(50).optional(),
 });
 
 /**

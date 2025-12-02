@@ -99,7 +99,7 @@ _Guardrail alignment:_ keep control-plane APIs on typed, versioned schemas; use 
 - **Plan**:
   1. Remove health-check dependency on ClickHouse client; base readiness purely on Postgres/Redis or new analytics tables. **Status:** ✅ `HealthCheckController` now issues direct Postgres probes (latency, replica lag via `pg_stat_replication`, staging pressure, cache hit ratio) and never instantiates the ClickHouse client; Redis remains a soft dependency.
   2. Rename metrics to `vra_query_fail_total` or similar to remove explicit ClickHouse terminology. **Status:** ✅ `backend/src/utils/prometheus.ts`, `monitoring/alerts/vra-alerts.yml`, Grafana dashboards, and the VRA runbook/summary docs now reference `vra_query_fail_total` while keeping the same alert thresholds.
-  3. Backfill dashboards/runbooks so Postgres replica lag, queue depth, cache hit rate, and staging pressure are graphed next to health-check status. **Status:** Pending — health dashboards still need the new panels surfaced alongside `/ready`; runbook anchors capture the expectations but Grafana wiring is still outstanding.
+  3. Backfill dashboards/runbooks so Postgres replica lag, queue depth, cache hit rate, and staging pressure are graphed next to health-check status. **Status:** Pending — Grafana still needs the replica-lag panels, but the monitoring alerts + `docs/runbooks/analytics-postgres.md` now document the Postgres-only ingestion path.
   - **Guardrails:** health probes must measure replica lag, queue depth, and cache hit SLIs in addition to base connectivity; alerts cannot rely on single-node signals and must prove replica isolation remains intact.
 
 ### 1.5 Scripts/tests/workers
@@ -108,7 +108,8 @@ _Guardrail alignment:_ keep control-plane APIs on typed, versioned schemas; use 
 - **Plan**: delete ClickHouse bootstrap scripts/tests or port them to Postgres equivalents; update CI/workflow/Make targets accordingly.
   1. Remove ClickHouse bootstrap scripts (`initClickHouseSchema.ts`, `scripts/vra*.js`) or swap them to Postgres migrations + seeders. **Status:** ✅ `initClickHouseSchema.ts` and `runClickHouseMigrations.js` were deleted; remaining VRA scripts continue to exist until their Postgres rewrites land.
   2. Update integration tests to seed/query Postgres partitions instead of relying on a ClickHouse service in CI. **Status:** ✅ Both analytics (`backend/src/__tests__/integration/analytics.integration.test.ts`) and reporting (`backend/src/__tests__/integration/reporting.integration.test.ts`) suites now boot entirely against the Postgres fixtures, so CI no longer needs the ClickHouse container for these flows.
-  3. Strip ClickHouse services from local/CI Compose stacks once all code/tests migrate. **Status:** Pending — `docker-compose.yml` and GitHub Actions continue to provision ClickHouse images.
+  3. Strip ClickHouse services from local/CI Compose stacks once all code/tests migrate. **Status:** ✅ `docker-compose*.yml` and `.github/workflows/ci*.yml` now run purely on Postgres + Redis; all ClickHouse containers/env wiring have been removed so CI/local dev exercise the Postgres-only stack end-to-end.
+  4. Update developer smoke-test scripts to stop booting ClickHouse locally. **Status:** ✅ `scripts/dev-transparency-metrics.sh` now only starts Postgres/Redis, no longer sets `CLICKHOUSE_URL`, and exercises the Postgres-backed transparency endpoints end-to-end. The scripts README was updated to match.
   - **Guardrails:** run migrations through the versioned pipeline only, enforce PgBouncer usage in scripts/tests, keep sandbox fixtures append-only, and ensure CI verifies replica-only read paths before removing the ClickHouse container.
 
 ## 2. Infrastructure & Tooling
@@ -119,12 +120,13 @@ _Guardrail alignment:_ enforce HA+replica requirements, automate partition/reten
 - **Helm charts / Terraform / Fly.toml**: drop `CLICKHOUSE_URL` secrets/envs and network policies referencing port 8123.
 - **Monitoring stack**: update Prometheus scrape configs, Grafana datasources/dashboards, and alert rules to eliminate ClickHouse jobs/metrics. Replace runbook links.
 - **CI workflows**: `.github/workflows/ci*.yml` currently spin up ClickHouse services; remove these and any env secrets (`STAGING_CLICKHOUSE_URL`, etc.).
+- **Deploy workflows**: `.github/workflows/deploy-staging.yml` and `deploy-production.yml` previously passed `clickhouse.url` Helm overrides. **Status:** ✅ Both now only set Postgres/Redis/JWT secrets, so ClickHouse creds are no longer required for any deployment pipeline.
 
 ## 3. Application layers beyond backend
 
 _Guardrail alignment:_ console/website/ML layers must read from dedicated replicas or archived Parquet via gateways; when analytics scale out again, prefer CDC mirroring into ClickHouse/BigQuery instead of direct coupling.
 
-- **Console app**: docs mention ClickHouse data sources; update to note Postgres analytics.
+- **Console app**: docs mention ClickHouse data sources; update to note Postgres analytics. **Status:** ✅ `console/BACKEND_INTEGRATION.md` now states analytics runs on the Postgres fact tables/replicas and drops the ClickHouse service from local setup instructions.
 - **Website**: marketing copy references ClickHouse Cloud as a sub-processor; replace with Postgres (or remove).
 - **ML**: `ML/scripts/etl_clickhouse.py` + tests need to switch to Postgres (likely via psycopg) or be deprecated.
 - **Data schemas**: remove `data/schemas/clickhouse*.sql` and replace with Postgres schema files if needed.
@@ -148,5 +150,62 @@ _Guardrail alignment:_ validation now checks replica lag, autovacuum health, par
 4. Monitoring dashboards/alerts have no dangling ClickHouse queries.
 5. Documentation (internal & public) no longer instructs operators to provision ClickHouse.
 6. CHANGELOG & production-readiness checklist updated to call out the Postgres migration.
+7. Integration suites (`npm run test:integration -- --detectOpenHandles ...`) complete without lingering asynchronous handles so CI proves the Postgres stack shuts down cleanly.
 
 This plan covers every observed ClickHouse touch-point; implementation will proceed workstream-by-workstream until the dependency is entirely removed.
+
+## Post-Migration 12-Step Checklist
+
+Use the following guardrails to confirm the Postgres-only analytics stack will scale without ClickHouse. Each item is intentionally small to roll out now and prevents painful rewrites later.
+
+1. **Enforce time partitioning and automated retention**  
+  - Partition all high-volume tables (auctions, impressions, logs) by day or week.  
+  - Automate detach → export → drop workflows once partitions age beyond the hot window (typically 30–90 days).
+
+2. **Adopt a hot/warm/cold storage lifecycle**  
+  - Keep the hottest 30–90 days on the primary.  
+  - Serve warm (30–365 day) reads from replicas or compressed chunks.  
+  - Archive anything older than the warm window to Parquet in object storage with compression and TTLs.
+
+3. **Use efficient ingest pipelines and staging**  
+  - Land data via `COPY` or batched inserts into UNLOGGED staging tables.  
+  - Validate + dedupe in staging, then move to partitioned targets with a single `INSERT ... SELECT` transaction per batch.
+
+4. **Apply index discipline for scale**  
+  - Favor BRIN indexes on time columns for append-only workloads.  
+  - Keep B-tree indexes minimal on hot partitions; add secondary indexes only after data cools.  
+  - Apply partial/covering indexes for selective predicates and index-only scans.
+
+5. **Deploy connection pooling and read replicas**  
+  - Run PgBouncer in transaction mode for every application.  
+  - Route analytics/dashboard traffic to dedicated read replicas; never run heavy scans on the primary.
+
+6. **Materialize common aggregations and read models**  
+  - Maintain incremental materialized views or rollup tables per partition.  
+  - Serve operational reads from these precomputed tables to stay within the p95 latency SLO.
+
+7. **Provide archive queryability via DuckDB or FDW**  
+  - Export detached partitions to compressed Parquet in object storage.  
+  - Offer ad-hoc access through DuckDB or a Parquet FDW so teams can query cold data without re-ingesting it.
+
+8. **Automate maintenance and bloat control**  
+  - Tune autovacuum per table (lower scale factor on hot partitions).  
+  - Schedule `pg_repack`/`REINDEX CONCURRENTLY` for heavy update tables.  
+  - Alert on bloat percentage, autovacuum lag, and long-running transactions.
+
+9. **Implement schema versioning and safe migrations**  
+  - Require versioned migrations with rollback scripts plus performance-impact notes.  
+  - Gate production DDL via CI that runs staging rehearsals and captures `EXPLAIN` plans for large changes.
+
+10. **Invest in observability and performance budgets**  
+   - Instrument `pg_stat_statements`, Prometheus, and Grafana for QPS, p95/p99 latency, replica lag, merge durations, and disk pressure.  
+   - Define SLOs (e.g., p95 operational reads < 200 ms) and enforce error budgets before shipping new features.
+
+11. **Harden disaster recovery and backup drills**  
+   - Automate base backups plus WAL archiving to object storage with retention aligned to RTO/RPO.  
+   - Run quarterly restore/failover drills and document PITR + replica rebuild runbooks.
+
+12. **Plan migration and growth paths**  
+   - Build CDC/replayable pipelines today so data can mirror into an OLAP engine later.  
+   - Define thresholds that trigger horizontal scale options (additional replicas, Timescale compression, Citus sharding) and rehearse those cutovers ahead of need. remain on DO Managed Postgres + Parquet. 
+   - Approach must be compatible with easy running with ClickHouse in the future. Postgres + Parquet now. Plan hygiene and maintenance must be fully automated from day 1, operator only seeing errors and warnings that stop production.

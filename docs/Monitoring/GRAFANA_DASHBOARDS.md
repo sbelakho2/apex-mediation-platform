@@ -444,7 +444,7 @@ Timeouts per adapter per second. Should be <0.01/s (<1%) for healthy adapters.
 
 ### Purpose
 
-Monitor analytics event ingestion pipeline from SDK → Redis queue → ClickHouse.
+Monitor analytics event ingestion pipeline from SDK → Redis queue → Postgres analytics tables.
 
 ### Key Metrics
 
@@ -456,13 +456,13 @@ sum(rate(analytics_events_enqueued_total[5m]))
 
 Events added to Redis queue per second. Should match SDK impression/click volume.
 
-#### Events Written (to ClickHouse)
+#### Events Written (Postgres)
 
 ```promql
 sum(rate(analytics_events_written_total[5m]))
 ```
 
-Successful writes to ClickHouse. Should be close to enqueued rate (within 5%).
+Successful INSERT + merge cycles into Postgres analytics tables. Should be close to enqueued rate (within 5%).
 
 #### Events Failed
 
@@ -470,7 +470,7 @@ Successful writes to ClickHouse. Should be close to enqueued rate (within 5%).
 sum(rate(analytics_events_failed_total[5m]))
 ```
 
-Failed writes due to validation, schema errors, or ClickHouse issues. Should be <1% of total.
+Failed writes due to validation, schema errors, or Postgres issues. Should be <1% of total.
 
 #### Success Rate
 
@@ -531,7 +531,7 @@ Time difference between oldest event in queue and now. High lag (>60s) indicates
    sum(rate(analytics_events_enqueued_total[5m]))
    ```
 
-2. **Events Written** (Stat) - Successful ClickHouse writes per second
+2. **Events Written** (Stat) - Successful Postgres writes per second
    ```promql
    sum(rate(analytics_events_written_total[5m]))
    ```
@@ -603,7 +603,7 @@ Time difference between oldest event in queue and now. High lag (>60s) indicates
 **Investigate Pipeline Backlog:**
 1. Check "Queue Lag" panel - if >60s, queue is backing up
 2. Compare "Events Enqueued" vs "Events Written" - gap indicates bottleneck
-3. Check ClickHouse logs: `kubectl logs -n analytics deployment/clickhouse`
+3. Inspect Postgres merges: `psql "$DATABASE_URL" -c "SELECT pid, query, now()-query_start AS age FROM pg_stat_activity WHERE query LIKE '%analytics_%merge%';"`
 4. Scale up workers: `kubectl scale deployment/analytics-worker --replicas=5`
 
 **Debug Failed Events:**

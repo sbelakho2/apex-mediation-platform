@@ -28,13 +28,13 @@ This directory contains utility scripts for development, deployment, and operati
 **Prerequisites**:
 - Docker and Docker Compose v2
 - Node.js 18+ with jsonwebtoken package
-- PostgreSQL, ClickHouse, Redis running (via docker-compose)
+- PostgreSQL + Redis running (via docker-compose)
 
 **What it does**:
 1. Generates a JWT token for authentication
-2. Starts required services (Postgres, ClickHouse, Redis)
+2. Starts required services (Postgres + Redis)
 3. Runs transparency metrics API smoke tests
-4. Validates metrics ingestion pipeline
+4. Validates metrics ingestion pipeline (Postgres partitions + Redis cache)
 5. Cleans up test data
 
 **Idempotency**: ✅ Yes - Can be run multiple times safely. Uses unique test identifiers.
@@ -416,7 +416,6 @@ All scripts in this directory follow these principles:
 | Variable | Used By | Description |
 |----------|---------|-------------|
 | `DATABASE_URL` | Most scripts | PostgreSQL connection string |
-| `CLICKHOUSE_URL` | Backend scripts | ClickHouse HTTP endpoint |
 | `REDIS_URL` | Backend scripts | Redis connection string |
 | `JWT_SECRET` | Auth scripts | JWT signing secret (32+ chars) |
 | `STRIPE_SECRET_KEY` | Billing scripts | Stripe API key |

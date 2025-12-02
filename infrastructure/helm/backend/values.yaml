@@ -163,13 +163,11 @@ secrets:
   mount: true
   requiredKeys:
     - DATABASE_URL
-    - CLICKHOUSE_URL
     - REDIS_URL
     - JWT_SECRET
     - JWT_REFRESH_SECRET
   data: {}
     # DATABASE_URL: postgresql://...
-    # CLICKHOUSE_URL: http://...
     # REDIS_URL: redis://...
     # JWT_SECRET: xxx
     # JWT_REFRESH_SECRET: xxx
@@ -216,7 +214,5 @@ networkPolicy:
       ports:
       - protocol: TCP
         port: 5432  # PostgreSQL
-      - protocol: TCP
-        port: 8123  # ClickHouse
       - protocol: TCP
         port: 6379  # Redis

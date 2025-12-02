@@ -113,7 +113,6 @@ jobs:
             --set deployment.color=green \
             --set service.selector.color=green \
             --set database.url=${{ secrets.PROD_DATABASE_URL }} \
-            --set clickhouse.url=${{ secrets.PROD_CLICKHOUSE_URL }} \
             --set redis.url=${{ secrets.PROD_REDIS_URL }} \
             --set jwt.secret=${{ secrets.PROD_JWT_SECRET }} \
             --set replicas=3 \

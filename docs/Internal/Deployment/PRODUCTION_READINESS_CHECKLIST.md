@@ -318,6 +318,7 @@ References
 
 ## 2. Monitoring & Observability
 ### 2.1 Host & App Monitoring
+- [ ] Materialize .env file for monitoring
 - [ ] Enable DigitalOcean Monitoring for `apex-core-1` (CPU/RAM/Disk/Network).
   ```bash
   export DROPLET_ID=$(doctl compute droplet list apex-core-1 --format ID --no-header)
@@ -342,9 +343,9 @@ References
   ```
 - [ ] Configure alerts (CPU>80%, Memory>80%, Disk>80%, droplet unreachable).
 
-### 2.1b Optional Grafana Stack
-- [ ] (Optional) Deploy Prometheus + Grafana via Docker with 7–30 day retention.
-- [ ] (Optional) Scrape node exporter + app `/metrics`; lock Grafana behind auth/IP restriction.
+### 2.1b Grafana Stack
+- [ ] Deploy Prometheus + Grafana via Docker with 7–30 day retention.
+- [ ] Scrape node exporter + app `/metrics`; lock Grafana behind auth/IP restriction.
 
 ### 2.2 Application Logging
 - [ ] Standardize JSON logs (timestamp, level, service, request_id, user_id, app_id, path, latency_ms, error_code).

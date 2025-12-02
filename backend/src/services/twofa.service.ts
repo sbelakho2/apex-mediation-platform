@@ -1,6 +1,7 @@
 import { authenticator } from 'otplib';
 import bcrypt from 'bcryptjs';
 import * as qrcode from 'qrcode';
+import { Repository } from 'typeorm';
 import logger from '../utils/logger';
 import { AppDataSource } from '../database';
 import { TwoFactorAuth } from '../database/entities/twoFactorAuth.entity';
@@ -8,9 +9,39 @@ import { User } from '../database/entities/user.entity';
 import { AuditTwofa } from '../database/entities/auditTwofa.entity';
 import { aesGcmEncrypt, aesGcmDecrypt, md5_16 } from '../utils/crypto';
 
-const tfaRepository = AppDataSource.getRepository(TwoFactorAuth);
-const userRepository = AppDataSource.getRepository(User);
-const auditRepository = AppDataSource.getRepository(AuditTwofa);
+type TwofaRepositories = {
+  tfaRepository: Repository<TwoFactorAuth>;
+  userRepository: Repository<User>;
+  auditRepository: Repository<AuditTwofa>;
+};
+
+let repoWarningEmitted = false;
+
+const getRepositories = (): TwofaRepositories | null => {
+  if (!AppDataSource.isInitialized) {
+    if (!repoWarningEmitted) {
+      logger.warn('Two-factor auth store is not initialized; falling back to safe defaults.');
+      repoWarningEmitted = true;
+    }
+    return null;
+  }
+
+  repoWarningEmitted = false;
+
+  return {
+    tfaRepository: AppDataSource.getRepository(TwoFactorAuth),
+    userRepository: AppDataSource.getRepository(User),
+    auditRepository: AppDataSource.getRepository(AuditTwofa),
+  };
+};
+
+const requireRepositories = (): TwofaRepositories => {
+  const repositories = getRepositories();
+  if (!repositories) {
+    throw new Error('Two-factor auth data source is unavailable');
+  }
+  return repositories;
+};
 
 const maskSecret = (secret: string) => secret.replace(/.(?=.{4})/g, '*');
 
@@ -18,13 +49,16 @@ type AuditCtx = { actorEmail?: string | null; ip?: string | null };
 
 async function writeAudit(userId: string, action: 'enroll' | 'enable' | 'regen' | 'disable', ctx?: AuditCtx) {
   try {
-    const row = auditRepository.create({
+    const repositories = getRepositories();
+    if (!repositories) return;
+
+    const row = repositories.auditRepository.create({
       user: { id: userId } as any,
       action,
       actorEmail: ctx?.actorEmail ?? null,
       ipHash: ctx?.ip ? md5_16(ctx.ip) : null,
     });
-    await auditRepository.save(row);
+    await repositories.auditRepository.save(row);
   } catch (e) {
     logger.warn('Failed to write 2FA audit row', { userId, action, error: (e as Error).message });
   }
@@ -32,11 +66,15 @@ async function writeAudit(userId: string, action: 'enroll' | 'enable' | 'regen' 
 
 export const twofaService = {
   async isEnabled(userId: string): Promise<boolean> {
-    const tfaRecord = await tfaRepository.findOne({ where: { user: { id: userId } } });
+    const repositories = getRepositories();
+    if (!repositories) return false;
+
+    const tfaRecord = await repositories.tfaRepository.findOne({ where: { user: { id: userId } } });
     return tfaRecord?.enabled === true;
   },
 
   async enroll(userId: string, email: string, issuer = 'ApexMediation', auditCtx?: AuditCtx) {
+    const { userRepository, tfaRepository } = requireRepositories();
     const user = await userRepository.findOneBy({ id: userId });
     if (!user) throw new Error('User not found');
 
@@ -83,6 +121,7 @@ export const twofaService = {
   },
 
   async verifyAndEnable(userId: string, token: string, auditCtx?: AuditCtx): Promise<{ backupCodes: string[] }> {
+    const { tfaRepository } = requireRepositories();
     const tfaRecord = await tfaRepository.findOne({ where: { user: { id: userId } }, relations: ['user'] });
     if (!tfaRecord) throw new Error('No enrollment in progress');
 
@@ -113,7 +152,10 @@ export const twofaService = {
   },
 
   async verifyTokenOrBackupCode(userId: string, code: string): Promise<boolean> {
-    const tfaRecord = await tfaRepository.findOne({ where: { user: { id: userId } } });
+    const repositories = getRepositories();
+    if (!repositories) return false;
+
+    const tfaRecord = await repositories.tfaRepository.findOne({ where: { user: { id: userId } } });
     if (!tfaRecord) return false;
 
     let secret: string;
@@ -130,7 +172,7 @@ export const twofaService = {
       const hashedCode = tfaRecord.backupCodes[i];
       if (await bcrypt.compare(code, hashedCode)) {
         tfaRecord.backupCodes.splice(i, 1);
-        await tfaRepository.save(tfaRecord);
+        await repositories.tfaRepository.save(tfaRecord);
         logger.info('2FA backup code used', { userId });
         return true;
       }
@@ -139,6 +181,7 @@ export const twofaService = {
   },
 
   async regenerateBackupCodes(userId: string, auditCtx?: AuditCtx): Promise<{ backupCodes: string[] }> {
+    const { tfaRepository } = requireRepositories();
     const tfaRecord = await tfaRepository.findOne({ where: { user: { id: userId } } });
     if (!tfaRecord || !tfaRecord.enabled) throw new Error('2FA not enabled');
 
@@ -155,6 +198,7 @@ export const twofaService = {
   },
 
   async disable(userId: string, auditCtx?: AuditCtx) {
+    const { tfaRepository } = requireRepositories();
     const tfaRecord = await tfaRepository.findOne({ where: { user: { id: userId } } });
     if (!tfaRecord) return;
 
