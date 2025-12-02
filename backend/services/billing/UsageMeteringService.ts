@@ -1,10 +1,10 @@
 // services/billing/UsageMeteringService.ts
 // Tracks SDK usage (impressions, API calls, data transfer) and syncs to Stripe for billing
 
-import { Pool } from 'pg';
+import type { QueryResultRow } from 'pg';
 import Stripe from 'stripe';
-import { createClient } from '@clickhouse/client';
 import logger from '../../src/utils/logger';
+import { query as pgQuery } from '../../src/utils/postgres';
 import {
   PLATFORM_TIER_ORDER,
   PLATFORM_TIER_USAGE_LIMITS,
@@ -14,29 +14,6 @@ import {
 } from '../../src/config/platformTiers';
 
 let stripeClient: Stripe | null = null;
-
-const resolveClickHouseUrl = (): string => {
-  if (process.env.CLICKHOUSE_URL) {
-    return process.env.CLICKHOUSE_URL;
-  }
-
-  const host = process.env.CLICKHOUSE_HOST?.trim();
-  const port = process.env.CLICKHOUSE_PORT || '8123';
-
-  if (!host) {
-    return `http://localhost:${port}`;
-  }
-
-  let normalized = host.replace(/\/$/, '');
-  if (!normalized.startsWith('http://') && !normalized.startsWith('https://')) {
-    normalized = `http://${normalized}`;
-  }
-  const afterScheme = normalized.split('://')[1] ?? normalized;
-  if (!/:[0-9]+$/.test(afterScheme)) {
-    normalized = `${normalized}:${port}`;
-  }
-  return normalized;
-};
 
 const getStripeClient = (): Stripe => {
   if (stripeClient) {
@@ -55,16 +32,17 @@ const getStripeClient = (): Stripe => {
   return stripeClient;
 };
 
-const db = new Pool({
-  connectionString: process.env.DATABASE_URL,
-});
+const primaryQuery = <T extends QueryResultRow = QueryResultRow>(
+  text: string,
+  params: ReadonlyArray<unknown> | undefined,
+  label: string
+) => pgQuery<T>(text, params, { label });
 
-const clickhouse = createClient({
-  url: resolveClickHouseUrl(),
-  username: process.env.CLICKHOUSE_USER || 'default',
-  password: process.env.CLICKHOUSE_PASSWORD || '',
-  database: process.env.CLICKHOUSE_DATABASE || 'apexmediation',
-});
+const replicaQuery = <T extends QueryResultRow = QueryResultRow>(
+  text: string,
+  params: ReadonlyArray<unknown> | undefined,
+  label: string
+) => pgQuery<T>(text, params, { label, replica: true });
 
 interface UsageMetrics {
   customer_id: string;
@@ -177,40 +155,28 @@ export class UsageMeteringService {
     customerId: string,
     metricType: 'impressions' | 'api_calls' | 'data_transfer',
     quantity: number,
-    metadata?: Record<string, any>
+    metadata?: Record<string, unknown>
   ): Promise<void> {
-    // Insert into PostgreSQL for durability
-    await db.query(
+    const metadataJson = JSON.stringify(metadata || {});
+
+    await primaryQuery(
       `INSERT INTO usage_records (customer_id, metric_type, quantity, metadata, recorded_at)
        VALUES ($1, $2, $3, $4, NOW())`,
-      [customerId, metricType, quantity, JSON.stringify(metadata || {})]
+      [customerId, metricType, quantity, metadataJson],
+      'USAGE_RECORD_INSERT'
     );
-
-    // Also insert into ClickHouse for fast analytics
-    await clickhouse.insert({
-      table: 'usage_events',
-      values: [
-        {
-          customer_id: customerId,
-          metric_type: metricType,
-          quantity: quantity,
-          metadata: JSON.stringify(metadata || {}),
-          timestamp: Math.floor(Date.now() / 1000),
-        },
-      ],
-      format: 'JSONEachRow',
-    });
   }
 
   /**
    * Get current billing period usage for a customer
    */
   async getCurrentPeriodUsage(customerId: string): Promise<UsageMetrics> {
-    const subscription = await db.query(
+    const subscription = await primaryQuery(
       `SELECT current_period_start, current_period_end, plan_type
        FROM subscriptions
        WHERE customer_id = $1 AND status = 'active'`,
-      [customerId]
+      [customerId],
+      'USAGE_SUBSCRIPTION_WINDOW'
     );
 
     if (subscription.rows.length === 0) {
@@ -220,7 +186,7 @@ export class UsageMeteringService {
     const { current_period_start, current_period_end } = subscription.rows[0];
 
     // Aggregate usage from PostgreSQL
-    const usage = await db.query(
+    const usage = await primaryQuery(
       `SELECT 
          metric_type,
          SUM(quantity) as total
@@ -229,7 +195,8 @@ export class UsageMeteringService {
          AND recorded_at >= $2
          AND recorded_at <= $3
        GROUP BY metric_type`,
-      [customerId, current_period_start, current_period_end]
+      [customerId, current_period_start, current_period_end],
+      'USAGE_PERIOD_AGGREGATE'
     );
 
     const metrics: UsageMetrics = {
@@ -266,9 +233,10 @@ export class UsageMeteringService {
     data_transfer_overage_cost_cents: number;
     total_overage_cost_cents: number;
   }> {
-    const subscription = await db.query(
+    const subscription = await primaryQuery(
       `SELECT plan_type FROM subscriptions WHERE customer_id = $1 AND status = 'active'`,
-      [customerId]
+      [customerId],
+      'USAGE_SUBSCRIPTION_PLAN'
     );
 
     if (subscription.rows.length === 0) {
@@ -324,7 +292,7 @@ export class UsageMeteringService {
     logger.info('[UsageMetering] Starting daily Stripe usage sync...');
 
     // Get all active subscriptions
-    const subscriptions = await db.query(
+    const subscriptions = await primaryQuery(
       `SELECT 
          s.id,
          s.customer_id,
@@ -334,7 +302,9 @@ export class UsageMeteringService {
          s.plan_type
        FROM subscriptions s
        WHERE s.status = 'active'
-         AND s.stripe_subscription_id IS NOT NULL`
+         AND s.stripe_subscription_id IS NOT NULL`,
+      undefined,
+      'USAGE_STRIPE_SUBSCRIPTIONS'
     );
 
     for (const sub of subscriptions.rows) {
@@ -349,7 +319,7 @@ export class UsageMeteringService {
         const yesterdayEnd = new Date(yesterday);
         yesterdayEnd.setHours(23, 59, 59, 999);
 
-        const usage = await db.query(
+        const usage = await primaryQuery(
           `SELECT 
              metric_type,
              SUM(quantity) as total
@@ -358,7 +328,8 @@ export class UsageMeteringService {
              AND recorded_at >= $2
              AND recorded_at <= $3
            GROUP BY metric_type`,
-          [sub.customer_id, yesterday, yesterdayEnd]
+          [sub.customer_id, yesterday, yesterdayEnd],
+          'USAGE_STRIPE_YESTERDAY'
         );
 
         // Get Stripe subscription items
@@ -418,10 +389,12 @@ export class UsageMeteringService {
   async checkUsageLimits(): Promise<void> {
     logger.info('[UsageMetering] Checking usage limits...');
 
-    const subscriptions = await db.query(
+    const subscriptions = await primaryQuery(
       `SELECT customer_id, plan_type, included_impressions
        FROM subscriptions
-       WHERE status = 'active'`
+       WHERE status = 'active'`,
+      undefined,
+      'USAGE_LIMITS_SUBSCRIPTIONS'
     );
 
     for (const sub of subscriptions.rows) {
@@ -465,12 +438,13 @@ export class UsageMeteringService {
     limits: PlanLimits
   ): Promise<void> {
     // Check if we've already sent this alert
-    const existingAlert = await db.query(
+    const existingAlert = await primaryQuery(
       `SELECT id FROM usage_alerts
        WHERE customer_id = $1
          AND alert_type = $2
          AND created_at >= NOW() - INTERVAL '24 hours'`,
-      [customerId, `usage_${percentUsed}`]
+      [customerId, `usage_${percentUsed}`],
+      'USAGE_ALERT_EXISTING'
     );
 
     if (existingAlert.rows.length > 0) {
@@ -478,14 +452,19 @@ export class UsageMeteringService {
     }
 
     // Record alert
-    await db.query(
+    await primaryQuery(
       `INSERT INTO usage_alerts (customer_id, alert_type, usage_amount, limit_amount, created_at)
        VALUES ($1, $2, $3, $4, NOW())`,
-      [customerId, `usage_${percentUsed}`, currentUsage, limits.included_impressions]
+      [customerId, `usage_${percentUsed}`, currentUsage, limits.included_impressions],
+      'USAGE_ALERT_INSERT'
     );
 
     // Get user email
-    const user = await db.query(`SELECT email FROM users WHERE id = $1`, [customerId]);
+    const user = await primaryQuery(
+      `SELECT email FROM users WHERE id = $1`,
+      [customerId],
+      'USAGE_ALERT_USER_EMAIL'
+    );
 
     if (user.rows.length === 0) return;
 
@@ -518,11 +497,12 @@ export class UsageMeteringService {
     included_api_calls: number;
     included_data_transfer_gb: number;
   }> {
-    const subscription = await db.query(
+    const subscription = await primaryQuery(
       `SELECT plan_type, included_impressions
        FROM subscriptions
        WHERE customer_id = $1 AND status = 'active'`,
-      [customerId]
+      [customerId],
+      'USAGE_SUBSCRIPTION_DETAILS'
     );
 
     if (subscription.rows.length === 0) {
@@ -556,58 +536,58 @@ export class UsageMeteringService {
     total_api_calls: number;
     avg_daily_impressions: number;
   }> {
+    const windowDays =
+      Number.isFinite(days) && days > 0 ? Math.max(1, Math.min(Math.floor(days), 180)) : 30;
     const startDate = new Date();
-    startDate.setDate(startDate.getDate() - days);
+    startDate.setHours(0, 0, 0, 0);
+    startDate.setDate(startDate.getDate() - windowDays);
 
-    // Query ClickHouse for fast analytics
-    const query = `
-      SELECT 
-        toDate(toDateTime(timestamp)) as date,
-        metric_type,
-        sum(quantity) as total
-      FROM usage_events
-      WHERE customer_id = {customer_id:String}
-        AND timestamp >= toUnixTimestamp({start_date:DateTime})
-      GROUP BY date, metric_type
-      ORDER BY date ASC
-    `;
+    type UsageAnalyticsRow = {
+      date: string;
+      metric_type: 'impressions' | 'api_calls' | 'data_transfer';
+      total: string | number;
+    };
 
-    const result = await clickhouse.query({
-      query,
-      query_params: {
-        customer_id: customerId,
-        start_date: startDate.toISOString(),
-      },
-      format: 'JSONEachRow',
-    });
+    const analytics = await replicaQuery<UsageAnalyticsRow>(
+      `SELECT 
+         to_char(date_trunc('day', recorded_at), 'YYYY-MM-DD') AS date,
+         metric_type,
+         SUM(quantity)::numeric AS total
+       FROM usage_records
+       WHERE customer_id = $1
+         AND recorded_at >= $2
+       GROUP BY date, metric_type
+       ORDER BY date ASC`,
+      [customerId, startDate],
+      'USAGE_ANALYTICS_DAILY'
+    );
 
-    const rows = await result.json();
+    const dailyUsageMap = new Map<string, { date: string; impressions: number; api_calls: number }>();
 
-    // Aggregate by date
-    const dailyUsageMap = new Map<
-      string,
-      { date: string; impressions: number; api_calls: number }
-    >();
-
-    for (const row of rows as any[]) {
+    for (const row of analytics.rows) {
       const dateStr = row.date;
-      if (!dailyUsageMap.has(dateStr)) {
-        dailyUsageMap.set(dateStr, { date: dateStr, impressions: 0, api_calls: 0 });
+      const totalValue = Number(row.total) || 0;
+      const current = dailyUsageMap.get(dateStr) ?? {
+        date: dateStr,
+        impressions: 0,
+        api_calls: 0,
+      };
+      const nextValue = { ...current };
+
+      if (row.metric_type === 'impressions') {
+        nextValue.impressions = totalValue;
+      } else if (row.metric_type === 'api_calls') {
+        nextValue.api_calls = totalValue;
       }
 
-      const dayData = dailyUsageMap.get(dateStr)!;
-      if (row.metric_type === 'impressions') {
-        dayData.impressions = row.total;
-      } else if (row.metric_type === 'api_calls') {
-        dayData.api_calls = row.total;
-      }
+      dailyUsageMap.set(dateStr, nextValue);
     }
 
-    const daily_usage = Array.from(dailyUsageMap.values());
+    const daily_usage = Array.from(dailyUsageMap.values()).sort((a, b) => a.date.localeCompare(b.date));
 
     const total_impressions = daily_usage.reduce((sum, day) => sum + day.impressions, 0);
     const total_api_calls = daily_usage.reduce((sum, day) => sum + day.api_calls, 0);
-    const avg_daily_impressions = total_impressions / days;
+    const avg_daily_impressions = windowDays > 0 ? total_impressions / windowDays : 0;
 
     return {
       daily_usage,
@@ -623,10 +603,11 @@ export class UsageMeteringService {
   private async emitEvent(eventType: string, data: any): Promise<void> {
     // Simple implementation: insert into events table
     // In production, use Redis Pub/Sub, Kafka, or RabbitMQ
-    await db.query(
+    await primaryQuery(
       `INSERT INTO events (event_type, data, created_at)
        VALUES ($1, $2, NOW())`,
-      [eventType, JSON.stringify(data)]
+      [eventType, JSON.stringify(data)],
+      'USAGE_EVENT_EMIT'
     );
   }
 }

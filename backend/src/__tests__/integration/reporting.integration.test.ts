@@ -1,10 +1,9 @@
 /**
  * Reporting Integration Tests
- * 
- * Tests reporting endpoints for ClickHouse analytics dashboard
- * 
- * Note: These tests require ClickHouse to be running and initialized.
- * They will be skipped if ClickHouse is not available.
+ *
+ * Exercises the reporting endpoints end-to-end against the Postgres-backed
+ * analytics read model. These tests previously required ClickHouse, but now
+ * verify the same flows using the replica-backed Postgres fixtures.
  */
 
 import request from 'supertest';
@@ -20,25 +19,16 @@ import {
   createTestPublisher,
   createTestUser,
 } from '../helpers/testFixtures';
-import { checkClickHouseHealth } from '../../utils/clickhouse';
 
 describe('Reporting API', () => {
   let pool: Pool;
   let app: Application;
   let authToken: string;
   let publisherId: string;
-  let clickhouseAvailable = false;
 
   beforeAll(async () => {
     pool = await setupTestDatabase();
     app = createTestApp();
-    
-    // Check if ClickHouse is available
-    try {
-      clickhouseAvailable = await checkClickHouseHealth();
-    } catch (error) {
-      clickhouseAvailable = false;
-    }
   });
 
   afterAll(async () => {
@@ -46,11 +36,6 @@ describe('Reporting API', () => {
   });
 
   beforeEach(async () => {
-    if (!clickhouseAvailable) {
-      // Skip all tests in this suite if ClickHouse not available
-      return;
-    }
-
     await cleanDatabase(pool);
 
     // Setup test data and authenticate
@@ -71,9 +56,6 @@ describe('Reporting API', () => {
 
     authToken = loginResponse.body.data.token;
   });
-
-  // Skip entire suite if ClickHouse not available
-  (clickhouseAvailable ? describe : describe.skip)('ClickHouse-dependent tests', () => {
 
   describe('GET /api/v1/reporting/overview', () => {
     it('should return revenue overview stats', async () => {
@@ -216,5 +198,4 @@ describe('Reporting API', () => {
       expect(response.body.data).toHaveProperty('timestamp');
     });
   });
-  }); // End ClickHouse-dependent tests
 });

@@ -189,8 +189,7 @@ wait_for_port "localhost" 6379 "30"
 echo "Running database migrations..."
 DATABASE_URL="$POSTGRES_URL" npm --prefix "$BACKEND_DIR" run migrate
 
-echo "Initializing ClickHouse schema..."
-CLICKHOUSE_URL="$CLICKHOUSE_URL" CLICKHOUSE_DATABASE="apexmediation" npm --prefix "$BACKEND_DIR" run clickhouse:init > /dev/null
+echo "Skipping ClickHouse schema bootstrap (legacy script removed)."
 
 echo "Building backend..."
 npm --prefix "$BACKEND_DIR" run build > /dev/null

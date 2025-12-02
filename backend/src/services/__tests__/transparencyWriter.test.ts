@@ -6,8 +6,7 @@ import {
   TransparencyWriter,
   buildTransparencySignaturePayload,
   canonicalizeForSignature,
-  type ClickHouseClient,
-  type ClickHouseInsertArgs,
+  type TransparencyStorage,
 } from '../transparencyWriter';
 import { emitOpsAlert } from '../../utils/opsAlert';
 
@@ -95,8 +94,8 @@ function makeAuctionResult(winnerBid: Bid, response: OpenRTBBidResponse) {
   };
 }
 
-function makeClickHouseError(statusCode = 500): Error & { statusCode: number } {
-  const error = new Error(`ClickHouse ${statusCode}`) as Error & { statusCode: number };
+function makeStorageError(statusCode = 500): Error & { statusCode: number } {
+  const error = new Error(`Storage ${statusCode}`) as Error & { statusCode: number };
   error.statusCode = statusCode;
   return error;
 }
@@ -109,10 +108,16 @@ describe('TransparencyWriter', () => {
     overrides: Partial<ConstructorParameters<typeof TransparencyWriter>[0]> = {}
   ): {
     writer: TransparencyWriter;
-    insertMock: MockedFunction<(args: ClickHouseInsertArgs) => Promise<void>>;
+    insertAuctionsMock: MockedFunction<TransparencyStorage['insertAuctions']>;
+    insertCandidatesMock: MockedFunction<TransparencyStorage['insertCandidates']>;
   } {
-    const insertMock: MockedFunction<(args: ClickHouseInsertArgs) => Promise<void>> = jest.fn(async (_args) => {});
-    const client: ClickHouseClient = overrides.client ?? ({ insert: insertMock } as ClickHouseClient);
+    const insertAuctionsMock: MockedFunction<TransparencyStorage['insertAuctions']> = jest.fn(async () => {});
+    const insertCandidatesMock: MockedFunction<TransparencyStorage['insertCandidates']> = jest.fn(async () => {});
+    const storage: TransparencyStorage =
+      overrides.storage ?? ({
+        insertAuctions: insertAuctionsMock,
+        insertCandidates: insertCandidatesMock,
+      } as TransparencyStorage);
 
     const defaultOptions = {
       samplingBps: 10000,
@@ -125,56 +130,57 @@ describe('TransparencyWriter', () => {
     const writer = new TransparencyWriter({
       ...defaultOptions,
       ...overrides,
-      client,
+      storage,
     });
 
-    return { writer, insertMock };
+    return { writer, insertAuctionsMock, insertCandidatesMock };
   }
 
   it('skips writes when sampling does not select the auction', async () => {
-    const { writer, insertMock } = makeWriter({ samplingBps: 0 });
+    const { writer, insertAuctionsMock, insertCandidatesMock } = makeWriter({ samplingBps: 0 });
     await writer.recordAuction(makeRequest(), makeAuctionResult(makeBid('alpha', 2.5), makeResponse(makeBid('alpha', 2.5))));
-    expect(insertMock).not.toHaveBeenCalled();
+    expect(insertAuctionsMock).not.toHaveBeenCalled();
+    expect(insertCandidatesMock).not.toHaveBeenCalled();
   });
 
   it('persists auction and candidate rows with a deterministic signature when sampling hits', async () => {
-    const { writer, insertMock } = makeWriter();
+    const { writer, insertAuctionsMock, insertCandidatesMock } = makeWriter();
     const request = makeRequest();
     const winningBid = makeBid('alpha', 2.75);
     const result = makeAuctionResult(winningBid, makeResponse(winningBid));
 
     await writer.recordAuction(request, result, new Date('2025-11-09T12:00:00.000Z'));
 
-    expect(insertMock).toHaveBeenCalledTimes(2);
-    const [[auctionArgs], [candidatesArgs]] = insertMock.mock.calls as Array<[ClickHouseInsertArgs]>;
+    expect(insertAuctionsMock).toHaveBeenCalledTimes(1);
+    const auctionRows = insertAuctionsMock.mock.calls[0][0];
+    expect(Array.isArray(auctionRows)).toBe(true);
 
-    expect(auctionArgs.table).toBe('auctions');
-    expect(Array.isArray(auctionArgs.values)).toBe(true);
-
-    const auctionRow = auctionArgs.values[0] as Record<string, unknown>;
+    const auctionRow = auctionRows[0] as Record<string, unknown>;
     expect(auctionRow.publisher_id).toBe('pub-42');
     expect(auctionRow.integrity_signature).toMatch(/^[A-Za-z0-9+/=]+$/);
     expect(auctionRow.integrity_algo).toBe('ed25519');
     expect(auctionRow.winner_source).toBe('alpha');
 
-    expect(candidatesArgs.table).toBe('auction_candidates');
-    expect(candidatesArgs.values).toHaveLength(2);
+    expect(insertCandidatesMock).toHaveBeenCalledTimes(1);
+    const candidateRows = insertCandidatesMock.mock.calls[0][0];
+    expect(candidateRows).toHaveLength(2);
   });
 
-  it('retries transient ClickHouse failures before succeeding', async () => {
-    const { writer, insertMock } = makeWriter({ retryAttempts: 2, retryMinDelayMs: 0, retryMaxDelayMs: 0 });
+  it('retries transient storage failures before succeeding', async () => {
+    const { writer, insertAuctionsMock, insertCandidatesMock } = makeWriter({ retryAttempts: 2, retryMinDelayMs: 0, retryMaxDelayMs: 0 });
     const request = makeRequest();
     const winningBid = makeBid('alpha', 1.5);
     const result = makeAuctionResult(winningBid, makeResponse(winningBid));
 
-    insertMock
-      .mockRejectedValueOnce(makeClickHouseError(500))
-      .mockResolvedValueOnce(undefined)
+    insertAuctionsMock
+      .mockRejectedValueOnce(makeStorageError(500))
       .mockResolvedValueOnce(undefined);
+    insertCandidatesMock.mockResolvedValueOnce(undefined);
 
     await writer.recordAuction(request, result, new Date('2025-11-09T12:00:00.000Z'));
 
-    expect(insertMock).toHaveBeenCalledTimes(3);
+    expect(insertAuctionsMock).toHaveBeenCalledTimes(2);
+    expect(insertCandidatesMock).toHaveBeenCalledTimes(1);
     const metrics = writer.getMetrics();
     expect(metrics.writes_attempted).toBe(1);
     expect(metrics.writes_failed).toBe(0);
@@ -186,7 +192,7 @@ describe('TransparencyWriter', () => {
 
   it('opens the breaker after consecutive failures and skips subsequent writes until cooldown elapses', async () => {
     let currentTime = 0;
-    const { writer, insertMock } = makeWriter({
+    const { writer, insertAuctionsMock, insertCandidatesMock } = makeWriter({
       retryAttempts: 0,
       breakerThreshold: 2,
       breakerCooldownMs: 1000,
@@ -194,10 +200,10 @@ describe('TransparencyWriter', () => {
     });
 
     let failures = 0;
-    insertMock.mockImplementation(async () => {
+    insertAuctionsMock.mockImplementation(async () => {
       if (failures < 2) {
         failures += 1;
-        throw makeClickHouseError(500);
+        throw makeStorageError(500);
       }
     });
 
@@ -215,9 +221,10 @@ describe('TransparencyWriter', () => {
     expect(metricsAfterFailures.breaker_cooldown_remaining_ms).toBe(1000);
   expect(emitOpsAlertMock.mock.calls.some(([event]) => event === 'transparency_breaker_open')).toBe(true);
 
-    const callCountBeforeSkip = insertMock.mock.calls.length;
+    const callCountBeforeSkip = insertAuctionsMock.mock.calls.length;
     await writer.recordAuction(request, result, new Date('2025-11-09T12:00:00.000Z'));
-    expect(insertMock.mock.calls.length).toBe(callCountBeforeSkip);
+    expect(insertAuctionsMock.mock.calls.length).toBe(callCountBeforeSkip);
+    expect(insertCandidatesMock).not.toHaveBeenCalled();
 
     const metricsDuringOpen = writer.getMetrics();
     expect(metricsDuringOpen.breaker_open).toBe(true);
@@ -230,7 +237,8 @@ describe('TransparencyWriter', () => {
   expect(emitOpsAlertMock.mock.calls.some(([event]) => event === 'transparency_breaker_closed')).toBe(true);
 
     await writer.recordAuction(request, result, new Date('2025-11-09T12:00:00.000Z'));
-    expect(insertMock.mock.calls.length).toBe(callCountBeforeSkip + 2);
+    expect(insertAuctionsMock.mock.calls.length).toBe(callCountBeforeSkip + 1);
+    expect(insertCandidatesMock).toHaveBeenCalledTimes(1);
 
     const metricsAfterSuccess = writer.getMetrics();
     expect(metricsAfterSuccess.writes_succeeded).toBe(1);
@@ -240,17 +248,17 @@ describe('TransparencyWriter', () => {
   });
 
   it('records a partial write failure when candidate inserts fail but auctions succeed', async () => {
-    const { writer, insertMock } = makeWriter({ retryAttempts: 0, breakerThreshold: 10 });
+    const { writer, insertAuctionsMock, insertCandidatesMock } = makeWriter({ retryAttempts: 0, breakerThreshold: 10 });
     const request = makeRequest();
     const result = makeAuctionResult(makeBid('alpha', 2.5), makeResponse(makeBid('alpha', 2.5)));
 
-    insertMock
-      .mockResolvedValueOnce(undefined)
-      .mockRejectedValueOnce(makeClickHouseError(500));
+    insertAuctionsMock.mockResolvedValueOnce(undefined);
+    insertCandidatesMock.mockRejectedValueOnce(makeStorageError(500));
 
     await writer.recordAuction(request, result, new Date('2025-11-09T12:00:00.000Z'));
 
-    expect(insertMock).toHaveBeenCalledTimes(2);
+    expect(insertAuctionsMock).toHaveBeenCalledTimes(1);
+    expect(insertCandidatesMock).toHaveBeenCalledTimes(1);
     const metrics = writer.getMetrics();
     expect(metrics.writes_attempted).toBe(1);
     expect(metrics.writes_succeeded).toBe(0);
@@ -260,15 +268,15 @@ describe('TransparencyWriter', () => {
     expect(metrics.breaker_cooldown_remaining_ms).toBe(0);
   });
 
-  it('emits ops alerts and tracks last failure metadata for ClickHouse errors', async () => {
+  it('emits ops alerts and tracks last failure metadata for storage errors', async () => {
     let currentTime = 2500;
-    const { writer, insertMock } = makeWriter({
+    const { writer, insertAuctionsMock } = makeWriter({
       retryAttempts: 0,
       breakerThreshold: 5,
       nowProvider: () => currentTime,
     });
 
-    insertMock.mockRejectedValue(makeClickHouseError(503));
+    insertAuctionsMock.mockRejectedValue(makeStorageError(503));
 
     const request = makeRequest();
     const result = makeAuctionResult(makeBid('alpha', 2.5), makeResponse(makeBid('alpha', 2.5)));
@@ -276,7 +284,7 @@ describe('TransparencyWriter', () => {
     await writer.recordAuction(request, result, new Date('2025-11-09T12:00:00.000Z'));
 
     expect(emitOpsAlertMock).toHaveBeenCalledWith(
-      'transparency_clickhouse_failure',
+      'transparency_storage_failure',
       'warning',
       expect.objectContaining({
         request_id: request.id,

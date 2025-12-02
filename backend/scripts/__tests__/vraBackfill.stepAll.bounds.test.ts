@@ -17,6 +17,14 @@ describe('vraBackfill.js — step=all requires bounds', () => {
     process.exit = originalExit;
   });
 
+  async function runCli() {
+    const imported = await import(scriptPath);
+    const mod = imported as { main?: () => Promise<void>; default?: { main?: () => Promise<void> } };
+    const invoke = mod.main || mod.default?.main;
+    if (!invoke) throw new Error('CLI main export not found');
+    await invoke();
+  }
+
   it('exits with ERROR (20) when --step all is provided without --from/--to', async () => {
     process.argv = [
       process.execPath,
@@ -28,10 +36,10 @@ describe('vraBackfill.js — step=all requires bounds', () => {
     const exitSpy = jest
       .spyOn(process, 'exit')
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .mockImplementation(((code?: number) => { throw new Error(`EXIT ${code}`); }) as any);
+      .mockImplementation(((code?: number) => { throw new Error(`EXIT ${code ?? 0}`); }) as any);
 
     try {
-      await import(scriptPath);
+      await runCli();
       throw new Error('expected process.exit');
     } catch (e: any) {
       expect(String(e.message)).toBe('EXIT 20');

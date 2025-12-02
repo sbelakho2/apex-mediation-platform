@@ -5,8 +5,49 @@
  * creative compliance, ANR detection, and SLO breach alerting
  */
 
-import { executeQuery } from '../utils/clickhouse';
+import type { QueryResultRow } from 'pg';
+import { query as pgQuery } from '../utils/postgres';
 import logger from '../utils/logger';
+
+const QUALITY_SLOW_QUERY_MS = parseInt(process.env.QUALITY_SLOW_QUERY_MS || '200', 10);
+const QUALITY_CAPTURE_EXPLAIN = process.env.QUALITY_CAPTURE_EXPLAIN !== '0';
+
+const runQuery = async <T extends QueryResultRow = QueryResultRow>(
+  sql: string,
+  params: ReadonlyArray<unknown> = [],
+  label?: string
+): Promise<T[]> => {
+  const queryLabel = label ?? 'QUALITY';
+  const start = Date.now();
+  const { rows } = await pgQuery<T>(sql, params, { replica: true, label: queryLabel });
+  const durationMs = Date.now() - start;
+
+  if (durationMs > QUALITY_SLOW_QUERY_MS) {
+    logger.warn('Slow quality query detected', { label: queryLabel, durationMs });
+    if (QUALITY_CAPTURE_EXPLAIN) {
+      try {
+        const explainSql = `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)\n${sql}`;
+        const plan = await pgQuery<{ 'QUERY PLAN': unknown }>(explainSql, params, {
+          replica: true,
+          label: `${queryLabel}_EXPLAIN`,
+        });
+        logger.warn('Quality query plan', {
+          label: queryLabel,
+          durationMs,
+          plan: plan.rows?.[0]?.['QUERY PLAN'] ?? plan.rows,
+        });
+      } catch (planError) {
+        logger.error('Failed to capture quality query plan', {
+          label: queryLabel,
+          durationMs,
+          error: (planError as Error).message,
+        });
+      }
+    }
+  }
+
+  return rows;
+};
 
 export interface ViewabilityMetrics {
   totalImpressions: number;
@@ -111,55 +152,47 @@ export class QualityMonitoringService {
     endDate: Date
   ): Promise<ViewabilityMetrics> {
     try {
-      const overallQuery = `
+      const overallSql = `
         SELECT
-          count(*) as total_impressions,
-          countIf(viewable = 1) as viewable_impressions,
-          countIf(viewable = 1) / count(*) * 100 as viewability_rate,
-          avg(view_duration_ms) / 1000.0 as avg_view_duration,
-          countIf(measurable = 1) / count(*) * 100 as measurable_rate
-        FROM impressions
-        WHERE publisher_id = {publisherId:UUID}
-          AND timestamp >= {startDate:DateTime}
-          AND timestamp < {endDate:DateTime}
-          AND is_test_mode = 0
+          COUNT(*) AS total_impressions,
+          COUNT(*) FILTER (WHERE viewable) AS viewable_impressions,
+          COALESCE(100.0 * COUNT(*) FILTER (WHERE viewable) / NULLIF(COUNT(*), 0), 0) AS viewability_rate,
+          COALESCE(AVG(view_duration_ms) / 1000.0, 0) AS avg_view_duration,
+          COALESCE(100.0 * COUNT(*) FILTER (WHERE measurable) / NULLIF(COUNT(*), 0), 0) AS measurable_rate
+        FROM analytics_impressions
+        WHERE publisher_id = $1
+          AND observed_at >= $2
+          AND observed_at < $3
+          AND is_test_mode = false
       `;
 
-      const byFormatQuery = `
+      const byFormatSql = `
         SELECT
-          ad_format,
-          countIf(viewable = 1) / count(*) * 100 as viewability_rate,
-          count(*) as impressions
-        FROM impressions
-        WHERE publisher_id = {publisherId:UUID}
-          AND timestamp >= {startDate:DateTime}
-          AND timestamp < {endDate:DateTime}
-          AND is_test_mode = 0
+          COALESCE(ad_format, 'unknown') AS ad_format,
+          COALESCE(100.0 * COUNT(*) FILTER (WHERE viewable) / NULLIF(COUNT(*), 0), 0) AS viewability_rate,
+          COUNT(*) AS impressions
+        FROM analytics_impressions
+        WHERE publisher_id = $1
+          AND observed_at >= $2
+          AND observed_at < $3
+          AND is_test_mode = false
         GROUP BY ad_format
         ORDER BY impressions DESC
       `;
 
       const [overallResult, formatResult] = await Promise.all([
-        executeQuery<{
+        runQuery<{
           total_impressions: string;
           viewable_impressions: string;
           viewability_rate: string;
           avg_view_duration: string;
           measurable_rate: string;
-        }>(overallQuery, {
-          publisherId,
-          startDate: startDate.toISOString(),
-          endDate: endDate.toISOString(),
-        }),
-        executeQuery<{
+        }>(overallSql, [publisherId, startDate, endDate]),
+        runQuery<{
           ad_format: string;
           viewability_rate: string;
           impressions: string;
-        }>(byFormatQuery, {
-          publisherId,
-          startDate: startDate.toISOString(),
-          endDate: endDate.toISOString(),
-        }),
+        }>(byFormatSql, [publisherId, startDate, endDate]),
       ]);
 
       if (overallResult.length === 0) {
@@ -201,76 +234,64 @@ export class QualityMonitoringService {
     endDate: Date
   ): Promise<BrandSafetyReport> {
     try {
-      const summaryQuery = `
+      const summarySql = `
         SELECT
-          count(*) as total_scans,
-          countIf(passed = 1) as passed_scans,
-          countIf(passed = 0) as failed_scans,
-          avg(risk_score) as avg_risk_score
-        FROM creative_scans
-        WHERE publisher_id = {publisherId:UUID}
-          AND timestamp >= {startDate:DateTime}
-          AND timestamp < {endDate:DateTime}
+          COUNT(*) AS total_scans,
+          COUNT(*) FILTER (WHERE passed) AS passed_scans,
+          COUNT(*) FILTER (WHERE passed = false) AS failed_scans,
+          COALESCE(AVG(risk_score), 0) AS avg_risk_score
+        FROM analytics_creative_scans
+        WHERE publisher_id = $1
+          AND observed_at >= $2
+          AND observed_at < $3
       `;
 
-      const categoriesQuery = `
+      const categoriesSql = `
         SELECT
-          blocked_category,
-          count(*) as count
-        FROM creative_scans
-        WHERE publisher_id = {publisherId:UUID}
-          AND timestamp >= {startDate:DateTime}
-          AND timestamp < {endDate:DateTime}
-          AND passed = 0
+          COALESCE(blocked_category, 'unknown') AS blocked_category,
+          COUNT(*) AS count
+        FROM analytics_creative_scans
+        WHERE publisher_id = $1
+          AND observed_at >= $2
+          AND observed_at < $3
+          AND passed = false
         GROUP BY blocked_category
         ORDER BY count DESC
         LIMIT 10
       `;
 
-      const violationsQuery = `
+      const violationsSql = `
         SELECT
           creative_id,
-          blocked_category,
-          severity,
-          timestamp
-        FROM creative_scans
-        WHERE publisher_id = {publisherId:UUID}
-          AND timestamp >= {startDate:DateTime}
-          AND timestamp < {endDate:DateTime}
-          AND passed = 0
-        ORDER BY timestamp DESC
+          COALESCE(blocked_category, 'unknown') AS blocked_category,
+          COALESCE(metadata->>'severity', 'medium') AS severity,
+          observed_at
+        FROM analytics_creative_scans
+        WHERE publisher_id = $1
+          AND observed_at >= $2
+          AND observed_at < $3
+          AND passed = false
+        ORDER BY observed_at DESC
         LIMIT 50
       `;
 
       const [summaryResult, categoriesResult, violationsResult] = await Promise.all([
-        executeQuery<{
+        runQuery<{
           total_scans: string;
           passed_scans: string;
           failed_scans: string;
           avg_risk_score: string;
-        }>(summaryQuery, {
-          publisherId,
-          startDate: startDate.toISOString(),
-          endDate: endDate.toISOString(),
-        }),
-        executeQuery<{
+        }>(summarySql, [publisherId, startDate, endDate]),
+        runQuery<{
           blocked_category: string;
           count: string;
-        }>(categoriesQuery, {
-          publisherId,
-          startDate: startDate.toISOString(),
-          endDate: endDate.toISOString(),
-        }),
-        executeQuery<{
+        }>(categoriesSql, [publisherId, startDate, endDate]),
+        runQuery<{
           creative_id: string;
           blocked_category: string;
-          severity: 'low' | 'medium' | 'high';
-          timestamp: string;
-        }>(violationsQuery, {
-          publisherId,
-          startDate: startDate.toISOString(),
-          endDate: endDate.toISOString(),
-        }),
+          severity: string | null;
+          observed_at: Date;
+        }>(violationsSql, [publisherId, startDate, endDate]),
       ]);
 
       if (summaryResult.length === 0) {
@@ -297,8 +318,10 @@ export class QualityMonitoringService {
         violations: violationsResult.map(row => ({
           creativeId: row.creative_id,
           category: row.blocked_category,
-          severity: row.severity,
-          timestamp: row.timestamp,
+          severity: (row.severity ?? 'medium') as 'low' | 'medium' | 'high',
+          timestamp: row.observed_at instanceof Date
+            ? row.observed_at.toISOString()
+            : String(row.observed_at ?? ''),
         })),
       };
     } catch (error) {
@@ -316,50 +339,78 @@ export class QualityMonitoringService {
     endDate: Date
   ): Promise<CreativeComplianceReport> {
     try {
-      const query = `
+      const summarySql = `
         WITH creative_checks AS (
           SELECT
             creative_id,
-            arrayStringConcat(
-              arrayFilter(x -> x != '', [
-                if(file_size_ok = 0, 'File size exceeded', ''),
-                if(dimensions_ok = 0, 'Invalid dimensions', ''),
-                if(format_ok = 0, 'Unsupported format', ''),
-                if(content_policy_ok = 0, 'Content policy violation', '')
-              ]),
-              ', '
-            ) as violations,
-            multiIf(
-              status = 'approved', 'approved',
-              status = 'rejected', 'rejected',
-              status = 'reviewed', 'reviewed',
-              'flagged'
-            ) as status
-          FROM creative_compliance
-          WHERE publisher_id = {publisherId:UUID}
-            AND timestamp >= {startDate:DateTime}
-            AND timestamp < {endDate:DateTime}
+            observed_at,
+            COALESCE(TRIM(BOTH ', ' FROM CONCAT_WS(', ',
+              CASE WHEN NOT file_size_ok THEN 'File size exceeded' END,
+              CASE WHEN NOT dimensions_ok THEN 'Invalid dimensions' END,
+              CASE WHEN NOT format_ok THEN 'Unsupported format' END,
+              CASE WHEN NOT content_policy_ok THEN 'Content policy violation' END
+            )), '') AS violations,
+            CASE
+              WHEN status = 'approved' THEN 'approved'
+              WHEN status = 'rejected' THEN 'rejected'
+              WHEN status = 'reviewed' THEN 'reviewed'
+              ELSE 'flagged'
+            END AS status
+          FROM analytics_creative_compliance
+          WHERE publisher_id = $1
+            AND observed_at >= $2
+            AND observed_at < $3
         )
         SELECT
-          count(DISTINCT creative_id) as total_creatives,
-          countIf(violations = '') as compliant_creatives,
-          countIf(violations = '') / count(*) * 100 as compliance_rate,
-          groupArray((creative_id, violations, status)) as violations_list
+          COUNT(DISTINCT creative_id) AS total_creatives,
+          COUNT(*) FILTER (WHERE violations = '') AS compliant_creatives,
+          COALESCE(100.0 * COUNT(*) FILTER (WHERE violations = '') / NULLIF(COUNT(*), 0), 0) AS compliance_rate
         FROM creative_checks
       `;
 
-      const result = await executeQuery<{
-        total_creatives: string;
-        compliant_creatives: string;
-        compliance_rate: string;
-        violations_list: Array<[string, string, string]>;
-      }>(query, {
-        publisherId,
-        startDate: startDate.toISOString(),
-        endDate: endDate.toISOString(),
-      });
+      const violationsSql = `
+        WITH creative_checks AS (
+          SELECT
+            creative_id,
+            observed_at,
+            COALESCE(TRIM(BOTH ', ' FROM CONCAT_WS(', ',
+              CASE WHEN NOT file_size_ok THEN 'File size exceeded' END,
+              CASE WHEN NOT dimensions_ok THEN 'Invalid dimensions' END,
+              CASE WHEN NOT format_ok THEN 'Unsupported format' END,
+              CASE WHEN NOT content_policy_ok THEN 'Content policy violation' END
+            )), '') AS violations,
+            CASE
+              WHEN status = 'approved' THEN 'approved'
+              WHEN status = 'rejected' THEN 'rejected'
+              WHEN status = 'reviewed' THEN 'reviewed'
+              ELSE 'flagged'
+            END AS status
+          FROM analytics_creative_compliance
+          WHERE publisher_id = $1
+            AND observed_at >= $2
+            AND observed_at < $3
+        )
+        SELECT creative_id, violations, status
+        FROM creative_checks
+        WHERE violations <> ''
+        ORDER BY observed_at DESC
+        LIMIT 100
+      `;
 
-      if (result.length === 0) {
+      const [summaryResult, violationsResult] = await Promise.all([
+        runQuery<{
+          total_creatives: string;
+          compliant_creatives: string;
+          compliance_rate: string;
+        }>(summarySql, [publisherId, startDate, endDate]),
+        runQuery<{
+          creative_id: string;
+          violations: string;
+          status: string;
+        }>(violationsSql, [publisherId, startDate, endDate]),
+      ]);
+
+      if (summaryResult.length === 0) {
         return {
           totalCreatives: 0,
           compliantCreatives: 0,
@@ -368,21 +419,18 @@ export class QualityMonitoringService {
         };
       }
 
-      const row = result[0];
-      const violations = (row.violations_list || [])
-        .filter(([, violationType]) => violationType !== '')
-        .map(([creativeId, violationType, status]) => ({
-          creativeId,
-          violationType,
-          details: violationType,
-          status: status as 'flagged' | 'reviewed' | 'approved' | 'rejected',
-        }))
-        .slice(0, 100); // Limit to 100 most recent
+      const summary = summaryResult[0];
+      const violations = violationsResult.map(row => ({
+        creativeId: row.creative_id,
+        violationType: row.violations,
+        details: row.violations,
+        status: row.status as 'flagged' | 'reviewed' | 'approved' | 'rejected',
+      }));
 
       return {
-        totalCreatives: parseInt(row.total_creatives),
-        compliantCreatives: parseInt(row.compliant_creatives),
-        complianceRate: parseFloat(row.compliance_rate),
+        totalCreatives: parseInt(summary.total_creatives),
+        compliantCreatives: parseInt(summary.compliant_creatives),
+        complianceRate: parseFloat(summary.compliance_rate),
         violations,
       };
     } catch (error) {
@@ -400,82 +448,72 @@ export class QualityMonitoringService {
     endDate: Date
   ): Promise<ANRReport> {
     try {
-      const overallQuery = `
+      const overallSql = `
         SELECT
-          count(DISTINCT session_id) as total_sessions,
-          countIf(event_type = 'anr') as anr_count,
-          countIf(event_type = 'anr') / count(DISTINCT session_id) * 100 as anr_rate,
-          countIf(event_type = 'crash') as crash_count,
-          countIf(event_type = 'crash') / count(DISTINCT session_id) * 100 as crash_rate
-        FROM sdk_telemetry
-        WHERE publisher_id = {publisherId:UUID}
-          AND timestamp >= {startDate:DateTime}
-          AND timestamp < {endDate:DateTime}
+          COUNT(DISTINCT payload->>'session_id') AS total_sessions,
+          COUNT(*) FILTER (WHERE event_type = 'anr') AS anr_count,
+          COALESCE(100.0 * COUNT(*) FILTER (WHERE event_type = 'anr') / NULLIF(COUNT(DISTINCT payload->>'session_id'), 0), 0) AS anr_rate,
+          COUNT(*) FILTER (WHERE event_type = 'crash') AS crash_count,
+          COALESCE(100.0 * COUNT(*) FILTER (WHERE event_type = 'crash') / NULLIF(COUNT(DISTINCT payload->>'session_id'), 0), 0) AS crash_rate
+        FROM analytics_sdk_telemetry
+        WHERE publisher_id = $1
+          AND observed_at >= $2
+          AND observed_at < $3
       `;
 
-      const byAdapterQuery = `
+      const byAdapterSql = `
         SELECT
-          adapter_id,
-          adapter_name,
-          countIf(event_type = 'anr') as anr_count,
-          countIf(event_type = 'anr') / count(DISTINCT session_id) * 100 as rate
-        FROM sdk_telemetry
-        WHERE publisher_id = {publisherId:UUID}
-          AND timestamp >= {startDate:DateTime}
-          AND timestamp < {endDate:DateTime}
+          COALESCE(adapter_id, payload->>'adapter_id', 'unknown') AS adapter_id,
+          COALESCE(payload->>'adapter_name', adapter_id, 'unknown') AS adapter_name,
+          COUNT(*) AS anr_count,
+          COALESCE(100.0 * COUNT(*) / NULLIF(COUNT(DISTINCT payload->>'session_id'), 0), 0) AS rate
+        FROM analytics_sdk_telemetry
+        WHERE publisher_id = $1
+          AND observed_at >= $2
+          AND observed_at < $3
           AND event_type = 'anr'
-        GROUP BY adapter_id, adapter_name
-        HAVING anr_count > 0
+        GROUP BY
+          COALESCE(adapter_id, payload->>'adapter_id', 'unknown'),
+          COALESCE(payload->>'adapter_name', adapter_id, 'unknown')
+        HAVING COUNT(*) > 0
         ORDER BY anr_count DESC
       `;
 
-      const topIssuesQuery = `
+      const topIssuesSql = `
         SELECT
-          stack_trace,
-          count(*) as count,
-          max(timestamp) as last_seen
-        FROM sdk_telemetry
-        WHERE publisher_id = {publisherId:UUID}
-          AND timestamp >= {startDate:DateTime}
-          AND timestamp < {endDate:DateTime}
+          COALESCE(payload->>'stack_trace', error_message, message, '') AS stack_trace,
+          COUNT(*) AS count,
+          MAX(observed_at) AS last_seen
+        FROM analytics_sdk_telemetry
+        WHERE publisher_id = $1
+          AND observed_at >= $2
+          AND observed_at < $3
           AND event_type = 'anr'
-          AND stack_trace != ''
-        GROUP BY stack_trace
+          AND COALESCE(payload->>'stack_trace', error_message, message, '') <> ''
+        GROUP BY 1
         ORDER BY count DESC
         LIMIT 20
       `;
 
       const [overallResult, byAdapterResult, topIssuesResult] = await Promise.all([
-        executeQuery<{
+        runQuery<{
           total_sessions: string;
           anr_count: string;
           anr_rate: string;
           crash_count: string;
           crash_rate: string;
-        }>(overallQuery, {
-          publisherId,
-          startDate: startDate.toISOString(),
-          endDate: endDate.toISOString(),
-        }),
-        executeQuery<{
-          adapter_id: string;
-          adapter_name: string;
+        }>(overallSql, [publisherId, startDate, endDate]),
+        runQuery<{
+          adapter_id: string | null;
+          adapter_name: string | null;
           anr_count: string;
           rate: string;
-        }>(byAdapterQuery, {
-          publisherId,
-          startDate: startDate.toISOString(),
-          endDate: endDate.toISOString(),
-        }),
-        executeQuery<{
+        }>(byAdapterSql, [publisherId, startDate, endDate]),
+        runQuery<{
           stack_trace: string;
           count: string;
-          last_seen: string;
-        }>(topIssuesQuery, {
-          publisherId,
-          startDate: startDate.toISOString(),
-          endDate: endDate.toISOString(),
-        }),
+          last_seen: Date;
+        }>(topIssuesSql, [publisherId, startDate, endDate]),
       ]);
 
       if (overallResult.length === 0) {
@@ -498,16 +536,19 @@ export class QualityMonitoringService {
         crashCount: parseInt(overall.crash_count),
         crashRate: parseFloat(overall.crash_rate),
         anrsByAdapter: byAdapterResult.map(row => ({
-          adapterId: row.adapter_id,
-          adapterName: row.adapter_name,
+          adapterId: row.adapter_id ?? 'unknown',
+          adapterName: row.adapter_name ?? row.adapter_id ?? 'unknown',
           anrCount: parseInt(row.anr_count),
           rate: parseFloat(row.rate),
         })),
-        topIssues: topIssuesResult.map(row => ({
-          stackTrace: row.stack_trace.substring(0, 200), // Truncate long stack traces
-          count: parseInt(row.count),
-          lastSeen: row.last_seen,
-        })),
+        topIssues: topIssuesResult.map(row => {
+          const stackTrace = row.stack_trace ?? '';
+          return {
+            stackTrace: stackTrace.substring(0, 200),
+            count: parseInt(row.count),
+            lastSeen: row.last_seen instanceof Date ? row.last_seen.toISOString() : String(row.last_seen),
+          };
+        }),
       };
     } catch (error) {
       logger.error('Failed to get ANR report', { publisherId, error });
@@ -524,47 +565,46 @@ export class QualityMonitoringService {
   ): Promise<PerformanceSLOs> {
     try {
       const startTime = new Date(Date.now() - hours * 60 * 60 * 1000);
-      
-      const query = `
-        WITH metrics AS (
+      const endTime = new Date();
+
+      const sql = `
+        WITH impression_metrics AS (
           SELECT
-            count(*) as total_requests,
-            countIf(status = 'success') as successful_requests,
-            countIf(status = 'error') as error_requests,
-            countIf(latency_ms <= 800) as fast_requests,
-            countIf(viewable = 1) / count(*) * 100 as viewability
-          FROM impressions
-          WHERE publisher_id = {publisherId:UUID}
-            AND timestamp >= {startTime:DateTime}
+            COUNT(*) AS total_requests,
+            COUNT(*) FILTER (WHERE status = 'success' OR filled IS TRUE) AS successful_requests,
+            COUNT(*) FILTER (WHERE status = 'error') AS error_requests,
+            COUNT(*) FILTER (WHERE latency_ms IS NOT NULL AND latency_ms <= 800) AS fast_requests,
+            COALESCE(100.0 * COUNT(*) FILTER (WHERE viewable) / NULLIF(COUNT(*), 0), 0) AS viewability
+          FROM analytics_impressions
+          WHERE publisher_id = $1
+            AND observed_at >= $2
+            AND observed_at < $3
         ),
         sdk_metrics AS (
           SELECT
-            count(DISTINCT session_id) as sessions,
-            countIf(event_type = 'anr') as anrs
-          FROM sdk_telemetry
-          WHERE publisher_id = {publisherId:UUID}
-            AND timestamp >= {startTime:DateTime}
+            COUNT(DISTINCT payload->>'session_id') AS sessions,
+            COUNT(*) FILTER (WHERE event_type = 'anr') AS anrs
+          FROM analytics_sdk_telemetry
+          WHERE publisher_id = $1
+            AND observed_at >= $2
+            AND observed_at < $3
         )
         SELECT
-          m.successful_requests / m.total_requests * 100 as availability,
-          m.fast_requests / m.total_requests * 100 as latency_slo,
-          m.error_requests / m.total_requests * 100 as error_rate,
-          s.anrs / s.sessions * 100 as anr_rate,
-          m.viewability
-        FROM metrics m
-        CROSS JOIN sdk_metrics s
+          COALESCE(100.0 * successful_requests / NULLIF(total_requests, 0), 0) AS availability,
+          COALESCE(100.0 * fast_requests / NULLIF(total_requests, 0), 0) AS latency_slo,
+          COALESCE(100.0 * error_requests / NULLIF(total_requests, 0), 0) AS error_rate,
+          COALESCE(100.0 * anrs / NULLIF(sessions, 0), 0) AS anr_rate,
+          COALESCE(viewability, 0) AS viewability
+        FROM impression_metrics, sdk_metrics
       `;
 
-      const result = await executeQuery<{
+      const result = await runQuery<{
         availability: string;
         latency_slo: string;
         error_rate: string;
         anr_rate: string;
         viewability: string;
-      }>(query, {
-        publisherId,
-        startTime: startTime.toISOString(),
-      });
+      }>(sql, [publisherId, startTime, endTime]);
 
       if (result.length === 0) {
         // Default SLOs when no data

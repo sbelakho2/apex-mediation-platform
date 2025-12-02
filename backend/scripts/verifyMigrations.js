@@ -2,32 +2,8 @@
 require('dotenv/config');
 const { execFileSync } = require('node:child_process');
 const { Client } = require('pg');
-const { createClient } = require('@clickhouse/client');
 
 function log(msg){ process.stdout.write(`${msg}\n`); }
-
-function resolveClickHouseUrl(){
-  if (process.env.CLICKHOUSE_URL) {
-    return process.env.CLICKHOUSE_URL;
-  }
-
-  const host = (process.env.CLICKHOUSE_HOST || '').trim();
-  const port = process.env.CLICKHOUSE_PORT || '8123';
-
-  if (!host) {
-    return `http://localhost:${port}`;
-  }
-
-  let normalized = host.replace(/\/$/, '');
-  if (!normalized.startsWith('http://') && !normalized.startsWith('https://')) {
-    normalized = `http://${normalized}`;
-  }
-  const afterScheme = normalized.split('://')[1] ?? normalized;
-  if (!/:[0-9]+$/.test(afterScheme)) {
-    normalized = `${normalized}:${port}`;
-  }
-  return normalized;
-}
 
 async function pgCheck() {
   const cs = process.env.DATABASE_URL;
@@ -45,34 +21,12 @@ async function pgCheck() {
   }
 }
 
-async function chCheck() {
-  const ch = createClient({
-    url: resolveClickHouseUrl(),
-    database: process.env.CLICKHOUSE_DATABASE || 'apexmediation',
-    username: process.env.CLICKHOUSE_USER || 'default',
-    password: process.env.CLICKHOUSE_PASSWORD || '',
-    application: 'apex-verify-migrations',
-  });
-  try {
-    // ensure tables exist by simple DESCRIBE
-    for (const t of ['impressions','clicks','auction_events']) {
-      await ch.query({ query: `DESCRIBE TABLE ${t}` });
-    }
-  } finally {
-    await ch.close();
-  }
-}
-
 async function main() {
   log('Applying Postgres migrations (up)');
   execFileSync('node', ['scripts/runMigrationsV2.js'], { stdio: 'inherit', cwd: __dirname + '/..' });
 
-  log('Applying ClickHouse migrations (up)');
-  execFileSync('node', ['scripts/runClickHouseMigrations.js'], { stdio: 'inherit', cwd: __dirname + '/..' });
-
   log('Running smoke checks');
   await pgCheck();
-  await chCheck();
 
   log('Reverting last PG migration (down)');
   process.env.ALLOW_MIGRATION_DOWN = process.env.ALLOW_MIGRATION_DOWN || '1';

@@ -146,7 +146,7 @@ curl -H "Cookie: auth_token=..." https://yourdomain.com/api/v1/billing/invoices
 1. [ ] Generate test traffic to app
 2. [ ] Wait 5 minutes for usage aggregation
 3. [ ] Check `/billing/usage/current` shows updated numbers
-4. [ ] Verify ClickHouse has usage records
+4. [ ] Verify Postgres analytics replica (read-model) has usage records
 5. [ ] Verify PostgreSQL `usage_records` table updated
 
 #### Invoice Generation Flow

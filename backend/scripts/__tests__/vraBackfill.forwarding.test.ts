@@ -36,8 +36,32 @@ describe('vraBackfill.js — flag forwarding to stage CLIs', () => {
     return seen;
   }
 
+  async function runCli() {
+    const imported = await import(scriptPath);
+    const mod = imported as { main?: () => Promise<void>; default?: { main?: () => Promise<void> } };
+    const invoke = mod.main || mod.default?.main;
+    if (!invoke) throw new Error('CLI main export not found');
+    await invoke();
+  }
+
+  async function expectExit(code: number) {
+    const exitSpy = jest
+      .spyOn(process, 'exit')
+      .mockImplementation(((exitCode?: number) => { throw new Error(`EXIT ${exitCode ?? 0}`); }) as any);
+
+    try {
+      await runCli();
+      throw new Error('expected process.exit');
+    } catch (e: any) {
+      expect(String(e?.message ?? '')).toBe(`EXIT ${code}`);
+    } finally {
+      exitSpy.mockRestore();
+    }
+  }
+
   it('forwards --dry-run to expected stage (vraBuildExpected.js)', async () => {
     const seen = setupSpawnCapture();
+    const checkpoint = path.resolve(process.cwd(), 'logs', `vra-forwarding-expected-${Date.now()}-${Math.random()}.json`);
 
     process.argv = [
       process.execPath,
@@ -46,16 +70,10 @@ describe('vraBackfill.js — flag forwarding to stage CLIs', () => {
       '--to', '2025-11-02T00:00:00Z',
       '--step', 'expected',
       '--dry-run', 'true',
+      '--checkpoint', checkpoint,
     ];
 
-    const exitSpy = jest.spyOn(process, 'exit').mockImplementation(((code?: number) => { throw new Error(`EXIT ${code}`); }) as any);
-    try {
-      await import(scriptPath);
-    } catch (e: any) {
-      expect(String(e.message)).toBe('EXIT 0');
-    } finally {
-      exitSpy.mockRestore();
-    }
+    await expectExit(0);
 
     const call = seen.find((c) => c[1]?.endsWith('vraBuildExpected.js')) || [];
     expect(call.length).toBeGreaterThan(0);
@@ -69,6 +87,7 @@ describe('vraBackfill.js — flag forwarding to stage CLIs', () => {
 
   it('forwards --dry-run to reconcile stage (vraReconcile.js)', async () => {
     const seen = setupSpawnCapture();
+    const checkpoint = path.resolve(process.cwd(), 'logs', `vra-forwarding-reconcile-${Date.now()}-${Math.random()}.json`);
 
     process.argv = [
       process.execPath,
@@ -77,16 +96,10 @@ describe('vraBackfill.js — flag forwarding to stage CLIs', () => {
       '--to', '2025-11-04T00:00:00Z',
       '--step', 'reconcile',
       '--dry-run', 'true',
+      '--checkpoint', checkpoint,
     ];
 
-    const exitSpy = jest.spyOn(process, 'exit').mockImplementation(((code?: number) => { throw new Error(`EXIT ${code}`); }) as any);
-    try {
-      await import(scriptPath);
-    } catch (e: any) {
-      expect(String(e.message)).toBe('EXIT 0');
-    } finally {
-      exitSpy.mockRestore();
-    }
+    await expectExit(0);
 
     const call = seen.find((c) => c[1]?.endsWith('vraReconcile.js')) || [];
     expect(call.length).toBeGreaterThan(0);

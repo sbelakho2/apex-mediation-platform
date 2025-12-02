@@ -17,6 +17,14 @@ describe('vraBackfill.js orchestrator — spawn args for matching stage', () => 
     process.exit = originalExit;
   });
 
+  async function runCli() {
+    const imported = await import(scriptPath);
+    const mod = imported as { main?: () => Promise<void>; default?: { main?: () => Promise<void> } };
+    const invoke = mod.main || mod.default?.main;
+    if (!invoke) throw new Error('CLI main export not found');
+    await invoke();
+  }
+
   it('passes --autoThreshold and --minConf to vraMatch.js', async () => {
     const seen: string[][] = [];
     jest.doMock('node:child_process', () => ({
@@ -34,6 +42,8 @@ describe('vraBackfill.js orchestrator — spawn args for matching stage', () => 
       }),
     }));
 
+    const checkpoint = path.resolve(process.cwd(), 'logs', `vra-spawn-args-${Date.now()}-${Math.random()}.json`);
+
     process.argv = [
       process.execPath,
       scriptPath,
@@ -41,11 +51,13 @@ describe('vraBackfill.js orchestrator — spawn args for matching stage', () => 
       '--to', '2025-11-02T00:00:00Z',
       '--step', 'matching',
       '--dry-run', 'true',
+      '--checkpoint', checkpoint,
     ];
 
-    const exitSpy = jest.spyOn(process, 'exit').mockImplementation(((code?: number) => { throw new Error(`EXIT ${code}`); }) as any);
+    const exitSpy = jest.spyOn(process, 'exit').mockImplementation(((code?: number) => { throw new Error(`EXIT ${code ?? 0}`); }) as any);
     try {
-      await import(scriptPath);
+      await runCli();
+      throw new Error('expected process.exit');
     } catch (e: any) {
       expect(String(e.message)).toBe('EXIT 0');
     } finally {

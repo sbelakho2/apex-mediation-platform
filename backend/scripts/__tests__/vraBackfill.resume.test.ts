@@ -36,6 +36,14 @@ describe('vraBackfill.js orchestrator — resume/checkpoint semantics', () => {
     }));
   }
 
+  async function runCli() {
+    const imported = await import(scriptPath);
+    const mod = imported as { main?: () => Promise<void>; default?: { main?: () => Promise<void> } };
+    const invoke = mod.main || mod.default?.main;
+    if (!invoke) throw new Error('CLI main export not found');
+    await invoke();
+  }
+
   it('skips completed stages on re-run using checkpoint file', async () => {
     mockSpawnReturning(0);
 
@@ -58,13 +66,13 @@ describe('vraBackfill.js orchestrator — resume/checkpoint semantics', () => {
     const exitSpy1 = jest
       .spyOn(process, 'exit')
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .mockImplementation(((code?: number) => { throw new Error(`EXIT1 ${code}`); }) as any);
+      .mockImplementation(((code?: number) => { throw new Error(`EXIT1 ${code ?? 0}`); }) as any);
 
     try {
-      await import(scriptPath);
+      await runCli();
       throw new Error('expected process.exit (first)');
     } catch (e: any) {
-      expect(String(e.message)).toBe('EXIT1 0');
+      expect(String(e?.message ?? '')).toBe('EXIT1 0');
     } finally {
       exitSpy1.mockRestore();
     }
@@ -80,13 +88,13 @@ describe('vraBackfill.js orchestrator — resume/checkpoint semantics', () => {
     const exitSpy2 = jest
       .spyOn(process, 'exit')
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .mockImplementation(((code?: number) => { throw new Error(`EXIT2 ${code}`); }) as any);
+      .mockImplementation(((code?: number) => { throw new Error(`EXIT2 ${code ?? 0}`); }) as any);
 
     try {
-      await import(scriptPath);
+      await runCli();
       throw new Error('expected process.exit (second)');
     } catch (e: any) {
-      expect(String(e.message)).toBe('EXIT2 0');
+      expect(String(e?.message ?? '')).toBe('EXIT2 0');
     } finally {
       exitSpy2.mockRestore();
       logSpy.mockRestore();

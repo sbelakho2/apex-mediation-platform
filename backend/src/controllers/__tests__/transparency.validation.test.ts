@@ -4,12 +4,102 @@
 
 import request from 'supertest';
 import express from 'express';
+import type { QueryResult, QueryResultRow } from 'pg';
 import transparencyRouter from '../../routes/transparency.routes';
 import { errorHandler } from '../../middleware/errorHandler';
+import { query } from '../../utils/postgres';
 
-// Mock dependencies
-jest.mock('../../utils/clickhouse');
+jest.mock('../../utils/postgres', () => ({
+  query: jest.fn(),
+}));
 jest.mock('../../services/transparencyWriter');
+
+const mockQuery = query as jest.MockedFunction<typeof query>;
+
+const mockAuctionRow = {
+  auction_id: 'test-auction-123',
+  observed_at: '2025-11-10T12:00:00Z',
+  timestamp: '2025-11-10T12:00:00Z',
+  publisher_id: 'pub-test-123',
+  app_or_site_id: 'app-123',
+  placement_id: 'place-123',
+  surface_type: 'mobile_app',
+  device_os: 'iOS',
+  device_geo: 'US',
+  att_status: 'authorized',
+  tc_string_sha256: 'hash123',
+  winner_source: 'AdMob',
+  winner_bid_ecpm: 1.5,
+  winner_gross_price: 1.5,
+  winner_currency: 'USD',
+  winner_reason: 'highest_bid',
+  aletheia_fee_bp: 200,
+  sample_bps: 10000,
+  effective_publisher_share: 0.98,
+  integrity_algo: 'ed25519',
+  integrity_key_id: 'key-1',
+  integrity_signature: 'sig123',
+};
+
+const defaultCandidateRows = [
+  {
+    auction_id: 'test-auction-123',
+    source: 'Meta',
+    bid_ecpm: 1.2,
+    currency: 'USD',
+    response_time_ms: 50,
+    status: 'bid',
+    metadata_hash: 'hash1',
+  },
+];
+
+type ConfigureQueryOptions = {
+  auctionRow?: typeof mockAuctionRow;
+  candidateRows?: typeof defaultCandidateRows;
+};
+
+const configureQueryMock = (options: ConfigureQueryOptions = {}) => {
+  const auctionRow = options.auctionRow ?? mockAuctionRow;
+  const candidateRows = options.candidateRows ?? defaultCandidateRows;
+
+  const asResult = <T extends QueryResultRow>(rows: T[]): QueryResult<T> => ({
+    rows,
+    rowCount: rows.length,
+    command: '',
+    oid: 0,
+    fields: [],
+  } as QueryResult<T>);
+
+  mockQuery.mockReset();
+  mockQuery.mockImplementation((sql: string) => {
+    if (sql.includes('COUNT(*)::bigint as total_sampled')) {
+      return Promise.resolve(asResult([{ total_sampled: 100 }]));
+    }
+    if (sql.includes('winner_source as source')) {
+      return Promise.resolve(asResult([{ source: 'AdMob', count: 5 }]));
+    }
+    if (sql.includes('avg(aletheia_fee_bp)')) {
+      return Promise.resolve(asResult([{ avg_fee_bp: 200, publisher_share_avg: 0.98 }]));
+    }
+    if (sql.includes('FROM transparency_auction_candidates') && sql.includes('ANY($1::uuid[])')) {
+      return Promise.resolve(asResult(candidateRows));
+    }
+    if (sql.includes('FROM transparency_auction_candidates') && !sql.includes('ANY($1::uuid[])')) {
+      return Promise.resolve(asResult(candidateRows));
+    }
+    if (sql.includes('FROM transparency_auctions') && sql.includes('LIMIT 1')) {
+      return Promise.resolve(asResult([auctionRow]));
+    }
+    if (sql.includes('FROM transparency_auctions')) {
+      return Promise.resolve(asResult([auctionRow]));
+    }
+    return Promise.resolve(asResult([]));
+  });
+};
+
+beforeEach(() => {
+  configureQueryMock();
+});
 
 const app = express();
 app.use(express.json());
@@ -29,10 +119,6 @@ process.env.TRANSPARENCY_API_ENABLED = 'true';
 
 describe('Transparency API Input Validation', () => {
   describe('GET /auctions - Query Parameter Validation', () => {
-    beforeEach(() => {
-      const { executeQuery } = require('../../utils/clickhouse');
-      executeQuery.mockResolvedValue([]);
-    });
 
     it('should accept valid limit within bounds (1-500)', async () => {
       const response = await request(app)
@@ -161,44 +247,6 @@ describe('Transparency API Input Validation', () => {
   });
 
   describe('GET /auctions/:id - includeCanonical Feature', () => {
-    const mockAuctionRow = {
-      auction_id: 'test-auction-123',
-      timestamp: '2025-11-10 12:00:00',
-      publisher_id: 'pub-test-123',
-      app_or_site_id: 'app-123',
-      placement_id: 'place-123',
-      surface_type: 'mobile_app',
-      device_os: 'iOS',
-      device_geo: 'US',
-      att_status: 'authorized',
-      tc_string_sha256: 'hash123',
-      winner_source: 'AdMob',
-      winner_bid_ecpm: '1.50',
-      winner_gross_price: '1.50',
-      winner_currency: 'USD',
-      winner_reason: 'highest_bid',
-      aletheia_fee_bp: 200,
-      sample_bps: 10000,
-      effective_publisher_share: '0.98',
-      integrity_algo: 'ed25519',
-      integrity_key_id: 'key-1',
-      integrity_signature: 'sig123',
-    };
-
-    beforeEach(() => {
-      const { executeQuery } = require('../../utils/clickhouse');
-      executeQuery.mockImplementation((query: string) => {
-        if (query.includes('FROM auctions')) {
-          return Promise.resolve([mockAuctionRow]);
-        }
-        if (query.includes('FROM auction_candidates')) {
-          return Promise.resolve([
-            { source: 'Meta', bid_ecpm: '1.20', currency: 'USD', response_time_ms: 50, status: 'bid', metadata_hash: 'hash1' },
-          ]);
-        }
-        return Promise.resolve([]);
-      });
-    });
 
     it('should not include canonical by default', async () => {
       const response = await request(app)
@@ -247,25 +295,16 @@ describe('Transparency API Input Validation', () => {
         winner_source: 'A'.repeat(100000), // Force large canonical
       };
       
-      const { executeQuery } = require('../../utils/clickhouse');
-      executeQuery.mockImplementation((query: string) => {
-        if (query.includes('FROM auctions')) {
-          return Promise.resolve([largeMockRow]);
-        }
-        if (query.includes('FROM auction_candidates')) {
-          // Return many candidates to increase size
-          const candidates = Array.from({ length: 1000 }, (_, i) => ({
-            source: `Source${i}`,
-            bid_ecpm: '1.00',
-            currency: 'USD',
-            response_time_ms: 50,
-            status: 'bid',
-            metadata_hash: `hash${i}`,
-          }));
-          return Promise.resolve(candidates);
-        }
-        return Promise.resolve([]);
-      });
+      const candidates = Array.from({ length: 1000 }, (_, i) => ({
+        auction_id: 'test-auction-123',
+        source: `Source${i}`,
+        bid_ecpm: 1.0,
+        currency: 'USD',
+        response_time_ms: 50,
+        status: 'bid',
+        metadata_hash: `hash${i}`,
+      }));
+      configureQueryMock({ auctionRow: largeMockRow, candidateRows: candidates });
 
       const response = await request(app)
         .get('/api/v1/transparency/auctions/test-auction-123?includeCanonical=true')
@@ -279,10 +318,6 @@ describe('Transparency API Input Validation', () => {
   });
 
   describe('GET /summary/auctions - Date Validation', () => {
-    beforeEach(() => {
-      const { executeQuery } = require('../../utils/clickhouse');
-      executeQuery.mockResolvedValue([{ total_sampled: 100, avg_fee_bp: 200, publisher_share_avg: 0.98 }]);
-    });
 
     it('should accept valid from and to dates', async () => {
       await request(app)

@@ -12,11 +12,13 @@ jest.mock('../../middleware/auth', () => ({
   authorize: jest.fn(() => (_req: Request, _res: Response, next: NextFunction) => next()),
 }));
 
-// Mock ClickHouse executeQuery
-const executeQueryMock = jest.fn();
-jest.mock('../../utils/clickhouse', () => ({
-  executeQuery: (q: string, params?: Record<string, unknown>) => executeQueryMock(q, params),
+// Mock Postgres query helper
+const queryMock = jest.fn();
+jest.mock('../../utils/postgres', () => ({
+  query: (q: string, params?: ReadonlyArray<unknown>) => queryMock(q, params),
 }));
+
+const asResult = (rows: any[]) => ({ rows });
 
 import { createTestApp } from '../../__tests__/helpers/testApp';
 
@@ -53,14 +55,14 @@ describe('Transparency Controller — summary API', () => {
 
   it('GET /transparency/summary/auctions → returns expected shape', async () => {
     // Query 1: total sampled
-    executeQueryMock.mockImplementationOnce(async () => [{ total_sampled: 42 }] );
+    queryMock.mockImplementationOnce(async () => asResult([{ total_sampled: 42 }]));
     // Query 2: winners by source
-    executeQueryMock.mockImplementationOnce(async () => [
+    queryMock.mockImplementationOnce(async () => asResult([
       { source: 'alpha', count: 10 },
       { source: 'beta', count: 5 },
-    ]);
+    ]));
     // Query 3: averages
-    executeQueryMock.mockImplementationOnce(async () => [{ avg_fee_bp: 150, publisher_share_avg: 0.985 }] );
+    queryMock.mockImplementationOnce(async () => asResult([{ avg_fee_bp: 150, publisher_share_avg: 0.985 }]));
 
     const res = await request(app)
       .get('/api/v1/transparency/summary/auctions')
@@ -80,6 +82,6 @@ describe('Transparency Controller — summary API', () => {
       ])
     );
     // Ensure executeQuery was called thrice
-    expect(executeQueryMock).toHaveBeenCalledTimes(3);
+    expect(queryMock).toHaveBeenCalledTimes(3);
   });
 });

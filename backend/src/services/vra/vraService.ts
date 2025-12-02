@@ -1,8 +1,20 @@
 import type { QueryResultRow } from 'pg';
 import { query } from '../../utils/postgres';
 import logger from '../../utils/logger';
-import { ReconOverviewParams, ReconOverviewResult, ReconDeltaQuery, ReconDeltaItem, ProofsMonthlyDigest } from './vraTypes';
-import { vraClickhouseFallbackTotal, vraEmptyResultsTotal, vraQueryDurationSeconds, vraCoveragePercent, vraVariancePercent } from '../../utils/prometheus';
+import {
+  ReconOverviewParams,
+  ReconOverviewResult,
+  ReconDeltaQuery,
+  ReconDeltaItem,
+  ProofsMonthlyDigest,
+} from './vraTypes';
+import {
+  vraQueryFailTotal,
+  vraEmptyResultsTotal,
+  vraQueryDurationSeconds,
+  vraCoveragePercent,
+  vraVariancePercent,
+} from '../../utils/prometheus';
 
 // Helper to time and safely execute CH queries returning empty arrays on failure (shadow-safe)
 async function safeQuery<T extends QueryResultRow = QueryResultRow>(
@@ -21,8 +33,11 @@ async function safeQuery<T extends QueryResultRow = QueryResultRow>(
     return rows;
   } catch (err) {
     end({ success: 'false' });
-    vraClickhouseFallbackTotal.inc({ op });
-    logger.warn('VRA safeQuery fallback (ClickHouse unavailable or query failed)', { error: (err as Error)?.message, op });
+    vraQueryFailTotal.inc({ op });
+    logger.warn('VRA safeQuery fallback (analytics read-model unavailable)', {
+      error: (err as Error)?.message,
+      op,
+    });
     return [] as T[];
   }
 }

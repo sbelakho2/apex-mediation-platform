@@ -74,7 +74,7 @@ export const rtbErrorsTotal = new Counter({
 export const dbQueryDurationSeconds = new Histogram({
   name: 'db_query_duration_seconds',
   help: 'Duration of PostgreSQL queries in seconds',
-  labelNames: ['operation'] as const,
+  labelNames: ['operation', 'replica'] as const,
   buckets: [0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2],
 });
 
@@ -124,13 +124,25 @@ export const analyticsEventsEnqueuedTotal = new Counter({
 
 export const analyticsEventsWrittenTotal = new Counter({
   name: 'analytics_events_written_total',
-  help: 'Total analytics events successfully written to ClickHouse',
+  help: 'Total analytics events successfully written to Postgres analytics tables',
   labelNames: ['kind'] as const,
 });
 
 export const analyticsEventsFailedTotal = new Counter({
   name: 'analytics_events_failed_total',
-  help: 'Total analytics events failed to write to ClickHouse',
+  help: 'Total analytics events failed to write to Postgres analytics tables',
+  labelNames: ['kind'] as const,
+});
+
+export const analyticsIngestBufferGauge = new Gauge({
+  name: 'analytics_ingest_buffer_size',
+  help: 'Number of analytics events currently buffered before staging insert',
+  labelNames: ['kind'] as const,
+});
+
+export const transparencyIngestStageGauge = new Gauge({
+  name: 'transparency_ingest_stage_size',
+  help: 'Rows currently pending merge inside transparency staging tables',
   labelNames: ['kind'] as const,
 });
 
@@ -182,18 +194,18 @@ export const twofaEventsTotal = new Counter({
 
 // --- VRA (Verifiable Revenue Auditor) metrics ---
 
-// Duration of VRA ClickHouse queries by operation (seconds)
+// Duration of VRA read-model queries by operation (seconds)
 export const vraQueryDurationSeconds = new Histogram({
   name: 'vra_query_duration_seconds',
-  help: 'Duration of VRA ClickHouse queries in seconds by operation',
+  help: 'Duration of VRA read-model queries (Postgres replicas) in seconds by operation',
   labelNames: ['op', 'success'] as const, // op: overview|deltas_count|deltas_list|monthly_digest
   buckets: [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10],
 });
 
-// Times when VRA fell back to empty/0 results due to CH failure
-export const vraClickhouseFallbackTotal = new Counter({
-  name: 'vra_clickhouse_fallback_total',
-  help: 'Total number of VRA fallbacks to safe empty results due to ClickHouse errors',
+// Times when VRA fell back to empty/0 results due to read-model failures
+export const vraQueryFailTotal = new Counter({
+  name: 'vra_query_fail_total',
+  help: 'Total number of VRA fallbacks to safe empty results due to analytics read-model failures',
   labelNames: ['op'] as const,
 });
 
@@ -296,7 +308,7 @@ export const vraMatchExactTotal = new Counter({
 // Review matches persisted to ClickHouse review table
 export const vraMatchReviewPersistedTotal = new Counter({
   name: 'vra_match_review_persisted_total',
-  help: 'Total number of review matches persisted to recon_match_review',
+  help: 'Total number of review matches persisted to the Postgres recon_match_review table',
 });
 
 // Reconcile & Delta Classification metrics

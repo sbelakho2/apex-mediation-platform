@@ -21,6 +21,14 @@ describe('vraBackfill.js orchestrator — checkpoint file', () => {
     try { fs.rmSync(checkpoint, { force: true }); } catch {}
   });
 
+  async function runCli() {
+    const imported = await import(scriptPath);
+    const mod = imported as { main?: () => Promise<void>; default?: { main?: () => Promise<void> } };
+    const invoke = mod.main || mod.default?.main;
+    if (!invoke) throw new Error('CLI main export not found');
+    await invoke();
+  }
+
   function mockSpawnReturning(code: number) {
     jest.doMock('node:child_process', () => ({
       spawn: jest.fn((_exec, _args, _opts) => {
@@ -49,9 +57,10 @@ describe('vraBackfill.js orchestrator — checkpoint file', () => {
       '--checkpoint', checkpoint,
     ];
 
-    const exitSpy = jest.spyOn(process, 'exit').mockImplementation(((code?: number) => { throw new Error(`EXIT ${code}`); }) as any);
+    const exitSpy = jest.spyOn(process, 'exit').mockImplementation(((code?: number) => { throw new Error(`EXIT ${code ?? 0}`); }) as any);
     try {
-      await import(scriptPath);
+      await runCli();
+      throw new Error('expected process.exit');
     } catch (e: any) {
       expect(String(e.message)).toBe('EXIT 0');
     } finally {

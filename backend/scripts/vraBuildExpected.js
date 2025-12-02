@@ -85,6 +85,12 @@ async function main() {
       );
       process.exit(EXIT.ERROR);
     }
+    if (args.limit != null) {
+      if (!Number.isFinite(limit) || limit <= 0) {
+        console.error('Refusing to run: --limit must be a positive integer');
+        process.exit(EXIT.ERROR);
+      }
+    }
     if (typeof limit === 'number' && limit > MAX_ROWS && !(force && yes)) {
       console.error(
         `Refusing to run: --limit ${limit} exceeds cap ${MAX_ROWS}. Use --force --yes to bypass.`
@@ -130,4 +136,8 @@ async function main() {
   }
 }
 
-main();
+module.exports = { main };
+
+if (require.main === module) {
+  main();
+}

@@ -4,13 +4,19 @@
  * Tests for analytics, fraud metrics, quality monitoring, and anomaly detection
  */
 
+import type { QueryResult, QueryResultRow } from 'pg';
 import { reportingService } from '../reportingService';
-import * as clickhouse from '../../utils/clickhouse';
+import * as postgres from '../../utils/postgres';
 
-jest.mock('../../utils/clickhouse');
+jest.mock('../../utils/postgres', () => ({
+  __esModule: true,
+  query: jest.fn(),
+}));
 jest.mock('../../utils/logger');
 
-const mockExecuteQuery = clickhouse.executeQuery as jest.MockedFunction<typeof clickhouse.executeQuery>;
+const mockPgQuery = postgres.query as jest.MockedFunction<typeof postgres.query>;
+
+const mockRows = <T extends QueryResultRow>(rows: T[]): QueryResult<T> => ({ rows } as unknown as QueryResult<T>);
 
 describe('ReportingService - Advanced Analytics', () => {
   const publisherId = '550e8400-e29b-41d4-a716-446655440000';
@@ -23,7 +29,7 @@ describe('ReportingService - Advanced Analytics', () => {
 
   describe('getAdapterHealthScores', () => {
     it('should calculate adapter health scores correctly', async () => {
-      mockExecuteQuery.mockResolvedValueOnce([
+      mockPgQuery.mockResolvedValueOnce(mockRows([
         {
           adapter_id: 'admob',
           adapter_name: 'AdMob',
@@ -57,7 +63,7 @@ describe('ReportingService - Advanced Analytics', () => {
           issues_last_24h: '150',
           last_issue: 'Multiple timeouts',
         },
-      ]);
+      ]));
 
       const result = await reportingService.getAdapterHealthScores(publisherId);
 
@@ -90,7 +96,7 @@ describe('ReportingService - Advanced Analytics', () => {
     });
 
     it('should handle empty adapter data', async () => {
-      mockExecuteQuery.mockResolvedValueOnce([]);
+      mockPgQuery.mockResolvedValueOnce(mockRows([]));
 
       const result = await reportingService.getAdapterHealthScores(publisherId);
 
@@ -98,17 +104,17 @@ describe('ReportingService - Advanced Analytics', () => {
     });
 
     it('should handle query errors gracefully', async () => {
-      mockExecuteQuery.mockRejectedValueOnce(new Error('ClickHouse connection failed'));
+      mockPgQuery.mockRejectedValueOnce(new Error('Postgres connection failed'));
 
       await expect(reportingService.getAdapterHealthScores(publisherId))
-        .rejects.toThrow('ClickHouse connection failed');
+        .rejects.toThrow('Postgres connection failed');
     });
   });
 
   describe('getFraudMetrics', () => {
     it('should return comprehensive fraud metrics', async () => {
-      mockExecuteQuery
-        .mockResolvedValueOnce([
+      mockPgQuery
+        .mockResolvedValueOnce(mockRows([
           {
             total_requests: '1000000',
             fraud_requests: '15000',
@@ -119,14 +125,14 @@ describe('ReportingService - Advanced Analytics', () => {
             anomaly_detections: '500',
             blocked_revenue: '2500.50',
           },
-        ])
-        .mockResolvedValueOnce([
-          { detection_method: 'datacenter_ip', count: '5000' },
-          { detection_method: 'bot_user_agent', count: '3000' },
-          { detection_method: 'click_farm', count: '2500' },
-          { detection_method: 'device_fingerprint', count: '2000' },
-          { detection_method: 'rapid_clicks', count: '1500' },
-        ]);
+        ]))
+          .mockResolvedValueOnce(mockRows([
+            { fraud_type: 'datacenter_ip', count: '5000' },
+            { fraud_type: 'bot_user_agent', count: '3000' },
+            { fraud_type: 'click_farm', count: '2500' },
+            { fraud_type: 'device_fingerprint', count: '2000' },
+            { fraud_type: 'rapid_clicks', count: '1500' },
+        ]));
 
       const result = await reportingService.getFraudMetrics(publisherId, startDate, endDate);
 
@@ -150,8 +156,8 @@ describe('ReportingService - Advanced Analytics', () => {
     });
 
     it('should handle zero fraud cases', async () => {
-      mockExecuteQuery
-        .mockResolvedValueOnce([
+      mockPgQuery
+        .mockResolvedValueOnce(mockRows([
           {
             total_requests: '500000',
             fraud_requests: '0',
@@ -162,8 +168,8 @@ describe('ReportingService - Advanced Analytics', () => {
             anomaly_detections: '0',
             blocked_revenue: '0',
           },
-        ])
-        .mockResolvedValueOnce([]);
+        ]))
+        .mockResolvedValueOnce(mockRows([]));
 
       const result = await reportingService.getFraudMetrics(publisherId, startDate, endDate);
 
@@ -174,7 +180,7 @@ describe('ReportingService - Advanced Analytics', () => {
 
   describe('getQualityMetrics', () => {
     it('should return comprehensive quality metrics', async () => {
-      mockExecuteQuery.mockResolvedValueOnce([
+      mockPgQuery.mockResolvedValueOnce(mockRows([
         {
           viewability_rate: '65.5',
           completion_rate: '78.2',
@@ -185,7 +191,7 @@ describe('ReportingService - Advanced Analytics', () => {
           anr_rate: '0.015',
           crash_rate: '0.005',
         },
-      ]);
+      ]));
 
       const result = await reportingService.getQualityMetrics(publisherId, startDate, endDate);
 
@@ -202,7 +208,7 @@ describe('ReportingService - Advanced Analytics', () => {
     });
 
     it('should return defaults when no data available', async () => {
-      mockExecuteQuery.mockResolvedValueOnce([]);
+      mockPgQuery.mockResolvedValueOnce(mockRows([]));
 
       const result = await reportingService.getQualityMetrics(publisherId, startDate, endDate);
 
@@ -219,7 +225,7 @@ describe('ReportingService - Advanced Analytics', () => {
     });
 
     it('should validate quality scores are within bounds', async () => {
-      mockExecuteQuery.mockResolvedValueOnce([
+      mockPgQuery.mockResolvedValueOnce(mockRows([
         {
           viewability_rate: '105.0', // Invalid (>100)
           completion_rate: '95.0',
@@ -230,7 +236,7 @@ describe('ReportingService - Advanced Analytics', () => {
           anr_rate: '0.020',
           crash_rate: '0.008',
         },
-      ]);
+      ]));
 
       const result = await reportingService.getQualityMetrics(publisherId, startDate, endDate);
 
@@ -248,7 +254,7 @@ describe('ReportingService - Advanced Analytics', () => {
         revenue: String(1000 + i * 50 + Math.random() * 100), // Upward trend with noise
       }));
 
-      mockExecuteQuery.mockResolvedValueOnce(mockData);
+      mockPgQuery.mockResolvedValueOnce(mockRows(mockData));
 
       const result = await reportingService.getRevenueProjections(publisherId, 7);
 
@@ -274,10 +280,10 @@ describe('ReportingService - Advanced Analytics', () => {
     });
 
     it('should return empty array with insufficient data', async () => {
-      mockExecuteQuery.mockResolvedValueOnce([
+      mockPgQuery.mockResolvedValueOnce(mockRows([
         { date: '2024-01-01', revenue: '1000' },
         { date: '2024-01-02', revenue: '1100' },
-      ]);
+      ]));
 
       const result = await reportingService.getRevenueProjections(publisherId, 7);
 
@@ -290,7 +296,7 @@ describe('ReportingService - Advanced Analytics', () => {
         revenue: String(3000 - i * 50), // Declining trend
       }));
 
-      mockExecuteQuery.mockResolvedValueOnce(mockData);
+      mockPgQuery.mockResolvedValueOnce(mockRows(mockData));
 
       const result = await reportingService.getRevenueProjections(publisherId, 7);
 
@@ -306,7 +312,7 @@ describe('ReportingService - Advanced Analytics', () => {
 
   describe('getCohortAnalysis', () => {
     it('should return cohort metrics with LTV and retention', async () => {
-      mockExecuteQuery.mockResolvedValueOnce([
+      mockPgQuery.mockResolvedValueOnce(mockRows([
         {
           cohort_date: '2024-01-01',
           user_count: '10000',
@@ -333,7 +339,7 @@ describe('ReportingService - Advanced Analytics', () => {
           retention_day30: '32.0',
           arpu: '2.50',
         },
-      ]);
+      ]));
 
       const result = await reportingService.getCohortAnalysis(publisherId, startDate, endDate);
 
@@ -362,7 +368,7 @@ describe('ReportingService - Advanced Analytics', () => {
     });
 
     it('should handle empty cohort data', async () => {
-      mockExecuteQuery.mockResolvedValueOnce([]);
+      mockPgQuery.mockResolvedValueOnce(mockRows([]));
 
       const result = await reportingService.getCohortAnalysis(publisherId, startDate, endDate);
 
@@ -372,8 +378,8 @@ describe('ReportingService - Advanced Analytics', () => {
 
   describe('getAnomalies', () => {
     it('should detect revenue drop anomalies', async () => {
-      mockExecuteQuery
-        .mockResolvedValueOnce([
+      mockPgQuery
+        .mockResolvedValueOnce(mockRows([
           {
             hour: '2024-01-15 14:00:00',
             revenue: '500',
@@ -390,8 +396,8 @@ describe('ReportingService - Advanced Analytics', () => {
             error_z_score: '0',
             latency_z_score: '0',
           },
-        ])
-        .mockResolvedValueOnce([]);
+        ]))
+        .mockResolvedValueOnce(mockRows([]));
 
       const result = await reportingService.getAnomalies(publisherId, 24);
 
@@ -406,8 +412,8 @@ describe('ReportingService - Advanced Analytics', () => {
     });
 
     it('should detect performance degradation', async () => {
-      mockExecuteQuery
-        .mockResolvedValueOnce([
+      mockPgQuery
+        .mockResolvedValueOnce(mockRows([
           {
             hour: '2024-01-15 14:00:00',
             revenue: '2000',
@@ -424,8 +430,8 @@ describe('ReportingService - Advanced Analytics', () => {
             error_z_score: '4.5',
             latency_z_score: '5.0',
           },
-        ])
-        .mockResolvedValueOnce([]);
+        ]))
+        .mockResolvedValueOnce(mockRows([]));
 
       const result = await reportingService.getAnomalies(publisherId, 24);
 
@@ -439,16 +445,16 @@ describe('ReportingService - Advanced Analytics', () => {
     });
 
     it('should detect fraud spikes', async () => {
-      mockExecuteQuery
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([
+      mockPgQuery
+        .mockResolvedValueOnce(mockRows([]))
+        .mockResolvedValueOnce(mockRows([
           {
             hour: '2024-01-15 14:00:00',
             fraud_count: '5000',
             total_count: '50000',
             fraud_rate: '10.0',
           },
-        ]);
+        ]));
 
       const result = await reportingService.getAnomalies(publisherId, 24);
 
@@ -460,8 +466,8 @@ describe('ReportingService - Advanced Analytics', () => {
     });
 
     it('should detect traffic anomalies', async () => {
-      mockExecuteQuery
-        .mockResolvedValueOnce([
+      mockPgQuery
+        .mockResolvedValueOnce(mockRows([
           {
             hour: '2024-01-15 14:00:00',
             revenue: '4000',
@@ -479,8 +485,8 @@ describe('ReportingService - Advanced Analytics', () => {
             error_z_score: '0',
             latency_z_score: '0',
           },
-        ])
-        .mockResolvedValueOnce([]);
+        ]))
+        .mockResolvedValueOnce(mockRows([]));
 
       const result = await reportingService.getAnomalies(publisherId, 24);
 
@@ -491,9 +497,9 @@ describe('ReportingService - Advanced Analytics', () => {
     });
 
     it('should return empty array when no anomalies detected', async () => {
-      mockExecuteQuery
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([]);
+      mockPgQuery
+        .mockResolvedValueOnce(mockRows([]))
+        .mockResolvedValueOnce(mockRows([]));
 
       const result = await reportingService.getAnomalies(publisherId, 24);
 
@@ -501,8 +507,8 @@ describe('ReportingService - Advanced Analytics', () => {
     });
 
     it('should assign appropriate severity levels', async () => {
-      mockExecuteQuery
-        .mockResolvedValueOnce([
+      mockPgQuery
+        .mockResolvedValueOnce(mockRows([
           {
             hour: '2024-01-15 14:00:00',
             revenue: '1400',
@@ -519,8 +525,8 @@ describe('ReportingService - Advanced Analytics', () => {
             error_z_score: '0',
             latency_z_score: '0',
           },
-        ])
-        .mockResolvedValueOnce([]);
+        ]))
+        .mockResolvedValueOnce(mockRows([]));
 
       const result = await reportingService.getAnomalies(publisherId, 24);
 
@@ -532,7 +538,7 @@ describe('ReportingService - Advanced Analytics', () => {
   describe('Integration - Multiple Metrics', () => {
     it('should correlate adapter health with quality metrics', async () => {
       // Mock adapter health data
-      mockExecuteQuery.mockResolvedValueOnce([
+      mockPgQuery.mockResolvedValueOnce(mockRows([
         {
           adapter_id: 'admob',
           adapter_name: 'AdMob',
@@ -544,12 +550,12 @@ describe('ReportingService - Advanced Analytics', () => {
           issues_last_24h: '2',
           last_issue: null,
         },
-      ]);
+      ]));
 
       const healthScores = await reportingService.getAdapterHealthScores(publisherId);
 
       // Mock quality metrics
-      mockExecuteQuery.mockResolvedValueOnce([
+      mockPgQuery.mockResolvedValueOnce(mockRows([
         {
           viewability_rate: '70.0',
           completion_rate: '80.0',
@@ -560,7 +566,7 @@ describe('ReportingService - Advanced Analytics', () => {
           anr_rate: '0.010',
           crash_rate: '0.003',
         },
-      ]);
+      ]));
 
       const qualityMetrics = await reportingService.getQualityMetrics(publisherId, startDate, endDate);
 

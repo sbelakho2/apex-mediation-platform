@@ -124,4 +124,11 @@ async function main() {
   }
 }
 
-main();
+module.exports = { main };
+
+if (require.main === module) {
+  main().catch((e) => {
+    console.error('VRA Match failed:', e && e.stack ? e.stack : String(e));
+    process.exit(EXIT.ERROR);
+  });
+}

@@ -17,23 +17,33 @@ describe('vraBackfill.js — argument validation and exit codes', () => {
     process.exit = originalExit;
   });
 
-  it('exits with ERROR (20) when required --from/--to are missing', async () => {
-    process.argv = [process.execPath, scriptPath];
+  async function runCli() {
+    const imported = await import(scriptPath);
+    const mod = imported as { main?: () => Promise<void>; default?: { main?: () => Promise<void> } };
+    const invoke = mod.main || mod.default?.main;
+    if (!invoke) throw new Error('CLI main export not found');
+    await invoke();
+  }
 
+  async function expectExit(code: number) {
     const exitSpy = jest
       .spyOn(process, 'exit')
-      .mockImplementation(((code?: number) => {
-        throw new Error(`EXIT ${code}`);
-      }) as any);
+      .mockImplementation(((exitCode?: number) => { throw new Error(`EXIT ${exitCode ?? 0}`); }) as any);
 
     try {
-      await import(scriptPath);
+      await runCli();
       throw new Error('should have exited');
     } catch (e: any) {
-      expect(String(e.message)).toBe('EXIT 20');
+      expect(String(e?.message ?? '')).toBe(`EXIT ${code}`);
     } finally {
       exitSpy.mockRestore();
     }
+  }
+
+  it('exits with ERROR (20) when required --from/--to are missing', async () => {
+    process.argv = [process.execPath, scriptPath];
+
+    await expectExit(20);
   });
 
   it('exits with ERROR (20) when --step is invalid', async () => {
@@ -45,19 +55,6 @@ describe('vraBackfill.js — argument validation and exit codes', () => {
       '--step', 'not-a-stage',
     ];
 
-    const exitSpy = jest
-      .spyOn(process, 'exit')
-      .mockImplementation(((code?: number) => {
-        throw new Error(`EXIT ${code}`);
-      }) as any);
-
-    try {
-      await import(scriptPath);
-      throw new Error('should have exited');
-    } catch (e: any) {
-      expect(String(e.message)).toBe('EXIT 20');
-    } finally {
-      exitSpy.mockRestore();
-    }
+    await expectExit(20);
   });
 });

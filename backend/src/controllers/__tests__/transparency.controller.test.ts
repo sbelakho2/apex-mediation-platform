@@ -15,15 +15,17 @@ jest.mock('../../middleware/auth', () => ({
   authorize: jest.fn(() => (_req: Request, _res: Response, next: NextFunction) => next()),
 }));
 
-// Mock ClickHouse executeQuery
-const executeQueryMock = jest.fn();
-jest.mock('../../utils/clickhouse', () => ({
-  executeQuery: (q: string, params?: Record<string, unknown>) => executeQueryMock(q, params),
+// Mock Postgres query helper
+const queryMock = jest.fn();
+jest.mock('../../utils/postgres', () => ({
+  query: (q: string, params?: ReadonlyArray<unknown>) => queryMock(q, params),
 }));
 
 import { createTestApp } from '../../__tests__/helpers/testApp';
 
 const AUCTION_ID = '11111111-1111-4111-8111-111111111111';
+
+const asResult = (rows: any[]) => ({ rows });
 
 function resetEnv() {
   delete process.env.TRANSPARENCY_PUBLIC_KEY_BASE64;
@@ -47,7 +49,7 @@ describe('Transparency Controller — verification API', () => {
     process.env.TRANSPARENCY_PUBLIC_KEY_BASE64 = '-----BEGIN PUBLIC KEY-----\nMFYwEAYHKoZIzj0CAQYFK4EEAAoDQgAEXAMPLEKEYLINE\n-----END PUBLIC KEY-----\n';
     process.env.TRANSPARENCY_KEY_ID = 'env-key-1';
     // make signer table empty
-    executeQueryMock.mockResolvedValueOnce([]);
+    queryMock.mockResolvedValueOnce(asResult([]));
 
     const res = await request(app)
       .get('/api/v1/transparency/keys')
@@ -60,10 +62,10 @@ describe('Transparency Controller — verification API', () => {
 
   it('GET /transparency/auctions/:id/verify → not_applicable when signature missing', async () => {
     // 1) auction row without signature
-    executeQueryMock.mockImplementationOnce(async () => [
+    queryMock.mockImplementationOnce(async () => asResult([
       {
         auction_id: AUCTION_ID,
-        timestamp: new Date().toISOString().replace('Z', ''),
+        observed_at: new Date().toISOString(),
         publisher_id: 'pub-1',
         winner_source: 'alpha',
         winner_bid_ecpm: 1.23,
@@ -75,9 +77,9 @@ describe('Transparency Controller — verification API', () => {
         integrity_key_id: 'key-1',
         integrity_signature: null,
       },
-    ]);
+    ]));
     // 2) candidates query
-    executeQueryMock.mockImplementationOnce(async () => []);
+    queryMock.mockImplementationOnce(async () => asResult([]));
 
     const res = await request(app)
       .get(`/api/v1/transparency/auctions/${AUCTION_ID}/verify`)
@@ -90,7 +92,7 @@ describe('Transparency Controller — verification API', () => {
   it('GET /transparency/auctions/:id/verify → unknown_key when key not found and no env fallback', async () => {
     // auction with signature and key id
     const { privateKey, publicKey } = generateKeyPairSync('ed25519');
-    const timestamp = new Date().toISOString().replace('Z', '');
+    const timestamp = new Date().toISOString();
 
     // Build canonical payload like controller does
     const payload = {
@@ -115,10 +117,10 @@ describe('Transparency Controller — verification API', () => {
     const signature = require('crypto').sign(null, Buffer.from(canonical, 'utf8'), privateKey).toString('base64');
 
     // Query 1: auction row
-    executeQueryMock.mockImplementationOnce(async () => [
+    queryMock.mockImplementationOnce(async () => asResult([
       {
         auction_id: AUCTION_ID,
-        timestamp,
+        observed_at: timestamp,
         publisher_id: 'pub-1',
         winner_source: 'alpha',
         winner_bid_ecpm: 1.23,
@@ -130,14 +132,14 @@ describe('Transparency Controller — verification API', () => {
         integrity_key_id: 'key-unknown',
         integrity_signature: signature,
       },
-    ]);
+    ]));
     // Query 2: candidates
-    executeQueryMock.mockImplementationOnce(async () => [
+    queryMock.mockImplementationOnce(async () => asResult([
       { source: 'alpha', bid_ecpm: 1.23, status: 'winner' },
       { source: 'beta', bid_ecpm: 1.1, status: 'loss' },
-    ]);
+    ]));
     // Query 3: keys (none)
-    executeQueryMock.mockImplementationOnce(async () => []);
+    queryMock.mockImplementationOnce(async () => asResult([]));
 
     const res = await request(app)
       .get(`/api/v1/transparency/auctions/${AUCTION_ID}/verify`)
@@ -149,7 +151,7 @@ describe('Transparency Controller — verification API', () => {
 
   it('GET /transparency/auctions/:id/verify → pass with valid signature and key', async () => {
     const { privateKey, publicKey } = generateKeyPairSync('ed25519');
-    const timestamp = new Date().toISOString().replace('Z', '');
+    const timestamp = new Date().toISOString();
     const payload = {
       auction: {
         auction_id: AUCTION_ID,
@@ -170,10 +172,10 @@ describe('Transparency Controller — verification API', () => {
     const signature = require('crypto').sign(null, Buffer.from(canonical, 'utf8'), privateKey).toString('base64');
 
     // Auction row
-    executeQueryMock.mockImplementationOnce(async () => [
+    queryMock.mockImplementationOnce(async () => asResult([
       {
         auction_id: AUCTION_ID,
-        timestamp,
+        observed_at: timestamp,
         publisher_id: 'pub-1',
         winner_source: 'alpha',
         winner_bid_ecpm: 1.23,
@@ -185,17 +187,17 @@ describe('Transparency Controller — verification API', () => {
         integrity_key_id: 'key-1',
         integrity_signature: signature,
       },
-    ]);
+    ]));
     // Candidates
-    executeQueryMock.mockImplementationOnce(async () => [
+    queryMock.mockImplementationOnce(async () => asResult([
       { source: 'alpha', bid_ecpm: 1.23, status: 'winner' },
       { source: 'beta', bid_ecpm: 1.1, status: 'loss' },
-    ]);
+    ]));
     // Keys (active)
     const pem = publicKey.export({ type: 'spki', format: 'pem' }).toString();
-    executeQueryMock.mockImplementationOnce(async () => [
+    queryMock.mockImplementationOnce(async () => asResult([
       { key_id: 'key-1', algo: 'ed25519', public_key_base64: pem, active: 1 },
-    ]);
+    ]));
 
     const res = await request(app)
       .get(`/api/v1/transparency/auctions/${AUCTION_ID}/verify`)
@@ -209,13 +211,13 @@ describe('Transparency Controller — verification API', () => {
 
   it('GET /transparency/auctions/:id/verify → 401 when unauthenticated', async () => {
     // Provide auction row so controller can scope-check before doing more work
-    executeQueryMock.mockImplementationOnce(async () => [
+    queryMock.mockImplementationOnce(async () => asResult([
       {
         auction_id: AUCTION_ID,
-        timestamp: new Date().toISOString().replace('Z', ''),
+        observed_at: new Date().toISOString(),
         publisher_id: 'pub-1',
       },
-    ]);
+    ]));
 
     // Suppress auth by sending a header our mock checks
     const res = await request(app)

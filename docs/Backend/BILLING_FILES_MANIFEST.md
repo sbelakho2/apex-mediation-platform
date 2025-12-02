@@ -247,7 +247,7 @@
 ## Performance Considerations
 
 ### API Latency
-- Usage endpoint: < 500ms (includes ClickHouse query)
+- Usage endpoint: < 500ms (includes Postgres replica query)
 - Invoice list: < 1s (paginated, max 100 results)
 - Invoice PDF: < 2s (includes generation + caching)
 - Reconciliation: < 10s (depends on subscription count)
@@ -262,7 +262,7 @@
 ### Caching Strategy
 - Invoice PDFs: ETag-based (304 Not Modified)
 - Feature flags: Per-request lifecycle
-- Usage data: 1 hour cache in ClickHouse
+- Usage data: 1 hour cache backed by Postgres analytics replicas
 - Reconciliation: 24-hour idempotency window
 
 ---

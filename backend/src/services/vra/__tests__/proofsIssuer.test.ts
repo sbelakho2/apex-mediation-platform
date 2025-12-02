@@ -97,7 +97,7 @@ describe('VRA Proofs Issuer', () => {
     const msgHex = sha256Hex(Buffer.from(`monthly_digest:${month}:${digest}`));
     const sig = crypto.sign(null, Buffer.from(msgHex, 'hex'), privateKey).toString('hex');
 
-    // Mock ClickHouse queries:
+    // Mock Postgres read-model queries:
     // 1) Fetch monthly digest row (provide digest + sig)
     // 2) Fetch daily roots for recompute
     (query as jest.Mock)

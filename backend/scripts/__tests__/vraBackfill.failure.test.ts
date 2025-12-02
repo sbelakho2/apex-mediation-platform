@@ -17,6 +17,14 @@ describe('vraBackfill.js orchestrator — failure path (mocked)', () => {
     process.exit = originalExit;
   });
 
+  async function runCli() {
+    const imported = await import(scriptPath);
+    const mod = imported as { main?: () => Promise<void>; default?: { main?: () => Promise<void> } };
+    const invoke = mod.main || mod.default?.main;
+    if (!invoke) throw new Error('CLI main export not found');
+    await invoke();
+  }
+
   function mockSpawnFailing(code: number) {
     jest.doMock('node:child_process', () => ({
       spawn: jest.fn((_exec, _args, _opts) => {
@@ -48,13 +56,13 @@ describe('vraBackfill.js orchestrator — failure path (mocked)', () => {
       '--checkpoint', path.resolve(process.cwd(), 'logs', 'vra-backfill-failure.json'),
     ];
 
-    const exitSpy = jest.spyOn(process, 'exit').mockImplementation(((code?: number) => { throw new Error(`EXIT ${code}`); }) as any);
+    const exitSpy = jest.spyOn(process, 'exit').mockImplementation(((code?: number) => { throw new Error(`EXIT ${code ?? 0}`); }) as any);
 
     try {
-      await import(scriptPath);
+      await runCli();
       throw new Error('Should have thrown EXIT error');
     } catch (e: any) {
-      expect(String(e.message)).toBe('EXIT 20'); // orchestrator treats as ERROR exit
+      expect(String(e.message)).toBe('EXIT 20');
     } finally {
       exitSpy.mockRestore();
     }

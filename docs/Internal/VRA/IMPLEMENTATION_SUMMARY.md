@@ -15,7 +15,7 @@ Scope delivered in this iteration
     - `recon_statements_raw`, `recon_statements_norm`
     - `recon_expected`, `recon_match`, `recon_deltas`, `recon_disputes`
     - `proofs_daily_roots`, `proofs_monthly_digest`
-  - Up/Down supported by the standard CH migrator script: `node backend/scripts/runClickHouseMigrations.js`
+  - Historical migrations lived under `backend/scripts/runClickHouseMigrations.js`, but the script was removed after the Postgres read-model cutover; ClickHouse tables remain documented here for archival context only.
 - Services
   - `backend/src/services/vra/vraService.ts`:
     - `getOverview(params)` — computes conservative overview using CH `revenue_events` (USD-normalized); expected==paid baseline (variance 0) until recon_expected is populated. Adds per‑network slices in `byNetwork` for UI panels and dashboards.
@@ -120,10 +120,10 @@ Observability polish (new)
   - Added `monitoring/grafana/dashboards/vra-reconcile.json`:
     - Reconcile run rate and p95 via `vra_reconcile_duration_seconds_*`.
     - Deltas by kind using `vra_reconcile_rows_total{kind=...}`.
-    - 24h total deltas and CH fallbacks/empty results guardrails.
+    - 24h total deltas and read-model failover / empty result guardrails.
 - Metrics/alerts alignment
-  - Prometheus metrics used across VRA flows: `vra_query_duration_seconds`, `vra_clickhouse_fallback_total`, `vra_empty_results_total`, ingestion/expected/matching/reconcile counters and histograms listed in `backend/src/utils/prometheus.ts`.
-  - Alert samples aligned to the metric names in `monitoring/alerts/vra-alerts.yml` (coverage drop, sustained variance, ingestion failures, proof verify failures, reconcile delta spikes, ClickHouse fallbacks), with `runbook_url` annotations pointing to `docs/Internal/VRA/RUNBOOK.md` anchors.
+  - Prometheus metrics used across VRA flows: `vra_query_duration_seconds`, `vra_query_fail_total`, `vra_empty_results_total`, ingestion/expected/matching/reconcile counters and histograms listed in `backend/src/utils/prometheus.ts`.
+  - Alert samples aligned to the metric names in `monitoring/alerts/vra-alerts.yml` (coverage drop, sustained variance, ingestion failures, proof verify failures, reconcile delta spikes, analytics failovers), with `runbook_url` annotations pointing to `docs/Internal/VRA/RUNBOOK.md` anchors.
   - Gauges used by alerts: `vra_coverage_percent{scope="pilot"}`, `vra_variance_percent{scope="pilot"}` — set by Overview; alerts reference RUNBOOK anchors.
 
 Infrastructure posture (DigitalOcean, budget‑capped)
@@ -173,7 +173,7 @@ Runbooks and operator tips
   - Use `byNetwork` for top‑N cards on the Console Overview; fall back to `byBreakdown` to render detailed tables.
 
 Rollout readiness
-- Canary settings: `VRA_ENABLED=true`, `VRA_SHADOW_ONLY=true` (no serving impact). Validate metrics on canary: no spikes in `vra_clickhouse_fallback_total`, expected trends in `vra_empty_results_total` for empty envs.
+  - Canary settings: `VRA_ENABLED=true`, `VRA_SHADOW_ONLY=true` (no serving impact). Validate metrics on canary: no spikes in `vra_query_fail_total`, expected trends in `vra_empty_results_total` for empty envs.
 - Pilot acceptance gates:
   - Coverage ≥90%
   - Unexplained variance ≤0.5%
@@ -257,7 +257,7 @@ Out of scope for this iteration (planned next milestones)
 
 Operational notes
 - Enabling VRA safely for canaries:
-  1. Apply CH migrations: `node backend/scripts/runClickHouseMigrations.js`
+  1. Apply Postgres migrations: `npm --prefix backend run migrate`
   2. Start API with `VRA_ENABLED=true` and keep `VRA_SHADOW_ONLY=true` initially.
   3. Hit `/api/v1/recon/overview` and `/api/v1/recon/deltas` to validate surfacing and rate limits.
   3a. CSV export: `/api/v1/recon/deltas.csv?from=YYYY-MM-DD&to=YYYY-MM-DD&kind=underpay&min_conf=0.8&page=1&page_size=100`

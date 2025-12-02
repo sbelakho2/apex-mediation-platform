@@ -14,8 +14,8 @@ Quality-of-life envs
 - VRA_LARGEN=1 — enable large-N matching performance sanity (off by default)
 
 Notes
-- Do not fail CI on ClickHouse availability; all VRA CH calls are wrapped via safeQuery and degrade to empty results.
-- Keep CH migrations out of smoke jobs; run them in dedicated ops pipelines when needed: npm --prefix backend run clickhouse:migrate
+- Do not fail CI on ClickHouse availability; remaining references degrade to empty results and no longer depend on dedicated migrations.
+- Postgres migrations continue to run via `npm --prefix backend run migrate`; no separate ClickHouse step exists anymore.
 - CLI guardrail tests under backend/scripts/__tests__ are included automatically by npm run test:backend
 
 Optional canary smoke (read‑only)
@@ -114,6 +114,4 @@ vra-backend-db:
 ```
 
 Ops note (migrations)
-- Exclude ClickHouse migrations from the default smoke. Run in an ops pipeline or manually when needed:
-  - Up: `npm --prefix backend run clickhouse:migrate`
-  - Down: `ALLOW_CH_DOWN=1 npm --prefix backend run clickhouse:migrate:down`
+- Only Postgres migrations remain in scope. Run `npm --prefix backend run migrate` (or the secure variant) as part of your usual DB setup; no additional ClickHouse commands are required.

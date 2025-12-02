@@ -1,7 +1,7 @@
 /**
  * Analytics Integration Tests
  * 
- * Tests event ingestion endpoints for ClickHouse analytics
+ * Tests event ingestion endpoints for analytics Postgres pipeline
  */
 
 import request from 'supertest';

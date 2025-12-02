@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
-import { executeQuery } from '../utils/clickhouse';
+import type { QueryResultRow } from 'pg';
+import { query } from '../utils/postgres';
 import { AppError } from '../middleware/errorHandler';
 import * as crypto from 'crypto';
 import { canonicalizeForSignature } from '../services/transparency/canonicalizer';
@@ -38,6 +39,11 @@ try {
 
 // Allowed values for sort and order parameters
 const ALLOWED_SORT_FIELDS = ['timestamp', 'winner_bid_ecpm', 'aletheia_fee_bp'];
+const SORT_FIELD_MAP: Record<string, string> = {
+  timestamp: 'observed_at',
+  winner_bid_ecpm: 'winner_bid_ecpm',
+  aletheia_fee_bp: 'aletheia_fee_bp',
+};
 const ALLOWED_ORDER_VALUES = ['asc', 'desc'];
 
 // Helpers
@@ -60,11 +66,30 @@ const truncateCanonical = (canonical: string): { canonical: string; truncated: b
   return { canonical: truncated, truncated: true };
 };
 
+const toIsoString = (value: unknown): string => {
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+  if (typeof value === 'string') {
+    return new Date(value).toISOString();
+  }
+  if (value === null || value === undefined) {
+    return new Date(0).toISOString();
+  }
+  return new Date(value as string).toISOString();
+};
+
 const ensureTransparencyEnabled = () => {
   if (process.env.TRANSPARENCY_API_ENABLED !== 'true') {
     throw new AppError('Transparency API is disabled', 503);
   }
 };
+
+const replicaQuery = <T extends QueryResultRow = QueryResultRow>(
+  text: string,
+  params?: ReadonlyArray<unknown>,
+  label?: string
+) => query<T>(text, params, { replica: true, label });
 
 /** GET /auctions */
 export const getAuctions = async (req: Request, res: Response, next: NextFunction) => {
@@ -111,22 +136,48 @@ export const getAuctions = async (req: Request, res: Response, next: NextFunctio
     const sort = validateEnum(req.query.sort as string, 'sort', ALLOWED_SORT_FIELDS);
     const order = validateEnum(req.query.order as string, 'order', ALLOWED_ORDER_VALUES) || 'desc';
 
-    // Build WHERE conditions
-    const where: string[] = ['publisher_id = {publisher_id: String}'];
-    if (from) where.push("timestamp >= toDateTime64(parseDateTimeBestEffort({from: String}), 3, 'UTC')");
-    if (to) where.push("timestamp <= toDateTime64(parseDateTimeBestEffort({to: String}), 3, 'UTC')");
-    if (placementId) where.push('placement_id = {placement_id: String}');
-    if (surface) where.push('surface_type = {surface: String}');
-    if (geo) where.push('device_geo = {geo: String}');
+    // Build WHERE clause and params
+    const params: unknown[] = [requestedPublisher];
+    const where: string[] = ['publisher_id = $1'];
+    let paramIdx = 2;
 
-    // Determine sort field and order
-    const sortField = sort || 'timestamp';
-    const sortOrder = order.toUpperCase();
+    if (from) {
+      where.push(`observed_at >= $${paramIdx}`);
+      params.push(new Date(from));
+      paramIdx += 1;
+    }
+    if (to) {
+      where.push(`observed_at <= $${paramIdx}`);
+      params.push(new Date(to));
+      paramIdx += 1;
+    }
+    if (placementId) {
+      where.push(`placement_id = $${paramIdx}`);
+      params.push(placementId);
+      paramIdx += 1;
+    }
+    if (surface) {
+      where.push(`surface_type = $${paramIdx}`);
+      params.push(surface);
+      paramIdx += 1;
+    }
+    if (geo) {
+      where.push(`device_geo = $${paramIdx}`);
+      params.push(geo);
+      paramIdx += 1;
+    }
+
+    const sortField = SORT_FIELD_MAP[sort || 'timestamp'] ?? 'observed_at';
+    const sortOrder = order === 'asc' ? 'ASC' : 'DESC';
+
+    const limitParam = paramIdx;
+    const offsetParam = paramIdx + 1;
+    params.push(limit, offset);
 
     const baseQuery = `
       SELECT 
         auction_id,
-        toString(timestamp) as timestamp,
+        observed_at,
         publisher_id,
         app_or_site_id,
         placement_id,
@@ -146,36 +197,30 @@ export const getAuctions = async (req: Request, res: Response, next: NextFunctio
         integrity_algo,
         integrity_key_id,
         integrity_signature
-      FROM auctions
+      FROM transparency_auctions
       WHERE ${where.join(' AND ')}
       ORDER BY ${sortField} ${sortOrder}
-      LIMIT {limit: UInt32} OFFSET {offset: UInt32}
+      LIMIT $${limitParam} OFFSET $${offsetParam}
     `;
 
-    const rows = await executeQuery<any>(baseQuery, {
-      publisher_id: requestedPublisher,
-      from: from || undefined,
-      to: to || undefined,
-      placement_id: placementId,
-      surface,
-      geo,
-      limit,
-      offset,
-    });
+    const { rows } = await replicaQuery(baseQuery, params, 'TRANSPARENCY_AUCTIONS_LIST');
 
-    // Fetch candidates for these auctions
-    const auctionIds = rows.map(r => r.auction_id);
-  const candidatesByAuction: Record<string, any[]> = {};
+    const auctionIds = rows.map((r) => r.auction_id);
+    const candidatesByAuction: Record<string, any[]> = {};
+
     if (auctionIds.length > 0) {
-      const candRows = await executeQuery<any>(
+      const candRows = await replicaQuery(
         `SELECT auction_id, source, bid_ecpm, currency, response_time_ms, status, metadata_hash
-         FROM auction_candidates
-         WHERE auction_id IN {auction_ids: Array(UUID)}
-        `,
-        { auction_ids: auctionIds }
+         FROM transparency_auction_candidates
+         WHERE auction_id = ANY($1::uuid[])`,
+        [auctionIds],
+        'TRANSPARENCY_CANDIDATES_BY_AUCTIONS'
       );
-      for (const c of candRows) {
-        if (!candidatesByAuction[c.auction_id]) candidatesByAuction[c.auction_id] = [];
+
+      for (const c of candRows.rows) {
+        if (!candidatesByAuction[c.auction_id]) {
+          candidatesByAuction[c.auction_id] = [];
+        }
         candidatesByAuction[c.auction_id].push({
           source: c.source,
           bid_ecpm: Number(c.bid_ecpm),
@@ -187,9 +232,9 @@ export const getAuctions = async (req: Request, res: Response, next: NextFunctio
       }
     }
 
-    const data = rows.map(r => ({
+    const data = rows.map((r) => ({
       auction_id: r.auction_id,
-      timestamp: r.timestamp,
+      timestamp: toIsoString(r.observed_at),
       publisher_id: r.publisher_id,
       app_or_site_id: r.app_or_site_id,
       placement_id: r.placement_id,
@@ -249,10 +294,10 @@ export const getAuctionById = async (req: Request, res: Response, next: NextFunc
       false
     );
 
-    const rows = await executeQuery<any>(
+    const { rows } = await replicaQuery(
       `SELECT 
         auction_id,
-        toString(timestamp) as timestamp,
+        observed_at,
         publisher_id,
         app_or_site_id,
         placement_id,
@@ -272,11 +317,11 @@ export const getAuctionById = async (req: Request, res: Response, next: NextFunc
         integrity_algo,
         integrity_key_id,
         integrity_signature
-      FROM auctions
-      WHERE auction_id = {auction_id: UUID}
-      LIMIT 1
-      `,
-      { auction_id: auctionId }
+      FROM transparency_auctions
+      WHERE auction_id = $1
+      LIMIT 1`,
+      [auctionId],
+      'TRANSPARENCY_AUCTION_BY_ID'
     );
 
     if (rows.length === 0) {
@@ -287,18 +332,18 @@ export const getAuctionById = async (req: Request, res: Response, next: NextFunc
       throw new AppError('Forbidden: cannot access other publishers', 403);
     }
 
-    const candRows = await executeQuery<any>(
+    const candRows = await replicaQuery(
       `SELECT source, bid_ecpm, currency, response_time_ms, status, metadata_hash
-       FROM auction_candidates
-       WHERE auction_id = {auction_id: UUID}
-      `,
-      { auction_id: auctionId }
+       FROM transparency_auction_candidates
+       WHERE auction_id = $1`,
+      [auctionId],
+      'TRANSPARENCY_CANDIDATES_BY_ID'
     );
 
     const r = rows[0];
     const payload: any = {
       auction_id: r.auction_id,
-      timestamp: r.timestamp,
+      timestamp: toIsoString(r.observed_at),
       publisher_id: r.publisher_id,
       app_or_site_id: r.app_or_site_id,
       placement_id: r.placement_id,
@@ -309,7 +354,7 @@ export const getAuctionById = async (req: Request, res: Response, next: NextFunc
         att: r.att_status,
         tc_string_sha256: r.tc_string_sha256,
       },
-      candidates: candRows.map(c => ({
+      candidates: candRows.rows.map((c) => ({
         source: c.source,
         bid_ecpm: Number(c.bid_ecpm),
         currency: c.currency,
@@ -350,7 +395,7 @@ export const getAuctionById = async (req: Request, res: Response, next: NextFunc
           winner_reason: r.winner_reason,
           sample_bps: Number(r.sample_bps || 0),
         },
-        candidates: candRows.map((c: any) => ({
+        candidates: candRows.rows.map((c: any) => ({
           source: c.source,
           bid_ecpm: Number(c.bid_ecpm || 0),
           status: c.status,
@@ -394,54 +439,55 @@ export const getAuctionSummary = async (req: Request, res: Response, next: NextF
       throw new AppError('Invalid range: from must be less than or equal to to', 400);
     }
 
-    const where: string[] = ['publisher_id = {publisher_id: String}'];
-    if (from) where.push("timestamp >= toDateTime64(parseDateTimeBestEffort({from: String}), 3, 'UTC')");
-    if (to) where.push("timestamp <= toDateTime64(parseDateTimeBestEffort({to: String}), 3, 'UTC')");
+    const where: string[] = ['publisher_id = $1'];
+    const params: unknown[] = [requestedPublisher];
+    let paramIdx = 2;
 
-    // Total sampled (signed) auctions
-    const totalRows = await executeQuery<any>(
-      `SELECT count() as total_sampled
-       FROM auctions
-       WHERE ${where.join(' AND ')} AND length(integrity_signature) > 0`,
-      {
-        publisher_id: requestedPublisher,
-        from: from || undefined,
-        to: to || undefined,
-      }
+    if (from) {
+      where.push(`observed_at >= $${paramIdx}`);
+      params.push(new Date(from));
+      paramIdx += 1;
+    }
+    if (to) {
+      where.push(`observed_at <= $${paramIdx}`);
+      params.push(new Date(to));
+      paramIdx += 1;
+    }
+
+    const whereSql = where.join(' AND ');
+
+    const totalRows = await replicaQuery(
+      `SELECT COUNT(*)::bigint as total_sampled
+       FROM transparency_auctions
+       WHERE ${whereSql} AND length(integrity_signature) > 0`,
+      [...params],
+      'TRANSPARENCY_SUMMARY_TOTAL'
     );
 
-    // Winners by source
-    const winnersRows = await executeQuery<any>(
-      `SELECT winner_source as source, count() as count
-       FROM auctions
-       WHERE ${where.join(' AND ')}
+    const winnersRows = await replicaQuery(
+      `SELECT winner_source as source, COUNT(*)::bigint as count
+       FROM transparency_auctions
+       WHERE ${whereSql}
        GROUP BY winner_source
        ORDER BY count DESC
        LIMIT 20`,
-      {
-        publisher_id: requestedPublisher,
-        from: from || undefined,
-        to: to || undefined,
-      }
+      [...params],
+      'TRANSPARENCY_SUMMARY_WINNERS'
     );
 
-    // Averages
-    const avgRows = await executeQuery<any>(
+    const avgRows = await replicaQuery(
       `SELECT avg(aletheia_fee_bp) as avg_fee_bp, avg(effective_publisher_share) as publisher_share_avg
-       FROM auctions
-       WHERE ${where.join(' AND ')}`,
-      {
-        publisher_id: requestedPublisher,
-        from: from || undefined,
-        to: to || undefined,
-      }
+       FROM transparency_auctions
+       WHERE ${whereSql}`,
+      [...params],
+      'TRANSPARENCY_SUMMARY_AVG'
     );
 
     const summary = {
-      total_sampled: Number(totalRows?.[0]?.total_sampled ?? 0),
-      winners_by_source: winnersRows.map((r: any) => ({ source: r.source, count: Number(r.count) })),
-      avg_fee_bp: Number(avgRows?.[0]?.avg_fee_bp ?? 0),
-      publisher_share_avg: Number(avgRows?.[0]?.publisher_share_avg ?? 0),
+      total_sampled: Number(totalRows.rows?.[0]?.total_sampled ?? 0),
+      winners_by_source: winnersRows.rows.map((r: any) => ({ source: r.source, count: Number(r.count) })),
+      avg_fee_bp: Number(avgRows.rows?.[0]?.avg_fee_bp ?? 0),
+      publisher_share_avg: Number(avgRows.rows?.[0]?.publisher_share_avg ?? 0),
     };
 
     res.json(summary);
@@ -503,12 +549,14 @@ export const getTransparencyKeys = async (req: Request, res: Response, next: Nex
       throw new AppError('Unauthorized', 401);
     }
 
-    const rows = await executeQuery<any>(
+    const { rows } = await replicaQuery(
       `SELECT key_id, algo, public_key_base64, active
        FROM transparency_signer_keys
-       WHERE active = 1
+       WHERE active = true
        ORDER BY created_at DESC
-       LIMIT 10`
+       LIMIT 10`,
+      undefined,
+      'TRANSPARENCY_KEYS'
     );
 
     const fallbackKey = process.env.TRANSPARENCY_PUBLIC_KEY_BASE64;
@@ -550,10 +598,10 @@ export const verifyAuction = async (req: Request, res: Response, next: NextFunct
     const tStart = process.hrtime.bigint();
 
     // Load auction row
-    const aRows = await executeQuery<any>(
+    const auctionRows = await replicaQuery(
       `SELECT 
          auction_id,
-         toString(timestamp) as timestamp,
+         observed_at,
          publisher_id,
          winner_source,
          winner_bid_ecpm,
@@ -564,40 +612,44 @@ export const verifyAuction = async (req: Request, res: Response, next: NextFunct
          integrity_algo,
          integrity_key_id,
          integrity_signature
-       FROM auctions
-       WHERE auction_id = {auction_id: UUID}
+       FROM transparency_auctions
+       WHERE auction_id = $1
        LIMIT 1`,
-      { auction_id: auctionId }
+      [auctionId],
+      'TRANSPARENCY_VERIFY_AUCTION'
     );
 
-    if (aRows.length === 0) {
+    if (auctionRows.rows.length === 0) {
       throw new AppError('Not found', 404);
     }
 
+    const auction = auctionRows.rows[0];
+
     // Publisher scoping
-    ensurePublisherScope(req, aRows[0].publisher_id);
+    ensurePublisherScope(req, auction.publisher_id);
 
     // Load candidates
-    const cRows = await executeQuery<any>(
+    const cRows = await replicaQuery(
       `SELECT source, bid_ecpm, status
-       FROM auction_candidates
-       WHERE auction_id = {auction_id: UUID}`,
-      { auction_id: auctionId }
+       FROM transparency_auction_candidates
+       WHERE auction_id = $1`,
+      [auctionId],
+      'TRANSPARENCY_VERIFY_CANDIDATES'
     );
 
     // Build canonical payload (must mirror writer)
     const payload = {
       auction: {
-        auction_id: aRows[0].auction_id,
-        publisher_id: aRows[0].publisher_id,
-        timestamp: aRows[0].timestamp,
-        winner_source: aRows[0].winner_source,
-        winner_bid_ecpm: Number(aRows[0].winner_bid_ecpm || 0),
-        winner_currency: aRows[0].winner_currency,
-        winner_reason: aRows[0].winner_reason,
-        sample_bps: Number(aRows[0].sample_bps || 0),
+        auction_id: auction.auction_id,
+        publisher_id: auction.publisher_id,
+        timestamp: toIsoString(auction.observed_at),
+        winner_source: auction.winner_source,
+        winner_bid_ecpm: Number(auction.winner_bid_ecpm || 0),
+        winner_currency: auction.winner_currency,
+        winner_reason: auction.winner_reason,
+        sample_bps: Number(auction.sample_bps || 0),
       },
-      candidates: cRows.map((c: any) => ({
+      candidates: cRows.rows.map((c: any) => ({
         source: c.source,
         bid_ecpm: Number(c.bid_ecpm || 0),
         status: c.status,
@@ -605,9 +657,9 @@ export const verifyAuction = async (req: Request, res: Response, next: NextFunct
     };
 
     const canonical = canonicalizeForSignature(payload);
-    const signatureB64 = aRows[0].integrity_signature as string | null;
-    const algo = (aRows[0].integrity_algo as string | null) || 'ed25519';
-    const keyId = aRows[0].integrity_key_id as string | null;
+    const signatureB64 = auction.integrity_signature as string | null;
+    const algo = (auction.integrity_algo as string | null) || 'ed25519';
+    const keyId = auction.integrity_key_id as string | null;
 
     if (!signatureB64 || !keyId || algo.toLowerCase() !== 'ed25519') {
       return res.json({
@@ -619,16 +671,17 @@ export const verifyAuction = async (req: Request, res: Response, next: NextFunct
     }
 
     // Fetch matching public key (active)
-    const kRows = await executeQuery<any>(
+    const kRows = await replicaQuery(
       `SELECT key_id, algo, public_key_base64, active
        FROM transparency_signer_keys
-       WHERE key_id = {key_id: String} AND active = 1
+       WHERE key_id = $1 AND active = true
        LIMIT 1`,
-      { key_id: keyId }
+      [keyId],
+      'TRANSPARENCY_VERIFY_KEYS'
     );
 
     const fallbackKey = process.env.TRANSPARENCY_PUBLIC_KEY_BASE64;
-    const keyBase64 = (kRows[0]?.public_key_base64 as string | undefined) || fallbackKey;
+    const keyBase64 = (kRows.rows[0]?.public_key_base64 as string | undefined) || fallbackKey;
 
     if (!keyBase64) {
       return res.json({
@@ -678,7 +731,7 @@ export const verifyAuction = async (req: Request, res: Response, next: NextFunct
       canonical: returnCanonical,
       canonical_truncated: truncated,
       canonical_size_bytes: canonical.length,
-      sample_bps: Number(aRows[0].sample_bps || 0),
+      sample_bps: Number(auction.sample_bps || 0),
     });
   } catch (err) {
     next(err);

@@ -113,7 +113,7 @@ export async function buildReconExpected(
     return { seen: receipts.length, written: 0, skipped: receipts.length };
   }
 
-  // 4) Fetch paid events from ClickHouse within the same window for the request_ids
+  // 4) Fetch paid events from Postgres within the same window for the request_ids
   let paidEvents: PaidEventRow[] = [];
   try {
     const res = await pgPool.query<PaidEventRow>(

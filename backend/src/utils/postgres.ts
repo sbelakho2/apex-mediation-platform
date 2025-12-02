@@ -56,18 +56,42 @@ pool.on('remove', () => {
   logger.debug('Connection removed from pool');
 });
 
+const buildReplicaPool = (): Pool | null => {
+  const replicaUrl = process.env.REPLICA_DATABASE_URL;
+  if (!replicaUrl) return null;
+  return new Pool({
+    connectionString: replicaUrl,
+    ssl: useSsl ? { rejectUnauthorized: false } : undefined,
+    max: parseInt(process.env.REPLICA_DATABASE_POOL_MAX || '15', 10),
+    min: parseInt(process.env.REPLICA_DATABASE_POOL_MIN || '1', 10),
+    idleTimeoutMillis: idleTimeout,
+    connectionTimeoutMillis: connectionTimeout,
+    statement_timeout: statementTimeout,
+  });
+};
+
+const replicaPool = buildReplicaPool();
+
+type QueryOptions = {
+  replica?: boolean;
+  label?: string;
+};
+
 export const query = <T extends QueryResultRow = QueryResultRow>(
   text: string,
-  params?: ReadonlyArray<unknown>
+  params?: ReadonlyArray<unknown>,
+  options: QueryOptions = {}
 ): Promise<QueryResult<T>> => {
   // Add query timeout wrapper
   const timeoutMs = parseInt(process.env.DATABASE_STATEMENT_TIMEOUT_MS || '30000', 10);
-  const op = (text.split(/\s+/)[0] || 'QUERY').toUpperCase();
-  const endTimer = dbQueryDurationSeconds.startTimer({ operation: op });
+  const op = options.label || (text.split(/\s+/)[0] || 'QUERY').toUpperCase();
+  const endTimer = dbQueryDurationSeconds.startTimer({ operation: op, replica: options.replica ? 'true' : 'false' });
   
+  const targetPool = options.replica && replicaPool ? replicaPool : pool;
+
   const queryPromise = params && params.length > 0
-    ? pool.query<T>(text, [...params])
-    : pool.query<T>(text);
+    ? targetPool.query<T>(text, [...params])
+    : targetPool.query<T>(text);
 
   // Wrap with timeout
   return Promise.race([

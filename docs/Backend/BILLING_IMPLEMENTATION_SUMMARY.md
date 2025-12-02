@@ -93,10 +93,10 @@ Successfully implemented complete billing platform infrastructure covering:
   - Scale: 50M impressions, 5M API calls, 2.5TB data
   - Enterprise: 100M impressions, 10M API calls, 5TB data
 - Integration with existing `calculateOverages()` method
-- Support for real-time usage tracking via ClickHouse
+- Support for real-time usage tracking via Postgres analytics replicas
 
 ### Usage Tracking Features
-- Hourly usage aggregation from ClickHouse
+- Hourly usage aggregation from Postgres staging tables
 - Overage calculation with per-metric pricing:
   - Impressions: $0.50 per 1000 over limit
   - API Calls: $0.10 per 1000 over limit
@@ -219,8 +219,8 @@ Successfully implemented complete billing platform infrastructure covering:
 - Idempotency at multiple layers: HTTP headers, webhook events, reconciliation
 
 ### Database
-- PostgreSQL for transactional data (invoices, subscriptions, audit logs)
-- ClickHouse for usage analytics and real-time metrics
+- PostgreSQL primary for transactional data (invoices, subscriptions, audit logs)
+- PostgreSQL read replicas for usage analytics and real-time metrics
 - Redis for caching and job queues (future use)
 
 ### Error Handling
@@ -255,7 +255,7 @@ STRIPE_WEBHOOK_SECRET=whsec_...
 
 # Database
 DATABASE_URL=postgresql://user:pass@localhost:5432/apexmediation
-CLICKHOUSE_URL=http://localhost:8123
+REPLICA_DATABASE_URL=postgresql://readuser:pass@localhost:5433/apexmediation
 REDIS_URL=redis://localhost:6379
 
 # API
@@ -334,7 +334,7 @@ NEXT_PUBLIC_USE_MOCK_API=false
 
 ### Caching Strategy
 - Invoice PDFs cached with ETag headers (304 Not Modified)
-- Usage data cached for 1 hour in ClickHouse
+- Usage data cached for 1 hour via Postgres analytics replicas
 - Feature flags cached per request lifecycle
 
 ### Database Optimization

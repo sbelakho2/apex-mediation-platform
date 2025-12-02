@@ -4,13 +4,15 @@
  * Tests for viewability, brand safety, ANR detection, and SLO monitoring
  */
 
+import type { QueryResult, QueryResultRow } from 'pg';
 import { qualityMonitoringService } from '../qualityMonitoringService';
-import * as clickhouse from '../../utils/clickhouse';
+import * as postgres from '../../utils/postgres';
 
-jest.mock('../../utils/clickhouse');
+jest.mock('../../utils/postgres');
 jest.mock('../../utils/logger');
 
-const mockExecuteQuery = clickhouse.executeQuery as jest.MockedFunction<typeof clickhouse.executeQuery>;
+const mockPgQuery = postgres.query as jest.MockedFunction<typeof postgres.query>;
+const mockRows = <T extends QueryResultRow>(rows: T[]): QueryResult<T> => ({ rows } as unknown as QueryResult<T>);
 
 describe('QualityMonitoringService', () => {
   const publisherId = '550e8400-e29b-41d4-a716-446655440000';
@@ -23,8 +25,8 @@ describe('QualityMonitoringService', () => {
 
   describe('getViewabilityMetrics', () => {
     it('should return viewability metrics with format breakdown', async () => {
-      mockExecuteQuery
-        .mockResolvedValueOnce([
+      mockPgQuery
+        .mockResolvedValueOnce(mockRows([
           {
             total_impressions: '100000',
             viewable_impressions: '65000',
@@ -32,8 +34,8 @@ describe('QualityMonitoringService', () => {
             avg_view_duration: '3.5',
             measurable_rate: '98.5',
           },
-        ])
-        .mockResolvedValueOnce([
+        ]))
+        .mockResolvedValueOnce(mockRows([
           {
             ad_format: 'banner',
             viewability_rate: '70.0',
@@ -49,7 +51,7 @@ describe('QualityMonitoringService', () => {
             viewability_rate: '95.0',
             impressions: '20000',
           },
-        ]);
+        ]));
 
       const result = await qualityMonitoringService.getViewabilityMetrics(
         publisherId,
@@ -72,9 +74,9 @@ describe('QualityMonitoringService', () => {
     });
 
     it('should handle zero impressions', async () => {
-      mockExecuteQuery
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([]);
+      mockPgQuery
+        .mockResolvedValueOnce(mockRows([]))
+        .mockResolvedValueOnce(mockRows([]));
 
       const result = await qualityMonitoringService.getViewabilityMetrics(
         publisherId,
@@ -93,8 +95,8 @@ describe('QualityMonitoringService', () => {
     });
 
     it('should verify video formats have higher viewability', async () => {
-      mockExecuteQuery
-        .mockResolvedValueOnce([
+      mockPgQuery
+        .mockResolvedValueOnce(mockRows([
           {
             total_impressions: '100000',
             viewable_impressions: '70000',
@@ -102,11 +104,11 @@ describe('QualityMonitoringService', () => {
             avg_view_duration: '4.2',
             measurable_rate: '99.0',
           },
-        ])
-        .mockResolvedValueOnce([
+        ]))
+        .mockResolvedValueOnce(mockRows([
           { ad_format: 'banner', viewability_rate: '60.0', impressions: '50000' },
           { ad_format: 'rewarded_video', viewability_rate: '98.0', impressions: '50000' },
-        ]);
+        ]));
 
       const result = await qualityMonitoringService.getViewabilityMetrics(
         publisherId,
@@ -123,34 +125,34 @@ describe('QualityMonitoringService', () => {
 
   describe('getBrandSafetyReport', () => {
     it('should return comprehensive brand safety report', async () => {
-      mockExecuteQuery
-        .mockResolvedValueOnce([
+      mockPgQuery
+        .mockResolvedValueOnce(mockRows([
           {
             total_scans: '10000',
             passed_scans: '9800',
             failed_scans: '200',
             avg_risk_score: '5.5',
           },
-        ])
-        .mockResolvedValueOnce([
+        ]))
+        .mockResolvedValueOnce(mockRows([
           { blocked_category: 'Adult Content', count: '50' },
           { blocked_category: 'Violence', count: '40' },
           { blocked_category: 'Hate Speech', count: '30' },
-        ])
-        .mockResolvedValueOnce([
+        ]))
+        .mockResolvedValueOnce(mockRows([
           {
             creative_id: 'creative_123',
             blocked_category: 'Adult Content',
             severity: 'high',
-            timestamp: '2024-01-15 10:30:00',
+              observed_at: '2024-01-15 10:30:00',
           },
           {
             creative_id: 'creative_456',
             blocked_category: 'Violence',
             severity: 'medium',
-            timestamp: '2024-01-15 09:15:00',
+              observed_at: '2024-01-15 09:15:00',
           },
-        ]);
+        ]));
 
       const result = await qualityMonitoringService.getBrandSafetyReport(
         publisherId,
@@ -186,17 +188,17 @@ describe('QualityMonitoringService', () => {
     });
 
     it('should handle perfect brand safety score', async () => {
-      mockExecuteQuery
-        .mockResolvedValueOnce([
+      mockPgQuery
+        .mockResolvedValueOnce(mockRows([
           {
             total_scans: '5000',
             passed_scans: '5000',
             failed_scans: '0',
             avg_risk_score: '0.0',
           },
-        ])
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([]);
+        ]))
+        .mockResolvedValueOnce(mockRows([]))
+        .mockResolvedValueOnce(mockRows([]));
 
       const result = await qualityMonitoringService.getBrandSafetyReport(
         publisherId,
@@ -210,26 +212,26 @@ describe('QualityMonitoringService', () => {
     });
 
     it('should prioritize high-severity violations', async () => {
-      mockExecuteQuery
-        .mockResolvedValueOnce([
+      mockPgQuery
+        .mockResolvedValueOnce(mockRows([
           {
             total_scans: '1000',
             passed_scans: '900',
             failed_scans: '100',
             avg_risk_score: '15.0',
           },
-        ])
-        .mockResolvedValueOnce([
+        ]))
+        .mockResolvedValueOnce(mockRows([
           { blocked_category: 'Adult Content', count: '100' },
-        ])
-        .mockResolvedValueOnce([
+        ]))
+        .mockResolvedValueOnce(mockRows([
           {
             creative_id: 'creative_789',
             blocked_category: 'Adult Content',
             severity: 'high',
-            timestamp: '2024-01-15 14:00:00',
+            observed_at: '2024-01-15 14:00:00',
           },
-        ]);
+        ]));
 
       const result = await qualityMonitoringService.getBrandSafetyReport(
         publisherId,
@@ -243,18 +245,31 @@ describe('QualityMonitoringService', () => {
 
   describe('getCreativeComplianceReport', () => {
     it('should return creative compliance metrics', async () => {
-      mockExecuteQuery.mockResolvedValueOnce([
-        {
-          total_creatives: '500',
-          compliant_creatives: '450',
-          compliance_rate: '90.0',
-          violations_list: [
-            ['creative_111', 'File size exceeded', 'flagged'],
-            ['creative_222', 'Invalid dimensions', 'reviewed'],
-            ['creative_333', 'Content policy violation', 'rejected'],
-          ],
-        },
-      ]);
+      mockPgQuery
+        .mockResolvedValueOnce(mockRows([
+          {
+            total_creatives: '500',
+            compliant_creatives: '450',
+            compliance_rate: '90.0',
+          },
+        ]))
+        .mockResolvedValueOnce(mockRows([
+          {
+            creative_id: 'creative_111',
+            violations: 'File size exceeded',
+            status: 'flagged',
+          },
+          {
+            creative_id: 'creative_222',
+            violations: 'Invalid dimensions',
+            status: 'reviewed',
+          },
+          {
+            creative_id: 'creative_333',
+            violations: 'Content policy violation',
+            status: 'rejected',
+          },
+        ]));
 
       const result = await qualityMonitoringService.getCreativeComplianceReport(
         publisherId,
@@ -290,14 +305,15 @@ describe('QualityMonitoringService', () => {
     });
 
     it('should handle 100% compliance', async () => {
-      mockExecuteQuery.mockResolvedValueOnce([
-        {
-          total_creatives: '1000',
-          compliant_creatives: '1000',
-          compliance_rate: '100.0',
-          violations_list: [],
-        },
-      ]);
+      mockPgQuery
+        .mockResolvedValueOnce(mockRows([
+          {
+            total_creatives: '1000',
+            compliant_creatives: '1000',
+            compliance_rate: '100.0',
+          },
+        ]))
+        .mockResolvedValueOnce(mockRows([]));
 
       const result = await qualityMonitoringService.getCreativeComplianceReport(
         publisherId,
@@ -312,8 +328,8 @@ describe('QualityMonitoringService', () => {
 
   describe('getANRReport', () => {
     it('should return comprehensive ANR and crash report', async () => {
-      mockExecuteQuery
-        .mockResolvedValueOnce([
+      mockPgQuery
+        .mockResolvedValueOnce(mockRows([
           {
             total_sessions: '100000',
             anr_count: '15',
@@ -321,8 +337,8 @@ describe('QualityMonitoringService', () => {
             crash_count: '5',
             crash_rate: '0.005',
           },
-        ])
-        .mockResolvedValueOnce([
+        ]))
+        .mockResolvedValueOnce(mockRows([
           {
             adapter_id: 'unity',
             adapter_name: 'Unity Ads',
@@ -335,8 +351,8 @@ describe('QualityMonitoringService', () => {
             anr_count: '5',
             rate: '0.005',
           },
-        ])
-        .mockResolvedValueOnce([
+        ]))
+        .mockResolvedValueOnce(mockRows([
           {
             stack_trace: 'android.os.NetworkOnMainThreadException at com.unity...',
             count: '8',
@@ -347,7 +363,7 @@ describe('QualityMonitoringService', () => {
             count: '3',
             last_seen: '2024-01-15 12:00:00',
           },
-        ]);
+        ]));
 
       const result = await qualityMonitoringService.getANRReport(
         publisherId,
@@ -385,8 +401,8 @@ describe('QualityMonitoringService', () => {
     });
 
     it('should meet ANR rate target of <0.02%', async () => {
-      mockExecuteQuery
-        .mockResolvedValueOnce([
+      mockPgQuery
+        .mockResolvedValueOnce(mockRows([
           {
             total_sessions: '100000',
             anr_count: '10',
@@ -394,9 +410,9 @@ describe('QualityMonitoringService', () => {
             crash_count: '3',
             crash_rate: '0.003',
           },
-        ])
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([]);
+        ]))
+        .mockResolvedValueOnce(mockRows([]))
+        .mockResolvedValueOnce(mockRows([]));
 
       const result = await qualityMonitoringService.getANRReport(
         publisherId,
@@ -408,8 +424,8 @@ describe('QualityMonitoringService', () => {
     });
 
     it('should identify problematic adapters', async () => {
-      mockExecuteQuery
-        .mockResolvedValueOnce([
+      mockPgQuery
+        .mockResolvedValueOnce(mockRows([
           {
             total_sessions: '50000',
             anr_count: '50',
@@ -417,16 +433,16 @@ describe('QualityMonitoringService', () => {
             crash_count: '10',
             crash_rate: '0.02',
           },
-        ])
-        .mockResolvedValueOnce([
+        ]))
+        .mockResolvedValueOnce(mockRows([
           {
             adapter_id: 'problematic_adapter',
             adapter_name: 'Problematic Ad Network',
             anr_count: '45',
             rate: '0.09',
           },
-        ])
-        .mockResolvedValueOnce([]);
+        ]))
+        .mockResolvedValueOnce(mockRows([]));
 
       const result = await qualityMonitoringService.getANRReport(
         publisherId,
@@ -439,8 +455,8 @@ describe('QualityMonitoringService', () => {
     });
 
     it('should handle zero ANRs', async () => {
-      mockExecuteQuery
-        .mockResolvedValueOnce([
+      mockPgQuery
+        .mockResolvedValueOnce(mockRows([
           {
             total_sessions: '100000',
             anr_count: '0',
@@ -448,9 +464,9 @@ describe('QualityMonitoringService', () => {
             crash_count: '0',
             crash_rate: '0.0',
           },
-        ])
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([]);
+        ]))
+        .mockResolvedValueOnce(mockRows([]))
+        .mockResolvedValueOnce(mockRows([]));
 
       const result = await qualityMonitoringService.getANRReport(
         publisherId,
@@ -465,7 +481,7 @@ describe('QualityMonitoringService', () => {
 
   describe('getPerformanceSLOs', () => {
     it('should return healthy SLO status', async () => {
-      mockExecuteQuery.mockResolvedValueOnce([
+      mockPgQuery.mockResolvedValueOnce(mockRows([
         {
           availability: '99.95',
           latency_slo: '98.5',
@@ -473,7 +489,7 @@ describe('QualityMonitoringService', () => {
           anr_rate: '0.012',
           viewability: '68.0',
         },
-      ]);
+      ]));
 
       const result = await qualityMonitoringService.getPerformanceSLOs(publisherId, 24);
 
@@ -485,7 +501,7 @@ describe('QualityMonitoringService', () => {
     });
 
     it('should detect SLO breaches', async () => {
-      mockExecuteQuery.mockResolvedValueOnce([
+      mockPgQuery.mockResolvedValueOnce(mockRows([
         {
           availability: '98.5', // Below 99.9% target
           latency_slo: '92.0', // Below 95% target
@@ -493,7 +509,7 @@ describe('QualityMonitoringService', () => {
           anr_rate: '0.035', // Above 0.02% target
           viewability: '45.0', // Below 60% target
         },
-      ]);
+      ]));
 
       const result = await qualityMonitoringService.getPerformanceSLOs(publisherId, 24);
 
@@ -505,7 +521,7 @@ describe('QualityMonitoringService', () => {
     });
 
     it('should calculate error budget correctly', async () => {
-      mockExecuteQuery.mockResolvedValueOnce([
+      mockPgQuery.mockResolvedValueOnce(mockRows([
         {
           availability: '99.85',
           latency_slo: '95.0',
@@ -513,7 +529,7 @@ describe('QualityMonitoringService', () => {
           anr_rate: '0.02',
           viewability: '60.0',
         },
-      ]);
+      ]));
 
       const result = await qualityMonitoringService.getPerformanceSLOs(publisherId, 24);
 
@@ -524,7 +540,7 @@ describe('QualityMonitoringService', () => {
     });
 
     it('should handle at-risk status with low error budget', async () => {
-      mockExecuteQuery.mockResolvedValueOnce([
+      mockPgQuery.mockResolvedValueOnce(mockRows([
         {
           availability: '99.92', // Close to 99.9% target
           latency_slo: '95.5',
@@ -532,7 +548,7 @@ describe('QualityMonitoringService', () => {
           anr_rate: '0.018',
           viewability: '61.0',
         },
-      ]);
+      ]));
 
       const result = await qualityMonitoringService.getPerformanceSLOs(publisherId, 24);
 
@@ -545,7 +561,7 @@ describe('QualityMonitoringService', () => {
   describe('getQualityAlerts', () => {
     it('should generate alerts for SLO breaches', async () => {
       // Mock SLO breach
-      mockExecuteQuery.mockResolvedValueOnce([
+      mockPgQuery.mockResolvedValueOnce(mockRows([
         {
           availability: '98.0', // Breached
           latency_slo: '98.0',
@@ -553,11 +569,11 @@ describe('QualityMonitoringService', () => {
           anr_rate: '0.01',
           viewability: '65.0',
         },
-      ]);
+      ]));
 
       // Mock ANR report
-      mockExecuteQuery
-        .mockResolvedValueOnce([
+      mockPgQuery
+        .mockResolvedValueOnce(mockRows([
           {
             total_sessions: '100000',
             anr_count: '10',
@@ -565,13 +581,13 @@ describe('QualityMonitoringService', () => {
             crash_count: '5',
             crash_rate: '0.005',
           },
-        ])
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([]);
+        ]))
+        .mockResolvedValueOnce(mockRows([]))
+        .mockResolvedValueOnce(mockRows([]));
 
       // Mock viewability metrics
-      mockExecuteQuery
-        .mockResolvedValueOnce([
+      mockPgQuery
+        .mockResolvedValueOnce(mockRows([
           {
             total_impressions: '100000',
             viewable_impressions: '65000',
@@ -579,21 +595,21 @@ describe('QualityMonitoringService', () => {
             avg_view_duration: '3.5',
             measurable_rate: '98.5',
           },
-        ])
-        .mockResolvedValueOnce([]);
+        ]))
+        .mockResolvedValueOnce(mockRows([]));
 
       // Mock brand safety
-      mockExecuteQuery
-        .mockResolvedValueOnce([
+      mockPgQuery
+        .mockResolvedValueOnce(mockRows([
           {
             total_scans: '10000',
             passed_scans: '9950',
             failed_scans: '50',
             avg_risk_score: '2.5',
           },
-        ])
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([]);
+        ]))
+        .mockResolvedValueOnce(mockRows([]))
+        .mockResolvedValueOnce(mockRows([]));
 
       const result = await qualityMonitoringService.getQualityAlerts(publisherId, 24);
 
@@ -604,7 +620,7 @@ describe('QualityMonitoringService', () => {
 
     it('should generate ANR spike alerts', async () => {
       // Mock healthy SLOs
-      mockExecuteQuery.mockResolvedValueOnce([
+      mockPgQuery.mockResolvedValueOnce(mockRows([
         {
           availability: '99.95',
           latency_slo: '98.0',
@@ -612,11 +628,11 @@ describe('QualityMonitoringService', () => {
           anr_rate: '0.045', // Above 0.02% threshold
           viewability: '65.0',
         },
-      ]);
+      ]));
 
       // Mock high ANR rate
-      mockExecuteQuery
-        .mockResolvedValueOnce([
+      mockPgQuery
+        .mockResolvedValueOnce(mockRows([
           {
             total_sessions: '100000',
             anr_count: '45',
@@ -624,20 +640,20 @@ describe('QualityMonitoringService', () => {
             crash_count: '10',
             crash_rate: '0.01',
           },
-        ])
-        .mockResolvedValueOnce([
+        ]))
+        .mockResolvedValueOnce(mockRows([
           {
             adapter_id: 'problematic',
             adapter_name: 'Problematic Network',
             anr_count: '40',
             rate: '0.04',
           },
-        ])
-        .mockResolvedValueOnce([]);
+        ]))
+        .mockResolvedValueOnce(mockRows([]));
 
       // Mock viewability metrics
-      mockExecuteQuery
-        .mockResolvedValueOnce([
+      mockPgQuery
+        .mockResolvedValueOnce(mockRows([
           {
             total_impressions: '100000',
             viewable_impressions: '65000',
@@ -645,21 +661,21 @@ describe('QualityMonitoringService', () => {
             avg_view_duration: '3.5',
             measurable_rate: '98.5',
           },
-        ])
-        .mockResolvedValueOnce([]);
+        ]))
+        .mockResolvedValueOnce(mockRows([]));
 
       // Mock brand safety
-      mockExecuteQuery
-        .mockResolvedValueOnce([
+      mockPgQuery
+        .mockResolvedValueOnce(mockRows([
           {
             total_scans: '10000',
             passed_scans: '9950',
             failed_scans: '50',
             avg_risk_score: '2.5',
           },
-        ])
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([]);
+        ]))
+        .mockResolvedValueOnce(mockRows([]))
+        .mockResolvedValueOnce(mockRows([]));
 
       const result = await qualityMonitoringService.getQualityAlerts(publisherId, 24);
 
@@ -671,7 +687,7 @@ describe('QualityMonitoringService', () => {
 
     it('should generate viewability drop alerts', async () => {
       // Mock healthy SLOs
-      mockExecuteQuery.mockResolvedValueOnce([
+      mockPgQuery.mockResolvedValueOnce(mockRows([
         {
           availability: '99.95',
           latency_slo: '98.0',
@@ -679,11 +695,11 @@ describe('QualityMonitoringService', () => {
           anr_rate: '0.01',
           viewability: '45.0', // Below 60% threshold
         },
-      ]);
+      ]));
 
       // Mock ANR report
-      mockExecuteQuery
-        .mockResolvedValueOnce([
+      mockPgQuery
+        .mockResolvedValueOnce(mockRows([
           {
             total_sessions: '100000',
             anr_count: '10',
@@ -691,13 +707,13 @@ describe('QualityMonitoringService', () => {
             crash_count: '5',
             crash_rate: '0.005',
           },
-        ])
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([]);
+        ]))
+        .mockResolvedValueOnce(mockRows([]))
+        .mockResolvedValueOnce(mockRows([]));
 
       // Mock low viewability
-      mockExecuteQuery
-        .mockResolvedValueOnce([
+      mockPgQuery
+        .mockResolvedValueOnce(mockRows([
           {
             total_impressions: '100000',
             viewable_impressions: '45000',
@@ -705,21 +721,21 @@ describe('QualityMonitoringService', () => {
             avg_view_duration: '2.5',
             measurable_rate: '95.0',
           },
-        ])
-        .mockResolvedValueOnce([]);
+        ]))
+        .mockResolvedValueOnce(mockRows([]));
 
       // Mock brand safety
-      mockExecuteQuery
-        .mockResolvedValueOnce([
+      mockPgQuery
+        .mockResolvedValueOnce(mockRows([
           {
             total_scans: '10000',
             passed_scans: '9950',
             failed_scans: '50',
             avg_risk_score: '2.5',
           },
-        ])
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([]);
+        ]))
+        .mockResolvedValueOnce(mockRows([]))
+        .mockResolvedValueOnce(mockRows([]));
 
       const result = await qualityMonitoringService.getQualityAlerts(publisherId, 24);
 
@@ -731,7 +747,7 @@ describe('QualityMonitoringService', () => {
 
     it('should sort alerts by severity', async () => {
       // Mock multiple issues
-      mockExecuteQuery.mockResolvedValueOnce([
+      mockPgQuery.mockResolvedValueOnce(mockRows([
         {
           availability: '98.0', // Critical
           latency_slo: '98.0',
@@ -739,10 +755,10 @@ describe('QualityMonitoringService', () => {
           anr_rate: '0.025', // Medium
           viewability: '55.0', // Medium
         },
-      ]);
+      ]));
 
-      mockExecuteQuery
-        .mockResolvedValueOnce([
+      mockPgQuery
+        .mockResolvedValueOnce(mockRows([
           {
             total_sessions: '100000',
             anr_count: '25',
@@ -750,12 +766,12 @@ describe('QualityMonitoringService', () => {
             crash_count: '5',
             crash_rate: '0.005',
           },
-        ])
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([]);
+        ]))
+        .mockResolvedValueOnce(mockRows([]))
+        .mockResolvedValueOnce(mockRows([]));
 
-      mockExecuteQuery
-        .mockResolvedValueOnce([
+      mockPgQuery
+        .mockResolvedValueOnce(mockRows([
           {
             total_impressions: '100000',
             viewable_impressions: '55000',
@@ -763,20 +779,20 @@ describe('QualityMonitoringService', () => {
             avg_view_duration: '3.0',
             measurable_rate: '97.0',
           },
-        ])
-        .mockResolvedValueOnce([]);
+        ]))
+        .mockResolvedValueOnce(mockRows([]));
 
-      mockExecuteQuery
-        .mockResolvedValueOnce([
+      mockPgQuery
+        .mockResolvedValueOnce(mockRows([
           {
             total_scans: '10000',
             passed_scans: '9950',
             failed_scans: '50',
             avg_risk_score: '2.5',
           },
-        ])
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([]);
+        ]))
+        .mockResolvedValueOnce(mockRows([]))
+        .mockResolvedValueOnce(mockRows([]));
 
       const result = await qualityMonitoringService.getQualityAlerts(publisherId, 24);
 
@@ -786,7 +802,7 @@ describe('QualityMonitoringService', () => {
 
     it('should return empty array when no issues', async () => {
       // Mock perfect metrics
-      mockExecuteQuery.mockResolvedValueOnce([
+      mockPgQuery.mockResolvedValueOnce(mockRows([
         {
           availability: '99.99',
           latency_slo: '99.0',
@@ -794,10 +810,10 @@ describe('QualityMonitoringService', () => {
           anr_rate: '0.005',
           viewability: '75.0',
         },
-      ]);
+      ]));
 
-      mockExecuteQuery
-        .mockResolvedValueOnce([
+      mockPgQuery
+        .mockResolvedValueOnce(mockRows([
           {
             total_sessions: '100000',
             anr_count: '5',
@@ -805,12 +821,12 @@ describe('QualityMonitoringService', () => {
             crash_count: '2',
             crash_rate: '0.002',
           },
-        ])
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([]);
+        ]))
+        .mockResolvedValueOnce(mockRows([]))
+        .mockResolvedValueOnce(mockRows([]));
 
-      mockExecuteQuery
-        .mockResolvedValueOnce([
+      mockPgQuery
+        .mockResolvedValueOnce(mockRows([
           {
             total_impressions: '100000',
             viewable_impressions: '75000',
@@ -818,20 +834,20 @@ describe('QualityMonitoringService', () => {
             avg_view_duration: '4.0',
             measurable_rate: '99.0',
           },
-        ])
-        .mockResolvedValueOnce([]);
+        ]))
+        .mockResolvedValueOnce(mockRows([]));
 
-      mockExecuteQuery
-        .mockResolvedValueOnce([
+      mockPgQuery
+        .mockResolvedValueOnce(mockRows([
           {
             total_scans: '10000',
             passed_scans: '10000',
             failed_scans: '0',
             avg_risk_score: '0.0',
           },
-        ])
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([]);
+        ]))
+        .mockResolvedValueOnce(mockRows([]))
+        .mockResolvedValueOnce(mockRows([]));
 
       const result = await qualityMonitoringService.getQualityAlerts(publisherId, 24);
 

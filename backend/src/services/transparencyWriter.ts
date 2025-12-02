@@ -2,8 +2,8 @@ import type { KeyObject } from 'crypto';
 import * as crypto from 'crypto';
 import type { Counter as PromCounterType, Gauge as PromGaugeType } from 'prom-client';
 import { Counter as PromCounter, Gauge as PromGauge } from 'prom-client';
-import { promRegister } from '../utils/prometheus';
-import { getClickHouseClient } from '../utils/clickhouse';
+import { promRegister, transparencyIngestStageGauge } from '../utils/prometheus';
+import { insertMany, query } from '../utils/postgres';
 import type { OpenRTBBidRequest, Bid } from '../types/openrtb.types';
 import { DeviceType, NoBidReason } from '../types/openrtb.types';
 import type { AuctionResult } from './openrtbEngine';
@@ -12,14 +12,9 @@ export { canonicalizeForSignature } from './transparency/canonicalizer';
 import logger from '../utils/logger';
 import { emitOpsAlert } from '../utils/opsAlert';
 
-export type ClickHouseInsertArgs = {
-  table: string;
-  values: unknown[];
-  format: 'JSONEachRow';
-};
-
-export type ClickHouseClient = {
-  insert: (args: ClickHouseInsertArgs) => Promise<unknown>;
+export type TransparencyStorage = {
+  insertAuctions: (rows: ReadonlyArray<AuctionRow>) => Promise<void>;
+  insertCandidates: (rows: ReadonlyArray<CandidateRow>) => Promise<void>;
 };
 
 type AuctionRow = {
@@ -67,6 +62,152 @@ type TransparencyPayload = {
   candidates: Array<Pick<CandidateRow, 'source' | 'bid_ecpm' | 'status'>>;
 };
 
+const TRANSPARENCY_AUCTION_COLUMNS = [
+  'auction_id',
+  'observed_at',
+  'publisher_id',
+  'app_or_site_id',
+  'placement_id',
+  'surface_type',
+  'device_os',
+  'device_geo',
+  'att_status',
+  'tc_string_sha256',
+  'winner_source',
+  'winner_bid_ecpm',
+  'winner_gross_price',
+  'winner_currency',
+  'winner_reason',
+  'aletheia_fee_bp',
+  'sample_bps',
+  'effective_publisher_share',
+  'integrity_algo',
+  'integrity_key_id',
+  'integrity_signature',
+] as const;
+
+const TRANSPARENCY_CANDIDATE_COLUMNS = [
+  'auction_id',
+  'observed_at',
+  'source',
+  'bid_ecpm',
+  'currency',
+  'response_time_ms',
+  'status',
+  'metadata_hash',
+] as const;
+
+const mapAuctionRowToValues = (row: AuctionRow): ReadonlyArray<unknown> => [
+  row.auction_id,
+  new Date(row.timestamp),
+  row.publisher_id,
+  row.app_or_site_id,
+  row.placement_id,
+  row.surface_type,
+  row.device_os,
+  row.device_geo,
+  row.att_status,
+  row.tc_string_sha256,
+  row.winner_source,
+  row.winner_bid_ecpm,
+  row.winner_gross_price,
+  row.winner_currency,
+  row.winner_reason,
+  row.aletheia_fee_bp,
+  row.sample_bps,
+  row.effective_publisher_share,
+  row.integrity_algo,
+  row.integrity_key_id,
+  row.integrity_signature,
+];
+
+const mapCandidateRowToValues = (row: CandidateRow): ReadonlyArray<unknown> => [
+  row.auction_id,
+  new Date(row.timestamp),
+  row.source,
+  row.bid_ecpm,
+  row.currency,
+  row.response_time_ms,
+  row.status,
+  row.metadata_hash,
+];
+
+const quoteIdentifier = (identifier: string): string => `"${identifier.replace(/"/g, '""')}"`;
+const quoteTableName = (table: string): string => table.split('.').map(quoteIdentifier).join('.');
+const STAGE_TABLES = {
+  auctions: 'transparency_auctions_stage',
+  candidates: 'transparency_auction_candidates_stage',
+} as const;
+
+type StageKind = keyof typeof STAGE_TABLES;
+const stagePendingCounts: Record<StageKind, number> = {
+  auctions: 0,
+  candidates: 0,
+};
+
+const adjustStageGauge = (kind: StageKind, delta: number): void => {
+  stagePendingCounts[kind] = Math.max(0, stagePendingCounts[kind] + delta);
+  transparencyIngestStageGauge.set({ kind }, stagePendingCounts[kind]);
+};
+
+const mergeStageIntoTarget = async (
+  stageTable: string,
+  targetTable: string,
+  columns: ReadonlyArray<string>,
+  conflictColumns?: ReadonlyArray<string>
+): Promise<void> => {
+  const columnSql = columns.map(quoteIdentifier).join(', ');
+  const conflictSql = conflictColumns?.length
+    ? ` ON CONFLICT (${conflictColumns.map(quoteIdentifier).join(', ')}) DO NOTHING`
+    : '';
+
+  await query(
+    `INSERT INTO ${quoteTableName(targetTable)} (${columnSql})
+     SELECT ${columnSql}
+     FROM ${quoteTableName(stageTable)}${conflictSql}`
+  );
+  await query(`TRUNCATE ${quoteTableName(stageTable)}`);
+};
+
+const postgresTransparencyStorage: TransparencyStorage = {
+  insertAuctions: async (rows) => {
+    if (!rows.length) {
+      return;
+    }
+
+    const values = rows.map((row) => mapAuctionRowToValues(row));
+    await insertMany(STAGE_TABLES.auctions, TRANSPARENCY_AUCTION_COLUMNS, values);
+    adjustStageGauge('auctions', values.length);
+    try {
+      await mergeStageIntoTarget(STAGE_TABLES.auctions, 'transparency_auctions', TRANSPARENCY_AUCTION_COLUMNS, [
+        'auction_id',
+        'observed_at',
+      ]);
+      adjustStageGauge('auctions', -values.length);
+    } catch (error) {
+      throw error;
+    }
+  },
+  insertCandidates: async (rows) => {
+    if (!rows.length) {
+      return;
+    }
+    const values = rows.map((row) => mapCandidateRowToValues(row));
+    await insertMany(STAGE_TABLES.candidates, TRANSPARENCY_CANDIDATE_COLUMNS, values);
+    adjustStageGauge('candidates', values.length);
+    try {
+      await mergeStageIntoTarget(
+        STAGE_TABLES.candidates,
+        'transparency_auction_candidates',
+        TRANSPARENCY_CANDIDATE_COLUMNS
+      );
+      adjustStageGauge('candidates', -values.length);
+    } catch (error) {
+      throw error;
+    }
+  },
+};
+
 const DEFAULT_TC_HASH = '0'.repeat(64);
 const DEFAULT_SAMPLE_BPS = 250; // 2.5%
 const DEFAULT_FEE_BP = 150; // 1.5%
@@ -76,6 +217,18 @@ const DEFAULT_RETRY_MAX_DELAY_MS = 250;
 const DEFAULT_BREAKER_THRESHOLD = 5;
 const DEFAULT_BREAKER_COOLDOWN_MS = 60_000;
 const TRANSIENT_ERROR_CODES = new Set(['ECONNRESET', 'ETIMEDOUT', 'EPIPE', 'ECONNREFUSED']);
+const POSTGRES_TRANSIENT_SQLSTATES = new Set([
+  '40001', // serialization_failure
+  '40P01', // deadlock_detected
+  '53200', // out_of_memory
+  '53300', // too_many_connections
+  '53400', // configuration_limit_exceeded
+  '55P03', // lock_not_available
+  '57014', // query_canceled
+  '57P01', // admin_shutdown
+  '57P02', // crash_shutdown
+  '57P03', // cannot_connect_now
+]);
 
 type SanitizedErrorInfo = {
   message: string;
@@ -157,7 +310,7 @@ export function buildTransparencySignaturePayload(
 
 
 interface TransparencyWriterOptions {
-  client?: ClickHouseClient | null;
+  storage?: TransparencyStorage | null;
   samplingBps?: number;
   privateKeySource?: string;
   keyId?: string;
@@ -181,7 +334,7 @@ export class TransparencyWriter {
     unsampled: 0,
     breaker_skipped: 0,
   };
-  private readonly client: ClickHouseClient | null;
+  private readonly storage: TransparencyStorage | null;
   private readonly samplingBps: number;
   private readonly keyId: string;
   private readonly privateKey?: KeyObject;
@@ -201,7 +354,6 @@ export class TransparencyWriter {
   private breakerOpenLogged = false;
   private breakerClosedLogged = true;
   private warnedMissingKey = false;
-  private warnedNoClient = false;
   private lastFailureAt: number | null = null;
   private lastFailureStage: 'auctions' | 'candidates' | null = null;
   private lastFailureWasPartial = false;
@@ -216,7 +368,7 @@ export class TransparencyWriter {
   };
 
   constructor(options: TransparencyWriterOptions) {
-    this.client = options.client ?? null; // Optional: injected for tests; runtime path uses getClickHouseClient()
+    this.storage = options.storage ?? null;
     this.samplingBps = Math.max(0, Math.min(10000, options.samplingBps ?? DEFAULT_SAMPLE_BPS));
     this.keyId = options.keyId ?? 'dev-ed25519';
     this.privateKey = this.parsePrivateKey(options.privateKeySource);
@@ -246,8 +398,8 @@ export class TransparencyWriter {
       breakerOpen: createPromGauge('breaker_open', '1 when the transparency breaker is open, otherwise 0'),
       failureStreak: createPromGauge('failure_streak', 'Current transparency write consecutive failure streak'),
       breakerCooldownRemaining: createPromGauge('breaker_cooldown_remaining_ms', 'Time remaining before breaker allows writes again'),
-      lastFailureTimestamp: createPromGauge('last_failure_timestamp_ms', 'Epoch millis of the last ClickHouse failure'),
-      lastSuccessTimestamp: createPromGauge('last_success_timestamp_ms', 'Epoch millis of the last successful ClickHouse write'),
+      lastFailureTimestamp: createPromGauge('last_failure_timestamp_ms', 'Epoch millis of the last storage failure'),
+      lastSuccessTimestamp: createPromGauge('last_success_timestamp_ms', 'Epoch millis of the last successful transparency write'),
     };
     this.promGauges.breakerOpen?.set(0);
     this.promGauges.failureStreak?.set(0);
@@ -256,17 +408,8 @@ export class TransparencyWriter {
     this.promGauges.lastSuccessTimestamp?.set(0);
   }
 
-  private getClient(): ClickHouseClient | null {
-    if (this.client) return this.client;
-    try {
-      const clickhouse = getClickHouseClient();
-      return {
-        insert: async (args: ClickHouseInsertArgs) =>
-          clickhouse.insert({ table: args.table, values: args.values, format: args.format }),
-      };
-    } catch (_err) {
-      return null;
-    }
+  private getStorage(): TransparencyStorage {
+    return this.storage ?? postgresTransparencyStorage;
   }
 
   public async recordAuction(
@@ -282,14 +425,7 @@ export class TransparencyWriter {
       return;
     }
 
-    const client = this.getClient();
-    if (!client) {
-      if (!this.warnedNoClient) {
-        logger.warn('TransparencyWriter: ClickHouse client not available; transparency disabled');
-        this.warnedNoClient = true;
-      }
-      return;
-    }
+    const storage = this.getStorage();
 
     const publisherId = this.extractPublisherId(request);
     if (!publisherId) {
@@ -327,13 +463,7 @@ export class TransparencyWriter {
     auctionRow.integrity_signature = signature;
 
     try {
-      await this.insertWithRetry(() =>
-        client.insert({
-          table: 'auctions',
-          values: [auctionRow],
-          format: 'JSONEachRow',
-        })
-      );
+      await this.insertWithRetry(() => storage.insertAuctions([auctionRow]));
     } catch (error) {
       this.recordFailure(error, request.id, 'auctions');
       return;
@@ -341,13 +471,7 @@ export class TransparencyWriter {
 
     if (candidateRows.length > 0) {
       try {
-        await this.insertWithRetry(() =>
-          client.insert({
-            table: 'auction_candidates',
-            values: candidateRows,
-            format: 'JSONEachRow',
-          })
-        );
+        await this.insertWithRetry(() => storage.insertCandidates(candidateRows));
       } catch (error) {
         this.recordFailure(error, request.id, 'candidates', { partial: true });
         return;
@@ -494,8 +618,13 @@ export class TransparencyWriter {
     }
 
     const code = (error as { code?: string }).code;
-    if (typeof code === 'string' && TRANSIENT_ERROR_CODES.has(code)) {
-      return true;
+    if (typeof code === 'string') {
+      if (TRANSIENT_ERROR_CODES.has(code)) {
+        return true;
+      }
+      if (POSTGRES_TRANSIENT_SQLSTATES.has(code)) {
+        return true;
+      }
     }
 
     return false;
@@ -512,7 +641,7 @@ export class TransparencyWriter {
     this.consecutiveFailures += 1;
     this.promGauges.failureStreak?.set(this.consecutiveFailures);
 
-    const sanitizedError = this.sanitizeClickHouseError(error);
+    const sanitizedError = this.sanitizeStorageError(error);
     this.lastFailureAt = now;
     this.lastFailureStage = stage;
     this.lastFailureWasPartial = opts.partial ?? false;
@@ -538,7 +667,7 @@ export class TransparencyWriter {
     if (sanitizedError.message) {
       opsDetails.message = sanitizedError.message.slice(0, 240);
     }
-    emitOpsAlert('transparency_clickhouse_failure', sanitizedError.transient ? 'warning' : 'critical', opsDetails);
+    emitOpsAlert('transparency_storage_failure', sanitizedError.transient ? 'warning' : 'critical', opsDetails);
 
     this.updateBreakerCooldownGauge(now);
 
@@ -814,7 +943,7 @@ export class TransparencyWriter {
     this.promGauges.breakerCooldownRemaining?.set(this.getBreakerCooldownRemaining(now));
   }
 
-  private sanitizeClickHouseError(error: unknown): SanitizedErrorInfo {
+  private sanitizeStorageError(error: unknown): SanitizedErrorInfo {
     if (!error || typeof error !== 'object') {
       return {
         message: typeof error === 'string' ? error : 'Unknown transparency writer error',

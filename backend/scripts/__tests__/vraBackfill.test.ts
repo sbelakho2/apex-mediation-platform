@@ -50,6 +50,31 @@ describe('vraBackfill.js orchestrator (mocked)', () => {
     // We let fs write into the repo logs/ path (tests run in sandbox). No-op.
   }
 
+  async function runCli() {
+    const imported = await import(scriptPath);
+    const mod = imported as { main?: () => Promise<void>; default?: { main?: () => Promise<void> } };
+    const invoke = mod.main || mod.default?.main;
+    if (!invoke) {
+      throw new Error('CLI main export not found');
+    }
+    await invoke();
+  }
+
+  async function expectExit(code: number) {
+    const exitSpy = jest
+      .spyOn(process, 'exit')
+      .mockImplementation(((exitCode?: number) => { throw new Error(`EXIT ${exitCode ?? 0}`); }) as any);
+
+    try {
+      await runCli();
+      throw new Error('expected process.exit');
+    } catch (e: any) {
+      expect(String(e?.message ?? '')).toBe(`EXIT ${code}`);
+    } finally {
+      exitSpy.mockRestore();
+    }
+  }
+
   it('treats EXIT 0 from stage as success and exits OK', async () => {
     mockSpawnReturning(0);
     mockFsPassthrough();
@@ -65,16 +90,7 @@ describe('vraBackfill.js orchestrator (mocked)', () => {
       '--checkpoint', path.resolve(process.cwd(), 'logs', 'vra-backfill-test.json'),
     ];
 
-    // Intercept process.exit to capture exit code
-    const exitSpy = jest.spyOn(process, 'exit').mockImplementation(((code?: number) => { throw new Error(`EXIT ${code}`); }) as any);
-
-    try {
-      await import(scriptPath);
-    } catch (e: any) {
-      expect(String(e.message)).toBe('EXIT 0');
-    } finally {
-      exitSpy.mockRestore();
-    }
+    await expectExit(0);
   });
 
   it('treats EXIT 10 (WARNINGS) from stage as success for progression', async () => {
@@ -91,14 +107,6 @@ describe('vraBackfill.js orchestrator (mocked)', () => {
       '--checkpoint', path.resolve(process.cwd(), 'logs', 'vra-backfill-test.json'),
     ];
 
-    const exitSpy = jest.spyOn(process, 'exit').mockImplementation(((code?: number) => { throw new Error(`EXIT ${code}`); }) as any);
-
-    try {
-      await import(scriptPath);
-    } catch (e: any) {
-      expect(String(e.message)).toBe('EXIT 0');
-    } finally {
-      exitSpy.mockRestore();
-    }
+    await expectExit(0);
   });
 });

@@ -15,11 +15,11 @@ This is the single, self-contained runbook to take the system to production on D
   - Backend: `infrastructure/production/.env.backend.example` (requires `?sslmode=require`)
   - Console: `infrastructure/production/.env.console.example`
 - [X] Evidence tooling verified locally: `scripts/ops/local_health_snapshot.sh`, `scripts/ops/do_tls_snapshot.sh`
-- [X] Clone repo to `/opt/apex` on the droplet
-- [ ] Materialize `.env` files from templates (do not commit secrets)
-- [ ] Start stack HTTP-only: `docker compose -f infrastructure/docker-compose.prod.yml up -d` and verify `http://<ip>/health`
-- [ ] Issue certs with certbot, mount `/etc/letsencrypt`, enable `infrastructure/nginx/apexmediation.ssl.conf`, expose 443
-- [ ] From your laptop run: `npm run do:tls` to capture TLS/HSTS evidence
+- [X] Clone repo to `/home/deploy/` on the droplet
+- [X] Materialize `.env` files from templates (do not commit secrets)
+- [X] Start stack HTTP-only: `docker compose -f infrastructure/docker-compose.prod.yml up -d` and verify `http://<ip>/health`
+- [X] Issue certs with certbot, mount `/etc/letsencrypt`, enable `infrastructure/nginx/apexmediation.ssl.conf`, expose 443
+- [X] From your laptop run: `npm run do:tls` to capture TLS/HSTS evidence
 
 ## 0.0 Full Sandbox Test Matrix (All SDKs + Console + Website + Billing + VRA)
 

@@ -1,11 +1,52 @@
 /**
  * Reporting Service
- * 
- * Queries ClickHouse for analytics and reporting data
+ *
+ * Queries Postgres analytics fact tables for reporting data
  */
 
-import { executeQuery } from '../utils/clickhouse';
+import type { QueryResultRow } from 'pg';
+import { query as pgQuery } from '../utils/postgres';
 import logger from '../utils/logger';
+
+const REPORTING_SLOW_QUERY_MS = parseInt(process.env.REPORTING_SLOW_QUERY_MS || '200', 10);
+const REPORTING_CAPTURE_EXPLAIN = process.env.REPORTING_CAPTURE_EXPLAIN !== '0';
+
+const runQuery = async <T extends QueryResultRow = QueryResultRow>(
+  sql: string,
+  params: ReadonlyArray<unknown>,
+  label?: string
+): Promise<T[]> => {
+  const queryLabel = label ?? 'REPORTING';
+  const start = Date.now();
+  const { rows } = await pgQuery<T>(sql, params, { replica: true, label: queryLabel });
+  const durationMs = Date.now() - start;
+
+  if (durationMs > REPORTING_SLOW_QUERY_MS) {
+    logger.warn('Slow reporting query detected', { label: queryLabel, durationMs });
+    if (REPORTING_CAPTURE_EXPLAIN) {
+      try {
+        const explainSql = `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)\n${sql}`;
+        const plan = await pgQuery<{ 'QUERY PLAN': unknown }>(explainSql, params, {
+          replica: true,
+          label: `${queryLabel}_EXPLAIN`,
+        });
+        logger.warn('Reporting query plan', {
+          label: queryLabel,
+          durationMs,
+          plan: plan.rows?.[0]?.['QUERY PLAN'] ?? plan.rows,
+        });
+      } catch (planError) {
+        logger.error('Failed to capture reporting query plan', {
+          label: queryLabel,
+          durationMs,
+          error: (planError as Error).message,
+        });
+      }
+    }
+  }
+
+  return rows;
+};
 
 export interface RevenueStats {
   totalRevenue: number;
@@ -138,31 +179,23 @@ class ReportingServiceImpl implements ReportingService {
     endDate: Date
   ): Promise<RevenueStats> {
     try {
-      const query = `
+      const sql = `
         SELECT
-          sum(revenue_usd) as total_revenue,
-          countDistinct(impression_id) as total_impressions,
-          countIf(revenue_type = 'click') as total_clicks,
-          if(countDistinct(impression_id) > 0, (sum(revenue_usd) / countDistinct(impression_id)) * 1000, 0) as ecpm,
-          if(countDistinct(impression_id) > 0, (countIf(revenue_type = 'click') / countDistinct(impression_id)) * 100, 0) as ctr
-        FROM revenue_events
-        WHERE publisher_id = {publisherId:UUID}
-          AND timestamp >= {startDate:DateTime}
-          AND timestamp < {endDate:DateTime}
-          AND is_test_mode = 0
+          COALESCE(SUM(r.revenue_usd), 0) AS total_revenue,
+          COALESCE(COUNT(DISTINCT r.impression_id), 0) AS total_impressions,
+          COALESCE(COUNT(*) FILTER (WHERE r.revenue_type = 'click'), 0) AS total_clicks
+        FROM analytics_revenue_events r
+        WHERE r.publisher_id = $1
+          AND r.observed_at >= $2
+          AND r.observed_at < $3
+          AND r.is_test_mode = false
       `;
 
-      const result = await executeQuery<{
+      const result = await runQuery<{
         total_revenue: string;
         total_impressions: string;
         total_clicks: string;
-        ecpm: string;
-        ctr: string;
-      }>(query, {
-        publisherId,
-        startDate: startDate.toISOString(),
-        endDate: endDate.toISOString(),
-      });
+      }>(sql, [publisherId, startDate, endDate]);
 
       if (result.length === 0) {
         return {
@@ -179,8 +212,8 @@ class ReportingServiceImpl implements ReportingService {
       const totalImpressions = Number.parseInt(row.total_impressions);
       const totalClicks = Number.parseInt(row.total_clicks);
       const totalRevenue = Number.parseFloat(row.total_revenue);
-      const ecpm = Number.isFinite(Number.parseFloat(row.ecpm)) ? Number.parseFloat(row.ecpm) : 0;
-      const ctr = Number.isFinite(Number.parseFloat(row.ctr)) ? Number.parseFloat(row.ctr) : 0;
+      const ecpm = totalImpressions > 0 ? (totalRevenue / totalImpressions) * 1000 : 0;
+      const ctr = totalImpressions > 0 ? (totalClicks / totalImpressions) * 100 : 0;
 
       return {
         totalRevenue: Number.isFinite(totalRevenue) ? totalRevenue : 0,
@@ -207,42 +240,37 @@ class ReportingServiceImpl implements ReportingService {
     granularity: 'hour' | 'day' = 'day'
   ): Promise<TimeSeriesDataPoint[]> {
     try {
-      const timeFunction = granularity === 'hour' ? 'toStartOfHour' : 'toStartOfDay';
-      
-      const query = `
+      const bucket = granularity === 'hour' ? 'hour' : 'day';
+      const sql = `
         SELECT
-          ${timeFunction}(timestamp) as timestamp,
-          sum(revenue_usd) as revenue,
-          countDistinct(impression_id) as impressions,
-          countIf(revenue_type = 'click') as clicks,
-          if(countDistinct(impression_id) > 0, (sum(revenue_usd) / countDistinct(impression_id)) * 1000, 0) as ecpm
-        FROM revenue_events
-        WHERE publisher_id = {publisherId:UUID}
-          AND timestamp >= {startDate:DateTime}
-          AND timestamp < {endDate:DateTime}
-          AND is_test_mode = 0
-        GROUP BY timestamp
-        ORDER BY timestamp ASC
+          date_trunc('${bucket}', r.observed_at) AS bucket,
+          SUM(r.revenue_usd) AS revenue,
+          COUNT(DISTINCT r.impression_id) AS impressions,
+          COUNT(*) FILTER (WHERE r.revenue_type = 'click') AS clicks
+        FROM analytics_revenue_events r
+        WHERE r.publisher_id = $1
+          AND r.observed_at >= $2
+          AND r.observed_at < $3
+          AND r.is_test_mode = false
+        GROUP BY bucket
+        ORDER BY bucket ASC
       `;
 
-      const result = await executeQuery<{
-        timestamp: string;
+      const result = await runQuery<{
+        bucket: Date;
         revenue: string;
         impressions: string;
         clicks: string;
-        ecpm: string;
-      }>(query, {
-        publisherId,
-        startDate: startDate.toISOString(),
-        endDate: endDate.toISOString(),
-      });
+      }>(sql, [publisherId, startDate, endDate]);
 
       return result.map(row => ({
-        timestamp: row.timestamp,
+        timestamp: new Date(row.bucket).toISOString(),
         revenue: parseFloat(row.revenue),
         impressions: parseInt(row.impressions),
         clicks: parseInt(row.clicks),
-        ecpm: parseFloat(row.ecpm),
+        ecpm: parseInt(row.impressions) > 0
+          ? (parseFloat(row.revenue) / parseInt(row.impressions)) * 1000
+          : 0,
       }));
     } catch (error) {
       logger.error('Failed to get time series data', { publisherId, error });
@@ -259,40 +287,32 @@ class ReportingServiceImpl implements ReportingService {
     endDate: Date
   ): Promise<AdapterPerformance[]> {
     try {
-      const query = `
+      const sql = `
         SELECT
           r.adapter_id,
-          r.adapter_name,
-          sum(r.revenue_usd) as revenue,
-          count(DISTINCT r.impression_id) as impressions,
-          countIf(r.revenue_type = 'click') as clicks,
-          (sum(r.revenue_usd) / count(DISTINCT r.impression_id)) * 1000 as ecpm,
-          (countIf(r.revenue_type = 'click') / count(DISTINCT r.impression_id)) * 100 as ctr,
-          avg(i.latency_ms) as avg_latency
-        FROM revenue_events r
-        LEFT JOIN impressions i ON r.impression_id = i.event_id
-        WHERE r.publisher_id = {publisherId:UUID}
-          AND r.timestamp >= {startDate:DateTime}
-          AND r.timestamp < {endDate:DateTime}
-          AND r.is_test_mode = 0
-        GROUP BY r.adapter_id, r.adapter_name
+          COALESCE(r.adapter_name, 'unknown') AS adapter_name,
+          SUM(r.revenue_usd) AS revenue,
+          COUNT(DISTINCT r.impression_id) AS impressions,
+          COUNT(*) FILTER (WHERE r.revenue_type = 'click') AS clicks,
+          AVG(i.latency_ms) AS avg_latency
+        FROM analytics_revenue_events r
+        LEFT JOIN analytics_impressions i ON r.impression_id = i.event_id
+        WHERE r.publisher_id = $1
+          AND r.observed_at >= $2
+          AND r.observed_at < $3
+          AND r.is_test_mode = false
+        GROUP BY r.adapter_id, adapter_name
         ORDER BY revenue DESC
       `;
 
-      const result = await executeQuery<{
+      const result = await runQuery<{
         adapter_id: string;
         adapter_name: string;
         revenue: string;
         impressions: string;
         clicks: string;
-        ecpm: string;
-        ctr: string;
-        avg_latency: string;
-      }>(query, {
-        publisherId,
-        startDate: startDate.toISOString(),
-        endDate: endDate.toISOString(),
-      });
+        avg_latency: string | null;
+      }>(sql, [publisherId, startDate, endDate]);
 
       return result.map(row => ({
         adapterId: row.adapter_id,
@@ -300,9 +320,13 @@ class ReportingServiceImpl implements ReportingService {
         revenue: parseFloat(row.revenue),
         impressions: parseInt(row.impressions),
         clicks: parseInt(row.clicks),
-        ecpm: parseFloat(row.ecpm),
-        ctr: parseFloat(row.ctr),
-        avgLatency: parseFloat(row.avg_latency),
+        ecpm: parseInt(row.impressions) > 0
+          ? (parseFloat(row.revenue) / parseInt(row.impressions)) * 1000
+          : 0,
+        ctr: parseInt(row.impressions) > 0
+          ? (parseInt(row.clicks) / parseInt(row.impressions)) * 100
+          : 0,
+        avgLatency: row.avg_latency ? parseFloat(row.avg_latency) : 0,
       }));
     } catch (error) {
       logger.error('Failed to get adapter performance', { publisherId, error });
@@ -320,39 +344,34 @@ class ReportingServiceImpl implements ReportingService {
     limit: number = 10
   ): Promise<CountryBreakdown[]> {
     try {
-      const query = `
+      const sql = `
         SELECT
-          country_code,
-          sum(revenue_usd) as revenue,
-          count(DISTINCT impression_id) as impressions,
-          (sum(revenue_usd) / count(DISTINCT impression_id)) * 1000 as ecpm
-        FROM revenue_events
-        WHERE publisher_id = {publisherId:UUID}
-          AND timestamp >= {startDate:DateTime}
-          AND timestamp < {endDate:DateTime}
-          AND is_test_mode = 0
-        GROUP BY country_code
+          r.country_code,
+          SUM(r.revenue_usd) AS revenue,
+          COUNT(DISTINCT r.impression_id) AS impressions
+        FROM analytics_revenue_events r
+        WHERE r.publisher_id = $1
+          AND r.observed_at >= $2
+          AND r.observed_at < $3
+          AND r.is_test_mode = false
+        GROUP BY r.country_code
         ORDER BY revenue DESC
-        LIMIT {limit:UInt32}
+        LIMIT $4
       `;
 
-      const result = await executeQuery<{
+      const result = await runQuery<{
         country_code: string;
         revenue: string;
         impressions: string;
-        ecpm: string;
-      }>(query, {
-        publisherId,
-        startDate: startDate.toISOString(),
-        endDate: endDate.toISOString(),
-        limit,
-      });
+      }>(sql, [publisherId, startDate, endDate, limit]);
 
       return result.map(row => ({
         countryCode: row.country_code,
         revenue: parseFloat(row.revenue),
         impressions: parseInt(row.impressions),
-        ecpm: parseFloat(row.ecpm),
+        ecpm: parseInt(row.impressions) > 0
+          ? (parseFloat(row.revenue) / parseInt(row.impressions)) * 1000
+          : 0,
       }));
     } catch (error) {
       logger.error('Failed to get country breakdown', { publisherId, error });
@@ -375,39 +394,34 @@ class ReportingServiceImpl implements ReportingService {
     ecpm: number;
   }>> {
     try {
-      const query = `
+      const sql = `
         SELECT
-          app_id,
-          sum(revenue_usd) as revenue,
-          count(DISTINCT impression_id) as impressions,
-          (sum(revenue_usd) / count(DISTINCT impression_id)) * 1000 as ecpm
-        FROM revenue_events
-        WHERE publisher_id = {publisherId:UUID}
-          AND timestamp >= {startDate:DateTime}
-          AND timestamp < {endDate:DateTime}
-          AND is_test_mode = 0
-        GROUP BY app_id
+          r.app_id,
+          SUM(r.revenue_usd) AS revenue,
+          COUNT(DISTINCT r.impression_id) AS impressions
+        FROM analytics_revenue_events r
+        WHERE r.publisher_id = $1
+          AND r.observed_at >= $2
+          AND r.observed_at < $3
+          AND r.is_test_mode = false
+        GROUP BY r.app_id
         ORDER BY revenue DESC
-        LIMIT {limit:UInt32}
+        LIMIT $4
       `;
 
-      const result = await executeQuery<{
+      const result = await runQuery<{
         app_id: string;
         revenue: string;
         impressions: string;
-        ecpm: string;
-      }>(query, {
-        publisherId,
-        startDate: startDate.toISOString(),
-        endDate: endDate.toISOString(),
-        limit,
-      });
+      }>(sql, [publisherId, startDate, endDate, limit]);
 
       return result.map(row => ({
         appId: row.app_id,
         revenue: parseFloat(row.revenue),
         impressions: parseInt(row.impressions),
-        ecpm: parseFloat(row.ecpm),
+        ecpm: parseInt(row.impressions) > 0
+          ? (parseFloat(row.revenue) / parseInt(row.impressions)) * 1000
+          : 0,
       }));
     } catch (error) {
       logger.error('Failed to get top apps', { publisherId, error });
@@ -426,25 +440,22 @@ class ReportingServiceImpl implements ReportingService {
     try {
       const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
       
-      const query = `
+      const sql = `
         SELECT
-          sum(revenue_usd) as revenue,
-          count(DISTINCT impression_id) as impressions,
-          uniq(adapter_id) as active_adapters
-        FROM revenue_events
-        WHERE publisher_id = {publisherId:UUID}
-          AND timestamp >= {oneHourAgo:DateTime}
-          AND is_test_mode = 0
+          COALESCE(SUM(r.revenue_usd), 0) AS revenue,
+          COALESCE(COUNT(DISTINCT r.impression_id), 0) AS impressions,
+          COALESCE(COUNT(DISTINCT r.adapter_id), 0) AS active_adapters
+        FROM analytics_revenue_events r
+        WHERE r.publisher_id = $1
+          AND r.observed_at >= $2
+          AND r.is_test_mode = false
       `;
 
-      const result = await executeQuery<{
+      const result = await runQuery<{
         revenue: string;
         impressions: string;
         active_adapters: string;
-      }>(query, {
-        publisherId,
-        oneHourAgo: oneHourAgo.toISOString(),
-      });
+      }>(sql, [publisherId, oneHourAgo]);
 
       if (result.length === 0) {
         return {
@@ -473,45 +484,44 @@ class ReportingServiceImpl implements ReportingService {
     try {
       const last24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
       
-      const query = `
+      const sql = `
         WITH adapter_stats AS (
           SELECT
             adapter_id,
-            adapter_name,
-            countIf(status = 'success') as success_count,
-            countIf(status = 'error') as error_count,
-            count(*) as total_requests,
-            avg(latency_ms) as avg_latency,
-            countIf(filled = 1) / count(*) * 100 as fill_rate,
-            sum(revenue_usd) as revenue
-          FROM impressions
-          WHERE publisher_id = {publisherId:UUID}
-            AND timestamp >= {last24h:DateTime}
+            COALESCE(adapter_name, 'unknown') AS adapter_name,
+            COUNT(*) AS total_requests,
+            COUNT(*) FILTER (WHERE status = 'success' OR filled IS TRUE) AS success_count,
+            COUNT(*) FILTER (WHERE status = 'error') AS error_count,
+            AVG(latency_ms) AS avg_latency,
+            100.0 * COUNT(*) FILTER (WHERE filled IS TRUE) / NULLIF(COUNT(*), 0) AS fill_rate,
+            SUM(revenue_usd) AS revenue
+          FROM analytics_impressions
+          WHERE publisher_id = $1
+            AND observed_at >= $2
           GROUP BY adapter_id, adapter_name
         ),
         total_revenue AS (
-          SELECT sum(revenue) as total FROM adapter_stats
+          SELECT COALESCE(SUM(revenue), 0) AS total FROM adapter_stats
         ),
         adapter_errors AS (
           SELECT
             adapter_id,
-            count(*) as error_count_24h,
-            argMax(error_message, timestamp) as last_issue
-          FROM sdk_telemetry
-          WHERE publisher_id = {publisherId:UUID}
-            AND timestamp >= {last24h:DateTime}
-            AND event_type = 'error'
+            COUNT(*) AS error_count_24h,
+            MAX(message) FILTER (WHERE event_type = 'error') AS last_issue
+          FROM analytics_sdk_telemetry
+          WHERE publisher_id = $1
+            AND observed_at >= $2
           GROUP BY adapter_id
         )
         SELECT
           s.adapter_id,
           s.adapter_name,
-          s.success_count / s.total_requests * 100 as uptime,
-          s.error_count / s.total_requests as error_rate,
-          s.avg_latency,
-          s.fill_rate,
-          s.revenue / t.total * 100 as revenue_share,
-          COALESCE(e.error_count_24h, 0) as issues_last_24h,
+          COALESCE(100.0 * s.success_count / NULLIF(s.total_requests, 0), 0) AS uptime,
+          COALESCE(100.0 * s.error_count / NULLIF(s.total_requests, 0), 0) AS error_rate,
+          COALESCE(s.avg_latency, 0) AS avg_latency,
+          COALESCE(s.fill_rate, 0) AS fill_rate,
+          CASE WHEN t.total = 0 THEN 0 ELSE 100.0 * s.revenue / t.total END AS revenue_share,
+          COALESCE(e.error_count_24h, 0) AS issues_last_24h,
           e.last_issue
         FROM adapter_stats s
         CROSS JOIN total_revenue t
@@ -519,26 +529,23 @@ class ReportingServiceImpl implements ReportingService {
         ORDER BY revenue_share DESC
       `;
 
-      const result = await executeQuery<{
+      const result = await runQuery<{
         adapter_id: string;
         adapter_name: string;
         uptime: string;
         error_rate: string;
-        avg_latency: string;
-        fill_rate: string;
+        avg_latency: string | null;
+        fill_rate: string | null;
         revenue_share: string;
         issues_last_24h: string;
         last_issue: string | null;
-      }>(query, {
-        publisherId,
-        last24h: last24h.toISOString(),
-      });
+      }>(sql, [publisherId, last24h]);
 
       return result.map(row => {
         const uptime = parseFloat(row.uptime);
         const errorRate = parseFloat(row.error_rate);
-        const fillRate = parseFloat(row.fill_rate);
-        const avgLatency = parseFloat(row.avg_latency);
+        const fillRate = row.fill_rate ? parseFloat(row.fill_rate) : 0;
+        const avgLatency = row.avg_latency ? parseFloat(row.avg_latency) : 0;
         
         // Calculate health score (0-100)
         let healthScore = 100;
@@ -584,23 +591,23 @@ class ReportingServiceImpl implements ReportingService {
     endDate: Date
   ): Promise<FraudMetrics> {
     try {
-      const query = `
+      const sql = `
         SELECT
-          count(*) as total_requests,
-          countIf(blocked = 1) as fraud_requests,
-          countIf(blocked = 1) / count(*) * 100 as fraud_rate,
-          countIf(fraud_type = 'givt') as givt_detections,
-          countIf(fraud_type = 'sivt') as sivt_detections,
-          countIf(fraud_type = 'ml_fraud') as ml_detections,
-          countIf(fraud_type = 'anomaly') as anomaly_detections,
-          sum(revenue_blocked_cents) / 100.0 as blocked_revenue
-        FROM fraud_events
-        WHERE publisher_id = {publisherId:UUID}
-          AND timestamp >= {startDate:DateTime}
-          AND timestamp < {endDate:DateTime}
+          COUNT(*) AS total_requests,
+          COUNT(*) FILTER (WHERE blocked) AS fraud_requests,
+          100.0 * COUNT(*) FILTER (WHERE blocked) / NULLIF(COUNT(*), 0) AS fraud_rate,
+          COUNT(*) FILTER (WHERE fraud_type = 'givt') AS givt_detections,
+          COUNT(*) FILTER (WHERE fraud_type = 'sivt') AS sivt_detections,
+          COUNT(*) FILTER (WHERE fraud_type = 'ml_fraud') AS ml_detections,
+          COUNT(*) FILTER (WHERE fraud_type = 'anomaly') AS anomaly_detections,
+          COALESCE(SUM(revenue_blocked_cents), 0) / 100.0 AS blocked_revenue
+        FROM analytics_fraud_events
+        WHERE publisher_id = $1
+          AND observed_at >= $2
+          AND observed_at < $3
       `;
 
-      const result = await executeQuery<{
+      const result = await runQuery<{
         total_requests: string;
         fraud_requests: string;
         fraud_rate: string;
@@ -609,35 +616,26 @@ class ReportingServiceImpl implements ReportingService {
         ml_detections: string;
         anomaly_detections: string;
         blocked_revenue: string;
-      }>(query, {
-        publisherId,
-        startDate: startDate.toISOString(),
-        endDate: endDate.toISOString(),
-      });
+      }>(sql, [publisherId, startDate, endDate]);
 
-      // Get top fraud types
-      const typesQuery = `
+      const typesSql = `
         SELECT
-          detection_method,
-          count(*) as count
-        FROM fraud_events
-        WHERE publisher_id = {publisherId:UUID}
-          AND timestamp >= {startDate:DateTime}
-          AND timestamp < {endDate:DateTime}
-          AND blocked = 1
-        GROUP BY detection_method
+          fraud_type,
+          COUNT(*) AS count
+        FROM analytics_fraud_events
+        WHERE publisher_id = $1
+          AND observed_at >= $2
+          AND observed_at < $3
+          AND blocked
+        GROUP BY fraud_type
         ORDER BY count DESC
         LIMIT 10
       `;
 
-      const typesResult = await executeQuery<{
-        detection_method: string;
+      const typesResult = await runQuery<{
+        fraud_type: string;
         count: string;
-      }>(typesQuery, {
-        publisherId,
-        startDate: startDate.toISOString(),
-        endDate: endDate.toISOString(),
-      });
+      }>(typesSql, [publisherId, startDate, endDate]);
 
       if (result.length === 0) {
         return {
@@ -664,7 +662,7 @@ class ReportingServiceImpl implements ReportingService {
         anomalyDetections: parseInt(row.anomaly_detections),
         blockedRevenue: parseFloat(row.blocked_revenue),
         topFraudTypes: typesResult.map(t => ({
-          type: t.detection_method,
+          type: t.fraud_type,
           count: parseInt(t.count),
         })),
       };
@@ -683,51 +681,67 @@ class ReportingServiceImpl implements ReportingService {
     endDate: Date
   ): Promise<QualityMetrics> {
     try {
-      const query = `
+      const sql = `
         WITH impression_quality AS (
           SELECT
-            countIf(viewable = 1) / count(*) * 100 as viewability_rate,
-            countIf(completed = 1) / countIf(ad_format = 'video') * 100 as completion_rate,
-            countIf(clicked = 1) / count(*) * 100 as ctr,
-            countIf(invalid_traffic = 1) / count(*) * 100 as ivt_rate
-          FROM impressions
-          WHERE publisher_id = {publisherId:UUID}
-            AND timestamp >= {startDate:DateTime}
-            AND timestamp < {endDate:DateTime}
+            COUNT(*) AS total_impressions,
+            COUNT(*) FILTER (WHERE viewable) AS viewable_impressions,
+            COUNT(*) FILTER (WHERE measurable) AS measurable_impressions
+          FROM analytics_impressions
+          WHERE publisher_id = $1
+            AND observed_at >= $2
+            AND observed_at < $3
         ),
-        quality_scores AS (
-          SELECT
-            avg(brand_safety_score) as brand_safety,
-            avg(user_experience_score) as user_experience
-          FROM quality_events
-          WHERE publisher_id = {publisherId:UUID}
-            AND timestamp >= {startDate:DateTime}
-            AND timestamp < {endDate:DateTime}
+        click_metrics AS (
+          SELECT COUNT(*) AS clicks
+          FROM analytics_clicks
+          WHERE publisher_id = $1
+            AND observed_at >= $2
+            AND observed_at < $3
         ),
-        sdk_health AS (
+        fraud_metrics AS (
           SELECT
-            countIf(event_type = 'anr') / count(DISTINCT session_id) * 100 as anr_rate,
-            countIf(event_type = 'crash') / count(DISTINCT session_id) * 100 as crash_rate
-          FROM sdk_telemetry
-          WHERE publisher_id = {publisherId:UUID}
-            AND timestamp >= {startDate:DateTime}
-            AND timestamp < {endDate:DateTime}
+            COUNT(*) AS total_events,
+            COUNT(*) FILTER (WHERE blocked) AS blocked_events
+          FROM analytics_fraud_events
+          WHERE publisher_id = $1
+            AND observed_at >= $2
+            AND observed_at < $3
+        ),
+        brand_safety AS (
+          SELECT AVG(risk_score) AS avg_risk_score
+          FROM analytics_creative_scans
+          WHERE publisher_id = $1
+            AND observed_at >= $2
+            AND observed_at < $3
+        ),
+        telemetry AS (
+          SELECT
+            COUNT(*) AS total_events,
+            COUNT(*) FILTER (WHERE event_type = 'anr') AS anr_events,
+            COUNT(*) FILTER (WHERE event_type = 'crash') AS crash_events
+          FROM analytics_sdk_telemetry
+          WHERE publisher_id = $1
+            AND observed_at >= $2
+            AND observed_at < $3
         )
         SELECT
-          i.viewability_rate,
-          i.completion_rate,
-          i.ctr,
-          i.ivt_rate,
-          COALESCE(q.brand_safety, 100) as brand_safety,
-          COALESCE(q.user_experience, 100) as user_experience,
-          COALESCE(s.anr_rate, 0) as anr_rate,
-          COALESCE(s.crash_rate, 0) as crash_rate
-        FROM impression_quality i
-        CROSS JOIN quality_scores q
-        CROSS JOIN sdk_health s
+          COALESCE(100.0 * iq.viewable_impressions / NULLIF(iq.total_impressions, 0), 0) AS viewability_rate,
+          0::double precision AS completion_rate,
+          COALESCE(100.0 * cm.clicks / NULLIF(iq.total_impressions, 0), 0) AS ctr,
+          COALESCE(100.0 * fm.blocked_events / NULLIF(iq.total_impressions, 0), 0) AS ivt_rate,
+          COALESCE(100 - bs.avg_risk_score, 100) AS brand_safety,
+          100::double precision AS user_experience,
+          COALESCE(100.0 * t.anr_events / NULLIF(t.total_events, 0), 0) AS anr_rate,
+          COALESCE(100.0 * t.crash_events / NULLIF(t.total_events, 0), 0) AS crash_rate
+        FROM impression_quality iq
+        LEFT JOIN click_metrics cm ON TRUE
+        LEFT JOIN fraud_metrics fm ON TRUE
+        LEFT JOIN brand_safety bs ON TRUE
+        LEFT JOIN telemetry t ON TRUE
       `;
 
-      const result = await executeQuery<{
+      const result = await runQuery<{
         viewability_rate: string;
         completion_rate: string;
         ctr: string;
@@ -736,11 +750,7 @@ class ReportingServiceImpl implements ReportingService {
         user_experience: string;
         anr_rate: string;
         crash_rate: string;
-      }>(query, {
-        publisherId,
-        startDate: startDate.toISOString(),
-        endDate: endDate.toISOString(),
-      });
+      }>(sql, [publisherId, startDate, endDate]);
 
       if (result.length === 0) {
         return {
@@ -785,27 +795,23 @@ class ReportingServiceImpl implements ReportingService {
       const startDate = new Date(Date.now() - lookbackDays * 24 * 60 * 60 * 1000);
       const endDate = new Date();
 
-      const query = `
+      const sql = `
         SELECT
-          toDate(timestamp) as date,
-          sum(revenue_usd) as revenue
-        FROM revenue_events
-        WHERE publisher_id = {publisherId:UUID}
-          AND timestamp >= {startDate:DateTime}
-          AND timestamp < {endDate:DateTime}
-          AND is_test_mode = 0
-        GROUP BY date
-        ORDER BY date ASC
+          date_trunc('day', observed_at) AS bucket,
+          SUM(revenue_usd) AS revenue
+        FROM analytics_revenue_events
+        WHERE publisher_id = $1
+          AND observed_at >= $2
+          AND observed_at < $3
+          AND is_test_mode = false
+        GROUP BY bucket
+        ORDER BY bucket ASC
       `;
 
-      const result = await executeQuery<{
-        date: string;
+      const result = await runQuery<{
+        bucket: Date;
         revenue: string;
-      }>(query, {
-        publisherId,
-        startDate: startDate.toISOString(),
-        endDate: endDate.toISOString(),
-      });
+      }>(sql, [publisherId, startDate, endDate]);
 
       if (result.length < 7) {
         // Not enough data for projection
@@ -868,42 +874,43 @@ class ReportingServiceImpl implements ReportingService {
     endDate: Date
   ): Promise<CohortMetrics[]> {
     try {
-      const query = `
-        WITH user_installs AS (
+      const sql = `
+        WITH user_first_impressions AS (
           SELECT
             user_id,
-            toDate(min(timestamp)) as install_date
-          FROM user_events
-          WHERE publisher_id = {publisherId:UUID}
-            AND event_type = 'install'
-            AND timestamp >= {startDate:DateTime}
-            AND timestamp < {endDate:DateTime}
+            MIN(observed_at)::date AS cohort_date
+          FROM analytics_impressions
+          WHERE publisher_id = $1
+            AND observed_at >= $2
+            AND observed_at < $3
+            AND user_id IS NOT NULL
           GROUP BY user_id
         ),
-        user_revenue AS (
+        revenue_by_user AS (
           SELECT
-            r.user_id,
-            i.install_date,
-            dateDiff('day', i.install_date, toDate(r.timestamp)) as days_since_install,
-            sum(r.revenue_usd) as revenue
-          FROM revenue_events r
-          INNER JOIN user_installs i ON r.user_id = i.user_id
-          WHERE r.publisher_id = {publisherId:UUID}
-          GROUP BY r.user_id, i.install_date, days_since_install
+            i.user_id,
+            u.cohort_date,
+            DATE_PART('day', r.observed_at::date - u.cohort_date) AS days_since_cohort,
+            SUM(r.revenue_usd) AS revenue
+          FROM analytics_revenue_events r
+          INNER JOIN analytics_impressions i ON r.impression_id = i.event_id
+          INNER JOIN user_first_impressions u ON u.user_id = i.user_id
+          WHERE r.publisher_id = $1
+          GROUP BY i.user_id, u.cohort_date, days_since_cohort
         ),
         cohort_stats AS (
           SELECT
-            install_date as cohort_date,
-            count(DISTINCT user_id) as user_count,
-            sumIf(revenue, days_since_install = 0) as day0_revenue,
-            sumIf(revenue, days_since_install = 1) as day1_revenue,
-            sumIf(revenue, days_since_install <= 7) as day7_revenue,
-            sumIf(revenue, days_since_install <= 30) as day30_revenue,
-            uniqIf(user_id, days_since_install >= 1) / count(DISTINCT user_id) * 100 as retention_day1,
-            uniqIf(user_id, days_since_install >= 7) / count(DISTINCT user_id) * 100 as retention_day7,
-            uniqIf(user_id, days_since_install >= 30) / count(DISTINCT user_id) * 100 as retention_day30
-          FROM user_revenue
-          GROUP BY install_date
+            cohort_date,
+            COUNT(DISTINCT user_id) AS user_count,
+            SUM(CASE WHEN days_since_cohort = 0 THEN revenue ELSE 0 END) AS day0_revenue,
+            SUM(CASE WHEN days_since_cohort = 1 THEN revenue ELSE 0 END) AS day1_revenue,
+            SUM(CASE WHEN days_since_cohort BETWEEN 0 AND 7 THEN revenue ELSE 0 END) AS day7_revenue,
+            SUM(CASE WHEN days_since_cohort BETWEEN 0 AND 30 THEN revenue ELSE 0 END) AS day30_revenue,
+            COUNT(DISTINCT CASE WHEN days_since_cohort >= 1 THEN user_id END) * 100.0 / NULLIF(COUNT(DISTINCT user_id), 0) AS retention_day1,
+            COUNT(DISTINCT CASE WHEN days_since_cohort >= 7 THEN user_id END) * 100.0 / NULLIF(COUNT(DISTINCT user_id), 0) AS retention_day7,
+            COUNT(DISTINCT CASE WHEN days_since_cohort >= 30 THEN user_id END) * 100.0 / NULLIF(COUNT(DISTINCT user_id), 0) AS retention_day30
+          FROM revenue_by_user
+          GROUP BY cohort_date
         )
         SELECT
           cohort_date,
@@ -912,18 +919,18 @@ class ReportingServiceImpl implements ReportingService {
           day1_revenue,
           day7_revenue,
           day30_revenue,
-          day30_revenue / user_count as ltv,
+          CASE WHEN user_count = 0 THEN 0 ELSE day30_revenue / user_count END AS ltv,
           retention_day1,
           retention_day7,
           retention_day30,
-          day30_revenue / user_count as arpu
+          CASE WHEN user_count = 0 THEN 0 ELSE day30_revenue / user_count END AS arpu
         FROM cohort_stats
-        WHERE user_count > 100  -- Only cohorts with significant sample size
+        WHERE user_count >= 100
         ORDER BY cohort_date DESC
       `;
 
-      const result = await executeQuery<{
-        cohort_date: string;
+      const result = await runQuery<{
+        cohort_date: Date;
         user_count: string;
         day0_revenue: string;
         day1_revenue: string;
@@ -934,14 +941,10 @@ class ReportingServiceImpl implements ReportingService {
         retention_day7: string;
         retention_day30: string;
         arpu: string;
-      }>(query, {
-        publisherId,
-        startDate: startDate.toISOString(),
-        endDate: endDate.toISOString(),
-      });
+      }>(sql, [publisherId, startDate, endDate]);
 
       return result.map(row => ({
-        cohortDate: row.cohort_date,
+        cohortDate: new Date(row.cohort_date).toISOString().split('T')[0],
         userCount: parseInt(row.user_count),
         day0Revenue: parseFloat(row.day0_revenue),
         day1Revenue: parseFloat(row.day1_revenue),
@@ -970,42 +973,34 @@ class ReportingServiceImpl implements ReportingService {
       const startTime = new Date(Date.now() - hours * 60 * 60 * 1000);
       const lookbackTime = new Date(Date.now() - (hours + 168) * 60 * 60 * 1000); // Additional 7 days for baseline
 
-      // Get hourly metrics with statistical baseline
-      const query = `
+      const sql = `
         WITH hourly_metrics AS (
           SELECT
-            toStartOfHour(timestamp) as hour,
-            sum(revenue_usd) as revenue,
-            count(*) as requests,
-            countIf(status = 'error') / count(*) * 100 as error_rate,
-            avg(latency_ms) as avg_latency
-          FROM impressions
-          WHERE publisher_id = {publisherId:UUID}
-            AND timestamp >= {lookbackTime:DateTime}
+            date_trunc('hour', observed_at) AS hour,
+            SUM(revenue_usd) AS revenue,
+            COUNT(*) AS requests,
+            100.0 * COUNT(*) FILTER (WHERE status = 'error') / NULLIF(COUNT(*), 0) AS error_rate,
+            AVG(latency_ms) AS avg_latency
+          FROM analytics_impressions
+          WHERE publisher_id = $1
+            AND observed_at >= $2
           GROUP BY hour
         ),
         baseline_stats AS (
           SELECT
-            avg(revenue) as mean_revenue,
-            stddevPop(revenue) as std_revenue,
-            avg(requests) as mean_requests,
-            stddevPop(requests) as std_requests,
-            avg(error_rate) as mean_error_rate,
-            stddevPop(error_rate) as std_error_rate,
-            avg(avg_latency) as mean_latency,
-            stddevPop(avg_latency) as std_latency
+            AVG(revenue) AS mean_revenue,
+            STDDEV_POP(revenue) AS std_revenue,
+            AVG(requests) AS mean_requests,
+            STDDEV_POP(requests) AS std_requests,
+            AVG(error_rate) AS mean_error_rate,
+            STDDEV_POP(error_rate) AS std_error_rate,
+            AVG(avg_latency) AS mean_latency,
+            STDDEV_POP(avg_latency) AS std_latency
           FROM hourly_metrics
-          WHERE hour < {startTime:DateTime}
+          WHERE hour < $3
         ),
         recent_metrics AS (
-          SELECT
-            hour,
-            revenue,
-            requests,
-            error_rate,
-            avg_latency
-          FROM hourly_metrics
-          WHERE hour >= {startTime:DateTime}
+          SELECT * FROM hourly_metrics WHERE hour >= $3
         )
         SELECT
           r.hour,
@@ -1021,44 +1016,47 @@ class ReportingServiceImpl implements ReportingService {
           b.std_error_rate,
           b.mean_latency,
           b.std_latency,
-          abs(r.revenue - b.mean_revenue) / nullIf(b.std_revenue, 0) as revenue_z_score,
-          abs(r.requests - b.mean_requests) / nullIf(b.std_requests, 0) as requests_z_score,
-          abs(r.error_rate - b.mean_error_rate) / nullIf(b.std_error_rate, 0) as error_z_score,
-          abs(r.avg_latency - b.mean_latency) / nullIf(b.std_latency, 0) as latency_z_score
+          ABS(r.revenue - b.mean_revenue) / NULLIF(b.std_revenue, 0) AS revenue_z_score,
+          ABS(r.requests - b.mean_requests) / NULLIF(b.std_requests, 0) AS requests_z_score,
+          ABS(r.error_rate - b.mean_error_rate) / NULLIF(b.std_error_rate, 0) AS error_z_score,
+          ABS(r.avg_latency - b.mean_latency) / NULLIF(b.std_latency, 0) AS latency_z_score
         FROM recent_metrics r
         CROSS JOIN baseline_stats b
-        WHERE revenue_z_score > 2.5 OR requests_z_score > 2.5 OR error_z_score > 3 OR latency_z_score > 3
+        WHERE (ABS(r.revenue - b.mean_revenue) / NULLIF(b.std_revenue, 0)) > 2.5
+           OR (ABS(r.requests - b.mean_requests) / NULLIF(b.std_requests, 0)) > 2.5
+           OR (ABS(r.error_rate - b.mean_error_rate) / NULLIF(b.std_error_rate, 0)) > 3
+           OR (ABS(r.avg_latency - b.mean_latency) / NULLIF(b.std_latency, 0)) > 3
         ORDER BY r.hour DESC
       `;
 
-      const result = await executeQuery<{
-        hour: string;
+      const result = await runQuery<{
+        hour: Date;
         revenue: string;
         requests: string;
         error_rate: string;
         avg_latency: string;
         mean_revenue: string;
-        std_revenue: string;
+        std_revenue: string | null;
         mean_requests: string;
+        std_requests: string | null;
         mean_error_rate: string;
+        std_error_rate: string | null;
         mean_latency: string;
-        revenue_z_score: string;
-        requests_z_score: string;
-        error_z_score: string;
-        latency_z_score: string;
-      }>(query, {
-        publisherId,
-        startTime: startTime.toISOString(),
-        lookbackTime: lookbackTime.toISOString(),
-      });
+        std_latency: string | null;
+        revenue_z_score: string | null;
+        requests_z_score: string | null;
+        error_z_score: string | null;
+        latency_z_score: string | null;
+      }>(sql, [publisherId, lookbackTime, startTime]);
 
       const anomalies: AnomalyAlert[] = [];
 
       result.forEach((row, index) => {
-        const revenueZScore = parseFloat(row.revenue_z_score) || 0;
-        const requestsZScore = parseFloat(row.requests_z_score) || 0;
-        const errorZScore = parseFloat(row.error_z_score) || 0;
-        const latencyZScore = parseFloat(row.latency_z_score) || 0;
+        const hourIso = new Date(row.hour).toISOString();
+        const revenueZScore = row.revenue_z_score ? parseFloat(row.revenue_z_score) : 0;
+        const requestsZScore = row.requests_z_score ? parseFloat(row.requests_z_score) : 0;
+        const errorZScore = row.error_z_score ? parseFloat(row.error_z_score) : 0;
+        const latencyZScore = row.latency_z_score ? parseFloat(row.latency_z_score) : 0;
 
         // Revenue anomaly
         if (revenueZScore > 2.5) {
@@ -1067,8 +1065,8 @@ class ReportingServiceImpl implements ReportingService {
           const deviation = ((currentRevenue - expectedRevenue) / expectedRevenue) * 100;
 
           anomalies.push({
-            id: `revenue_${row.hour}_${index}`,
-            timestamp: row.hour,
+            id: `revenue_${hourIso}_${index}`,
+            timestamp: hourIso,
             type: deviation < 0 ? 'revenue_drop' : 'traffic_anomaly',
             severity: revenueZScore > 4 ? 'critical' : revenueZScore > 3 ? 'high' : 'medium',
             metric: 'revenue',
@@ -1086,8 +1084,8 @@ class ReportingServiceImpl implements ReportingService {
           const deviation = ((currentRequests - expectedRequests) / expectedRequests) * 100;
 
           anomalies.push({
-            id: `traffic_${row.hour}_${index}`,
-            timestamp: row.hour,
+            id: `traffic_${hourIso}_${index}`,
+            timestamp: hourIso,
             type: 'traffic_anomaly',
             severity: requestsZScore > 4 ? 'critical' : requestsZScore > 3 ? 'high' : 'medium',
             metric: 'requests',
@@ -1105,8 +1103,8 @@ class ReportingServiceImpl implements ReportingService {
           const deviation = currentErrorRate - expectedErrorRate;
 
           anomalies.push({
-            id: `error_${row.hour}_${index}`,
-            timestamp: row.hour,
+            id: `error_${hourIso}_${index}`,
+            timestamp: hourIso,
             type: 'performance_degradation',
             severity: errorZScore > 5 ? 'critical' : errorZScore > 4 ? 'high' : 'medium',
             metric: 'error_rate',
@@ -1124,8 +1122,8 @@ class ReportingServiceImpl implements ReportingService {
           const deviation = ((currentLatency - expectedLatency) / expectedLatency) * 100;
 
           anomalies.push({
-            id: `latency_${row.hour}_${index}`,
-            timestamp: row.hour,
+            id: `latency_${hourIso}_${index}`,
+            timestamp: hourIso,
             type: 'performance_degradation',
             severity: latencyZScore > 5 ? 'critical' : latencyZScore > 4 ? 'high' : 'medium',
             metric: 'latency',
@@ -1138,35 +1136,33 @@ class ReportingServiceImpl implements ReportingService {
       });
 
       // Check for fraud spikes
-      const fraudQuery = `
+      const fraudSql = `
         SELECT
-          toStartOfHour(timestamp) as hour,
-          countIf(blocked = 1) as fraud_count,
-          count(*) as total_count,
-          countIf(blocked = 1) / count(*) * 100 as fraud_rate
-        FROM fraud_events
-        WHERE publisher_id = {publisherId:UUID}
-          AND timestamp >= {startTime:DateTime}
+          date_trunc('hour', observed_at) AS hour,
+          COUNT(*) FILTER (WHERE blocked) AS fraud_count,
+          COUNT(*) AS total_count,
+          100.0 * COUNT(*) FILTER (WHERE blocked) / NULLIF(COUNT(*), 0) AS fraud_rate
+        FROM analytics_fraud_events
+        WHERE publisher_id = $1
+          AND observed_at >= $2
         GROUP BY hour
-        HAVING fraud_rate > 5  -- Alert if fraud rate > 5%
+        HAVING (100.0 * COUNT(*) FILTER (WHERE blocked) / NULLIF(COUNT(*), 0)) > 5
         ORDER BY hour DESC
       `;
 
-      const fraudResult = await executeQuery<{
-        hour: string;
+      const fraudResult = await runQuery<{
+        hour: Date;
         fraud_count: string;
         total_count: string;
         fraud_rate: string;
-      }>(fraudQuery, {
-        publisherId,
-        startTime: startTime.toISOString(),
-      });
+      }>(fraudSql, [publisherId, startTime]);
 
       fraudResult.forEach((row, index) => {
         const fraudRate = parseFloat(row.fraud_rate);
+        const hourIso = new Date(row.hour).toISOString();
         anomalies.push({
-          id: `fraud_${row.hour}_${index}`,
-          timestamp: row.hour,
+          id: `fraud_${hourIso}_${index}`,
+          timestamp: hourIso,
           type: 'fraud_spike',
           severity: fraudRate > 15 ? 'critical' : fraudRate > 10 ? 'high' : 'medium',
           metric: 'fraud_rate',

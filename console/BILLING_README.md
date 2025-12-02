@@ -9,7 +9,7 @@ The billing module provides usage tracking, invoice management, and reconciliati
 ## Feature Parity Snapshot — 2025-11-16
 | Capability | Surface | Status | Notes |
 | --- | --- | --- | --- |
-| Usage tracking & overage detection | `/billing/usage`, `GET /api/v1/billing/usage/current` | ✅ Shipped | Data sourced from ClickHouse with hourly cache invalidation. |
+| Usage tracking & overage detection | `/billing/usage`, `GET /api/v1/billing/usage/current` | ✅ Shipped | Data sourced from Postgres analytics replicas with hourly cache invalidation. |
 | Invoice management & PDFs | `/billing/invoices`, `/billing/invoices/[id]`, `GET /api/v1/billing/invoices*` | ✅ Shipped | Detail pages + PDF downloads in console, Stripe webhook sync in backend. |
 | Admin reconciliation | `/admin/billing`, `POST /api/v1/billing/reconcile` | ✅ Shipped | Requires admin role and acknowledgement prompt. |
 | Migration Assistant (beta) | `/billing/settings` (flag `NEXT_PUBLIC_ENABLE_BILLING_MIGRATION`), `POST /api/v1/billing/migration/request` | ✅ Pilot | Sends sandbox/production migration context to ops with request IDs and char-count validation. |
@@ -257,7 +257,7 @@ npm test -- integration/billing.test.ts
 - Check `/api/v1/meta/features` returns `billingEnabled: true`
 
 ### Usage data not updating
-- Verify ClickHouse connection for real-time analytics
+- Verify Postgres analytics replica connectivity (DATABASE_URL + REPLICA_DATABASE_URL)
 - Check `usage_records` table for recent entries
 - Review cron job logs for usage sync tasks
 

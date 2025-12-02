@@ -33,14 +33,6 @@ jest.mock('redis', () => ({
   })),
 }));
 
-jest.mock('@clickhouse/client', () => ({
-  createClient: jest.fn(() => ({
-    query: jest.fn(),
-    insert: jest.fn(),
-    close: jest.fn(),
-  })),
-}));
-
 jest.mock('stripe', () => {
   return jest.fn().mockImplementation(() => ({
     billing: { meterEvents: { create: jest.fn() } },

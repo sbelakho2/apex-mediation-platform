@@ -62,14 +62,14 @@ groups:
           description: "Reconcile is emitting more than 50 deltas per 5 minutes across kinds. Check the Reconcile & Deltas dashboard."
           runbook_url: "/-/blob/main/docs/Internal/VRA/RUNBOOK.md#reconcile"
 
-      # ClickHouse fallbacks for VRA operations elevating
-      - alert: VRA_ClickHouse_Fallbacks
-        expr: sum(rate(vra_clickhouse_fallback_total[5m])) > 0
+      # Analytics read-model failures for VRA operations elevating
+      - alert: VRA_Query_Failures
+        expr: sum(rate(vra_query_fail_total[5m])) > 0
         for: 15m
         labels:
           severity: warning
           service: vra
         annotations:
-          summary: "VRA ClickHouse fallbacks detected"
-          description: "VRA operations are falling back to empty results for >15m. Inspect ClickHouse availability and safeQuery logs."
-          runbook_url: "/-/blob/main/docs/Internal/VRA/RUNBOOK.md#clickhouse-troubleshooting"
+          summary: "VRA analytics read-model failures detected"
+          description: "VRA operations are falling back to empty results for >15m. Inspect Postgres replica health and safeQuery logs."
+          runbook_url: "/-/blob/main/docs/Internal/VRA/RUNBOOK.md#read-model-troubleshooting"

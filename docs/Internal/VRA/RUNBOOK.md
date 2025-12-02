@@ -4,16 +4,19 @@ Operational guide for the Variance & Reconciliation Analytics (VRA) system. All 
 
 Use the quick links below to jump to a section.
 
-- [Ingestion](#ingestion)
-- [Matching](#matching)
-- [Reconcile](#reconcile)
-- [Deltas](#deltas)
-- [Coverage](#coverage)
-- [Proofs](#proofs)
-- [ClickHouse troubleshooting](#clickhouse-troubleshooting)
-- [Backfill & CLIs](#backfill-and-clis)
-- [Canary & Pilot](#canary-and-pilot)
-- [Rollback](#rollback)
+- [VRA Runbook](#vra-runbook)
+  - [Operator Quick Start](#operator-quick-start)
+  - [Ingestion](#ingestion)
+  - [Matching](#matching)
+  - [Reconcile](#reconcile)
+  - [Deltas](#deltas)
+  - [Coverage](#coverage)
+  - [Proofs](#proofs)
+  - [Read-model troubleshooting](#read-model-troubleshooting)
+  - [Backfill and CLIs](#backfill-and-clis)
+  - [Canary and Pilot](#canary-and-pilot)
+  - [Rollback](#rollback)
+  - [Dashboards \& Alerts — Link Verification](#dashboards--alerts--link-verification)
 
 ---
 
@@ -129,7 +132,7 @@ Signals / Metrics
 Actions
 1) Confirm threshold tunables are set as expected.
 2) Validate strict `>` behavior at thresholds (exact equals suppresses emissions).
-3) If ClickHouse issues suspected, see [ClickHouse troubleshooting](#clickhouse-troubleshooting).
+3) If analytics read-model issues are suspected, see [Read-model troubleshooting](#read-model-troubleshooting).
 
 ---
 
@@ -178,30 +181,48 @@ Actions
 
 ---
 
-## ClickHouse troubleshooting
+## Read-model troubleshooting
 
 Symptoms
-- Panels show “ClickHouse fallbacks”; queries return empties when data is expected.
+- Grafana panels show “query failovers”; API responses are empty despite recent activity.
 
 Signals / Metrics
-- `vra_clickhouse_fallback_total` — safeQuery fallback count.
-- `vra_empty_results_total` — expected empty results (safe behavior under no data).
+- `vra_query_fail_total` — safeQuery fallback count (alerts if >0 for 15m).
+- `vra_empty_results_total` — expected empty results (safe behavior when no rows exist).
+- `db_query_duration_seconds{replica="true"}` — replica latency backing the read-model queries.
+- `/ready` guardrail panels in Grafana chart replica lag (`pg_stat_replication`), staging backlog (`analytics_ingest_buffer_size` / `pg_stat_user_tables`), and cache hit ratio from `pg_stat_database`.
 
 Actions
-1) Check CH connectivity and credentials.
-2) Inspect query logs and ensure tables/partitions exist for the window.
-3) If CH is degraded, VRA remains read‑only; alerts guide to this section.
+1) Check Postgres replica health/lag:
+   ```sql
+   SELECT application_name,
+          EXTRACT(EPOCH FROM COALESCE(replay_lag, '0 seconds')) AS replay_lag_seconds,
+          state
+     FROM pg_stat_replication;
+   ```
+   Lag >15s or no rows triggers the readiness guardrail.
+2) Inspect API logs for `VRA safeQuery fallback` entries; correlate `op=` labels with the failing panel or endpoint.
+3) Ensure analytics partitions contain data for the requested window:
+   ```sql
+   SELECT date_trunc('day', timestamp) AS day,
+          COUNT(*)
+     FROM revenue_events
+    WHERE timestamp >= NOW() - INTERVAL '7 days'
+    GROUP BY 1
+    ORDER BY 1 DESC;
+   ```
+4) If replicas are down or far behind, fail traffic over to healthy instances (or temporarily disable VRA via `VRA_ENABLED=false`).
 
-Verification (TTL presence)
+Verification (partition visibility)
 ```sql
--- Check TTL settings on VRA tables (ClickHouse)
-SELECT name, ttl
-FROM system.tables
-WHERE database = currentDatabase()
-  AND name IN (
-    'recon_statements_raw','recon_statements_norm','recon_expected',
-    'recon_match','recon_deltas','recon_disputes','proofs_daily_roots'
-  );
+SELECT child.relname AS partition,
+       pg_size_pretty(pg_total_relation_size(child.oid)) AS size,
+       child.reltuples AS approx_rows
+  FROM pg_inherits
+  JOIN pg_class parent ON pg_inherits.inhparent = parent.oid
+  JOIN pg_class child ON pg_inherits.inhrelid = child.oid
+ WHERE parent.relname IN ('recon_expected','recon_deltas')
+ ORDER BY child.relname DESC;
 ```
 
 ---
@@ -242,7 +263,7 @@ Resume
 Exit code semantics
 - 0 (OK): Work completed with writes enabled (or meaningful dry‑run with non‑zero actions for some tools).
 - 10 (WARNINGS): Dry‑run or no work to perform; orchestration treats this as non‑fatal and continues.
-- 20 (ERROR): Invalid args, guardrail violation, or initialization failures (e.g., ClickHouse init).
+- 20 (ERROR): Invalid args, guardrail violation, or initialization failures (legacy ClickHouse clusters may still throw when operators keep them online).
 
 Guardrails
 - 3‑day window cap enforced by `vraBuildExpected.js`, `vraMatch.js`, `vraReconcile.js` unless `--force --yes`.
@@ -284,16 +305,8 @@ Checkpoints
 - File path (default): `logs/vra-backfill-checkpoints.json`
 - Behavior: completed stages are marked `{ done: true, at: <ISO>, dryRun: <bool> }`, and skipped on rerun.
 
-ClickHouse TTL migrations (retention)
-```bash
-# Apply VRA TTL/retention (up)
-npm --prefix backend run clickhouse:migrate
-
-# Roll back TTL/retention (down)
-ALLOW_CH_DOWN=1 npm --prefix backend run clickhouse:migrate:down
-
-# Notes: TTL applies 12–36 months depending on table; monthly digest has no TTL (String month key).
-```
+ClickHouse TTL migrations (retention — legacy)
+- The dedicated ClickHouse migrator (`npm --prefix backend run clickhouse:migrate`) was removed after the Postgres cutover. This section is retained for historical context only; modern environments do not run TTL automation, and any remaining ClickHouse clusters should be managed manually if they are still online.
 
 TTL verification (ops)
 1) After applying the up migration, run:
@@ -335,7 +348,7 @@ Gates (Pilot)
 - Proofs verification OK.
 
 Checks
-- `vra_clickhouse_fallback_total` flat; `vra_empty_results_total` follows expected trends.
+- `vra_query_fail_total` flat; `vra_empty_results_total` follows expected trends.
 
 Pilot‑gate metrics
 - Gauges surfaced from Overview best‑effort: `vra_coverage_percent{scope="pilot"}`, `vra_variance_percent{scope="pilot"}`. Alerts map to these and link back to this Runbook.
@@ -357,7 +370,7 @@ Operator Drill (10 min)
 2) Exercise endpoints: Overview, Deltas JSON, Deltas CSV with a narrow window (≤24h).
 3) Open Grafana dashboards and confirm timeseries move; check that pilot‑gate gauges exist in `/metrics`.
 4) Intentionally request an inverted window to confirm 400 validation paths still work.
-5) Verify no CH hard failures: `vra_clickhouse_fallback_total` should stay near flat; empties are acceptable early on.
+5) Verify no read-model hard failures: `vra_query_fail_total` should stay near flat; empties are acceptable early on.
 6) If any alert fires, click the runbook link in the alert and follow the steps; record notes.
 7) Rollback drill: set `VRA_ENABLED=false` and confirm routes return 404; dashboards remain accessible.
 

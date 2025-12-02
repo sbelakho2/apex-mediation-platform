@@ -9,8 +9,7 @@ import { createWriteStream } from 'fs';
 import { join } from 'path';
 import { format as formatCsv } from '@fast-csv/format';
 import logger from '../../utils/logger';
-import clickhouse from '../../utils/clickhouse';
-import pool from '../../utils/postgres';
+import pool, { query } from '../../utils/postgres';
 import { DataExportJob } from '../queueManager';
 
 type AnalyticsExportRow = {
@@ -49,7 +48,7 @@ export async function processDataExport(job: Job<DataExportJob>): Promise<void> 
     await updateJobStatus(jobId, 'processing');
     await job.updateProgress(10);
 
-    // Fetch data from ClickHouse
+    // Fetch data from Postgres rollups
     const data = await fetchExportData(publisherId, startDate, endDate, filters);
     await job.updateProgress(50);
 
@@ -87,81 +86,39 @@ async function fetchExportData(
   endDate: string,
   _filters?: Record<string, unknown>
 ): Promise<AnalyticsExportRow[]> {
-  const query = `
+  const sql = `
     SELECT
-      toDate(i.timestamp) as date,
-      i.publisher_id,
-      i.app_id,
-      i.ad_unit_id,
-      i.adapter_id,
-      i.country,
-      count(*) as impressions,
-      countIf(i.is_filled = 1) as filled_impressions,
-      c.clicks,
-      r.revenue,
-      if(count(*) > 0, c.clicks / count(*) * 100, 0) as ctr,
-      if(count(*) > 0, countIf(i.is_filled = 1) / count(*) * 100, 0) as fill_rate,
-      if(count(*) > 0, r.revenue / count(*) * 1000, 0) as ecpm
-    FROM analytics.impressions i
-    LEFT JOIN (
-      SELECT
-        toDate(timestamp) as date,
-        publisher_id,
-        app_id,
-        ad_unit_id,
-        adapter_id,
-        country,
-        count(*) as clicks
-      FROM analytics.clicks
-      WHERE publisher_id = {publisherId:String}
-        AND timestamp >= {startDate:String}
-        AND timestamp < {endDate:String}
-      GROUP BY date, publisher_id, app_id, ad_unit_id, adapter_id, country
-    ) c ON i.date = c.date 
-      AND i.publisher_id = c.publisher_id
-      AND i.app_id = c.app_id
-      AND i.ad_unit_id = c.ad_unit_id
-      AND i.adapter_id = c.adapter_id
-      AND i.country = c.country
-    LEFT JOIN (
-      SELECT
-        toDate(timestamp) as date,
-        publisher_id,
-        app_id,
-        ad_unit_id,
-        adapter_id,
-        country,
-        sum(revenue) as revenue
-      FROM analytics.revenue
-      WHERE publisher_id = {publisherId:String}
-        AND timestamp >= {startDate:String}
-        AND timestamp < {endDate:String}
-      GROUP BY date, publisher_id, app_id, ad_unit_id, adapter_id, country
-    ) r ON i.date = r.date
-      AND i.publisher_id = r.publisher_id
-      AND i.app_id = r.app_id
-      AND i.ad_unit_id = r.ad_unit_id
-      AND i.adapter_id = r.adapter_id
-      AND i.country = r.country
-    WHERE i.publisher_id = {publisherId:String}
-      AND i.timestamp >= {startDate:String}
-      AND i.timestamp < {endDate:String}
-    GROUP BY date, i.publisher_id, i.app_id, i.ad_unit_id, i.adapter_id, i.country, c.clicks, r.revenue
-    ORDER BY date DESC, impressions DESC
+      bucket_date::text AS date,
+      publisher_id,
+      NULLIF(app_id, '') AS app_id,
+      NULLIF(ad_unit_id, '') AS ad_unit_id,
+      NULLIF(adapter_id, '') AS adapter_id,
+      country_code AS country,
+      impression_count::double precision AS impressions,
+      filled_count::double precision AS filled_impressions,
+      click_count::double precision AS clicks,
+      total_revenue::double precision AS revenue,
+      ctr::double precision AS ctr,
+      fill_rate::double precision AS fill_rate,
+      ecpm::double precision AS ecpm
+    FROM analytics_metrics_rollups
+    WHERE publisher_id = $1
+      AND bucket_date >= $2::date
+      AND bucket_date < $3::date
+    ORDER BY bucket_date DESC, impression_count DESC
   `;
 
-  const result = await clickhouse.executeQuery<AnalyticsExportRow>(query, {
-    publisherId,
-    startDate,
-    endDate,
+  const { rows } = await query<AnalyticsExportRow>(sql, [publisherId, startDate, endDate], {
+    label: 'analytics_export_rollup',
+    replica: true,
   });
 
   logger.debug('Export data fetched', {
     publisherId,
-    rowCount: result.length,
+    rowCount: rows.length,
   });
 
-  return result;
+  return rows;
 }
 
 /**

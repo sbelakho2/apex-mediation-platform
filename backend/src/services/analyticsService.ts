@@ -1,10 +1,11 @@
 /**
  * Analytics Service
- * 
- * Handles ingestion of ad events into ClickHouse for real-time analytics
+ *
+ * Handles ingestion of ad events into Postgres analytics fact tables
  */
 
-import { insertBatch } from '../utils/clickhouse';
+import { insertMany, query } from '../utils/postgres';
+import { analyticsIngestBufferGauge } from '../utils/prometheus';
 import logger from '../utils/logger';
 import {
   ImpressionEventDTO,
@@ -12,24 +13,181 @@ import {
   RevenueEventDTO,
 } from '../types/analytics.types';
 
-class AnalyticsService {
+type AnalyticsServiceOptions = {
+  batchSize?: number;
+  flushIntervalMs?: number;
+};
+
+const IMPRESSION_COLUMNS = [
+  'event_id',
+  'observed_at',
+  'publisher_id',
+  'app_id',
+  'placement_id',
+  'adapter_id',
+  'adapter_name',
+  'ad_unit_id',
+  'ad_format',
+  'country_code',
+  'device_type',
+  'os',
+  'os_version',
+  'session_id',
+  'user_id',
+  'request_id',
+  'latency_ms',
+  'meta',
+  'is_test_mode',
+] as const;
+
+const CLICK_COLUMNS = [
+  'event_id',
+  'observed_at',
+  'impression_id',
+  'publisher_id',
+  'app_id',
+  'placement_id',
+  'adapter_id',
+  'adapter_name',
+  'click_url',
+  'country_code',
+  'device_type',
+  'os',
+  'session_id',
+  'user_id',
+  'request_id',
+  'time_to_click_ms',
+  'is_verified',
+  'meta',
+  'is_test_mode',
+] as const;
+
+const REVENUE_COLUMNS = [
+  'event_id',
+  'observed_at',
+  'publisher_id',
+  'app_id',
+  'placement_id',
+  'adapter_id',
+  'adapter_name',
+  'impression_id',
+  'revenue_type',
+  'revenue_usd',
+  'revenue_currency',
+  'revenue_original',
+  'exchange_rate',
+  'ecpm_usd',
+  'country_code',
+  'ad_format',
+  'os',
+  'is_test_mode',
+  'reconciliation_status',
+  'metadata',
+] as const;
+
+const asDate = (value: string): Date => new Date(value);
+const quoteIdentifier = (identifier: string): string => `"${identifier.replace(/"/g, '""')}"`;
+const STAGE_TABLE = {
+  impressions: 'analytics_impressions_stage',
+  clicks: 'analytics_clicks_stage',
+  revenue: 'analytics_revenue_events_stage',
+} as const;
+
+const toImpressionRow = (event: ImpressionEventDTO): unknown[] => [
+  event.event_id,
+  asDate(event.timestamp),
+  event.publisher_id,
+  event.app_id,
+  event.placement_id,
+  event.adapter_id,
+  event.adapter_name,
+  event.ad_unit_id,
+  event.ad_format,
+  event.country_code,
+  event.device_type,
+  event.os,
+  event.os_version,
+  event.session_id,
+  event.user_id,
+  event.request_id,
+  event.latency_ms,
+  {
+    app_version: event.app_version,
+    sdk_version: event.sdk_version,
+    bid_price_usd: event.bid_price_usd,
+    ecpm_usd: event.ecpm_usd,
+  },
+  event.is_test_mode,
+];
+
+const toClickRow = (event: ClickEventDTO): unknown[] => [
+  event.event_id,
+  asDate(event.timestamp),
+  event.impression_id,
+  event.publisher_id,
+  event.app_id,
+  event.placement_id,
+  event.adapter_id,
+  event.adapter_name,
+  event.click_url,
+  event.country_code,
+  event.device_type,
+  event.os,
+  event.session_id,
+  event.user_id,
+  event.request_id,
+  event.time_to_click_ms,
+  event.is_verified,
+  {
+    request_id: event.request_id,
+  },
+  event.is_test_mode,
+];
+
+const toRevenueRow = (event: RevenueEventDTO): unknown[] => [
+  event.event_id,
+  asDate(event.timestamp),
+  event.publisher_id,
+  event.app_id,
+  event.placement_id,
+  event.adapter_id,
+  event.adapter_name,
+  event.impression_id,
+  event.revenue_type,
+  event.revenue_usd,
+  event.revenue_currency,
+  event.revenue_original,
+  event.exchange_rate,
+  event.ecpm_usd,
+  event.country_code,
+  event.ad_format,
+  event.os,
+  event.is_test_mode,
+  event.reconciliation_status,
+  {},
+];
+
+export class AnalyticsService {
   private impressionBuffer: ImpressionEventDTO[] = [];
   private clickBuffer: ClickEventDTO[] = [];
   private revenueBuffer: RevenueEventDTO[] = [];
   
-  private readonly BATCH_SIZE = 100;
-  private readonly FLUSH_INTERVAL_MS = 5000; // 5 seconds
+  private readonly BATCH_SIZE: number;
+  private readonly FLUSH_INTERVAL_MS: number;
   private flushInterval: NodeJS.Timeout | null = null;
 
-  constructor() {
-    // Set up periodic flushing
-    const interval = setInterval(() => {
-      void this.flushAll();
-    }, this.FLUSH_INTERVAL_MS);
+  constructor(options: AnalyticsServiceOptions = {}) {
+    this.BATCH_SIZE = options.batchSize ?? 100;
+    this.FLUSH_INTERVAL_MS = options.flushIntervalMs ?? 5000;
 
-    // Allow Node.js process to exit even if interval is still scheduled
-    interval.unref();
-    this.flushInterval = interval;
+    if (this.FLUSH_INTERVAL_MS > 0) {
+      const interval = setInterval(() => {
+        void this.flushAll();
+      }, this.FLUSH_INTERVAL_MS);
+
+      interval.unref?.();
+      this.flushInterval = interval;
+    }
   }
 
   /**
@@ -37,6 +195,7 @@ class AnalyticsService {
    */
   async recordImpression(event: ImpressionEventDTO): Promise<void> {
     this.impressionBuffer.push(event);
+    this.updateBufferGauge('impressions');
     
     if (this.impressionBuffer.length >= this.BATCH_SIZE) {
       await this.flushImpressions();
@@ -48,6 +207,7 @@ class AnalyticsService {
    */
   async recordImpressions(events: ImpressionEventDTO[]): Promise<void> {
     this.impressionBuffer.push(...events);
+    this.updateBufferGauge('impressions');
     
     if (this.impressionBuffer.length >= this.BATCH_SIZE) {
       await this.flushImpressions();
@@ -59,6 +219,7 @@ class AnalyticsService {
    */
   async recordClick(event: ClickEventDTO): Promise<void> {
     this.clickBuffer.push(event);
+    this.updateBufferGauge('clicks');
     
     if (this.clickBuffer.length >= this.BATCH_SIZE) {
       await this.flushClicks();
@@ -70,6 +231,7 @@ class AnalyticsService {
    */
   async recordClicks(events: ClickEventDTO[]): Promise<void> {
     this.clickBuffer.push(...events);
+    this.updateBufferGauge('clicks');
     
     if (this.clickBuffer.length >= this.BATCH_SIZE) {
       await this.flushClicks();
@@ -81,6 +243,7 @@ class AnalyticsService {
    */
   async recordRevenue(event: RevenueEventDTO): Promise<void> {
     this.revenueBuffer.push(event);
+    this.updateBufferGauge('revenue');
     
     if (this.revenueBuffer.length >= this.BATCH_SIZE) {
       await this.flushRevenue();
@@ -92,6 +255,7 @@ class AnalyticsService {
    */
   async recordRevenueEvents(events: RevenueEventDTO[]): Promise<void> {
     this.revenueBuffer.push(...events);
+    this.updateBufferGauge('revenue');
     
     if (this.revenueBuffer.length >= this.BATCH_SIZE) {
       await this.flushRevenue();
@@ -99,7 +263,7 @@ class AnalyticsService {
   }
 
   /**
-   * Flush impression buffer to ClickHouse
+   * Flush impression buffer to Postgres
    */
   private async flushImpressions(): Promise<void> {
     if (this.impressionBuffer.length === 0) {
@@ -108,9 +272,21 @@ class AnalyticsService {
 
     const eventsToFlush = [...this.impressionBuffer];
     this.impressionBuffer = [];
+    this.updateBufferGauge('impressions');
 
     try {
-      await insertBatch('impressions', eventsToFlush);
+      const rows = eventsToFlush.map(toImpressionRow);
+      await insertMany(
+        STAGE_TABLE.impressions,
+        [...IMPRESSION_COLUMNS],
+        rows
+      );
+      await this.mergeStageIntoTarget(
+        STAGE_TABLE.impressions,
+        'analytics_impressions',
+        [...IMPRESSION_COLUMNS],
+        ['observed_at', 'event_id']
+      );
       logger.debug('Flushed impressions', { count: eventsToFlush.length });
     } catch (error) {
       logger.error('Failed to flush impressions', { 
@@ -119,11 +295,12 @@ class AnalyticsService {
       });
       // Re-add to buffer for retry
       this.impressionBuffer.unshift(...eventsToFlush);
+      this.updateBufferGauge('impressions');
     }
   }
 
   /**
-   * Flush click buffer to ClickHouse
+   * Flush click buffer to Postgres
    */
   private async flushClicks(): Promise<void> {
     if (this.clickBuffer.length === 0) {
@@ -132,9 +309,21 @@ class AnalyticsService {
 
     const eventsToFlush = [...this.clickBuffer];
     this.clickBuffer = [];
+    this.updateBufferGauge('clicks');
 
     try {
-      await insertBatch('clicks', eventsToFlush);
+      const rows = eventsToFlush.map(toClickRow);
+      await insertMany(
+        STAGE_TABLE.clicks,
+        [...CLICK_COLUMNS],
+        rows
+      );
+      await this.mergeStageIntoTarget(
+        STAGE_TABLE.clicks,
+        'analytics_clicks',
+        [...CLICK_COLUMNS],
+        ['observed_at', 'event_id']
+      );
       logger.debug('Flushed clicks', { count: eventsToFlush.length });
     } catch (error) {
       logger.error('Failed to flush clicks', { 
@@ -142,11 +331,12 @@ class AnalyticsService {
         error 
       });
       this.clickBuffer.unshift(...eventsToFlush);
+      this.updateBufferGauge('clicks');
     }
   }
 
   /**
-   * Flush revenue buffer to ClickHouse
+   * Flush revenue buffer to Postgres
    */
   private async flushRevenue(): Promise<void> {
     if (this.revenueBuffer.length === 0) {
@@ -155,9 +345,21 @@ class AnalyticsService {
 
     const eventsToFlush = [...this.revenueBuffer];
     this.revenueBuffer = [];
+    this.updateBufferGauge('revenue');
 
     try {
-      await insertBatch('revenue_events', eventsToFlush);
+      const rows = eventsToFlush.map(toRevenueRow);
+      await insertMany(
+        STAGE_TABLE.revenue,
+        [...REVENUE_COLUMNS],
+        rows
+      );
+      await this.mergeStageIntoTarget(
+        STAGE_TABLE.revenue,
+        'analytics_revenue_events',
+        [...REVENUE_COLUMNS],
+        ['observed_at', 'event_id']
+      );
       logger.debug('Flushed revenue events', { count: eventsToFlush.length });
     } catch (error) {
       logger.error('Failed to flush revenue events', { 
@@ -165,6 +367,7 @@ class AnalyticsService {
         error 
       });
       this.revenueBuffer.unshift(...eventsToFlush);
+      this.updateBufferGauge('revenue');
     }
   }
 
@@ -199,6 +402,32 @@ class AnalyticsService {
       revenue: this.revenueBuffer.length,
       total: this.impressionBuffer.length + this.clickBuffer.length + this.revenueBuffer.length,
     };
+  }
+
+  private async mergeStageIntoTarget(
+    stageTable: string,
+    targetTable: string,
+    columns: ReadonlyArray<string>,
+    conflictColumns: ReadonlyArray<string>
+  ): Promise<void> {
+    const columnSql = columns.map(quoteIdentifier).join(', ');
+    const conflictSql = conflictColumns.map(quoteIdentifier).join(', ');
+
+    await query(
+      `INSERT INTO ${quoteIdentifier(targetTable)} (${columnSql})
+       SELECT ${columnSql} FROM ${quoteIdentifier(stageTable)}
+       ON CONFLICT (${conflictSql}) DO NOTHING`
+    );
+    await query(`TRUNCATE ${quoteIdentifier(stageTable)}`);
+  }
+
+  private updateBufferGauge(kind: 'impressions' | 'clicks' | 'revenue'): void {
+    const size = kind === 'impressions'
+      ? this.impressionBuffer.length
+      : kind === 'clicks'
+        ? this.clickBuffer.length
+        : this.revenueBuffer.length;
+    analyticsIngestBufferGauge.set({ kind }, size);
   }
 }
 

@@ -4,10 +4,18 @@ describe('vraBuildExpected.js — dry-run and exit semantics', () => {
   const scriptPath = path.resolve(__dirname, '..', 'vraBuildExpected.js');
 
   const originalArgv = process.argv.slice();
+  let exitSpy: jest.SpyInstance | undefined;
 
   beforeEach(() => {
     jest.resetModules();
     process.argv = originalArgv.slice(0, 2);
+    exitSpy = jest.spyOn(process, 'exit').mockImplementation(((code?: number) => {
+      throw new Error(`process.exit called with "${code ?? 0}"`);
+    }) as never);
+  });
+
+  afterEach(() => {
+    exitSpy?.mockRestore();
   });
 
   afterAll(() => {
@@ -35,6 +43,32 @@ describe('vraBuildExpected.js — dry-run and exit semantics', () => {
     }), { virtual: true });
   }
 
+  async function runCli() {
+    const imported = await import(scriptPath);
+    const runner = (imported as { main?: () => Promise<void>; default?: { main?: () => Promise<void> } });
+    const invoke = runner.main || runner.default?.main;
+    if (!invoke) {
+      throw new Error('CLI main export not found');
+    }
+    await invoke();
+  }
+
+  async function expectExit(code: number) {
+    exitSpy?.mockClear();
+    await runCli().catch((err) => {
+      const msg = String(err?.message ?? '');
+      if (!msg.startsWith('process.exit called with')) {
+        throw err;
+      }
+    });
+    const calls = exitSpy?.mock.calls ?? [];
+    if (!calls.length) {
+      throw new Error('process.exit was not called');
+    }
+    const firstCode = calls[0]?.[0];
+    expect(firstCode).toBe(code);
+  }
+
   it('exits OK (0) on dry-run when seen/written > 0', async () => {
     mockDeps({ seen: 3, written: 3, skipped: 0 });
 
@@ -46,8 +80,7 @@ describe('vraBuildExpected.js — dry-run and exit semantics', () => {
       '--limit', '100',
       '--dry-run', 'true',
     ];
-
-    await expect(import(scriptPath)).rejects.toThrow('process.exit called with "0"');
+    await expectExit(0);
   });
 
   it('exits with WARNINGS (10) when no rows written/seen', async () => {
@@ -60,7 +93,6 @@ describe('vraBuildExpected.js — dry-run and exit semantics', () => {
       '--to', '2025-11-02T00:00:00Z',
       '--dry-run', 'true',
     ];
-
-    await expect(import(scriptPath)).rejects.toThrow('process.exit called with "10"');
+    await expectExit(10);
   });
 });

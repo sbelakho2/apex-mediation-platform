@@ -1,4 +1,6 @@
-# ClickHouse Analytics Integration
+# ClickHouse Analytics Integration *(Legacy)*
+
+> **Note:** The ClickHouse bootstrap scripts were removed as part of the Postgres migration plan. This document is retained for archival reference only. If you still operate a ClickHouse cluster, seed schemas manually using the statements in `backend/src/utils/clickhouse.schema.ts`.
 
 ## Overview
 
@@ -383,11 +385,7 @@ CLICKHOUSE_MAX_CONNECTIONS=10
 
 3. **Initialize Schema**
 
-```bash
-npm run clickhouse:init
-```
-
-This will create the database and all required tables, indexes, and materialized views.
+The previous helper script (`npm run clickhouse:init`) has been removed. To provision a legacy ClickHouse cluster, run the DDL statements from `backend/src/utils/clickhouse.schema.ts` manually (e.g., via `clickhouse-client` or your preferred migration tool). This step is no longer automated.
 
 ### Verification
 

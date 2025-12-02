@@ -120,7 +120,7 @@ async function main() {
   if (network) console.log('[VRA Backfill] Network:', network);
   console.log('[VRA Backfill] Stages:', stages.join(' → '));
 
-  let warnings = 0;
+  let failures = 0;
 
   for (const s of stages) {
     const done = !!ck.runs[runKey].stages[s]?.done;
@@ -169,15 +169,15 @@ async function main() {
       ck.runs[runKey].stages[s] = { done: true, at: new Date().toISOString(), dryRun };
       await writeCheckpoints(checkpointFile, ck);
     } catch (e) {
-      warnings++;
+      failures++;
       console.warn(`[VRA Backfill] Stage "${s}" failed:`, (e && e.message) || e);
       // Leave checkpoint as-is; allow resume.
       break;
     }
   }
 
-  if (warnings > 0) {
-    process.exit(EXIT.WARNINGS);
+  if (failures > 0) {
+    process.exit(EXIT.ERROR);
   }
   process.exit(EXIT.OK);
 }
@@ -198,4 +198,8 @@ function runNodeScript(scriptPath, args) {
   });
 }
 
-main().catch((e) => { console.error(e); process.exit(EXIT.ERROR); });
+module.exports = { main };
+
+if (require.main === module) {
+  main().catch((e) => { console.error(e); process.exit(EXIT.ERROR); });
+}

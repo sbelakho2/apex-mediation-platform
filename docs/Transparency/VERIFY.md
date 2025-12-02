@@ -13,7 +13,7 @@ This guide explains how to verify auction integrity records end-to-end using:
 
 Prerequisites
 - Backend running with transparency enabled: `TRANSPARENCY_ENABLED=1` and `TRANSPARENCY_API_ENABLED=true`
-- ClickHouse initialized with the transparency tables (`npm --prefix backend run clickhouse:init`)
+- ClickHouse initialized with the transparency tables (legacy instruction — `npm --prefix backend run clickhouse:init` was removed; seed tables manually only if you still operate a ClickHouse cluster)
 - An active Ed25519 key pair configured:
   - Private (server): `TRANSPARENCY_PRIVATE_KEY` (PKCS#8 PEM or DER Base64)
   - Public (verify): `TRANSPARENCY_KEY_ID`, `TRANSPARENCY_PUBLIC_KEY_BASE64` (PEM or SPKI DER Base64)

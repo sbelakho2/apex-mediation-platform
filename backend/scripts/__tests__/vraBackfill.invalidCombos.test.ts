@@ -17,6 +17,14 @@ describe('vraBackfill.js — invalid combo guardrails', () => {
     process.exit = originalExit;
   });
 
+  async function runCli() {
+    const imported = await import(scriptPath);
+    const mod = imported as { main?: () => Promise<void>; default?: { main?: () => Promise<void> } };
+    const invoke = mod.main || mod.default?.main;
+    if (!invoke) throw new Error('CLI main export not found');
+    await invoke();
+  }
+
   it('exits with ERROR (20) when --force is provided without --yes', async () => {
     process.argv = [
       process.execPath,
@@ -31,10 +39,10 @@ describe('vraBackfill.js — invalid combo guardrails', () => {
     const exitSpy = jest
       .spyOn(process, 'exit')
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .mockImplementation(((code?: number) => { throw new Error(`EXIT ${code}`); }) as any);
+      .mockImplementation(((code?: number) => { throw new Error(`EXIT ${code ?? 0}`); }) as any);
 
     try {
-      await import(scriptPath);
+      await runCli();
       throw new Error('expected process.exit');
     } catch (e: any) {
       expect(String(e.message)).toBe('EXIT 20');
@@ -57,10 +65,10 @@ describe('vraBackfill.js — invalid combo guardrails', () => {
     const exitSpy = jest
       .spyOn(process, 'exit')
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .mockImplementation(((code?: number) => { throw new Error(`EXIT ${code}`); }) as any);
+      .mockImplementation(((code?: number) => { throw new Error(`EXIT ${code ?? 0}`); }) as any);
 
     try {
-      await import(scriptPath);
+      await runCli();
       throw new Error('expected process.exit');
     } catch (e: any) {
       expect(String(e.message)).toBe('EXIT 20');
@@ -82,10 +90,10 @@ describe('vraBackfill.js — invalid combo guardrails', () => {
     const exitSpy2 = jest
       .spyOn(process, 'exit')
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .mockImplementation(((code?: number) => { throw new Error(`EXIT2 ${code}`); }) as any);
+      .mockImplementation(((code?: number) => { throw new Error(`EXIT2 ${code ?? 0}`); }) as any);
 
     try {
-      await import(scriptPath);
+      await runCli();
       throw new Error('expected process.exit');
     } catch (e: any) {
       expect(String(e.message)).toBe('EXIT2 20');

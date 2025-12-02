@@ -3,7 +3,7 @@ import { verifyToken } from '../utils/signing';
 import { TrackingTokenSchema } from '../schemas/rtb';
 import { redis } from '../utils/redis';
 import logger from '../utils/logger';
-import { getClickHouseClient } from '../utils/clickhouse';
+import { query } from '../utils/postgres';
 import { queueManager, QueueName } from '../queues/queueManager';
 import { analyticsEventsEnqueuedTotal } from '../utils/prometheus';
 import crypto from 'crypto';
@@ -33,6 +33,12 @@ export async function getCreative(req: Request, res: Response) {
     return res.status(400).send('invalid token');
   }
 }
+
+const INSERT_TRACKING_EVENT_SQL = `
+  INSERT INTO rtb_tracking_events
+  (event_type, observed_at, bid_id, placement_id, adapter, cpm, ua_hash, ip_hash, metadata)
+  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+`;
 
 async function recordEvent(kind: 'imp' | 'click', claims: any, req: Request) {
   try {
@@ -64,16 +70,28 @@ async function recordEvent(kind: 'imp' | 'click', claims: any, req: Request) {
       }
     }
 
-    // Fallback: direct insert
-    const ch = getClickHouseClient();
-    await ch.insert({
-      table: kind === 'imp' ? 'impressions' : 'clicks',
-      values: [payload],
-      format: 'JSONEachRow',
-    });
+    // Fallback: write directly to Postgres tracking table
+    try {
+      await query(INSERT_TRACKING_EVENT_SQL, [
+        kind,
+        new Date(payload.ts),
+        claims.bidId,
+        claims.placementId,
+        claims.adapter,
+        claims.cpm ?? 0,
+        payload.ua_hash || null,
+        payload.ip_hash || null,
+        JSON.stringify({
+          currency: claims.currency,
+          nonce: claims.nonce,
+        }),
+      ]);
+    } catch (dbError) {
+      logger.warn('Failed to write tracking to Postgres', { error: (dbError as Error).message });
+    }
   } catch (e) {
     // best effort only
-    logger.warn('Failed to write tracking to ClickHouse', { error: (e as Error).message });
+    logger.warn('Failed to write tracking event', { error: (e as Error).message });
   }
 }
 

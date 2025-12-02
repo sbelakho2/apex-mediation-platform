@@ -2273,8 +2273,8 @@ System analysis (current state)
   - Sales Engine: lead-intel, lead-score, sales-orchestrator with persuasion_policy.json.
 
 How to run (operator)
-- Initialize ClickHouse schemas:
-  - cd backend && npm run clickhouse:init
+- Initialize ClickHouse schemas (deprecated after Postgres cutover):
+  - (Historical) cd backend && npm run clickhouse:init
 - Start API:
   - cd backend && npm run dev
 - Enable Transparency endpoints:
@@ -2427,7 +2427,7 @@ Next
   - **ClickHouse schema fixes**: Added `toDateTime()` wrappers for TTL expressions (DateTime64 not allowed in TTL) and split multi-statement index creation for idempotency
   - **ClickHouse initialization fix**: Database creation now uses temporary client without database specified, then reconnects with database for schema creation
   - **Backend build path correction**: Fixed `npm start` and smoke script to use `dist/src/index.js` (matching tsconfig rootDir)
-  - Evidence: `backend/migrations/012_self_evolving_system.sql`, `backend/migrations/013_automated_growth_engine.sql`, `backend/migrations/015_referral_and_multiplier_systems.sql`, `backend/migrations/016_comprehensive_transaction_logging.sql`, `backend/scripts/runMigrations.js`, `backend/scripts/initClickHouseSchema.ts`, `backend/src/utils/clickhouse.schema.ts`, `backend/package.json`, `scripts/dev-transparency-metrics.sh`
+  - Evidence: `backend/migrations/012_self_evolving_system.sql`, `backend/migrations/013_automated_growth_engine.sql`, `backend/migrations/015_referral_and_multiplier_systems.sql`, `backend/migrations/016_comprehensive_transaction_logging.sql`, `backend/scripts/runMigrations.js`, `backend/src/utils/clickhouse.schema.ts` (legacy `initClickHouseSchema.ts` has been removed), `backend/package.json`, `scripts/dev-transparency-metrics.sh`
 - Test results
   - ✅ All 16 PostgreSQL migrations apply cleanly and idempotently
   - ✅ ClickHouse schema initialized with all tables and indexes
@@ -2870,7 +2870,7 @@ Changelog — 2025-11-11 13:17 Local — Parts 1–4 Progress (Monorepo)
 - Implemented ClickHouse migration runner and created impressions, clicks, auction_events tables with TTLs.
 - Added analytics ingestion pipeline using BullMQ with batch writes and Prom metrics; Redis-backed rate limits/WAF for tracking endpoints.
 - Added seed fixtures and a verifyMigrations.js smoke script; provided k6 load tests under quality/load-tests/.
-- Evidence: backend/migrations/postgres/*, backend/scripts/{runMigrationsV2.js,runClickHouseMigrations.js,verifyMigrations.js,seedTestData.js}, backend/src/queues/processors/analyticsIngest.ts, backend/src/middleware/trackingRateLimiter.ts, quality/load-tests/*
+- Evidence: backend/migrations/postgres/*, backend/scripts/{runMigrationsV2.js,verifyMigrations.js,seedTestData.js} (legacy runClickHouseMigrations.js removed after Postgres cutover), backend/src/queues/processors/analyticsIngest.ts, backend/src/middleware/trackingRateLimiter.ts, quality/load-tests/*
 - [x] PG up/down with checksums
 - [x] ClickHouse migrations
 - [x] Queue-based ingestion + metrics

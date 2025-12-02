@@ -84,17 +84,17 @@
     },
     {
       "type": "timeseries",
-      "title": "Empty results and CH fallbacks (rate)",
+      "title": "Empty results and query failures (rate)",
       "gridPos": { "x": 6, "y": 16, "w": 18, "h": 6 },
       "targets": [
         { "refId": "A", "expr": "sum(rate(vra_empty_results_total{op=~\"overview|deltas_count|deltas_list|monthly_digest\"}[5m]))", "legendFormat": "empty_results" },
-        { "refId": "B", "expr": "sum(rate(vra_clickhouse_fallback_total[5m]))", "legendFormat": "ch_fallbacks" }
+        { "refId": "B", "expr": "sum(rate(vra_query_fail_total[5m]))", "legendFormat": "failures" }
       ],
       "links": [
         {
-          "title": "Runbook: Troubleshooting ClickHouse",
+          "title": "Runbook: Read-model troubleshooting",
           "type": "link",
-          "url": "/-/blob/main/docs/Internal/VRA/RUNBOOK.md#clickhouse-troubleshooting",
+          "url": "/-/blob/main/docs/Internal/VRA/RUNBOOK.md#read-model-troubleshooting",
           "targetBlank": true
         }
       ]

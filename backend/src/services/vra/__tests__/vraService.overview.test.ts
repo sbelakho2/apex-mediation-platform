@@ -22,7 +22,7 @@ describe('VRA Service — getOverview basics', () => {
     jest.clearAllMocks();
   });
 
-  it('calls ClickHouse with between timestamps and maps totals', async () => {
+  it('queries the Postgres read-model with between timestamps and maps totals', async () => {
     const from = '2025-11-01T00:00:00Z';
     const to = '2025-11-02T00:00:00Z';
     const out = await vraService.getOverview({ from, to });

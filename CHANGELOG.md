@@ -1,3 +1,114 @@
+Changelog — Reporting Integration Tests Postgres-Only (2025-12-02)
+
+Summary
+- Reporting API integration suite no longer checks ClickHouse readiness and now boots entirely on the Postgres analytics fixtures, ensuring CI runs without the ClickHouse container.
+- The migration plan reflects the completed integration-test workstream.
+
+What changed
+- Tests: `backend/src/__tests__/integration/reporting.integration.test.ts` dropped the ClickHouse health gate, provisions publishers/users through the shared Postgres helpers, and runs every endpoint check directly against the Postgres read-model.
+- Docs: `docs/Internal/Infrastructure/POSTGRES_MIGRATION_PLAN.md` Step 1.5.2 now marks the integration-test migration complete with references to both analytics and reporting suites.
+
+Validation
+- `npm run test:integration -- reporting.integration.test.ts`
+
+---
+
+Changelog — Billing Docs & Tests Postgres Refresh (2025-12-02)
+
+Summary
+- Billing documentation now states that usage data is sourced from Postgres analytics replicas (no ClickHouse dependency) across the console README, backend manifest, implementation/deployment guides, and troubleshooting steps.
+- Billing deployment checklists and env samples highlight the `REPLICA_DATABASE_URL` knob while removing stale ClickHouse instructions.
+- Jest suites that already operate purely on Postgres (billing routes, VRA services, proofs issuer, expected builder) dropped ClickHouse mocks/comments so test expectations match the new read-model reality.
+
+What changed
+- Docs: `console/BILLING_README.md`, `docs/Backend/BILLING_FILES_MANIFEST.md`, `docs/Backend/BILLING_DEPLOYMENT_CHECKLIST.md`, and `docs/Backend/BILLING_IMPLEMENTATION_SUMMARY.md` now describe Postgres as the sole analytics source, mention replica guardrails, and remove ClickHouse troubleshooting steps.
+- Tests & comments: `backend/src/routes/__tests__/billing.routes.test.ts`, `backend/src/services/vra/__tests__/vraService.overview.test.ts`, `backend/src/services/vra/__tests__/proofsIssuer.test.ts`, and `backend/src/services/vra/expectedBuilder.ts` were updated to reference Postgres read-models instead of ClickHouse.
+- Migration plan: Section 1.3 now marks the docs/tests cleanup complete with references to the refreshed artifacts.
+
+Validation
+- `npm run test:backend -- src/routes/__tests__/billing.routes.test.ts`
+- `npm run test:backend -- src/services/vra/__tests__/vraService.overview.test.ts`
+
+---
+
+Changelog — Postgres-Only Health Checks (2025-12-02)
+
+Summary
+- `/ready` now reports exclusively on Postgres + Redis guardrails (latency, replica lag, cache hit ratio, staging backlog) and no longer references ClickHouse knobs.
+- VRA read-model counters were renamed to `vra_query_fail_total` so alerts/dashboards stop referring to ClickHouse failovers.
+- Documentation, Prometheus alerts, and Grafana dashboards were updated accordingly; the deprecated `CLICKHOUSE_REQUIRED` flag was removed to avoid confusing operators.
+
+What changed
+- Backend: `backend/src/config/index.ts` and `backend/src/utils/clickhouse.ts` dropped the `CLICKHOUSE_REQUIRED` guard, ensuring ClickHouse settings are never considered a readiness prerequisite, and `HealthCheckController` tests now stub only Postgres/Redis knobs.
+- Metrics/alerts: `backend/src/utils/prometheus.ts`, `backend/src/services/vra/vraService.ts`, `monitoring/alerts/vra-alerts.yml`, and `monitoring/grafana/dashboards/vra-reconcile.json` now emit/consume `vra_query_fail_total`; alert copy references read-model failures instead of ClickHouse failovers.
+- Docs: `docs/Internal/Infrastructure/POSTGRES_MIGRATION_PLAN.md`, `docs/Internal/VRA/RUNBOOK.md`, and `docs/Internal/VRA/IMPLEMENTATION_SUMMARY.md` describe the Postgres-only readiness signals and the renamed metrics.
+
+Validation
+- `npm run test:backend -- src/controllers/__tests__/healthcheck.readiness.test.ts`
+
+---
+
+Changelog — Transparency Pipeline Guardrails (2025-12-01)
+
+Summary
+- Transparency auctions/candidates now follow the same partitioning, staging, and workload-isolation guardrails as analytics: tables are daily range partitioned, ingestion writes flow through UNLOGGED staging tables with dedupe-safe merges, and API reads route exclusively through Postgres replicas with new Prometheus coverage.
+
+What changed
+- Database: `backend/migrations/postgres/20251201_134500_partition_transparency_tables.{up,down}.sql` convert `transparency_auctions`/`transparency_auction_candidates` into daily partitions (composite PK on `auction_id, observed_at`) and add rollback scaffolding; `20251201_135600_transparency_staging_tables.{up,down}.sql` introduce UNLOGGED staging tables flushed prior to merge.
+- Services: `backend/src/services/transparencyWriter.ts` writes to the staging tables, merges into parents via `ON CONFLICT`, tracks pending stage depth, and emits the new Prometheus gauge `transparency_ingest_stage_size` from `backend/src/utils/prometheus.ts`.
+- API & infra: `backend/src/controllers/transparency.controller.ts` now calls a `replicaQuery` helper so key endpoints (`/auctions`, `/summary`, `/verify`, `/keys`) use read replicas with labeled metrics; `docs/Internal/Infrastructure/POSTGRES_MIGRATION_PLAN.md` documents the completed transparency guardrails.
+
+Validation
+- `npm test -- transparencyWriter transparency.controller`
+
+---
+
+Changelog — RTB Tracking Postgres Fallback (2025-12-01)
+
+Summary
+- RTB impression/click tracking no longer depends on ClickHouse; fallback writes land in a dedicated Postgres table so the controller works even when the analytics ingest queue is unavailable.
+
+What changed
+- Database: `backend/migrations/postgres/20251201_120500_rtb_tracking_events.up.sql` (and `.down.sql`) add the `rtb_tracking_events` table plus covering indexes for observed_at, bid_id, and adapter lookups.
+- API: `backend/src/controllers/rtbTracking.controller.ts` now imports `utils/postgres.query` instead of `getClickHouseClient`, persisting hashed UA/IP metadata into Postgres whenever the queue is unavailable or enqueue fails.
+- Tests & docs: `backend/src/controllers/__tests__/rtbTracking.controller.test.ts` guards the new fallback behavior, and `docs/Internal/Infrastructure/POSTGRES_MIGRATION_PLAN.md` marks Step 1.2.4 as in-progress with RTB tracking off ClickHouse.
+
+Validation
+- `npm test -- rtbTracking.controller`
+
+---
+
+Changelog — Backend Analytics: Postgres Fact Tables + Reporting API (2025-12-01)
+
+Summary
+- Captured the full Postgres analytics migration to date: fact tables now live in Postgres, ingestion batches through `analyticsService` land there, and both reporting and quality APIs read exclusively from the new SQL helpers while the migration plan documents the completed scope.
+
+What changed
+- Database: `backend/migrations/postgres/20251201_103000_analytics_tables.up.sql` (and `.down.sql`) introduce the `analytics_impressions`, `analytics_clicks`, and `analytics_revenue_events` fact tables plus supporting indexes so every downstream service can operate without ClickHouse.
+- Services: `backend/src/services/analyticsService.ts` writes all event buffers to the Postgres tables via `utils/postgres.insertMany`, and `backend/src/services/reportingService.ts` issues SQL queries (CTEs, `DATE_TRUNC`, filtered aggregates) against the same tables instead of `executeQuery`.
+- Tests & docs: `backend/src/services/__tests__/analyticsService.test.ts` and `backend/src/services/__tests__/reportingService.test.ts` now mock the Postgres helper, while `docs/Internal/Infrastructure/POSTGRES_MIGRATION_PLAN.md` marks Step 1.2.3 complete and describes the Postgres-first topology.
+
+Validation
+- `npm test -- analyticsService`
+- `npm test -- reportingService`
+
+---
+
+Changelog — Backend Analytics: Quality Monitoring Postgres Cutover (2025-12-01)
+
+Summary
+- Completed the quality monitoring Postgres migration: production code now issues SQL against the `analytics_*` tables through the shared Postgres helper, tests were rewired to mock `utils/postgres.query`, and the migration plan reflects the finished workstream.
+
+What changed
+- Backend: `backend/src/services/qualityMonitoringService.ts` dropped the ClickHouse client entirely, introduced the local `runQuery` helper, and rewrote ANR/SLO/viewability/brand-safety/compliance queries to operate on Postgres analytics tables with proper null-safe parsing.
+- Tests: `backend/src/services/__tests__/qualityMonitoringService.test.ts` now mocks `utils/postgres.query`, reuses a typed `mockRows` helper, and updates fixtures (e.g., `observed_at`, split compliance summaries/violations) to match the new SQL shape.
+- Documentation: `docs/Internal/Infrastructure/POSTGRES_MIGRATION_PLAN.md` marks Step 1.2.3 as complete, noting both reporting and quality services now read from Postgres.
+
+Validation
+- `npm test -- qualityMonitoringService`
+
+---
+
 Changelog — Phase 8: Local Evidence (Final) — 200 OK via Nginx; Redis Verified (2025-11-25)
 
 Summary
@@ -618,7 +729,7 @@ Guarantees & safety
 - Availability: routes short‑circuit to empty/0 responses if ClickHouse not available (no errors surface to callers), maintaining a “no insights” degradation mode.
 
 Operator notes
-- Apply ClickHouse migrations: node backend/scripts/runClickHouseMigrations.js
+- ClickHouse migrations were removed after the Postgres read-model cutover; legacy files remain for historical reference only.
 - Enable canary via env: VRA_ENABLED=true with VRA_SHADOW_ONLY=true for safe validation.
 - See docs/Internal/VRA/IMPLEMENTATION_SUMMARY.md for full technical details and acceptance gates.
 
@@ -2010,7 +2121,7 @@ Key changes
 
 - Transparency writer breaker + alerting upgrades
   - `backend/src/services/transparencyWriter.ts`: Emits gauges for last success/failure, breaker cooldown remaining, and failure streak; ClickHouse errors are sanitized before logging.
-  - `backend/src/utils/opsAlert.ts`: Central helper used to emit `transparency_clickhouse_failure`, `transparency_breaker_open`, and `transparency_breaker_closed` events with severity routing.
+  - `backend/src/utils/opsAlert.ts`: Central helper used to emit `transparency_storage_failure`, `transparency_breaker_open`, and `transparency_breaker_closed` events with severity routing.
   - Tests updated (`backend/src/services/__tests__/transparencyWriter.test.ts`) to assert alert emission and new metrics; scripts `npm run transparency:metrics-check` and `npm run transparency:smoke` document the canary drill.
 
 - Documentation + runbooks
