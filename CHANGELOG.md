@@ -1,3 +1,36 @@
+Changelog — Archive Query Runbook & TLS Checklist (2025-12-03)
+
+Summary
+- Wrote the DuckDB/Parquet archive-query runbook so cold analytics stays queryable without reviving ClickHouse, completing Step 7 of the Postgres migration guardrails.
+- Production readiness and infrastructure plans now call out the DigitalOcean TLS/HSTS evidence workflow and point operators at the same script that captured the latest FRA1 validation bundle.
+- Nginx SSL config mirrors the plan (Let’s Encrypt paths, OCSP stapling, `/metrics` protection hooks) so the checklist steps map 1:1 to deployable manifests.
+
+What changed
+- Docs: `docs/Internal/Infrastructure/ARCHIVE_QUERY.md` now documents how to request replica-backed exports (`POST /api/v1/data-export/jobs`), download Parquet objects, and run bounded DuckDB queries with cost guardrails.
+- Migration plan: `docs/Internal/Infrastructure/POSTGRES_MIGRATION_PLAN.md` Step 7 marks archive queryability as ✅ with a direct link to the runbook and reiterates that DuckDB/FDW gates satisfy the cold-data guardrail without ClickHouse.
+- Production checklist: `docs/Internal/Deployment/PRODUCTION_READINESS_CHECKLIST.md` and `docs/Internal/Infrastructure/INFRASTRUCTURE_MIGRATION_PLAN.md` add the Post-DO HTTPS/HSTS verification block (run `scripts/ops/do_tls_snapshot.sh`, archive redirects/TLS/HSTS evidence) so TLS readiness is explicit in Phase 9.
+- Infra: `infrastructure/nginx/apexmediation.ssl.conf` reflects the hardened TLS posture (Let’s Encrypt cert paths, OCSP stapling toggles, `/metrics` auth hook) the plan references.
+
+Validation
+- Documentation-only; no automated tests to run.
+
+---
+
+Changelog — Cursor Streaming Typings & 2FA Flow Tests (2025-12-03)
+
+Summary
+- `utils/postgres.streamQuery` now exposes typed cursor batches and enforces replica metrics so long-running exports inherit the same instrumentation as `query`.
+- Added a basic 2FA happy-path Jest test that runs entirely on mocked repositories, ensuring `twofaService` no longer depends on a live AppDataSource or KMS secret initialization.
+
+What changed
+- Backend: `backend/src/utils/postgres.ts` annotates the cursor with `<T>` generics, keeps `batchSize` bounded via `DB_STREAM_BATCH_SIZE`, and refactors the finally block so timers close once the cursor releases—callers inherit typed rows plus high-cardinality metrics.
+- Tests: `backend/src/controllers/__tests__/twofa.flows.test.ts` stubs `AppDataSource.getRepository`, seeds deterministic repository responses, injects a fake `APP_KMS_KEY`, and runs an enroll → verify/enable happy path (expecting verify to reject with a dummy token) to guarantee the service works without ClickHouse-era globals.
+
+Validation
+- `npm run test:backend -- src/controllers/__tests__/twofa.flows.test.ts`
+
+---
+
 Changelog — Data Export Streaming + ClickHouse Client Removal (2025-12-02)
 
 Summary

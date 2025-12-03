@@ -396,11 +396,12 @@ export class FinancialReportingService {
     worksheet.getCell('A1').alignment = { horizontal: 'center' };
 
     worksheet.getCell('A2').value = 'Company:';
-    worksheet.getCell('B2').value = 'Bel Consulting OÜ';
+    const headerColumn = 'B';
+    worksheet.getCell(`${headerColumn}${2}`).value = 'Bel Consulting OÜ';
     worksheet.getCell('A3').value = 'Registry Code:';
-    worksheet.getCell('B3').value = '[INSERT_ESTONIAN_REGISTRY_CODE]';
+    worksheet.getCell(`${headerColumn}${3}`).value = '[INSERT_ESTONIAN_REGISTRY_CODE]';
     worksheet.getCell('A4').value = 'Period:';
-    worksheet.getCell('B4').value = `Q${quarter} ${fiscalYear}`;
+    worksheet.getCell(`${headerColumn}${4}`).value = `Q${quarter} ${fiscalYear}`;
 
     // VAT summary section
     worksheet.getCell('A6').value = 'VAT SUMMARY';

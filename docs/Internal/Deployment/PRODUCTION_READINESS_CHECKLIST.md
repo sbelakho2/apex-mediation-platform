@@ -43,6 +43,10 @@ This is the single, self-contained runbook to take the system to production on D
 - [x] Evidence capture: run `npm run do:tls` from laptop and archive artifacts under `docs/Internal/Deployment/do-readiness-YYYY-MM-DD`.
 - [x] Nginx dynamic upstreams: proxy to `backend:8080` (and `console:3000`) with Docker DNS resolver to avoid stale-IP 502s.
 - [x] Health/Readiness are Postgres + Redis only (no ClickHouse gates): `/health` OK; `/ready` relies on DB/Redis latency and basic cache checks.
+### Post‑DO HTTPS/HSTS Verification (Phase 9)
+- [ ] Once HTTPS is live, run `scripts/ops/do_tls_snapshot.sh` (or `npm run do:tls`) from your workstation to archive redirects/TLS/HSTS output.
+- [ ] Ensure the bundle contains `verify-redirects.txt`, `verify-tls.txt`, and `verify-hsts.txt` with SSL Labs A/A+ notations.
+- [ ] Keep HSTS commented until the API cert consistently scores A/A+, then re-run the script and capture the enforcement snapshot.
 
 ### 0.0.1 Environments, Fixtures & Common Test Data
 - [ ] Provision dedicated staging endpoints (`STAGING_API_BASE`, `STAGING_CONSOLE_BASE`) and an isolated staging database
@@ -443,7 +447,7 @@ References
 
 ### Data Protection
 - [ ] Verify PII handling in logs/errors; ensure redaction in `/metrics` and Sentry.
-- [ ] Confirm backups encryption and test restore drill from Spaces/B2.
+- [ ] Confirm backups encryption and test restore drill from Spaces (plus any secondary offsite mirror).
 
 ### Evidence
 - [ ] Save scan reports and pentest summary under `docs/Internal/QA/security-YYYY-MM-DD/`.
@@ -542,7 +546,7 @@ References
 - [ ] Schedule April 30 submission reminder.
 
 ### 8.3 Document Retention
-- [ ] Configure Spaces/B2 retention (7-year invoice/doc policy).
+- [ ] Configure Spaces retention (7-year invoice/doc policy) or an equivalent S3-compatible mirror.
 - [ ] Test upload/retrieval and verify no accidental deletions.
 
 ## 9. Sales Automation
@@ -741,7 +745,7 @@ Notes:
 - Prefer queue‑based scheduling inside backend where feasible; use host cron only as a thin trigger.
 - Ensure Redis is healthy before queue work; see `npm run verify:redis --workspace backend`.
 
-### 2.3 Backups & Retention (DB → Spaces/B2)
+### 2.3 Backups & Retention (DB → Spaces + Offsite Mirror)
 - [ ] Nightly logical backup of Postgres via `pg_dump` to S3‑compatible storage
     - Script template: `scripts/backup/pg_dump_s3_template.sh`
     - Configure: `S3_ENDPOINT`, `S3_BUCKET`, `S3_PREFIX`, lifecycle retention (30–90 days)
@@ -794,7 +798,7 @@ bash scripts/backup/pg_dump_s3_template.sh
 ### 2.7 Capacity & Cost Management
 - [ ] Observe CPU/RAM/disk trends monthly; scale droplet if p95 CPU > 70% or memory pressure sustained
 - [ ] Database: monitor connections, slow queries; add indices as needed; consider plan upgrade when CPU saturates
-- [ ] Storage: track Spaces/B2 usage; enforce lifecycle rules; review backup sizes
+- [ ] Storage: track Spaces/offsite usage; enforce lifecycle rules; review backup sizes
 - [ ] Network egress: review DO bills; enable gzip in Nginx (already set) and cache headers where safe
 
 ### 2.8 Operator Routines (Checklist)

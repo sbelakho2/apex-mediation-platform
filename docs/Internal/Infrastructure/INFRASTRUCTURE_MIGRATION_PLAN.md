@@ -156,7 +156,7 @@ DigitalOcean Spaces (simple, tightly integrated)
 Approximate monthly:
 - Droplet 2 vCPU / 4GB: $24
 - Managed Postgres basic: $15
-- Spaces or B2: $5
+- Spaces primary + optional S3-compatible mirror: $5
 - Misc (egress, DNS, backup overhead): $3–5
 👉 Total: $44–49 / month, within your $50 target.
 
@@ -278,7 +278,7 @@ Final pass to ensure the infra/monitoring stack does what you need with minimal 
 ---
 
 ## TL;DR
-Move from Supabase + Upstash + ClickHouse to DigitalOcean droplet + DO Managed Postgres + simple Redis + Spaces/B2.
+Move from Supabase + Upstash + ClickHouse to DigitalOcean droplet + DO Managed Postgres + simple Redis + Spaces (plus optional offsite mirror).
 
 Lean heavily on:
 - DO monitoring,
