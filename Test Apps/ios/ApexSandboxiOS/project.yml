@@ -3,12 +3,32 @@ options:
   minimumXcodeGenVersion: 2.41.0
   deploymentTarget:
     iOS: "16.0"
+packages:
+  RivalApexMediationSDK:
+    path: ../../../sdk/core/ios
+  Firebase:
+    url: https://github.com/firebase/firebase-ios-sdk
+    from: 10.22.0
 targets:
   ApexSandboxiOS:
     type: application
     platform: iOS
     sources:
       - path: Sources
+        excludes:
+          - Info.plist
+        includes:
+          - "**/*.swift"
+    resources:
+      - path: Sources
+        includes:
+          - "**/*.json"
+    dependencies:
+      - package: RivalApexMediationSDK
+        product: RivalApexMediationSDK
+      # Optional Crashlytics (will only initialize if GoogleService-Info.plist exists at runtime)
+      - package: Firebase
+        product: FirebaseCrashlytics
     settings:
       INFOPLIST_FILE: Sources/Info.plist
       PRODUCT_BUNDLE_IDENTIFIER: com.apex.sandbox.ios

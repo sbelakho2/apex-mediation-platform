@@ -26,5 +26,7 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+    <key>NSUserTrackingUsageDescription</key>
+    <string>This identifier will be used to deliver more relevant ads and improve ad quality in the Apex Mediation SDK sandbox.</string>
 </dict>
 </plist>

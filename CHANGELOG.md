@@ -2897,3 +2897,34 @@ Validation
 - Optional: `npm run test:backend -- src/routes/__tests__/billing.routes.test.ts` should pass.
 
 ---
+Changelog — ApexSandboxiOS: Full E2E SDK Sandbox (2025-12-03)
+
+Summary
+- Implemented a simulator-only iOS sandbox app to exercise the Rival Apex Mediation SDK end-to-end: Initialize, Load/Show Interstitial and Rewarded, consent (GDPR/CCPA/COPPA) + Test Mode toggles, ATT request, and a non-blocking debug overlay (config version, last request ID, last error, ATT status, rolling logs).
+- Uses a local Swift Package dependency on `sdk/core/ios` (product `RivalApexMediationSDK`); no CocoaPods required.
+
+What changed
+- New test app at `Test Apps/ios/ApexSandboxiOS/`:
+  - `project.yml` (XcodeGen) with SPM dependency on `../../../sdk/core/ios`, resources bundling
+  - `Sources/App.swift` (simulator-only guard)
+  - `Sources/ContentView.swift` (UI: lifecycle controls, consent/ATT toggles, debug overlay)
+  - `Sources/SandboxViewModel.swift` (SDK wiring: initialize, consent, load/show interstitial & rewarded, logs)
+  - `Sources/UIKit+Root.swift` (helper to find presenter VC)
+  - `Sources/Info.plist` (includes `NSUserTrackingUsageDescription`)
+  - `Sources/SandboxConfig.json` (sample placements/config)
+  - `README.md` (how to generate/open project with XcodeGen)
+
+How to run (Simulator)
+```
+cd "Test Apps/ios/ApexSandboxiOS"
+brew install xcodegen   # if needed
+xcodegen generate
+open ApexSandboxiOS.xcodeproj
+# Select an iPhone Simulator → Run
+```
+
+Notes
+- Production code was not modified; the sandbox lives entirely under `Test Apps/`.
+- The production readiness checklist (0.0.3 iOS) was updated to mark the UI/debug overlay implementation as complete; scenario-based validations (network loss, lifecycle stress, soak run) remain to be executed.
+
+---

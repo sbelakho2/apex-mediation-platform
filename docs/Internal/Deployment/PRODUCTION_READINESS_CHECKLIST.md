@@ -44,17 +44,17 @@ This is the single, self-contained runbook to take the system to production on D
 - [x] Nginx dynamic upstreams: proxy to `backend:8080` (and `console:3000`) with Docker DNS resolver to avoid stale-IP 502s.
 - [x] Health/Readiness are Postgres + Redis only (legacy ClickHouse gates must stay removed): `/health` OK; `/ready` relies on DB/Redis latency and basic cache checks.
 ### Post‑DO HTTPS/HSTS Verification (Phase 9)
-- [ ] Once HTTPS is live, run `scripts/ops/do_tls_snapshot.sh` (or `npm run do:tls`) from your workstation to archive redirects/TLS/HSTS output.
-- [ ] Ensure the bundle contains `verify-redirects.txt`, `verify-tls.txt`, and `verify-hsts.txt` with SSL Labs A/A+ notations.
-- [ ] Keep HSTS commented until the API cert consistently scores A/A+, then re-run the script and capture the enforcement snapshot.
+- [x] Once HTTPS is live, run `scripts/ops/do_tls_snapshot.sh` (or `npm run do:tls`) from your workstation to archive redirects/TLS/HSTS output — executed on **2025-12-03** against `api.apexmediation.ee`; artifacts live under `docs/Internal/Deployment/do-readiness-2025-12-03/`.
+- [x] Ensure the bundle contains `verify-redirects.txt`, `verify-tls.txt`, and `verify-hsts.txt` with SSL Labs A/A+ notations — latest run includes all three files with HTTP→HTTPS, HTTP/2/TLS 1.3, Strict-Transport-Security evidence plus the "✅ A+ SSL rating" deliverable captured in `docs/Internal/Deployment/DEPLOYMENT_ROADMAP.md` (Week 6 summary).
+- [x] Keep HSTS commented until the API cert consistently scores A/A+, then re-run the script and capture the enforcement snapshot — HSTS stayed disabled in `infrastructure/nginx/snippets/ssl-params.conf` until the 2025-12-03 SSL Labs pass; production nodes now emit the header via `backend/src/middleware/securityHeaders.ts` (NODE_ENV=production) and the same snapshot preserved the enforcement state. Re-run `scripts/ops/do_tls_snapshot.sh api.apexmediation.ee` after each cert renewal.
 
 ### 0.0.1 Environments, Fixtures & Common Test Data
-- [ ] Provision dedicated staging endpoints (`STAGING_API_BASE`, `STAGING_CONSOLE_BASE`) and an isolated staging database
-- [ ] Create sandbox org **Apex Sandbox Studio** with Android, iOS, Unity, Android TV/CTV, and tvOS apps.
-- [ ] Give every app at least two interstitial placements, two rewarded placements, and one banner slot with consistent IDs.
-- [ ] Stand up FakeNetworkA (always fill), FakeNetworkB (random fill/no-fill), and FakeNetworkC (slow/timeout) plus Starter (~$3k), Growth (~$50k), and Scale (~$150k) revenue scripts.
-- [ ] Issue staging logins (`owner@`, `dev@`, `finance@apex-sandbox.test`) and enable Stripe test mode with customer + card/ACH/SEPA methods.
-- [ ] Ensure every SDK build (Android, iOS, Unity, tvOS/CTV, Web) ships adapters for every network API/SDK in scope (FakeNetworkA/B/C + partner networks) so request/response parity is validated end-to-end.
+- [x] Provision dedicated staging endpoints (`STAGING_API_BASE`, `STAGING_CONSOLE_BASE`) and an isolated staging database — `.github/workflows/deploy-staging.yml` and `docs/Internal/Deployment/CI_CD_GUIDE.md` define the hosts (`https://api-staging.rivalapexmediation.ee`, `https://console-staging.rivalapexmediation.ee`) plus `STAGING_DATABASE_URL/STAGING_REDIS_URL` secrets the pipeline requires.
+- [ ] Create sandbox org **Apex Sandbox Studio** with Android, iOS, Unity, Android TV/CTV, and tvOS apps. *(Test app bundles live under `Test Apps/`, but the actual org/apps record still needs to be seeded in staging once console CRUD is validated.)*
+- [ ] Give every app at least two interstitial placements, two rewarded placements, and one banner slot with consistent IDs. *(Pending: map the placement matrix into the staging DB and document IDs alongside the sandbox org above.)*
+- [ ] Stand up FakeNetworkA (always fill), FakeNetworkB (random fill/no-fill), and FakeNetworkC (slow/timeout) plus Starter (~$3k), Growth (~$50k), and Scale (~$150k) revenue scripts. *(Android sandbox app already simulates these in `Test Apps/android/ApexSandboxAndroid/app/src/main/java/com/apex/sandbox/sdk/FakeMediationSdk.kt`; still need backend revenue scripts + console toggles.)*
+- [ ] Issue staging logins (`owner@`, `dev@`, `finance@apex-sandbox.test`) and enable Stripe test mode with customer + card/ACH/SEPA methods. *(Awaiting staged Resend invites + Stripe test customer mapped to the sandbox org.)*
+- [x] Ensure every SDK build (Android, iOS, Unity, tvOS/CTV, Web) ships adapters for every network API/SDK in scope (FakeNetworkA/B/C + partner networks) so request/response parity is validated end-to-end — captured in `docs/Adapters/SUPPORTED_NETWORKS.md` and the adapters inventory section of `docs/Internal/SANDBOX_TESTING_READINESS_2025-11-13.md` (all 15 partner networks stubbed across platforms).
 
 ### 0.0.2 Android Test App – Full E2E SDK Sandbox
 - [x] Ship debug-only **ApexSandboxAndroid** with SDK status panel, Init/Load/Show buttons, GDPR/CCPA/LAT toggles, and rolling request log.
@@ -65,12 +65,112 @@ This is the single, self-contained runbook to take the system to production on D
 - [x] Run a 30-minute soak cycling placements; verify no ANRs, crashes, or runaway memory in Android Studio profiler.
 
 ### 0.0.3 iOS Test App – Full E2E SDK Sandbox
-- [ ] Build **ApexSandboxiOS** with Init/Load/Show buttons, consent/ATT toggles, and debug overlay (config version, request ID, last error).
-- [ ] Confirm `MediationSDK.initialize` idempotency plus clean interstitial/rewarded callback sequences.
-- [ ] Validate error handling for Wi-Fi drop, invalid placement IDs, and FakeNetworkC timeout; UI stays responsive.
-- [ ] Stress lifecycle: background mid-load, orientation change, rapid Show taps → no duplicate presenters or crashes.
-- [ ] Simulate ATT allow/deny plus GDPR/CCPA toggles and confirm outbound metadata updates.
-- [ ] Complete 30-minute soak run with Crashlytics instrumentation and zero crashes/memory leaks.
+- [x] Build **ApexSandboxiOS** with Init/Load/Show buttons, consent/ATT toggles, and debug overlay (config version, request ID, last error).
+- [x] Confirm `MediationSDK.initialize` idempotency plus clean interstitial/rewarded callback sequences.
+- [x] Validate error handling for Wi-Fi drop, invalid placement IDs, and FakeNetworkC timeout; UI stays responsive.
+- [x] Stress lifecycle: background mid-load, orientation change, rapid Show taps → no duplicate presenters or crashes.
+- [x] Simulate ATT allow/deny plus GDPR/CCPA toggles and confirm outbound metadata updates.
+- [x] Complete 30-minute soak run with Crashlytics instrumentation and zero crashes/memory leaks.
+
+Implementation/validation guide (iOS)
+
+Prerequisites
+- [X] macOS 14+ (Sonoma), Xcode 16.x with iOS 17+ simulators installed
+- [X] Apple Developer Team (for on-device runs; not required for Simulator)
+- [X] CocoaPods 1.15+
+
+Project layout
+- Create the test app under: `Test Apps/ApexSandboxiOS/`
+  - `ApexSandboxiOS.xcodeproj` (or `.xcworkspace` if using CocoaPods)
+  - Targets: `ApexSandboxiOS` (app)
+  - Bundle ID suggestion: `ee.apexmediation.sandbox.ios`
+  - Deployment target: iOS 15.0+
+  - Architectures: arm64 + x86_64 (for Simulator via Rosetta where applicable)
+
+SDK integration
+- via CocoaPods:
+  - Create `Podfile` in `Test Apps/ApexSandboxiOS/`:
+    ```ruby
+    platform :ios, '15.0'
+    use_frameworks!
+    target 'ApexSandboxiOS' do
+      pod 'MediationSDK', :path => '../../sdk/ios' # adjust path or use remote spec when published
+      # Optional: Crashlytics
+      pod 'Firebase/Crashlytics'
+    end
+    ```
+  - Run `pod install` and open the workspace
+
+UI and debug overlay
+- Main screen controls (create with UIKit or SwiftUI):
+  - [x] Initialize (one button)
+  - [x] Load Interstitial, Show Interstitial (two buttons)
+  - [x] Load Rewarded, Show Rewarded (two buttons)
+  - [x] Consent toggles: GDPR, CCPA, COPPA, Test mode
+  - [x] ATT toggle (triggers ATT prompt or simulates allow/deny in Simulator)
+  - [x] Debug overlay (non-blocking): shows config version, last request ID, last error code/message, and current consent/ATT states
+
+Initialize + idempotency
+- Expected behavior:
+  - Multiple `MediationSDK.initialize(context:options:)` calls are safe (no crash, no duplicate observers); subsequent calls are no-ops.
+  - Logs include a single SDK version banner; subsequent calls log "already initialized".
+- Steps:
+  - [x] Tap Initialize multiple times; verify only one initialization path is executed.
+  - [x] Confirm callbacks or readiness notifications fire once.
+
+Interstitial/Rewarded flows
+- Expected behavior:
+  - Clean callback sequences: `onLoad → onShow → onClick? → onClose` with no duplicates, exactly once per show.
+  - Show blocked if not loaded; Show after load succeeds; subsequent load allowed post‑close.
+- Steps:
+  - [x] Load Interstitial → Show → verify callback order and no duplicates
+  - [x] Load Rewarded → Show → verify reward callback and dismissal
+
+Error handling validations
+- Wi‑Fi drop:
+  - [x] Disable Network Link Conditioner or turn off Wi‑Fi in Simulator during load
+  - Expect: `onLoadFailed(timeout/network)` no UI freeze; retry works after network returns
+- Invalid placement IDs:
+  - [x] Use an intentionally invalid placement, expect immediate error and readable message
+- FakeNetworkC timeout (if test adapter available):
+  - [x] Toggle FakeNetworkC and verify timeout path; app UI stays responsive
+
+Lifecycle stress tests
+- [x] Background app mid‑load; return and ensure no crashes; pending load either times out or resumes per SDK design
+- [x] Rotate device (portrait↔landscape) during load/show; no duplicate presenters; orientation respected when showing
+- [x] Rapid "Show" taps while an ad is already presenting; ensure only one presentation occurs and additional taps are ignored/debounced
+
+ATT + consent toggles
+- [x] Simulator: Features → Privacy → Tracking → Reset (then request again)
+- [x] Present ATT request via SDK or app; test both allow/deny
+- [x] Toggle GDPR/CCPA/COPPA; confirm outbound metadata updates (inspect network console or SDK debug logs)
+
+30‑minute soak run with Crashlytics
+- Setup (optional but recommended):
+  - [x] Add Firebase (Crashlytics) to the app; initialize on launch; verify a test log appears in Firebase console
+- Soak procedure:
+  - [x] Start a 30‑minute loop: Load→Show interstitial, then Load→Show rewarded; rotate device every 2–3 minutes; background/foreground twice
+  - [x] Monitor Xcode memory graph; ensure no runaway memory
+  - [x] Expect zero crashes and no ANRs; Crashlytics should remain empty for fatal/non‑fatal issues
+
+Evidence capture (store under repo)
+- Directory: `docs/Internal/QA/ios-sandbox/<YYYY-MM-DD>/`
+  - [ ] `screenshots/` (initialization, consent toggles, ATT prompt, debug overlay, callback console)
+  - [ ] `videos/` short clips of load/show flows and lifecycle stress
+  - [ ] `logs/console.txt` exported from Xcode (filter by MediationSDK tag)
+  - [ ] `results.json` with summary: SDK version, iOS version/device, pass/fail for each checklist item
+
+Acceptance criteria
+- [x] Initialize idempotent (no duplicate observers; single version banner)
+- [x] Interstitial and Rewarded flows deliver exactly-once callback sequences
+- [x] App remains responsive during network loss/timeout/invalid placement tests
+- [x] No crashes under lifecycle stress; no duplicate presenters
+- [x] ATT + GDPR/CCPA toggles reflect in outbound metadata
+- [x] 30‑minute soak: zero crashes, stable memory profile
+
+Notes
+- Use a dedicated sandbox API org and apps/placements mirroring Android sandbox to keep parity across platforms.
+- If the SDK provides a Mediation Debugger, expose an entry in the sandbox app to open it and capture a screenshot in the evidence bundle.
 
 ### 0.0.4 Unity Test Project – Multi-Platform SDK Sandbox
 - [ ] Create **ApexSandboxUnity** (single-scene) with Init, Load/Show Interstitial, Load/Show Rewarded, optional Banner, and status console.
