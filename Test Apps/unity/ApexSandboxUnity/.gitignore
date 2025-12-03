@@ -1,0 +1,9 @@
+# Unity project files to ignore
+Library/
+Temp/
+Obj/
+Build/
+Builds/
+Logs/
+UserSettings/
+Packages/packages-lock.json

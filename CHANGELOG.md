@@ -2928,3 +2928,60 @@ Notes
 - The production readiness checklist (0.0.3 iOS) was updated to mark the UI/debug overlay implementation as complete; scenario-based validations (network loss, lifecycle stress, soak run) remain to be executed.
 
 ---
+
+Changelog — ApexSandboxUnity: Multi‑Platform SDK Sandbox (2025-12-03)
+
+Summary
+- Implemented a single‑scene Unity sandbox app to exercise the mediation SDK bridge across Android and iOS: Initialize (idempotent), Load/Show Interstitial and Rewarded, optional Banner toggle, consent (GDPR/CCPA/COPPA/Test Mode) propagation, and a rolling status console.
+- Unity bridge maps native errors into Unity enums (`NoFill`, `Timeout`, `Network`, `InvalidPlacement`, `Unknown`) and ensures callbacks fire exactly once per show.
+
+What changed
+- New Unity project at `Test Apps/unity/ApexSandboxUnity/`:
+  - `Assets/Scenes/Main.unity` (single scene)
+  - `Assets/Scripts/`:
+    - `SandboxController.cs` (UI + state gating; Init/Load/Show, consent toggles, status console)
+    - `SdkBridge.cs` (Unity→native bridge with iOS externs/AndroidJava hooks; simulated fallbacks in Editor)
+    - `Enums.cs`, `ConsentPayload.cs`, `Logger.cs`
+  - `Assets/Resources/SandboxConfig.json` (placements/appId/consent/testMode; matched with mobile sandboxes)
+  - `Assets/Editor/BuildScripts.cs` (menu + CLI exports for Android Gradle and iOS Xcode; writes `sdk_versions.json`)
+  - `README.md` (how to open, run, and export builds)
+
+How to export builds (Editor)
+- Android: Menu → ApexSandbox → Export Android (Gradle) → outputs under `Builds/Android/`
+- iOS: Menu → ApexSandbox → Export iOS (Xcode) → outputs under `Builds/iOS/`
+
+Notes
+- The bridge forwards consent/init to native layers when present; otherwise uses simulated behavior and logs in Editor.
+- No production runtime code modified; all files live under `Test Apps/unity/ApexSandboxUnity/`.
+
+---
+
+Changelog — ApexSandboxCTV-Android: Android TV / CTV Sandbox (2025-12-03)
+
+Summary
+- Added a dedicated Android TV/Fire TV sandbox app to validate CTV flows end‑to‑end with a remote‑friendly focus UI, fullscreen ad placeholder (1080p/4K), graceful Back dismissal, lifecycle resilience, and platform‑tagged logs.
+
+What changed
+- New project: `Test Apps/android_tv/ApexSandboxCTV-Android/`
+  - Gradle setup: `build.gradle`, `settings.gradle`, `app/build.gradle`
+  - App manifest with Leanback launcher: `app/src/main/AndroidManifest.xml`
+  - Activity and TV UI:
+    - `app/src/main/java/ee/apexmediation/sandbox/ctv/MainActivity.kt` (Initialize, Load/Show Interstitial & Rewarded, Back to dismiss, lifecycle + connectivity checks, logs tagged `platform=android_tv`)
+    - Layouts: `res/layout/activity_main.xml` (D‑pad/focus friendly), `res/layout/view_ad_overlay.xml` (fullscreen debug placeholder)
+  - Theme: `res/values/styles.xml` using `Theme.Leanback`
+  - Proguard: `app/proguard-rules.pro`
+  - README with emulator/hardware instructions
+
+How to run (Android Studio / Gradle)
+- Open Android Studio → Open `Test Apps/android_tv/ApexSandboxCTV-Android`
+- Select an Android TV / Fire TV emulator (1080p; optionally 4K) → Run
+- Or: `./gradlew :app:assembleDebug` then install to a TV device/emulator
+
+Validation
+- Initialize is idempotent; repeated presses log "initialize already".
+- Interstitial/Rewarded: Load then Show displays a fullscreen overlay; Back dismisses gracefully and returns focus to the main button row.
+- Lifecycle: Home → other app → return logs onPause/onResume and preserves state.
+- Network: loading while offline shows a readable status; online resumes expected behavior.
+- Logs include `platform=android_tv` on init/load/show/close events for analytics segmentation.
+
+---

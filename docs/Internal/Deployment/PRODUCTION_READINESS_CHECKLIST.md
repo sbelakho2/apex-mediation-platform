@@ -173,16 +173,16 @@ Notes
 - If the SDK provides a Mediation Debugger, expose an entry in the sandbox app to open it and capture a screenshot in the evidence bundle.
 
 ### 0.0.4 Unity Test Project – Multi-Platform SDK Sandbox
-- [ ] Create **ApexSandboxUnity** (single-scene) with Init, Load/Show Interstitial, Load/Show Rewarded, optional Banner, and status console.
-- [ ] Export Android and iOS builds; ensure Unity wrapper wiring matches native SDK versions.
-- [ ] Verify Unity callbacks fire exactly once per show and map errors (no-fill/timeout/network) into Unity enums/strings.
-- [ ] Ensure Unity consent toggles propagate down to native layers (check staging logs) and that placement IDs/configs match mobile builds.
+- [x] Create **ApexSandboxUnity** (single-scene) with Init, Load/Show Interstitial, Load/Show Rewarded, optional Banner, and status console.
+- [x] Export Android and iOS builds; ensure Unity wrapper wiring matches native SDK versions.
+- [x] Verify Unity callbacks fire exactly once per show and map errors (no-fill/timeout/network) into Unity enums/strings.
+- [x] Ensure Unity consent toggles propagate down to native layers (check staging logs) and that placement IDs/configs match mobile builds.
 
 ### 0.0.5 Android TV / CTV Test App
-- [ ] Build **ApexSandboxCTV-Android** with remote-friendly focus UI and full-screen ad surface (1080p + 4K).
-- [ ] Validate SDK init plus interstitial/rewarded load+show on real Android TV/Fire TV hardware or emulator; Back button dismisses gracefully.
-- [ ] Confirm lifecycle resilience (Home → other app → return) and smooth handling of Ethernet/Wi-Fi toggles mid-load.
-- [ ] Ensure logging tags requests with `platform=android_tv` (or similar) for analytics segmentation.
+- [x] Build **ApexSandboxCTV-Android** with remote-friendly focus UI and full-screen ad surface (1080p + 4K).
+- [x] Validate SDK init plus interstitial/rewarded load+show on real Android TV/Fire TV hardware or emulator; Back button dismisses gracefully.
+- [x] Confirm lifecycle resilience (Home → other app → return) and smooth handling of Ethernet/Wi-Fi toggles mid-load.
+- [x] Ensure logging tags requests with `platform=android_tv` (or similar) for analytics segmentation.
 
 ### 0.0.6 tvOS / CTV Test App
 - [ ] Build **ApexSandboxCTV-tvOS** with focus-driven UI (Init, Show Interstitial, Show Rewarded) and test on Apple TV.
