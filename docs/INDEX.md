@@ -33,6 +33,12 @@ Docs/
 
 ---
 
+## ✅ Recent Updates (2025-12-03)
+- `docs/Internal/Deployment/PRODUCTION_READINESS_CHECKLIST.md` now captures the backend Jest sweep from 2025-12-03 (133/134 suites, 733 tests) proving the Postgres-only stack is green and documenting the evidence under the migrations/readiness notes.
+- `docs/Internal/Infrastructure/POSTGRES_MIGRATION_PLAN.md` includes an “Implementation Status (2025-12-03)” banner summarizing ClickHouse removal, the latest backend verification command, and guardrail evidence links for the Post-Migration 12-Step Checklist.
+
+---
+
 ## 🌐 Customer-Facing Documentation
 
 ### Getting Started
@@ -96,6 +102,7 @@ Docs/
 - **QUICK_START_DEPLOYMENT.md** - Quick deployment guide
 - **PRE_DEPLOYMENT_CHECKLIST.md** - Pre-deployment validation
 - **PRODUCTION_READINESS_CHECKLIST.md** - Production checklist
+  - TLS/HSTS, Postgres-only readiness, and 2025-12-03 backend Jest evidence log
 - **CI_CD_COMPLETION_REPORT.md** - CI/CD implementation
 - **CI_CD_GUIDE.md** - CI/CD setup
 - **ACCOUNTING_*.md** - Accounting system docs
@@ -111,6 +118,11 @@ Docs/
   - Cloud provider migration
   - Database migration
   - Service architecture
+
+- **POSTGRES_MIGRATION_PLAN.md** - Postgres-first architecture + ClickHouse removal status (Implementation Status banner + guardrails)
+  - Guardrails for append-only facts, replicas, retention, and rollback
+  - Workstream-by-workstream completion notes with migration IDs
+  - Post-Migration 12-Step Checklist evidence references and recent backend verification command
 
 - **CLICKHOUSE_INTEGRATION.md** - Archived ClickHouse analytics plan (historical reference only; Postgres now primary)
   - Schema design (legacy)
@@ -259,6 +271,6 @@ Operational procedures for production systems:
 
 ---
 
-**Last Updated**: 2025-11-04
+**Last Updated**: 2025-12-03
 **Maintained By**: ApexMediation Engineering Team
 **Questions?** Contact: dev@bel-consulting.ee

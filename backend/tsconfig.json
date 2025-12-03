@@ -16,7 +16,8 @@
     "declarationMap": true,
     "sourceMap": true,
     "moduleResolution": "node",
-    "types": ["node", "jest"]
+    "types": ["node", "jest"],
+    "typeRoots": ["./src/types", "./node_modules/@types"]
   },
   "include": ["src/**/*", "services/**/*", "scripts/**/*"],
   "exclude": ["node_modules", "dist", "**/*.test.ts"]

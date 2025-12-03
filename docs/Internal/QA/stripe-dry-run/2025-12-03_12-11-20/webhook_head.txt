@@ -1,0 +1,26 @@
+HTTP/1.1 404 Not Found
+Cross-Origin-Opener-Policy: same-origin
+Cross-Origin-Resource-Policy: same-origin
+Origin-Agent-Cluster: ?1
+Referrer-Policy: no-referrer
+Strict-Transport-Security: max-age=15552000; includeSubDomains
+X-Content-Type-Options: nosniff
+X-DNS-Prefetch-Control: off
+X-Download-Options: noopen
+X-Frame-Options: SAMEORIGIN
+X-Permitted-Cross-Domain-Policies: none
+X-XSS-Protection: 0
+Vary: Origin, Accept-Encoding
+Access-Control-Allow-Credentials: true
+X-RateLimit-Limit: 100
+X-RateLimit-Remaining: 91
+Date: Wed, 03 Dec 2025 11:11:22 GMT
+X-RateLimit-Reset: 1764760483
+x-request-id: cc7d3442-30ac-4a0e-8530-5066ea225903
+set-cookie: XSRF-TOKEN=pDmvethD7XbAOFdgKwpb66Zk; Path=/; SameSite=Lax
+Content-Type: application/json; charset=utf-8
+Content-Length: 75
+ETag: W/"4b-yBKvqa4LU3u7Uqzs+rE+YsXZQlI"
+Connection: keep-alive
+Keep-Alive: timeout=5
+

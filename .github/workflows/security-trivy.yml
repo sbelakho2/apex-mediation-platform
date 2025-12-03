@@ -54,9 +54,6 @@ jobs:
           - name: console
             dockerfile: console/Dockerfile
             context: console
-          - name: analytics
-            dockerfile: backend/analytics/Dockerfile
-            context: backend/analytics
     steps:
       - uses: actions/checkout@v4
       

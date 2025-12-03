@@ -1,33 +1,37 @@
 import { generateKeyPairSync } from 'crypto';
 import type { Bid, OpenRTBBidRequest, OpenRTBBidResponse } from '../src/types/openrtb.types';
 import type { AuctionResult } from '../src/services/openrtbEngine';
-import {
-  TransparencyWriter,
-  type ClickHouseClient,
-  type ClickHouseInsertArgs,
-} from '../src/services/transparencyWriter';
+import { TransparencyWriter, type TransparencyStorage } from '../src/services/transparencyWriter';
 import { promRegister } from '../src/utils/prometheus';
 
 type InsertBehavior =
   | { type: 'resolve' }
   | { type: 'reject'; error: Error & { statusCode?: number; code?: string } };
 
-class SequenceClient implements ClickHouseClient {
+class SequenceStorage implements TransparencyStorage {
   private queue: InsertBehavior[] = [];
 
   public enqueue(...behaviors: InsertBehavior[]) {
     this.queue.push(...behaviors);
   }
 
-  async insert(_args: ClickHouseInsertArgs): Promise<void> {
+  private async handle(kind: 'auctions' | 'candidates'): Promise<void> {
     const behavior = this.queue.shift();
     if (!behavior) {
-      throw new Error('SequenceClient: unexpected insert call with no configured behavior');
+      throw new Error(`SequenceStorage: unexpected ${kind} insert call with no configured behavior`);
     }
     if (behavior.type === 'resolve') {
       return;
     }
     throw behavior.error;
+  }
+
+  async insertAuctions(_rows: ReadonlyArray<unknown>): Promise<void> {
+    await this.handle('auctions');
+  }
+
+  async insertCandidates(_rows: ReadonlyArray<unknown>): Promise<void> {
+    await this.handle('candidates');
   }
 }
 
@@ -106,13 +110,13 @@ function makeAuctionResult(winnerBid: Bid, response: OpenRTBBidResponse): Auctio
 }
 
 function transientError(statusCode: number): Error & { statusCode: number } {
-  const error = new Error(`ClickHouse transient ${statusCode}`) as Error & { statusCode: number };
+  const error = new Error(`Storage transient ${statusCode}`) as Error & { statusCode: number };
   error.statusCode = statusCode;
   return error;
 }
 
 function nonTransientError(statusCode: number): Error & { statusCode: number } {
-  const error = new Error(`ClickHouse non-transient ${statusCode}`) as Error & { statusCode: number };
+  const error = new Error(`Storage non-transient ${statusCode}`) as Error & { statusCode: number };
   error.statusCode = statusCode;
   return error;
 }
@@ -123,10 +127,10 @@ async function main() {
   const { privateKey } = generateKeyPairSync('ed25519');
   const privateKeyPem = privateKey.export({ type: 'pkcs8', format: 'pem' }).toString();
 
-  const client = new SequenceClient();
+  const storage = new SequenceStorage();
   let currentTime = Date.now();
   const writer = new TransparencyWriter({
-    client,
+    storage,
     samplingBps: 10000,
     privateKeySource: privateKeyPem,
     keyId: 'dev-test-key',
@@ -153,7 +157,7 @@ async function main() {
   };
 
   // Scenario 1: transient failure recovered by retry
-  client.enqueue(
+  storage.enqueue(
     { type: 'reject', error: transientError(500) },
     { type: 'resolve' },
     { type: 'resolve' }
@@ -162,7 +166,7 @@ async function main() {
   logMetrics('After transient retry success');
 
   // Scenario 2: consecutive non-transient failures trigger breaker open
-  client.enqueue({ type: 'reject', error: nonTransientError(400) });
+  storage.enqueue({ type: 'reject', error: nonTransientError(400) });
   try {
     await writer.recordAuction(request, result, new Date(currentTime));
   } catch (error) {
@@ -170,7 +174,7 @@ async function main() {
     console.log('Expected failure #1 (non-transient):', (error as Error).message);
   }
 
-  client.enqueue({ type: 'reject', error: nonTransientError(400) });
+  storage.enqueue({ type: 'reject', error: nonTransientError(400) });
   try {
     await writer.recordAuction(request, result, new Date(currentTime));
   } catch (error) {

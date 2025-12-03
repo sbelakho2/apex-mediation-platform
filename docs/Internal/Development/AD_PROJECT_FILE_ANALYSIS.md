@@ -1,7 +1,9 @@
 # AD-Project File-by-File Analysis
 
 _Last updated: 2025-11-14 00:00 UTC_
-_Owner: Platform Engineering 
+_Owner: Platform Engineering_
+
+> **Postgres-only follow-up (2025-12-03):** This audit intentionally preserves the historical descriptions captured prior to the ClickHouse teardown. Any references to ClickHouse clients, env vars, or schemas describe the pre-cutover state and should be treated as archival context only; production code now runs exclusively on PostgreSQL + Redis.
 
 ## Objectives
 - Provide a repeatable, auditable record of what every file in the repository does, its dependencies, and its current health.

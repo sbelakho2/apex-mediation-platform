@@ -579,7 +579,7 @@ Acceptance:
   - [x] Deduplication rules (per request_id / impression_id / click_id)
   - [x] Privacy guard: drop direct identifiers; hash stable IDs; truncate IP (/24) & UA normalization
   - [x] Add ETL dry‑run + unit tests (golden queries, row counts, null checks)
-  - Evidence: ML/scripts/etl_postgres.py (hashing, partitioned parquet writer backed by Postgres) with ML/scripts/etl_clickhouse.py retained only as a shim, plus ML/scripts/tests/test_etl_postgres.py (dry-run + CTIT/IP/privacy fixtures)
+  - Evidence: ML/scripts/etl_postgres.py (hashing, partitioned parquet writer backed by Postgres) is now the sole maintained exporter; the former ML/scripts/etl_clickhouse.py shim has been removed after the Postgres cutover. ML/scripts/tests/test_etl_postgres.py (dry-run + CTIT/IP/privacy fixtures) remains the validation harness.
 
 - [x] Enrichment (cached locally; no external calls at runtime)
   - [x] IP intelligence: AbuseIPDB exports ingest (CSV), Tor exit list, cloud IP ranges (AWS/GCP/Azure) → local prefix index (backend/src/services/enrichment/enrichmentService.ts, ipRangeIndex.ts)
@@ -2051,7 +2051,7 @@ Impact on plan
 
 ## 2025-11-08 — ML Fraud ETL bring-up
 - Delivered end-to-end ClickHouse → Parquet pipeline aligned with DataContracts v1.0.0. (Superseded by the Postgres pipeline on 2025-11-27.)
-  - `ML/scripts/etl_postgres.py` is the maintained exporter (etl_clickhouse.py now imports it as a shim) and handles date windowing, dedupe rules, CTIT joins, adapter/IP aggregates, privacy hashing (`--hash-salt`), and partitioned parquet output with metadata manifest.
+  - `ML/scripts/etl_postgres.py` is the maintained exporter (the old etl_clickhouse shim has been deleted) and handles date windowing, dedupe rules, CTIT joins, adapter/IP aggregates, privacy hashing (`--hash-salt`), and partitioned parquet output with metadata manifest.
   - `ML/scripts/tests/test_etl_postgres.py` provides offline coverage via a fake psycopg client (hash enforcement, CTIT computation, IP truncation, adapter latency/error stats, dry-run) while the old ClickHouse test remains as a compatibility import.
   - `ML/requirements.txt` / `ML/pyproject.toml` now include `psycopg[binary]` to satisfy Postgres exports.
 - Checklist impact: `P0 › ML Fraud — Shadow Mode and Data Pipeline › ETL` marked complete with evidence links.

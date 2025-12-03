@@ -174,4 +174,3 @@ FROM analytics_revenue_events_legacy;
 DROP TABLE IF EXISTS analytics_impressions_legacy;
 DROP TABLE IF EXISTS analytics_clicks_legacy;
 DROP TABLE IF EXISTS analytics_revenue_events_legacy;
-```}

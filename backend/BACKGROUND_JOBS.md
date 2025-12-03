@@ -504,7 +504,7 @@ Response:
   "status": "healthy",
   "services": {
     "postgres": "up",
-    "clickhouse": "up",
+    "analytics_rollups": "up",
     "redis": "up",
     "queues": "up"
   }
@@ -594,7 +594,7 @@ The queue system integrates with the existing data export service:
 3. Job added to `DATA_EXPORT` queue
 4. Worker processes job:
    - Updates status to 'processing'
-   - Fetches data from ClickHouse
+  - Fetches data from analytics rollup tables
    - Generates file (CSV/JSON)
    - Updates status to 'completed'
    - Stores file path

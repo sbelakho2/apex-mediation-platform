@@ -1,7 +1,127 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import type { Metadata } from 'next';
+import type { ReactNode } from 'react';
 
 const RESERVED_SEGMENTS = new Set(['api']);
+const SLUG_BASE_URL = 'https://apexmediation.ee';
+const DEFAULT_TITLE = 'ApexMediation - Enterprise Ad Mediation Platform';
+const DEFAULT_DESCRIPTION =
+  'Maximize your BYO mediation revenue with transparent reporting, fraud protection, and developer-first workflows.';
+
+const SEO_MAP: Record<string, { title: string; description: string }> = {
+  documentation: {
+    title: 'Developer Documentation | ApexMediation',
+    description: 'Reference SDK guides, RTB APIs, and integration checklists for every supported platform.',
+  },
+  pricing: {
+    title: 'Pricing & BYO Platform Tiers | ApexMediation',
+    description: 'See Starter, Growth, Scale, and Enterprise pricing (0–2.5%) plus included support and automation.',
+  },
+  support: {
+    title: 'Support & Implementation Help | ApexMediation',
+    description: 'Open support tickets, review SLAs, and contact the developer advocacy team for launch assistance.',
+  },
+  about: {
+    title: 'About Bel Consulting OÜ | ApexMediation',
+    description: 'Learn how ApexMediation delivers transparent ad demand while keeping publishers in full control.',
+  },
+  team: {
+    title: 'Leadership & Team | ApexMediation',
+    description: 'Meet the revenue, product, and engineering leads building the ApexMediation BYO platform.',
+  },
+  careers: {
+    title: 'Careers at ApexMediation',
+    description: 'Join a fully-remote team focused on transparent ad monetization, privacy, and revenue automation.',
+  },
+  press: {
+    title: 'Press & Media Kit | ApexMediation',
+    description: 'Download the latest press kit, brand assets, and company stats for coverage or partnerships.',
+  },
+  guides: {
+    title: 'Implementation Guides | ApexMediation',
+    description: 'Step-by-step guides for SDK integration, consent tooling, and BYO adapter orchestration.',
+  },
+  'case-studies': {
+    title: 'Case Studies | ApexMediation',
+    description: 'See how publishers improve fill, transparency, and billing accuracy with ApexMediation.',
+  },
+  changelog: {
+    title: 'Product Changelog | ApexMediation',
+    description: 'Track weekly product improvements across SDKs, console, billing, and transparency tooling.',
+  },
+  blog: {
+    title: 'ApexMediation Blog',
+    description: 'Insights on ad monetization strategy, BYO mediation, and transparency-first revenue ops.',
+  },
+  'blog/monetization-trends-2025': {
+    title: '2025 Monetization Trends | ApexMediation',
+    description: 'Key 2025 trends across rewarded video, transparency, and BYO mediation economics.',
+  },
+  privacy: {
+    title: 'Privacy Policy | ApexMediation',
+    description: 'How Bel Consulting OÜ processes publisher and end-user data with GDPR-first safeguards.',
+  },
+  terms: {
+    title: 'Terms of Service | ApexMediation',
+    description: 'Customer agreement covering platform usage, responsibilities, and service guarantees.',
+  },
+  gdpr: {
+    title: 'GDPR & Data Processing | ApexMediation',
+    description: 'DPIA guidance, roles, and lawful bases for GDPR-compliant mediation workflows.',
+  },
+  security: {
+    title: 'Security Program | ApexMediation',
+    description: 'Learn about encryption, access controls, and incident response SLAs protecting your data.',
+  },
+  cookies: {
+    title: 'Cookie Policy | ApexMediation',
+    description: 'Details on analytics, functional, and consent cookies used across apexmediation.ee.',
+  },
+};
+
+const buildSlugKey = (slug: string[]): string => slug.map((segment) => segment.toLowerCase()).join('/');
+
+export function generateMetadata({ params }: PageProps): Metadata {
+  if (!params.slug?.length) {
+    return {
+      title: DEFAULT_TITLE,
+      description: DEFAULT_DESCRIPTION,
+    };
+  }
+
+  const slugKey = buildSlugKey(params.slug);
+  const seo = SEO_MAP[slugKey];
+  const path = `/${params.slug.join('/')}`;
+
+  return {
+    title: seo?.title ?? DEFAULT_TITLE,
+    description: seo?.description ?? DEFAULT_DESCRIPTION,
+    alternates: {
+      canonical: `${SLUG_BASE_URL}${path}`,
+    },
+    openGraph: {
+      title: seo?.title ?? DEFAULT_TITLE,
+      description: seo?.description ?? DEFAULT_DESCRIPTION,
+      url: `${SLUG_BASE_URL}${path}`,
+      siteName: 'ApexMediation',
+      type: 'article',
+      images: [
+        {
+          url: '/og-image.png',
+          width: 1200,
+          height: 630,
+        },
+      ],
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title: seo?.title ?? DEFAULT_TITLE,
+      description: seo?.description ?? DEFAULT_DESCRIPTION,
+      images: ['/og-image.png'],
+    },
+  };
+}
 
 type PageProps = {
   params: {
@@ -24,8 +144,7 @@ export default function InformationalPage({ params }: PageProps) {
     notFound();
   }
 
-  const slugSegments = params.slug.map((segment) => segment.toLowerCase());
-  const slugKey = slugSegments.join('/');
+  const slugKey = buildSlugKey(params.slug);
 
   const breadcrumbs: Breadcrumb[] = params.slug.map((segment, index) => ({
     href: `/${params.slug.slice(0, index + 1).join('/')}`,
@@ -42,102 +161,52 @@ export default function InformationalPage({ params }: PageProps) {
   return page;
 }
 
-function PageLayout({
-  title,
-  intro,
-  breadcrumbs,
-          intro="Detailed guidance for data controllers integrating ApexMediation, the Bel Consulting OÜ platform operating at apexmediation.ee."
-  heroTag,
-}: {
+type PageLayoutProps = {
   title: string;
   intro: string;
-            <section className="rounded-3xl bg-white p-8 text-gray-900 shadow-xl ring-1 ring-gray-200 space-y-3">
-              <h2 className="text-h3 font-bold uppercase">Scope & roles</h2>
-              <p className="text-sm text-gray-700">
-                ApexMediation (Bel Consulting OÜ) processes personal data strictly to provide mediation, reporting, fraud, and billing services to publishers. You remain the Data Controller; Bel Consulting OÜ acts as Data Processor under Article 28 GDPR and the Data Processing Agreement accessible in <Link href="/dashboard/settings?tab=security" className="font-bold underline">Settings → Security</Link>. Sub-processors are limited to core infrastructure (Fly.io, DigitalOcean, ClickHouse Cloud, Resend), and the demand partners you explicitly connect. Notices of new sub-processors are posted 30 days in advance.
-              </p>
-            </section>
+  heroTag: string;
+  breadcrumbs: Breadcrumb[];
+  children: ReactNode;
+};
 
-            <section className="rounded-3xl bg-white p-8 text-gray-900 shadow-xl ring-1 ring-gray-200 space-y-3">
-              <h2 className="text-h3 font-bold uppercase">Data categories & purposes</h2>
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
-                  <h3 className="text-sm font-semibold text-gray-900">End-user data</h3>
-                  <ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-gray-700">
-                    <li>Advertising identifiers (IDFA, GAID, AdID), hashed user IDs, consent strings.</li>
-                    <li>Device metadata (OS version, locale, screen size, timezone).</li>
-                    <li>Event telemetry (requests, fills, impressions, clicks, rewards, revenue).</li>
-                  </ul>
-                </div>
-                <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
-                  <h3 className="text-sm font-semibold text-gray-900">Publisher & finance data</h3>
-                  <ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-gray-700">
-                    <li>Organisation profile, billing contacts, tax IDs, payout banking info.</li>
-                    <li>Support conversations, audit logs, and automation metadata.</li>
-                    <li>Aggregated marketplace metrics for benchmarking (anonymised).</li>
-                  </ul>
-                </div>
-              </div>
-              <p className="text-sm text-gray-700">
-                Purposes include ad serving, fraud detection, reporting, usage-based billing, support, and compliance evidence. We never sell or broker personal data.
-              </p>
-            </section>
+function PageLayout({ title, intro, heroTag, breadcrumbs, children }: PageLayoutProps) {
+  const lastIndex = breadcrumbs.length - 1;
 
-            <section className="rounded-3xl bg-white p-8 text-gray-900 shadow-xl ring-1 ring-gray-200 space-y-3">
-              <h2 className="text-h3 font-bold uppercase">Lawful bases & consent</h2>
-              <ul className="list-disc space-y-3 pl-6 text-sm text-gray-700">
-                <li>Personalised ads and analytics rely on user consent gathered through your CMP (IAB TCF v2.2 or equivalent). Our SDK stores consent records for up to 13 months.</li>
-                <li>Fraud detection, security logging, availability monitoring, and non-personalised ads rely on legitimate interest (Article 6(1)(f)). Balancing tests are documented within the DPIA template.</li>
-                <li>Payment processing and invoicing rely on contract fulfilment (Article 6(1)(b)) and legal obligations (tax retention rules).</li>
-              </ul>
-              <p className="text-sm text-gray-700">
-                Provide clear notices, purpose-specific toggles, and equal withdrawal mechanisms. The SDK exposes `setConsentState`, `setChildDirected`, and `setLimitAdTracking` helpers for mobile and Unity surfaces.
-              </p>
-            </section>
+  return (
+    <main className="bg-gray-50">
+      <div className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-4 pb-16 pt-10 sm:px-6 lg:px-8">
+        <nav aria-label="Breadcrumb" className="overflow-x-auto text-sm text-gray-600">
+          <ol className="flex flex-wrap items-center gap-2 whitespace-nowrap">
+            <li>
+              <Link href="/" className="text-gray-500 transition hover:text-gray-900">
+                Home
+              </Link>
+            </li>
+            {breadcrumbs.map((crumb, index) => (
+              <li key={crumb.href} className="flex items-center gap-2">
+                <span aria-hidden="true" className="text-gray-400">
+                  /
+                </span>
+                {index === lastIndex ? (
+                  <span className="font-semibold capitalize text-gray-900">{crumb.label}</span>
+                ) : (
+                  <Link href={crumb.href} className="text-gray-500 transition hover:text-gray-900">
+                    {crumb.label}
+                  </Link>
+                )}
+              </li>
+            ))}
+          </ol>
+        </nav>
 
-            <section className="rounded-3xl bg-white p-8 text-gray-900 shadow-xl ring-1 ring-gray-200 space-y-3">
-              <h2 className="text-h3 font-bold uppercase">Data subject rights tooling</h2>
-              <p className="text-sm text-gray-700">
-                Automations satisfy access, deletion, rectification, portability, and objection requests inside 30 days (median under 15 minutes). Integrations include:
-              </p>
-              <ul className="list-disc space-y-3 pl-6 text-sm text-gray-700">
-                <li><code className="rounded bg-gray-100 px-1 py-0.5">POST /v1/gdpr/access</code> – returns JSON/CSV including raw auction and reward history.</li>
-                <li><code className="rounded bg-gray-100 px-1 py-0.5">POST /v1/gdpr/delete</code> – purges hot + cold storage, adapter caches, and queued payouts, then emits a signed deletion receipt.</li>
-                <li>Role-gated console workflows for manual review plus webhook notifications for your compliance inbox.</li>
-              </ul>
-            </section>
+        <header className="space-y-4 text-center md:text-left">
+          <p className="text-xs font-semibold uppercase tracking-[0.35em] text-gray-500">{heroTag}</p>
+          <h1 className="text-3xl font-semibold text-gray-900 sm:text-4xl lg:text-5xl">{title}</h1>
+          <p className="text-base leading-relaxed text-gray-600 md:text-lg">{intro}</p>
+        </header>
 
-            <section className="rounded-3xl bg-white p-8 text-gray-900 shadow-xl ring-1 ring-gray-200 space-y-3">
-              <h2 className="text-h3 font-bold uppercase">International transfers & retention</h2>
-              <ul className="list-disc space-y-3 pl-6 text-sm text-gray-700">
-                <li>Primary storage lives in EU-West (Frankfurt) with encrypted backups in Dublin. Cross-border transfers outside the EEA use EU Standard Contractual Clauses plus supplementary controls (TLS 1.3, encryption keys held in EU HSMs).</li>
-                <li>End-user telemetry deletes 90 days after last activity; aggregated analytics remain but are irreversibly anonymised.</li>
-                <li>Account, billing, and contract data deletes 30 days after termination unless finance or tax law requires up to seven-year retention.</li>
-              </ul>
-            </section>
-
-            <section className="rounded-3xl bg-white p-8 text-gray-900 shadow-xl ring-1 ring-gray-200 space-y-3">
-              <h2 className="text-h3 font-bold uppercase">Security & incident response</h2>
-              <p className="text-sm text-gray-700">
-                Controls include TLS 1.3 everywhere, AES-256 encryption at rest, hardware security keys for privileged access, quarterly penetration tests, and 24/7 anomaly detection on ingestion pipelines. Incident response SLAs:
-              </p>
-              <ul className="list-disc space-y-3 pl-6 text-sm text-gray-700">
-                <li>Notify controllers within 24 hours of confirming a breach affecting their data.</li>
-                <li>Notify supervisory authorities within 72 hours when required by Article 33.</li>
-                <li>Provide post-incident reports, mitigation steps, and updated risk assessments.</li>
-              </ul>
-            </section>
-
-            <section className="rounded-3xl bg-white p-8 text-gray-900 shadow-xl ring-1 ring-gray-200 space-y-3">
-              <h2 className="text-h3 font-bold uppercase">Contact & escalation</h2>
-              <p className="text-sm text-gray-700">
-                Data Protection Officer: <a href="mailto:dpo@apexmediation.ee" className="underline">dpo@apexmediation.ee</a>. Mailing address: Bel Consulting OÜ, Sepapaja 6, Tallinn 15551, Estonia. For complaints you may also contact the Estonian Data Protection Inspectorate (Andmekaitse Inspektsioon) at <a href="https://www.aki.ee" className="underline" rel="noreferrer" target="_blank">aki.ee</a>.
-              </p>
-              <p className="text-sm text-gray-700">
-                For implementation help email <a href="mailto:support@bel-consulting.ee" className="underline">support@bel-consulting.ee</a> or file a ticket in the dashboard. DPIA templates, consent copy, and audit checklists live in the Customer-Facing GDPR documentation bundle.
-              </p>
-            </section>
-          </div>
+        <div className="space-y-10 lg:space-y-12">{children}</div>
+      </div>
     </main>
   );
 }

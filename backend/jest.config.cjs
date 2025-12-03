@@ -17,6 +17,16 @@ const config = {
   // Ignore built output to prevent duplicate manual mocks (__mocks__) from dist
   modulePathIgnorePatterns: ['<rootDir>/dist/'],
   testPathIgnorePatterns: [],
+  globals: {
+    'ts-jest': {
+      tsconfig: {
+        // Ensure Jest globals are available in TS during test transpilation
+        types: ['jest', 'node'],
+        typeRoots: ['<rootDir>/src/types', '<rootDir>/node_modules/@types'],
+      },
+      isolatedModules: true,
+    },
+  },
 };
 
 // Gate DB-backed integration tests behind FORCE_DB_SETUP flag for lightweight CI/local runs

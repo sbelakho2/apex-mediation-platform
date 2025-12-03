@@ -142,7 +142,7 @@ func makeAPIRequest(t *testing.T, method, rawPath, publisherID string, body inte
 	}
 }
 
-func queryClickHouse(t *testing.T, query string) int {
+func queryAnalyticsPostgres(t *testing.T, query string) int {
 	t.Helper()
 	return testBackend.query(query)
 }

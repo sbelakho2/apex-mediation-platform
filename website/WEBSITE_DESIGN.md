@@ -45,7 +45,7 @@ Complete technical architecture for connecting the customer-facing website to th
 │  Microservices (Go):                                         │
 │  - Auction Service (port 8080)  - Header Bidding             │
 │  - Fraud Service (port 8081)    - ML Detection               │
-│  - Analytics Service (port 8082) - ClickHouse Queries        │
+│  - Analytics Service (port 8082) - Postgres Rollups          │
 └────────────────┬─────────────────────────────────────────────┘
                  │
                  │
@@ -53,7 +53,7 @@ Complete technical architecture for connecting the customer-facing website to th
 │                        Data Layer                             │
 ├──────────────────────────────────────────────────────────────┤
 │  PostgreSQL: User data, apps, configs, experiments           │
-│  ClickHouse: Analytics events, impressions, revenue          │
+│  Postgres analytics replicas: impressions, revenue, rollups  │
 │  Redis: Caching, session state, real-time data               │
 └──────────────────────────────────────────────────────────────┘
 ```
@@ -1165,7 +1165,7 @@ export interface AnalyticsOverview {
 - Node.js + TypeScript
 - Express.js
 - PostgreSQL (user data, configs)
-- ClickHouse (analytics events)
+- Postgres analytics replicas (impressions, revenue, telemetry)
 - Redis (caching, sessions)
 - Go microservices (auction, fraud)
 

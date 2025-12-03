@@ -1698,7 +1698,7 @@ What changed (highlights)
 - FIX-07-05 — `quality/load-tests/auction-load-test.js` shares the staging-ready defaults from the tracking test (placement/adFormat/device/app metadata), injects unique request IDs each iteration, and normalizes the optional Bearer token header so load runs surface real adapter issues.
 - FIX-07-06 — `quality/e2e/website/visual.spec.ts` now accepts `WEBSITE_BASE_URL`, writes every screenshot to `artifacts/website-visual/`, and attaches the PNG to the test run so CI retains visual evidence even when snapshots pass/fail.
 - FIX-07-07 — `quality/go.mod` now declares `github.com/bel-consulting/rival-ad-stack/quality` (instead of the generic `quality` path) and `go mod tidy` refreshed `go.sum`, preventing accidental dependency resolution conflicts when importing the suite externally.
-- FIX-07-08 — `quality/integration/helpers_test.go` introduces an in-memory publisher/ad server, payment ledger, and config rollout simulator so `end_to_end_test.go` can exercise real flows (ad auction, fraud blocking, payouts, staged rollouts) without external services. The helper also backs `queryClickHouse`, `generateTestRevenue`, and the `makeAPIRequest` shim, meaning `go test ./integration` now passes locally and in CI.
+- FIX-07-08 — `quality/integration/helpers_test.go` introduces an in-memory publisher/ad server, payment ledger, and config rollout simulator so `end_to_end_test.go` can exercise real flows (ad auction, fraud blocking, payouts, staged rollouts) without external services. The helper also backs `queryAnalyticsPostgres`, `generateTestRevenue`, and the `makeAPIRequest` shim, meaning `go test ./integration` now passes locally and in CI.
 - FIX-07-09 — `quality/lighthouse/website.config.cjs` now runs three Lighthouse samples by default (override with `LHCI_RUNS`) so CI compares median scores instead of a single potentially cold run.
 - FIX-07-10 — `quality/lint/no-hardcoded-hex.js` expands its extension allowlist to `.scss/.sass/.json`, ensuring theme tokens defined outside TS/JS files are linted for rogue hex colors.
 - FIX-07-11 — `quality/load-tests/fraud-smoke-test.js` makes the summary artifact path configurable via `FRAUD_SUMMARY_FILE`/`K6_SUMMARY_PATH` (or `none` to skip) instead of hard-coding `/tmp`, preventing CI permission issues.
@@ -2720,7 +2720,7 @@ Evidence
 
 Notes
 - HSTS must remain disabled until HTTPS is validated via SSL Labs with an A/A+ grade; enable by uncommenting the header in `infrastructure/nginx/snippets/ssl-params.conf` and reloading Nginx.
-- ClickHouse remains intentionally disabled per migration plan; backend health may report `status: "degraded"` due to CH — acceptable.
+- Legacy ClickHouse wiring has been fully removed; backend health should never surface ClickHouse-related degradation again. Treat any new references as regressions against the Postgres-only plan.
 
 ---
 
@@ -2763,7 +2763,7 @@ What changed
   - `backend/docs/CLICKHOUSE_ANALYTICS.md`
   - `docs/Internal/Infrastructure/CLICKHOUSE_INTEGRATION.md`
   - `data/schemas/clickhouse.sql`, `data/schemas/clickhouse_migration.sql`
-  - `ML/scripts/etl_postgres.py` (new Postgres ETL section + usage note) and `ML/scripts/etl_clickhouse.py` (shim header pointing to the new script)
+  - `ML/scripts/etl_postgres.py` (new Postgres ETL section + usage note); the legacy `ML/scripts/etl_clickhouse.py` shim has now been removed entirely to avoid reintroducing ClickHouse tooling.
   - `docs/Internal/Automation/ULTRA_LEAN_AUTOMATION.md` (Upstash notes marked superseded)
   - `monitoring/prometheus.yml` (Upstash metrics comment marked deprecated)
 
@@ -2867,5 +2867,33 @@ Validation
 
 Impact
 - Documentation-only change; operational guidance aligned with free and safe local alternatives.
+
+---
+Changelog — Local Stripe Billing Dry Run Automation (2025-12-03)
+
+Summary
+- Added a resilient local Test Mode Stripe dry‑run script and npm entry to automate end‑to‑end billing validation on a developer laptop.
+- The script starts a Stripe webhook listener, captures and persists the signing secret, creates/reuses a test customer, emits a metered usage event, creates and pays an invoice, and stores all evidence in a timestamped folder with a stable `latest-run` symlink.
+
+What changed
+- Scripts: `scripts/stripe_dry_run_local.sh` implements the full flow with portability tweaks (no `sed -i`, `awk` env injection, listener polling, feature‑flag detection).
+- Repo root `package.json`: added npm script `dryrun:stripe:local` → `bash scripts/stripe_dry_run_local.sh`.
+- Backend env: `backend/.env` template for local dev updated/used to include `BILLING_ENABLED=true` and a Stripe Test Secret key placeholder; the dry‑run script auto‑injects `STRIPE_WEBHOOK_SECRET` captured via Stripe CLI into `backend/.env`.
+
+How to run (local)
+1. Ensure Postgres + Redis (Docker or local). Example: `docker compose up -d postgres redis`.
+2. Backend: `cd backend && npm install && npm run dev` → verify `http://localhost:8080/health`.
+3. Install and login to Stripe CLI: `brew install stripe/stripe-cli/stripe && stripe login`.
+4. From repo root: `npm run dryrun:stripe:local`.
+
+Artifacts produced
+- Directory: `docs/Internal/QA/stripe-dry-run/<timestamp>/` and symlink `docs/Internal/QA/stripe-dry-run/latest-run`.
+- Files: `stripe_listen.log`, `webhook_secret.txt`, `run.log`, `health.json`, `features.json`, `post_health.json`,
+  `customers.lookup.json` (+ optional `customer.create.json`), `meter_event.json`, `invoice.create.json`, `invoice.pay.json`,
+  `invoice.status.txt` (expected `paid`), and `invoice.pdf.url`.
+- PDF link: `invoice.pdf.url` contains `http://localhost:8080/api/v1/billing/invoices/<invoiceId>/pdf` (console UI page: `http://localhost:3000/billing/invoices/<invoiceId>`).
+
+Validation
+- Optional: `npm run test:backend -- src/routes/__tests__/billing.routes.test.ts` should pass.
 
 ---

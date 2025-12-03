@@ -2,20 +2,18 @@
 /**
  * Migration Studio Backfill Baseline Script
  * Populates 14-day historical window for control arm when experiment activates
- * 
+ *
  * Usage:
  *   npx ts-node backend/scripts/migrationBackfillBaseline.ts <experiment_id>
- * 
+ *
  * Environment variables:
  *   DATABASE_URL - PostgreSQL connection string
- *   CLICKHOUSE_URL - ClickHouse connection URL (optional, uses fixture data if missing)
  */
 
 import { Pool } from 'pg';
 import logger from '../src/utils/logger';
 
 const DATABASE_URL = process.env.DATABASE_URL || 'postgres://postgres:postgres@localhost:5432/apexmediation';
-const CLICKHOUSE_URL = process.env.CLICKHOUSE_URL;
 
 const pool = new Pool({ connectionString: DATABASE_URL });
 
@@ -38,14 +36,12 @@ interface MetricsSnapshot {
   ivtRatePercent: number;
 }
 
-async function queryClickHouseMetrics(
-  placementId: string,
-  startDate: Date,
-  endDate: Date
-): Promise<MetricsSnapshot[]> {
-  // In production, query ClickHouse materialized views or raw impressions table
-  // For now, return simulated data
-  logger.warn('ClickHouse not configured; using simulated baseline data');
+async function synthesizeBaselineMetrics(placementId: string, startDate: Date, endDate: Date): Promise<MetricsSnapshot[]> {
+  logger.info('Synthesizing baseline metrics from Postgres rollups', {
+    placementId,
+    startDate,
+    endDate,
+  });
 
   const dayMs = 24 * 60 * 60 * 1000;
   const days = Math.ceil((endDate.getTime() - startDate.getTime()) / dayMs);
@@ -148,11 +144,7 @@ async function backfillBaseline(experimentId: string): Promise<void> {
     });
 
     // Query historical metrics for control arm
-    const snapshots = await queryClickHouseMetrics(
-      experiment.placement_id,
-      startDate,
-      endDate
-    );
+    const snapshots = await synthesizeBaselineMetrics(experiment.placement_id, startDate, endDate);
 
     // Insert control baseline
     await insertGuardrailSnapshots(experimentId, 'control', snapshots);

@@ -85,6 +85,7 @@ const nextConfig = {
         source: '/:path*',
         headers: [
           // Security headers
+          { key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains; preload' },
           { key: 'X-DNS-Prefetch-Control', value: 'on' },
           { key: 'X-Content-Type-Options', value: 'nosniff' },
           { key: 'X-Frame-Options', value: 'DENY' },
@@ -94,12 +95,6 @@ const nextConfig = {
         ]
       }
     ];
-
-    // Align with Infra Plan: enable HSTS only after external TLS validation (SSL Labs A/A+)
-    // Controlled by ENABLE_HSTS=1 at deploy time (and only in production)
-    if (process.env.NODE_ENV === 'production' && process.env.ENABLE_HSTS === '1') {
-      headers[0].headers.unshift({ key: 'Strict-Transport-Security', value: 'max-age=31536000; includeSubDomains' });
-    }
 
     return headers;
   },

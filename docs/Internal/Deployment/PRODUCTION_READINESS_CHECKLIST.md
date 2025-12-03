@@ -6,7 +6,7 @@ This is the single, self-contained runbook to take the system to production on D
 
 ## Outcomes by the end of this checklist
 - Staging stack is online behind Nginx with valid TLS (API required; Console optional) and HSTS enabled for API.
-- Backend health and readiness are green using Postgres + Redis only; migrations applied; no ClickHouse gates anywhere.
+- Backend health/readiness rely exclusively on Postgres + Redis with migrations applied; legacy ClickHouse gating is permanently removed and should never reappear.
 - Evidence captured locally for TLS/HSTS and local health snapshot.
 - Sandbox org/apps/placements exist; Android test app validated end-to-end; matrix items progressed in order.
 - Load/soak, billing usage, and VRA tests planned and executable with clear acceptance criteria.
@@ -42,7 +42,7 @@ This is the single, self-contained runbook to take the system to production on D
   - Console TLS (when Console service is enabled): either reuse the API cert if SAN includes `console.apexmediation.ee`, or issue a dedicated console cert; verify `curl -I https://console.apexmediation.ee/`.
 - [x] Evidence capture: run `npm run do:tls` from laptop and archive artifacts under `docs/Internal/Deployment/do-readiness-YYYY-MM-DD`.
 - [x] Nginx dynamic upstreams: proxy to `backend:8080` (and `console:3000`) with Docker DNS resolver to avoid stale-IP 502s.
-- [x] Health/Readiness are Postgres + Redis only (no ClickHouse gates): `/health` OK; `/ready` relies on DB/Redis latency and basic cache checks.
+- [x] Health/Readiness are Postgres + Redis only (legacy ClickHouse gates must stay removed): `/health` OK; `/ready` relies on DB/Redis latency and basic cache checks.
 ### Post‑DO HTTPS/HSTS Verification (Phase 9)
 - [ ] Once HTTPS is live, run `scripts/ops/do_tls_snapshot.sh` (or `npm run do:tls`) from your workstation to archive redirects/TLS/HSTS output.
 - [ ] Ensure the bundle contains `verify-redirects.txt`, `verify-tls.txt`, and `verify-hsts.txt` with SSL Labs A/A+ notations.
@@ -55,11 +55,6 @@ This is the single, self-contained runbook to take the system to production on D
 - [ ] Stand up FakeNetworkA (always fill), FakeNetworkB (random fill/no-fill), and FakeNetworkC (slow/timeout) plus Starter (~$3k), Growth (~$50k), and Scale (~$150k) revenue scripts.
 - [ ] Issue staging logins (`owner@`, `dev@`, `finance@apex-sandbox.test`) and enable Stripe test mode with customer + card/ACH/SEPA methods.
 - [ ] Ensure every SDK build (Android, iOS, Unity, tvOS/CTV, Web) ships adapters for every network API/SDK in scope (FakeNetworkA/B/C + partner networks) so request/response parity is validated end-to-end.
-
-Notes (data plane & migrations):
-- Migration plan is Postgres-first for analytics, reporting, transparency, and RTB tracking. Ensure migrations are applied before enabling dependent routes.
-- Run migrations via backend container (Prisma/TypeORM/SQL scripts) and re-run on schema changes.
-  - Readiness `/ready` must reflect Postgres + Redis health only (replica lag, DB/Redis latency, cache hit); remove ClickHouse checks.
 
 ### 0.0.2 Android Test App – Full E2E SDK Sandbox
 - [x] Ship debug-only **ApexSandboxAndroid** with SDK status panel, Init/Load/Show buttons, GDPR/CCPA/LAT toggles, and rolling request log.
@@ -108,9 +103,10 @@ Postgres-only analytics/readiness (from migration plan and changelog):
 - `/ready` reports Postgres/Redis health (latency, replica lag, cache hit), not ClickHouse; alerts/dashboards track replica lag and query budgets.
 
 ### 0.0.8 Website / Landing Page Sandbox Tests
-- [] Deploy staging marketing site (e.g., `staging.apexmediation.ee`) and verify `/`, `/pricing`, `/docs`, `/legal/*` routes 
+- [ ] Deploy staging marketing site (e.g., `staging.apexmediation.ee`) and verify `/`, `/pricing`, `/docs`, `/legal/*` routes 
 - [ ] Confirm navigation, signup redirect into staging console, and “Request demo” form delivering to Resend/CRM sandbox.
 - [x] Check content parity: BYO tiers (Starter 0%, Growth 2.5%, Scale 2.0%, Enterprise 1–1.5%) and no legacy managed-demand copy (see `website/src/app/%5B...slug%5D/page.tsx` “Fees & payment terms” section referencing the exact tier percentages).
+- [ ] Run website security header/unit suite: `npm --prefix website run test` (guards mandatory HSTS + CSP headers under `website/src/__tests__/security.headers.test.js`).
 - [ ] Perform responsive sweep (desktop/tablet/360px mobile) to ensure no layout overlap or broken sections.
 - [ ] Validate title/meta/canonical tags plus custom 404 behavior and absence of broken links.
 

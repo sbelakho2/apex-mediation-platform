@@ -14,7 +14,8 @@ export const AppDataSource = new DataSource({
   url: config.databaseUrl,
   entities: [User, TwoFactorAuth, ApiKey, ApiKeyUsage, SkanPostback, AdapterConfig, AuditTwofa],
   migrations: ['src/migrations/*.ts'],
-  synchronize: config.isDevelopment, // Be careful with this in production
+  // Disable synchronize to avoid destructive schema diffs; use migrations instead
+  synchronize: false,
   logging: config.isDevelopment,
 });
 

@@ -118,7 +118,7 @@ type PerformanceMetrics struct {
 
 // getPerformanceMetrics retrieves performance metrics for adapters
 func (wm *WaterfallManager) getPerformanceMetrics(ctx context.Context, placementID string) (map[string]PerformanceMetrics, error) {
-	// This would query ClickHouse or analytics service
+	// This would query Postgres rollups or the analytics service
 	// For now, return mock data
 	return map[string]PerformanceMetrics{
 		"admob": {

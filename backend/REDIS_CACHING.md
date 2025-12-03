@@ -2,7 +2,7 @@
 
 ## Overview
 
-Comprehensive Redis caching layer implemented to optimize performance of analytics, A/B testing, and data export endpoints. The caching system reduces load on the ClickHouse analytics database and improves API response times.
+Comprehensive Redis caching layer implemented to optimize performance of analytics, A/B testing, and data export endpoints. The caching system reduces load on the Postgres analytics rollup tables and improves API response times.
 
 ## Architecture
 
@@ -272,7 +272,7 @@ Response:
   "status": "healthy",
   "services": {
     "postgres": "connected",
-    "clickhouse": "connected",
+    "analytics_rollups": "connected",
     "redis": "connected"  // or "disconnected"
   }
 }
@@ -311,7 +311,7 @@ logger.info('Cache cleared', { pattern });
    - Data export status: 20-50ms → 2-5ms (80-90% improvement)
 
 2. **Load Reduction:**
-   - ClickHouse query load: 50-80% reduction
+  - Analytics rollup query load: 50-80% reduction
    - Database connection pool usage: 40-60% reduction
    - API server CPU: 20-30% reduction
 

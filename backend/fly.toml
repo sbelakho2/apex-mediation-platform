@@ -107,8 +107,6 @@ kill_timeout = 5
 # Secrets (set via: fly secrets set KEY=value)
 # Required secrets:
 # - DATABASE_URL
-# - CLICKHOUSE_URL
-# - CLICKHOUSE_PASSWORD
 # - UPSTASH_REDIS_URL
 # - UPSTASH_REDIS_TOKEN
 # - STRIPE_SECRET_KEY

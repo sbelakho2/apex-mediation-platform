@@ -67,21 +67,6 @@ ADD COLUMN IF NOT EXISTS suspended_at TIMESTAMP;
 ALTER TABLE api_keys
 ADD COLUMN IF NOT EXISTS suspended_at TIMESTAMP;
 
--- ClickHouse table for fast analytics (run in ClickHouse, not PostgreSQL)
--- This is for reference only, create manually in ClickHouse:
-/*
-CREATE TABLE IF NOT EXISTS apexmediation.usage_events (
-  customer_id String,
-  metric_type LowCardinality(String), -- 'impressions', 'api_calls', 'data_transfer'
-  quantity UInt64,
-  metadata String,
-  timestamp DateTime
-) ENGINE = MergeTree()
-PARTITION BY toYYYYMM(timestamp)
-ORDER BY (customer_id, timestamp)
-TTL timestamp + INTERVAL 1 YEAR; -- Keep 1 year of detailed data
-*/
-
 -- Create indexes for performance
 CREATE INDEX IF NOT EXISTS idx_usage_records_customer_date 
 ON usage_records (customer_id, recorded_at DESC);

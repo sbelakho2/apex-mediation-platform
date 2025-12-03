@@ -7,16 +7,21 @@ import { ThemeProvider } from '@/components/ui/ThemeProvider';
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter', display: 'swap' });
 const pjs = Plus_Jakarta_Sans({ subsets: ['latin'], variable: '--font-pjs', display: 'swap' });
 
+const SITE_ORIGIN = 'https://apexmediation.ee';
+
 export const metadata: Metadata = {
-  metadataBase: new URL('https://apexmediation.bel-consulting.ee'),
+  metadataBase: new URL(SITE_ORIGIN),
   title: 'ApexMediation - Enterprise Ad Mediation Platform',
   description: 'Maximize your ad revenue with transparent mediation, fraud protection, and developer-first tools.',
   keywords: ['ad mediation', 'mobile ads', 'Unity ads', 'iOS ads', 'Android ads', 'ad monetization'],
   authors: [{ name: 'Bel Consulting OÜ' }],
+  alternates: {
+    canonical: SITE_ORIGIN,
+  },
   openGraph: {
     title: 'ApexMediation - Enterprise Ad Mediation Platform',
     description: 'Maximize your ad revenue with transparent mediation, fraud protection, and developer-first tools.',
-    url: 'https://apexmediation.bel-consulting.ee',
+    url: SITE_ORIGIN,
     siteName: 'ApexMediation',
     images: [
       {
@@ -51,6 +56,7 @@ export default function RootLayout({
         <link rel="icon" href="/favicon.ico" />
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
         <meta name="theme-color" content="#356eff" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
       </head>
       <body>
         <SkipToContent />

@@ -97,7 +97,7 @@ fi
 sections=(
   "7.1|Console Navigation & Feature Flags|console/src/components/Breadcrumbs.tsx,console/src/lib/hooks/useQueryState.ts,console/src/lib/hooks/useQueryParamsState.ts,backend/src/routes/meta.routes.ts"
   "7.2|Billing Backend APIs|backend/src/openapi/billing.yaml,backend/src/routes/billing.routes.ts,backend/src/controllers/billing.controller.ts"
-  "7.3|Usage Metering & Limits|backend/scripts/hourly-usage-limiter.ts,backend/scripts/stripe-daily-usage-sync.ts,backend/analytics/queries/usage_summary.sql"
+  "7.3|Usage Metering & Limits|backend/scripts/hourly-usage-limiter.ts,backend/scripts/stripe-daily-usage-sync.ts,backend/migrations/postgres/20251201_150500_analytics_rollup_tables.up.sql"
   "7.4|Invoicing & Reconciliation|backend/src/services/invoiceService.ts,backend/src/services/reconciliationService.ts,backend/src/routes/webhooks.routes.ts"
   "7.5|Console Billing UI|console/src/app/billing/usage/page.tsx,console/src/app/billing/invoices/page.tsx,console/src/app/billing/settings/page.tsx,console/src/app/billing/usage/page.a11y.test.tsx,console/src/app/billing/invoices/page.a11y.test.tsx,console/src/app/billing/invoices/[id]/page.a11y.test.tsx,console/src/app/billing/settings/page.a11y.test.tsx,console/src/app/billing/invoices/page.test.tsx,console/src/lib/__tests__/billing.test.ts,console/src/i18n/index.ts,console/src/i18n/messages/en.json"
 )

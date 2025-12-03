@@ -193,7 +193,7 @@ paths:
     post:
       summary: Trigger manual reconciliation
       description: |
-        Reconciles Stripe usage records against internal ClickHouse data.
+        Reconciles Stripe usage records against internal Postgres rollup tables.
         Returns discrepancies and generates audit logs. Idempotent via request ID.
       operationId: reconcileUsage
       tags:
@@ -220,15 +220,15 @@ paths:
                 status: completed
                 summary:
                   impressions_stripe: 1250000
-                  impressions_clickhouse: 1250000
+                  impressions_rollup: 1250000
                   clicks_stripe: 37500
-                  clicks_clickhouse: 37501
+                  clicks_rollup: 37501
                   videostarts_stripe: 18000
-                  videostarts_clickhouse: 18000
+                  videostarts_rollup: 18000
                 discrepancies:
                   - metric: clicks
                     stripe_value: 37500
-                    clickhouse_value: 37501
+                    rollup_value: 37501
                     diff: 1
                     diff_percent: 0.003
                 audit_log_id: "audit_1234567890"
@@ -469,7 +469,7 @@ components:
       required:
         - metric
         - stripe_value
-        - clickhouse_value
+        - rollup_value
         - diff
         - diff_percent
       properties:
@@ -477,7 +477,7 @@ components:
           type: string
         stripe_value:
           type: integer
-        clickhouse_value:
+        rollup_value:
           type: integer
         diff:
           type: integer

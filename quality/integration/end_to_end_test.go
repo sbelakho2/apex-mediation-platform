@@ -63,9 +63,9 @@ func TestEndToEndAuctionFlow(t *testing.T) {
 			impResp := makeAPIRequest(t, "POST", "/v1/events/impression", publisherID, impressionData)
 			assert.Equal(t, http.StatusOK, impResp.StatusCode)
 
-			// Verify impression recorded in ClickHouse
+			// Verify impression recorded in Postgres analytics
 			waitForAsyncFlush()
-			impressionCount := queryClickHouse(t, fmt.Sprintf(
+			impressionCount := queryAnalyticsPostgres(t, fmt.Sprintf(
 				"SELECT count() FROM impressions WHERE auction_id = '%s'",
 				auctionID,
 			))
@@ -83,9 +83,9 @@ func TestEndToEndAuctionFlow(t *testing.T) {
 			clickResp := makeAPIRequest(t, "POST", "/v1/events/click", publisherID, clickData)
 			assert.Equal(t, http.StatusOK, clickResp.StatusCode)
 
-			// Verify click recorded
+			// Verify click recorded in Postgres analytics
 			waitForAsyncFlush()
-			clickCount := queryClickHouse(t, fmt.Sprintf(
+			clickCount := queryAnalyticsPostgres(t, fmt.Sprintf(
 				"SELECT count() FROM clicks WHERE impression_id IN (SELECT event_id FROM impressions WHERE auction_id = '%s')",
 				auctionID,
 			))
