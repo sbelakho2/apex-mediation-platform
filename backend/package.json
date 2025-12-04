@@ -33,6 +33,11 @@
     "verify:migrations": "node scripts/verifyMigrations.js",
     "transparency:smoke": "bash ../scripts/dev-transparency-metrics.sh",
     "qa:billing-emails": "ts-node scripts/generateBillingEmailSamples.ts",
+    "sandbox:bootstrap": "node scripts/setupSandboxNetworks.js",
+    "sandbox:revenue": "node scripts/generateSandboxRevenue.js",
+    "sandbox:revenue:starter": "node scripts/generateSandboxRevenue.js --tier=starter",
+    "sandbox:revenue:growth": "node scripts/generateSandboxRevenue.js --tier=growth",
+    "sandbox:revenue:scale": "node scripts/generateSandboxRevenue.js --tier=scale",
     "verify:db": "ts-node scripts/verifyDb.ts",
     "verify:redis": "ts-node scripts/verifyRedis.ts",
     "verify:storage": "ts-node scripts/verifyStorage.ts"

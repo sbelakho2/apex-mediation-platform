@@ -1,3 +1,20 @@
+Changelog — Sandbox Fake Networks & Stripe Bootstrap (2025-12-04)
+
+Summary
+- Added an idempotent backend script that seeds the Apex Sandbox Studio publisher with FakeNetworkA/B/C adapters, placement waterfalls, and staging logins that mirror the 0.0.1 checklist requirements.
+- Stripe provisioning for the sandbox org is now automated (customer + card/ACH/SEPA sources) once the staging test key is present, simplifying billing demos and usage scripts.
+- Documentation for Part 0.0.1 explicitly references the new bootstrapper and records how to run it; backend npm scripts expose a one-liner for operators.
+
+What changed
+- Backend: `backend/scripts/setupSandboxNetworks.js` provisions the sandbox logins (owner/dev/finance), adapters, adapter configs, waterfalls, and optional Stripe customer/payment methods; JSON payloads are written to Postgres/Stripe deterministically.
+- Tooling: `backend/package.json` now exposes `npm run sandbox:bootstrap --workspace backend` so the new script can be executed with the repo-standard workflow.
+- Docs: `docs/Internal/Deployment/PRODUCTION_READINESS_CHECKLIST.md` and `backend/scripts/README.md` describe the bootstrap process, prerequisites (`DATABASE_URL`, `STRIPE_SECRET_KEY`), and tie it directly to the Part 0.0.1 checklist.
+
+Validation
+- Not run (script-only addition; execution occurs against the managed staging DB when ready).
+
+---
+
 Changelog — Archive Query Runbook & TLS Checklist (2025-12-03)
 
 Summary
@@ -2983,5 +3000,41 @@ Validation
 - Lifecycle: Home → other app → return logs onPause/onResume and preserves state.
 - Network: loading while offline shows a readable status; online resumes expected behavior.
 - Logs include `platform=android_tv` on init/load/show/close events for analytics segmentation.
+
+---
+
+Changelog — ApexSandboxCTV-tvOS: tvOS / CTV Sandbox (2025-12-03)
+
+Summary
+- Added a dedicated tvOS sandbox to validate CTV flows on Apple TV with a focus-driven UI and platform-tagged logs.
+
+What changed
+- New project: `Test Apps/tvos/ApexSandboxCTV-tvOS/`
+  - `project.yml` (XcodeGen) — tvOS target with SPM dependency on `sdk/core/ios` (product `RivalApexMediationSDK`)
+  - Sources:
+    - `Sources/App.swift` — entry point
+    - `Sources/ContentView.swift` — focus-driven UI: Initialize, Show Interstitial, Show Rewarded
+    - `Sources/SandboxViewModel.swift` — SDK wiring, single-presentation guard, lifecycle logs, `platform=tvos` tagging
+    - `Sources/UIKit+TopVC.swift` — presenter helper
+    - `Sources/Info.plist` — minimal tvOS Info.plist
+    - `Sources/SandboxConfig.json` — placements/appId/testMode
+
+How to run (Apple TV Simulator)
+```
+cd "Test Apps/tvos/ApexSandboxCTV-tvOS"
+brew install xcodegen   # if needed
+xcodegen generate
+open ApexSandboxCTV-tvOS.xcodeproj
+# Select an Apple TV simulator → Run
+```
+
+Validation
+- Initialize is idempotent; repeated presses log "initialize already".
+- Interstitial/Rewarded: Show presents one at a time; guard prevents duplicates.
+- Lifecycle: background/foreground transitions are logged.
+- Logs include `platform=tvos` on init/show/close events for analytics segmentation.
+
+Notes
+- Production runtime code was not modified; all changes live under `Test Apps/tvos/ApexSandboxCTV-tvOS/`.
 
 ---

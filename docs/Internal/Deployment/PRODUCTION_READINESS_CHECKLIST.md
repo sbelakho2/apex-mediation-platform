@@ -50,10 +50,54 @@ This is the single, self-contained runbook to take the system to production on D
 
 ### 0.0.1 Environments, Fixtures & Common Test Data
 - [x] Provision dedicated staging endpoints (`STAGING_API_BASE`, `STAGING_CONSOLE_BASE`) and an isolated staging database — `.github/workflows/deploy-staging.yml` and `docs/Internal/Deployment/CI_CD_GUIDE.md` define the hosts (`https://api-staging.rivalapexmediation.ee`, `https://console-staging.rivalapexmediation.ee`) plus `STAGING_DATABASE_URL/STAGING_REDIS_URL` secrets the pipeline requires.
-- [ ] Create sandbox org **Apex Sandbox Studio** with Android, iOS, Unity, Android TV/CTV, and tvOS apps. *(Test app bundles live under `Test Apps/`, but the actual org/apps record still needs to be seeded in staging once console CRUD is validated.)*
-- [ ] Give every app at least two interstitial placements, two rewarded placements, and one banner slot with consistent IDs. *(Pending: map the placement matrix into the staging DB and document IDs alongside the sandbox org above.)*
-- [ ] Stand up FakeNetworkA (always fill), FakeNetworkB (random fill/no-fill), and FakeNetworkC (slow/timeout) plus Starter (~$3k), Growth (~$50k), and Scale (~$150k) revenue scripts. *(Android sandbox app already simulates these in `Test Apps/android/ApexSandboxAndroid/app/src/main/java/com/apex/sandbox/sdk/FakeMediationSdk.kt`; still need backend revenue scripts + console toggles.)*
-- [ ] Issue staging logins (`owner@`, `dev@`, `finance@apex-sandbox.test`) and enable Stripe test mode with customer + card/ACH/SEPA methods. *(Awaiting staged Resend invites + Stripe test customer mapped to the sandbox org.)*
+- [x] Create sandbox org **Apex Sandbox Studio** with Android, iOS, Unity, Android TV/CTV, and tvOS apps. *(Seeded 2025-12-04 via managed Postgres using `doadmin` — connection string `postgres://doadmin@apexmediation-db-do-user-29825488-0.m.db.ondigitalocean.com:25060/apexmediation?sslmode=no-verify`.)*
+  - Publisher ID `138f62be-5cee-4c73-aba4-ba78ea77ab44` now exists in `publishers`.
+  - App inventory (all tied to the publisher above):
+
+    | Platform          | App Name                       | Bundle ID                    | App ID                                 |
+    | ----------------- | ------------------------------ | ---------------------------- | -------------------------------------- |
+    | Android           | Apex Sandbox Android           | `com.apex.sandbox.android`   | `7bcfc807-1834-4d69-a1ca-27e258f4ce75` |
+    | iOS               | Apex Sandbox iOS               | `com.apex.sandbox.ios`       | `6b8213e3-b331-40b8-a32f-2bac1678e737` |
+    | Unity             | Apex Sandbox Unity             | `com.apex.sandbox.unity`     | `26c1c1eb-9fe1-4d3d-9218-6a2d863d57ac` |
+    | Android TV / CTV  | Apex Sandbox Android TV/CTV    | `com.apex.sandbox.androidtv` | `3a6dac72-aa81-44af-909c-5b48ab9cbe67` |
+    | tvOS              | Apex Sandbox tvOS              | `com.apex.sandbox.tvos`      | `f79cd436-751a-4e26-b2cc-298d1029f794` |
+
+  - Verification: `docker run --rm -e PGPASSWORD=$DOADMIN_PASS postgres:16 psql 'sslmode=require host=apexmediation-db-do-user-29825488-0.m.db.ondigitalocean.com port=25060 user=doadmin dbname=apexmediation' -c "SELECT company_name, COUNT(*) apps FROM apps WHERE publisher_id='138f62be-5cee-4c73-aba4-ba78ea77ab44' GROUP BY 1;"`
+- [x] Give every app at least two interstitial placements, two rewarded placements, and one banner slot with consistent IDs. *(All 25 placements inserted 2025-12-04; IDs follow the `sandbox-<platform>-<type>-<nn>` naming convention and live in `placements`.)*
+  - Each platform received five placements — two interstitial, two rewarded, one banner — using deterministic UUIDs so they can be referenced safely in SDK configs.
+  - Quick reference (per app):
+
+    | App                              | Placement ID                             | Placement Name                | Type         |
+    | -------------------------------- | ---------------------------------------- | ----------------------------- | ------------ |
+    | Apex Sandbox Android             | `edcbe420-5e96-4c0f-b7ee-e5a10eb11db3`   | Android Interstitial 01       | interstitial |
+    |                                  | `92fe3cb3-8028-4a65-aacf-c9916b2efc29`   | Android Interstitial 02       | interstitial |
+    |                                  | `b8372490-f300-49e8-b7c2-a77fc04f85e9`   | Android Rewarded 01           | rewarded     |
+    |                                  | `631c2a8a-94b8-4448-8d56-a7cddb280ea5`   | Android Rewarded 02           | rewarded     |
+    |                                  | `47998e9f-dfbe-4ba9-922c-3001f106722e`   | Android Banner 01             | banner       |
+    | Apex Sandbox iOS                 | `26c8907d-7635-4a13-a94b-6c3b12af1779`   | iOS Interstitial 01           | interstitial |
+    |                                  | `3b94ce00-15d2-4b96-9d1e-b096cd12cdb9`   | iOS Interstitial 02           | interstitial |
+    |                                  | `ca610a0c-8607-4a38-8a21-9cbfd3018b7b`   | iOS Rewarded 01               | rewarded     |
+    |                                  | `83d155c1-d3ab-413a-8d6f-bb282d4a058b`   | iOS Rewarded 02               | rewarded     |
+    |                                  | `bdf98482-e3c8-4792-bc06-7e98f7184d08`   | iOS Banner 01                 | banner       |
+    | Apex Sandbox Unity               | `3d1094ab-a85b-4737-a749-d8a153a0f026`   | Unity Interstitial 01         | interstitial |
+    |                                  | `7f7f250e-48c0-4a89-9015-5c6cea325b3e`   | Unity Interstitial 02         | interstitial |
+    |                                  | `074b2dc7-3173-4da0-aba0-250f3f129df1`   | Unity Rewarded 01             | rewarded     |
+    |                                  | `e159286d-7f60-437c-9f58-83aebdcdbf13`   | Unity Rewarded 02             | rewarded     |
+    |                                  | `f6e7aa9b-09c5-4644-bf56-f8ab781ac62d`   | Unity Banner 01               | banner       |
+    | Apex Sandbox Android TV/CTV      | `28f1d412-71d4-486b-93c7-e3d7101f2b2c`   | Android TV Interstitial 01    | interstitial |
+    |                                  | `15d8efc7-0e45-4eb8-9eec-47eedb8424bb`   | Android TV Interstitial 02    | interstitial |
+    |                                  | `916aa3f1-b875-45f9-b672-bb6461ceadf4`   | Android TV Rewarded 01        | rewarded     |
+    |                                  | `430810ca-0549-4755-ae74-cd0df596cfee`   | Android TV Rewarded 02        | rewarded     |
+    |                                  | `1a5c9eca-b8b7-4b9a-b8a7-2ec5942d5645`   | Android TV Banner 01          | banner       |
+    | Apex Sandbox tvOS                | `8a94e8fd-8995-4b17-b308-38f1104d1e84`   | tvOS Interstitial 01          | interstitial |
+    |                                  | `d8f4ec50-cde4-47b7-a139-ed02bd1f88d8`   | tvOS Interstitial 02          | interstitial |
+    |                                  | `090ce110-b9dc-4722-93dd-8bd3fcfdb2e0`   | tvOS Rewarded 01              | rewarded     |
+    |                                  | `24ed4867-b16e-4a4b-b8ac-43dd05788a81`   | tvOS Rewarded 02              | rewarded     |
+    |                                  | `f7defcdc-33e5-41f3-8577-2bceb73015d3`   | tvOS Banner 01                | banner       |
+
+  - Verification: `SELECT a.name, pl.type, pl.name, pl.id FROM placements pl JOIN apps a ON a.id = pl.app_id WHERE a.publisher_id='138f62be-5cee-4c73-aba4-ba78ea77ab44' ORDER BY a.name, pl.type, pl.name;`
+- [x] Stand up FakeNetworkA (always fill), FakeNetworkB (random fill/no-fill), and FakeNetworkC (slow/timeout) plus Starter (~$3k), Growth (~$50k), and Scale (~$150k) revenue scripts. *(Run `npm run sandbox:bootstrap --workspace backend` to upsert adapters/configs/waterfalls + sandbox logins/Stripe, then `npm run sandbox:revenue:starter|growth|scale --workspace backend` to synthesize 30-day revenue (~$3k, ~$50k, ~$150k) across all placements. Scripts are idempotent and scoped to publisher `138f62be-5cee-4c73-aba4-ba78ea77ab44`; use `--dry-run`/`--keep-history` flags when needed.)*
+- [x] Issue staging logins (`owner@`, `dev@`, `finance@apex-sandbox.test`) and enable Stripe test mode with customer + card/ACH/SEPA methods. *(Same bootstrap script hashes deterministic passwords (override via `SANDBOX_USER_PASSWORD`), seeds the three users, and provisions a Stripe test customer with 4242 card + `btok_us_verified` (ACH) + `btok_sepa_debit`. Follow up by sending Resend invites if you need fresh magic links.)*
 - [x] Ensure every SDK build (Android, iOS, Unity, tvOS/CTV, Web) ships adapters for every network API/SDK in scope (FakeNetworkA/B/C + partner networks) so request/response parity is validated end-to-end — captured in `docs/Adapters/SUPPORTED_NETWORKS.md` and the adapters inventory section of `docs/Internal/SANDBOX_TESTING_READINESS_2025-11-13.md` (all 15 partner networks stubbed across platforms).
 
 ### 0.0.2 Android Test App – Full E2E SDK Sandbox
@@ -185,9 +229,9 @@ Notes
 - [x] Ensure logging tags requests with `platform=android_tv` (or similar) for analytics segmentation.
 
 ### 0.0.6 tvOS / CTV Test App
-- [ ] Build **ApexSandboxCTV-tvOS** with focus-driven UI (Init, Show Interstitial, Show Rewarded) and test on Apple TV.
-- [ ] Confirm show flows mirror iOS while respecting TV navigation semantics (one presentation at a time).
-- [ ] Test background/foreground transitions and rapid button presses without crashes; verify logs carry `platform=tvos`.
+- [x] Build **ApexSandboxCTV-tvOS** with focus-driven UI (Init, Show Interstitial, Show Rewarded) and test on Apple TV.
+- [x] Confirm show flows mirror iOS while respecting TV navigation semantics (one presentation at a time).
+- [x] Test background/foreground transitions and rapid button presses without crashes; verify logs carry `platform=tvos`.
 
 ### 0.0.7 Console & Dashboard Sandbox Tests
 - [ ] Run signup/login/password-reset flows on staging console; confirm verification emails via Resend and session handling.
