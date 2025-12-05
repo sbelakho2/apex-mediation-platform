@@ -36,6 +36,7 @@ public enum SignatureError: Error, Equatable, LocalizedError {
 }
 
 /// Utility responsible for verifying Ed25519 signatures used for OTA config updates.
+@available(macOS 10.15, *)
 public final class SignatureVerifier {
     private static let devTestPublicKeyHex = "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a"
     private static let signatureLength = 64

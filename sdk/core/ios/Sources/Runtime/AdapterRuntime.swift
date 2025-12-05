@@ -139,6 +139,7 @@ public final class HedgeManager {
 
 // MARK: - Timeout Enforcer
 
+@available(macOS 12.0, *)
 public final class AdapterTimeoutEnforcer {
     public init() {}
     
@@ -165,6 +166,7 @@ public final class AdapterTimeoutEnforcer {
 
 // MARK: - Adapter Runtime Wrapper
 
+@available(macOS 12.0, *)
 public final class AdapterRuntimeWrapper {
     private let adapter: AdNetworkAdapterV2
     private let partnerId: String

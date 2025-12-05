@@ -129,7 +129,11 @@ async function ensureWaterfalls(client, ownerUserId) {
     return;
   }
   const placements = await client.query(
-    `SELECT id, name FROM placements WHERE publisher_id = $1 ORDER BY name`,
+    `SELECT pl.id, pl.name, pl.type
+       FROM placements pl
+       JOIN apps a ON a.id = pl.app_id
+      WHERE a.publisher_id = $1
+      ORDER BY pl.name`,
     [SANDBOX_PUBLISHER_ID]
   );
   if (placements.rowCount === 0) {
@@ -198,15 +202,7 @@ async function ensureCard(customerId, email) {
   if (existing.data.length) {
     return existing.data[0].id;
   }
-  const token = await stripe.tokens.create({
-    card: {
-      number: '4242424242424242',
-      exp_month: 12,
-      exp_year: new Date().getFullYear() + 5,
-      cvc: '123',
-    },
-  });
-  const card = await stripe.customers.createSource(customerId, { source: token.id });
+  const card = await stripe.customers.createSource(customerId, { source: 'tok_visa' });
   console.log(`• attached test card for ${email}`);
   return card.id;
 }
@@ -216,6 +212,10 @@ async function ensureBankToken(customerId, tokenId, label) {
   const existing = await stripe.customers.listSources(customerId, { object, limit: 1 });
   if (existing.data.length) {
     return existing.data[0].id;
+  }
+  if (tokenId.includes('sepa')) {
+    console.warn('⚠️ Stripe account lacks SEPA test token support; skipping sepa source.');
+    return null;
   }
   const source = await stripe.customers.createSource(customerId, { source: tokenId });
   console.log(`• attached ${label} source (${source.id})`);

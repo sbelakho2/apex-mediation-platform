@@ -30,11 +30,23 @@ android {
         }
     }
 
+    buildFeatures {
+        buildConfig true
+    }
+
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
     }
     kotlinOptions { jvmTarget = '17' }
+
+    publishing {
+        // Ensure the release variant is configured before publishing references components.release
+        singleVariant('release') {
+            withSourcesJar()
+            withJavadocJar()
+        }
+    }
 }
 
 dependencies {
@@ -51,7 +63,7 @@ dependencies {
     implementation "org.bouncycastle:bcprov-jdk15to18:1.77"
 
     // AndroidX
-    compileOnly "androidx.annotation:annotation:1.7.1"
+    implementation "androidx.annotation:annotation:1.7.1"
     testImplementation "androidx.annotation:annotation:1.7.1"
 
     // Testing
@@ -66,7 +78,9 @@ dependencies {
 publishing {
     publications {
         release(MavenPublication) {
-            from components.release
+            afterEvaluate {
+                from components.release
+            }
             groupId = 'com.rivalapex'
             artifactId = 'apexmediation-ctv'
             version = android.defaultConfig.versionName

@@ -10,6 +10,7 @@ import FoundationNetworking
 /// - UserDefaults caching with TTL
 /// - Async/await concurrency
 /// - Automatic retry with exponential backoff
+@available(macOS 12.0, *)
 public final class ConfigManager {
     private let config: SDKConfig
     private let urlSession: URLSession

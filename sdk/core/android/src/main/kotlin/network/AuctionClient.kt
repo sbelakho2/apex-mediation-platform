@@ -94,6 +94,7 @@ class AuctionClient(
 
         var attempt = 0
         var lastErr: AuctionException? = null
+        var sawTimeout = false
         while (attempt < 2) { // initial + 1 retry
             attempt++
             val call = callClient.newCall(req)
@@ -143,6 +144,9 @@ class AuctionClient(
                 }
             } catch (e: Exception) {
                 val reason = mapExceptionToReason(e)
+                if (reason == "timeout") {
+                    sawTimeout = true
+                }
                 val ex = AuctionException(reason, e.message)
                 lastErr = ex
                 // Retry only for transient reasons and only on first attempt
@@ -153,6 +157,11 @@ class AuctionClient(
                 // OkHttp's use{} closes body; nothing extra to do here.
             }
         }
+        if (sawTimeout && (lastErr == null || lastErr.reason != "timeout")) {
+            val detail = lastErr?.message?.takeIf { it.isNotBlank() }
+            val msg = detail?.let { "timeout (after retry): $it" } ?: "timeout"
+            throw AuctionException("timeout", msg)
+        }
         throw lastErr ?: AuctionException("error")
     }
 
@@ -161,10 +170,9 @@ class AuctionClient(
     }
 
     private fun mapExceptionToReason(e: Exception): String {
-        return when (e) {
-            is AuctionException -> e.reason
-            is SocketTimeoutException -> "timeout"
-            is InterruptedIOException -> "timeout"
+        return when {
+            e is AuctionException -> e.reason
+            isTimeoutException(e) -> "timeout"
             else -> {
                 val msg = e.message ?: ""
                 when {
@@ -173,6 +181,27 @@ class AuctionClient(
                 }
             }
         }
+    }
+
+    // OkHttp surfaces call-timeout breaches as generic IOExceptions, so walk the cause chain
+    // and message text to classify them as timeouts instead of generic network errors.
+    private fun isTimeoutException(t: Throwable?): Boolean {
+        var current: Throwable? = t
+        while (current != null) {
+            when (current) {
+                is SocketTimeoutException -> return true
+                is InterruptedIOException -> return true
+            }
+            val msg = current.message
+            if (!msg.isNullOrBlank()) {
+                val normalized = msg.lowercase(Locale.US)
+                if (normalized.contains("timeout") || normalized.contains("time out") || normalized.contains("timed out")) {
+                    return true
+                }
+            }
+            current = current.cause
+        }
+        return false
     }
 
     private fun isNetworkIOException(e: Exception): Boolean {

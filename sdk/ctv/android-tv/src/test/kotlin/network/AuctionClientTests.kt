@@ -1,7 +1,6 @@
 package network
 
 import android.content.Context
-import androidx.test.core.app.ApplicationProvider
 import com.google.gson.Gson
 import com.rivalapexmediation.ctv.SDKConfig
 import com.rivalapexmediation.ctv.network.AuctionClient
@@ -13,7 +12,11 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
 
+@RunWith(RobolectricTestRunner::class)
 class AuctionClientTests {
     private lateinit var server: MockWebServer
     private lateinit var context: Context
@@ -22,7 +25,7 @@ class AuctionClientTests {
     fun setUp() {
         server = MockWebServer()
         server.start()
-        context = ApplicationProvider.getApplicationContext()
+        context = RuntimeEnvironment.getApplication()
     }
 
     @After

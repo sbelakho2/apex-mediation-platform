@@ -124,7 +124,11 @@ function hashSeed(...parts) {
 
 async function fetchPlacements(client) {
   const result = await client.query(
-    `SELECT id, type FROM placements WHERE publisher_id = $1 ORDER BY name`,
+    `SELECT pl.id, pl.type
+       FROM placements pl
+       JOIN apps a ON a.id = pl.app_id
+      WHERE a.publisher_id = $1
+      ORDER BY pl.name`,
     [SANDBOX_PUBLISHER_ID]
   );
   return result.rows;

@@ -22,8 +22,8 @@ internal object ImageRenderer {
                 }
                 override fun onResponse(call: okhttp3.Call, response: okhttp3.Response) {
                     response.use { res ->
-                        if (!res.isSuccessful) { onError?.invoke("image_http_${res.code()}"); return }
-                        val bytes = res.body()?.bytes()
+                        if (!res.isSuccessful) { onError?.invoke("image_http_${res.code}"); return }
+                        val bytes = res.body?.bytes()
                         if (bytes == null) { onError?.invoke("image_empty"); return }
                         val bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
                         if (bmp == null) { onError?.invoke("image_decode"); return }

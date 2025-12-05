@@ -84,7 +84,7 @@ class ConfigManager(private val context: Context, private val config: SDKConfig)
             }.build()
             client.newCall(req).execute().use { res ->
                 if (!res.isSuccessful) return current
-                val body = res.body()?.string() ?: return current
+                val body = res.body?.string() ?: return current
                 val headerSig = res.header("x-config-sig") ?: res.header("X-Config-Sig") ?: res.header("X-Apex-Signature")
                 val pubPem = config.configPublicKeyPem
                 if (!pubPem.isNullOrBlank() && !headerSig.isNullOrBlank()) {
