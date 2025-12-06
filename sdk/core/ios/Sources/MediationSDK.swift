@@ -59,6 +59,12 @@ public final class MediationSDK: @unchecked Sendable {
         await runtime.setSandboxAdapterWhitelist(names)
     }
 
+    /// In sandbox/test mode, force the SDK to use the adapter pipeline instead of the HTTP test-mode loader.
+    /// This allows exercising adapter stubs without a live auction service.
+    public func setSandboxForceAdapterPipeline(_ enabled: Bool) async {
+        await runtime.setSandboxForceAdapterPipeline(enabled)
+    }
+
     /// Update consent state shared across the SDK.
     public func setConsent(_ consent: ConsentData) {
         ConsentManager.shared.setConsent(consent)
@@ -205,6 +211,7 @@ private actor MediationRuntime {
     private var adCache: [String: [Ad]] = [:]
     private let consentManager = ConsentManager.shared
     private var sandboxAdapterWhitelist: Set<String>? = nil
+    private var sandboxForceAdapterPipeline = false
 
     init(sdkVersion: String) {
         self.sdkVersion = sdkVersion
@@ -280,7 +287,7 @@ private actor MediationRuntime {
             throw SDKError.invalidPlacement(placementId)
         }
 
-        if config?.testMode == true {
+        if config?.testMode == true && sandboxForceAdapterPipeline == false {
             return try await loadAdUsingTestMode(placement: placement)
         }
 
@@ -562,6 +569,10 @@ private actor MediationRuntime {
         } else {
             sandboxAdapterWhitelist = nil
         }
+    }
+
+    func setSandboxForceAdapterPipeline(_ enabled: Bool) {
+        sandboxForceAdapterPipeline = enabled
     }
 }
 
