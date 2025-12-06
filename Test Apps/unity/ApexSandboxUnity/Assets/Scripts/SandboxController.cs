@@ -8,9 +8,9 @@ namespace ApexSandboxUnity
     {
         [Header("Config")]
         [SerializeField] private string appId = "sandbox-app-unity";
-        [SerializeField] private string interstitialPlacement = "test_interstitial_a";
-        [SerializeField] private string rewardedPlacement = "test_rewarded_a";
-        [SerializeField] private string bannerPlacement = "test_banner_a";
+        [SerializeField] private string interstitialPlacement = "3d1094ab-a85b-4737-a749-d8a153a0f026";
+        [SerializeField] private string rewardedPlacement = "074b2dc7-3173-4da0-aba0-250f3f129df1";
+        [SerializeField] private string bannerPlacement = "f6e7aa9b-09c5-4644-bf56-f8ab781ac62d";
 
         [Header("Consent/Test")]
         [SerializeField] private bool testMode = true;

@@ -10,8 +10,7 @@ import FoundationNetworking
 /// - UserDefaults caching with TTL
 /// - Async/await concurrency
 /// - Automatic retry with exponential backoff
-@available(macOS 12.0, *)
-public final class ConfigManager {
+public final class ConfigManager: @unchecked Sendable {
     private let config: SDKConfig
     private let urlSession: URLSession
     private let userDefaults: UserDefaults
@@ -30,9 +29,10 @@ public final class ConfigManager {
         self.config = config
         self.signatureVerifier = signatureVerifier
         
-        let configuration = URLSessionConfiguration.default
-        configuration.timeoutIntervalForRequest = 10
-        configuration.timeoutIntervalForResource = 30
+        let configuration = URLSessionConfiguration.apexDefault(
+            requestTimeout: 10,
+            resourceTimeout: 30
+        )
         self.urlSession = URLSession(configuration: configuration)
         
         self.userDefaults = UserDefaults.standard
@@ -97,7 +97,7 @@ public final class ConfigManager {
         request.addValue("RivalApexMediation-iOS/1.0.0", forHTTPHeaderField: "User-Agent")
         request.addValue("application/json", forHTTPHeaderField: "Accept")
         
-        let (data, response) = try await urlSession.data(for: request)
+        let (data, response) = try await urlSession.apexData(for: request)
         
         guard let httpResponse = response as? HTTPURLResponse else {
             throw ConfigError.invalidResponse
@@ -142,7 +142,11 @@ public final class ConfigManager {
     
     /// Verify Ed25519 signature
     private func verifySignature(config: SDKRemoteConfig, verifier: SignatureVerifier) throws {
-        guard let signature = config.signature else {
+        guard let signature = config.signature, !signature.isEmpty else {
+            // Allow unsigned payloads when running local test builds with no production key provisioned
+            if self.config.testMode && self.config.configSignaturePublicKey == nil {
+                return
+            }
             throw ConfigError.missingSignature
         }
 

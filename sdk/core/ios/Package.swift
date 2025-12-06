@@ -5,7 +5,8 @@ let package = Package(
     name: "RivalApexMediationSDK",
     platforms: [
         .iOS(.v14),
-        .tvOS(.v14)
+        .tvOS(.v14),
+        .macOS(.v10_15)
     ],
     products: [
         .library(

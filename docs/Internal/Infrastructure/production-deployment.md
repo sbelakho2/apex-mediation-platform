@@ -229,24 +229,21 @@ kubectl apply -f - <<EOF
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
-  name: rivalapexmediation-tls
+  name: apexmediation-tls
   namespace: rival
 spec:
-  secretName: rivalapexmediation-tls
+  secretName: apexmediation-tls
   issuerRef:
     name: letsencrypt-prod
     kind: ClusterIssuer
   dnsNames:
-    - api.rivalapexmediation.ee
-    - console.rivalapexmediation.ee
-    - analytics.rivalapexmediation.ee
-    - fraud.rivalapexmediation.ee
+    - api.apexmediation.ee
+    - console.apexmediation.ee
 EOF
 
 # Update DNS records
-# - api.rivalapexmediation.ee → Load Balancer IP
-# - console.rivalapexmediation.ee → Load Balancer IP
-# - *.rivalapexmediation.ee → Load Balancer IP (wildcard)
+# - api.apexmediation.ee → Load Balancer IP
+# - console.apexmediation.ee → Load Balancer IP
 ```
 
 ## Step 5: Monitoring Setup
@@ -388,7 +385,7 @@ psql $DATABASE_URL << EOF
 INSERT INTO publishers (id, email, name, company_name, status, tier)
 VALUES (
   '00000000-0000-0000-0000-000000000001',
-  'demo@rivalapexmediation.ee',
+  'demo@apexmediation.ee',
   'Demo Publisher',
   'Demo Company',
   'active',
@@ -455,7 +452,7 @@ kubectl run -it --rm redis-test --image=redis:7 --restart=Never -- \
 
 ```bash
 # Create test ad request
-curl -X POST https://api.rivalapexmediation.ee/v1/ad/request \
+curl -X POST https://api.apexmediation.ee/v1/ad/request \
   -H "Authorization: Bearer <api-key>" \
   -H "Content-Type: application/json" \
   -d '{
@@ -626,7 +623,7 @@ See `PRE_DEPLOYMENT_CHECKLIST.md` for the full 10-section validation covering in
 watch kubectl get pods -n rival
 
 # Check service health
-curl https://api.rivalapexmediation.ee/health
+curl https://api.apexmediation.ee/health
 
 # View logs
 kubectl logs -f deployment/router-service -n rival --tail=100
@@ -659,7 +656,7 @@ gh workflow run rollback.yml -f environment=production
 For issues during deployment:
 - Check logs: `kubectl logs -n rival <pod-name>`
 - Review events: `kubectl get events -n rival --sort-by='.lastTimestamp'`
-- Contact: ops@rivalapexmediation.ee
+- Contact: security@apexmediation.ee
 - On-call: PagerDuty incident trigger
 
 ## Next Steps

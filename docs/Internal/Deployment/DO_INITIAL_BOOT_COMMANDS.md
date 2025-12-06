@@ -86,7 +86,7 @@ apt-get -y install certbot
 systemctl stop nginx || true
 certbot certonly --standalone \
   -d api.apexmediation.ee -d console.apexmediation.ee \
-  --email ops@apexmediation.ee --agree-tos --non-interactive
+  --email security@apexmediation.ee --agree-tos --non-interactive
 
 # Renewal dry run
 certbot renew --dry-run

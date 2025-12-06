@@ -159,4 +159,4 @@ API snapshot:
 | Debugger overlay missing | Overlay disabled or stripped | Enable "Attach Debugger Overlay In Editor" or add `MediationDebuggerOverlay` manually in dev builds |
 | CI fails `Unity Footprint Gate` | Runtime exceeded 100KB compressed or .NET tests failed | Run `./scripts/check_package_constraints.sh` locally, prune unused runtime code/assets, fix tests |
 
-Need more help? Reach out via `support@bel-consulting.ee` with your latest transparency proof hash and telemetry snapshot.
+Need more help? Reach out via `support@apexmediation.ee` with your latest transparency proof hash and telemetry snapshot.

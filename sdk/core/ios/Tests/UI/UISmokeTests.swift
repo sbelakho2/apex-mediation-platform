@@ -15,7 +15,8 @@ final class UISmokeTests: XCTestCase {
         throw XCTSkip("UISmokeTests require Apple's networking stack")
     #else
         // Register MockURLProtocol for deterministic responses
-        URLProtocol.registerClass(MockURLProtocolFixture.self)
+        NetworkTestHooks.registerMockProtocol(MockURLProtocolFixture.self)
+        MockURLProtocolFixture.reset()
         
         sdk = MediationSDK.shared
     #endif
@@ -26,7 +27,8 @@ final class UISmokeTests: XCTestCase {
         return
     #else
         MockURLProtocolFixture.reset()
-        URLProtocol.unregisterClass(MockURLProtocolFixture.self)
+        NetworkTestHooks.resetMockProtocols()
+        sdk.shutdown()
     #endif
     }
     
@@ -323,9 +325,19 @@ class MockURLProtocolFixture: URLProtocol {
     }
     
     override func startLoading() {
+        guard let url = request.url else {
+            client?.urlProtocol(self, didFailWithError: URLError(.badURL))
+            return
+        }
+        
+        if url.path.contains("/v1/config") {
+            sendConfigResponse()
+            return
+        }
+        
         switch MockURLProtocolFixture.scenario {
         case .success:
-            sendSuccessResponse()
+            sendAuctionSuccess()
         case .noFill:
             sendNoFillResponse()
         case .rateLimitExceeded:
@@ -340,8 +352,8 @@ class MockURLProtocolFixture: URLProtocol {
     }
     
     override func stopLoading() {}
-    
-    private func sendSuccessResponse() {
+
+    private func sendAuctionSuccess() {
         let json = """
         {
             "ad_id": "test_ad_123",
@@ -354,37 +366,25 @@ class MockURLProtocolFixture: URLProtocol {
             "metadata": {}
         }
         """
-        
-        let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
-        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-        client?.urlProtocol(self, didLoad: json.data(using: .utf8)!)
-        client?.urlProtocolDidFinishLoading(self)
+        respond(statusCode: 200, body: json)
     }
     
     private func sendNoFillResponse() {
-        let response = HTTPURLResponse(url: request.url!, statusCode: 204, httpVersion: nil, headerFields: nil)!
-        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-        client?.urlProtocolDidFinishLoading(self)
+        respond(statusCode: 204)
     }
     
     private func sendRateLimitResponse() {
         let json = """
         {"error": "Rate limit exceeded", "retry_after": 60}
         """
-        let response = HTTPURLResponse(url: request.url!, statusCode: 429, httpVersion: nil, headerFields: ["Retry-After": "60"])!
-        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-        client?.urlProtocol(self, didLoad: json.data(using: .utf8)!)
-        client?.urlProtocolDidFinishLoading(self)
+        respond(statusCode: 429, headers: ["Retry-After": "60"], body: json)
     }
     
     private func sendServerErrorResponse(code: Int) {
         let json = """
         {"error": "Service unavailable"}
         """
-        let response = HTTPURLResponse(url: request.url!, statusCode: code, httpVersion: nil, headerFields: nil)!
-        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-        client?.urlProtocol(self, didLoad: json.data(using: .utf8)!)
-        client?.urlProtocolDidFinishLoading(self)
+        respond(statusCode: code, body: json)
     }
     
     private func sendTimeoutError() {
@@ -392,8 +392,51 @@ class MockURLProtocolFixture: URLProtocol {
         client?.urlProtocol(self, didFailWithError: error)
     }
     
+    private func sendConfigResponse() {
+        respond(statusCode: 200, body: MockURLProtocolFixture.configPayload)
+    }
+    
+    private func respond(statusCode: Int, headers: [String: String]? = nil, body: String? = nil) {
+        let response = HTTPURLResponse(url: request.url!, statusCode: statusCode, httpVersion: "HTTP/1.1", headerFields: headers)!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        if let body = body {
+            client?.urlProtocol(self, didLoad: Data(body.utf8))
+        }
+        client?.urlProtocolDidFinishLoading(self)
+    }
+    
     private func futureISODate() -> String {
         let formatter = ISO8601DateFormatter()
         return formatter.string(from: Date().addingTimeInterval(3600))
     }
+
+    private static let configPayload: String = {
+        return """
+        {
+            "version": 1,
+            "placements": [
+                {"placement_id": "interstitial_main", "ad_type": "interstitial", "adapter_priority": ["admob"], "timeout_ms": 2000, "floor_cpm": 1.5},
+                {"placement_id": "rewarded_main", "ad_type": "rewarded", "adapter_priority": ["admob"], "timeout_ms": 2000, "floor_cpm": 2.5},
+                {"placement_id": "test_placement", "ad_type": "interstitial", "adapter_priority": ["admob"], "timeout_ms": 2000, "floor_cpm": 1.0},
+                {"placement_id": "placement_0", "ad_type": "interstitial", "adapter_priority": ["admob"], "timeout_ms": 2000, "floor_cpm": 1.0},
+                {"placement_id": "placement_1", "ad_type": "interstitial", "adapter_priority": ["admob"], "timeout_ms": 2000, "floor_cpm": 1.0},
+                {"placement_id": "placement_2", "ad_type": "interstitial", "adapter_priority": ["admob"], "timeout_ms": 2000, "floor_cpm": 1.0},
+                {"placement_id": "placement_3", "ad_type": "interstitial", "adapter_priority": ["admob"], "timeout_ms": 2000, "floor_cpm": 1.0},
+                {"placement_id": "placement_4", "ad_type": "interstitial", "adapter_priority": ["admob"], "timeout_ms": 2000, "floor_cpm": 1.0}
+            ],
+            "adapters": {
+                "admob": {
+                    "enabled": true,
+                    "settings": {
+                        "app_id": "demo-app",
+                        "sdk_key": "demo-key"
+                    }
+                }
+            },
+            "killswitches": [],
+            "telemetry_enabled": false,
+            "signature": null
+        }
+        """
+    }()
 }

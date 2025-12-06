@@ -65,6 +65,8 @@ test-results*/
 playwright-report/
 .lighthouse/
 *.lcov
+.output.txt
+sdk/core/unity/Tests/TestResults/
 
 # k6
 k6-results.json

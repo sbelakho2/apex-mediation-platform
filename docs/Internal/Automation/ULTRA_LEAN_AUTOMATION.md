@@ -302,12 +302,12 @@ groups:
 export const EMAIL_TEMPLATES = {
   welcome: {
     subject: 'Welcome to ApexMediation! 🚀',
-    from: 'Sabel @ ApexMediation <sabel@apexmediation.ee>',
+    from: 'ApexMediation Contact <contact@apexmediation.ee>',
     replyTo: 'support@apexmediation.ee',
   },
   trial_ending_7d: {
     subject: 'Your ApexMediation trial ends in 7 days',
-    from: 'ApexMediation <noreply@apexmediation.ee>',
+    from: 'ApexMediation Support <support@apexmediation.ee>',
   },
   payment_failed: {
     subject: 'Payment failed - action required',
@@ -315,7 +315,7 @@ export const EMAIL_TEMPLATES = {
   },
   usage_80_percent: {
     subject: 'You\'ve used 80% of your plan limits',
-    from: 'ApexMediation <noreply@apexmediation.ee>',
+    from: 'ApexMediation Support <support@apexmediation.ee>',
   },
 };
 ```
@@ -687,7 +687,7 @@ export class CustomerHealthService {
     
     // 1. Immediate email with personal touch
     await emailService.send(customerId, 'high-risk-intervention', {
-      from: 'sabel@apexmediation.ee', // Personal email
+      from: 'contact@apexmediation.ee', // Contact inbox
       subject: 'Quick check-in - need any help?',
     });
     

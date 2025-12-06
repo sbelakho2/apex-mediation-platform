@@ -88,7 +88,7 @@ const RESULTS = [
     maxScore: 4,
     label: 'BYO Enterprise Track',
     summary: 'You need automation, custom workflows, and contractual SLAs. The BYO control plane already supports these—let us map the marginal schedule to your approvals and configure tooling with you.',
-    cta: { label: 'Talk to our enterprise specialists', href: 'mailto:enterprise@bel-consulting.ee' },
+    cta: { label: 'Talk to our enterprise specialists', href: 'mailto:sales@apexmediation.ee' },
   },
 ];
 

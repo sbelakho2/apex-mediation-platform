@@ -1,3 +1,67 @@
+Changelog — DigitalOcean `/ready` Redeploy & Verification (2025-12-06)
+
+Summary
+- Rebuilt and redeployed the backend container on the FRA1 DigitalOcean droplet so the new health router (`createHealthCheckRoutes`) is active behind nginx.
+- Confirmed that `/ready` now returns the Postgres + Redis readiness payload over HTTPS, enabling CI/readiness gates to rely on it before production rollouts.
+
+What changed
+- Droplet: copied the updated `backend/src/index.ts` and `backend/src/controllers/HealthCheckController.ts`, rebuilt `infrastructure-backend` via `docker compose -f infrastructure/docker-compose.prod.yml build backend`, and relaunched it with `docker compose ... up -d backend`.
+- Infra: nginx now proxies a backend that exposes `/health`, `/ready`, and `/startup` through the shared router, so DigitalOcean probes and manual curls hit identical logic.
+- Docs: `docs/Internal/Deployment/PRODUCTION_READINESS_CHECKLIST.md` flips the readiness checkbox back to ✅ with a 2025-12-06 evidence snapshot referencing the successful `/ready` response.
+
+Validation
+- `curl -Is https://api.apexmediation.ee/health`
+- `curl -s https://api.apexmediation.ee/ready | jq`
+
+---
+
+Changelog — Readiness Probe Verification (2025-12-05)
+
+Summary
+- Re-ran the production `/health` and `/ready` probes against `https://api.apexmediation.ee` to validate the router deployment and confirm whether Kubernetes-compatible readiness checks are publicly reachable.
+- Documented the actual responses in the production readiness checklist so operators have an up-to-date snapshot before relying on the `/ready` gate.
+
+What changed
+- Docs: `docs/Internal/Deployment/PRODUCTION_READINESS_CHECKLIST.md` reverts the health/readiness checkbox to unchecked and records the latest outputs (`/health` returns `HTTP/2 200` with strict headers; `/ready` still responds with `{ "success": false, "error": "Route not found" }`). Follow-up guidance notes that the backend/router must be redeployed behind nginx so `/ready` is routable before sign-off.
+
+Validation
+- `curl -Is https://api.apexmediation.ee/health`
+- `curl -s https://api.apexmediation.ee/ready | jq`
+
+---
+
+Changelog — Health Router Wiring & Readiness Evidence (2025-12-05)
+
+Summary
+- Mounted the dedicated Kubernetes health router in the backend entrypoint so `/ready`, `/startup`, and `/api/v1/status` resolve consistently on every environment (Docker, local, DigitalOcean) instead of relying on the legacy inline `/health` handler.
+- Extended the liveness payload with Redis + BullMQ queue status, then documented the successful `/health` + `/ready` verification snapshot in the production readiness checklist so operators can reference concrete evidence for Phase 0.0.0.
+
+What changed
+- Backend: `backend/src/index.ts` now imports `createHealthCheckRoutes` and the shared Postgres pool, mounts the router at the root, and removes the bespoke `/health` Express handler so all probes funnel through `HealthCheckController`.
+- Backend: `backend/src/controllers/HealthCheckController.ts` liveness output now mirrors the previous inline JSON (service/env/Redis/queue health); readiness/startup logic remains unchanged but is finally reachable through the router.
+- Docs: `docs/Internal/Deployment/PRODUCTION_READINESS_CHECKLIST.md` flips the “Health/Readiness are Postgres + Redis only” item to ✅ with a 2025-12-05 snapshot that records the new `/health` body and the live `/ready` response (DB latency, Redis ready flag, replica metrics).
+
+Validation
+- Not run (routing/doc-only). Follow-up: `curl http://localhost:<port>/ready` and `/startup` after `npm run dev:backend` to confirm probes return 200.
+
+---
+
+Changelog — Sandbox QA Evidence Snapshot (2025-12-05)
+
+Summary
+- Captured every automation artifact for the sandbox SDK matrix (iOS Swift, Android core + StrictMode + validator, Android TV, Unity, tvOS attempt) and centralized them under `docs/Internal/QA/sdk-automation-2025-12-05/` for checklist sections 0.0.2–0.0.5.
+- Documented the sandbox readiness matrix in `docs/Internal/QA/sandbox-2025-12-05/README.md`, clarifying which stages remain blocked pending real devices/emulators and tying each row back to the production readiness checklist.
+
+What changed
+- Docs: `docs/Internal/QA/sdk-automation-2025-12-05/README.md` now enumerates the exact commands, logs, and JUnit/TRX artifacts for iOS, Android (core, StrictMode, validator), Android TV, Unity, and the tvOS build attempt so reviewers can trace evidence quickly.
+- Docs: `docs/Internal/QA/sandbox-2025-12-05/README.md` adds the platform matrix snapshot, pending-manual callouts, and instructions for dropping screenshots/logs once devices are available.
+
+Next steps
+- Run the Android sandbox app on an emulator or device with `apiBase` pointed at `https://api.apexmediation.ee`, confirm the DigitalOcean droplet/health endpoint is reachable, and archive the logs/screenshots under `docs/Internal/QA/sandbox-2025-12-05/android/`.
+- Replay the remaining manual flows (iOS ATT/consent, Unity scene export, Android TV hardware focus, tvOS StoreKit/ATT gates, console dashboard CRUD) on staging hardware, then update the production readiness checklist with references to the captured evidence.
+
+---
+
 Changelog — Sandbox Fake Networks & Stripe Bootstrap (2025-12-04)
 
 Summary
@@ -644,7 +708,7 @@ What changed (highlights)
   - Replaced legacy pricing “plans” with the documented marginal revenue-share tiers, CTV premium, and add-ons; hero pills and stats cite the 13-minute onboarding, <50ms bidder runtime, and 99.7% fraud precision called out in docs.
 - Legal & compliance stubs
   - `website/src/app/[...slug]/page.tsx` now fleshes out Privacy, Terms, GDPR, Security, Cookie Policy, and the Pricing page with the same content structure as `docs/Customer-Facing/**` (data collected, lawful bases, DPAs/SCCs, NET 30 terms, consent APIs, etc.).
-  - Updated contact mailboxes (`support@bel-consulting.ee`, `billing@bel-consulting.ee`, `security@bel-consulting.ee`, `sales@bel-consulting.ee`) to match the documentation, and added detailed GDPR/DPA instructions plus data subject request endpoints.
+  - Updated contact mailboxes (`support@apexmediation.ee`, `billing@apexmediation.ee`, `security@apexmediation.ee`, `sales@apexmediation.ee`) to match the documentation, and added detailed GDPR/DPA instructions plus data subject request endpoints.
 
 Validation
 - `npm --prefix website run lint` (not rerun; marketing copy-only changes)

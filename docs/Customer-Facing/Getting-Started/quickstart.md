@@ -182,7 +182,7 @@ ApexMediation.loadAd('banner-ad');
 **Common Issues:**
 - **No ads showing?** Check your API key is correct
 - **Console errors?** See [Troubleshooting Guide](/docs/troubleshooting/common-issues)
-- **Need help?** Contact support@bel-consulting.ee
+- **Need help?** Contact support@apexmediation.ee
 
 **⏱️ Time: 2 minutes**
 
@@ -217,7 +217,7 @@ ApexMediation.loadAd('banner-ad');
 
 ## Support
 
-- **📧 Email**: support@bel-consulting.ee
+- **📧 Email**: support@apexmediation.ee
 - **💬 Live Chat**: Available in the dashboard
 - **📚 Documentation**: [docs.apexmediation.ee](https://docs.apexmediation.ee)
 - **🐛 Report a Bug**: [GitHub Issues](https://github.com/bel-consulting/apexmediation-sdk/issues)

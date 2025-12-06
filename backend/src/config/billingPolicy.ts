@@ -237,7 +237,7 @@ export const billingPolicy: BillingPolicy = {
   },
   communications: {
     billingEmail: 'billing@apexmediation.ee',
-    escalationEmail: 'founder@apexmediation.ee',
+    escalationEmail: 'contact@apexmediation.ee',
     officeHours: 'Weekdays 09:00-17:00 CET',
   },
 }

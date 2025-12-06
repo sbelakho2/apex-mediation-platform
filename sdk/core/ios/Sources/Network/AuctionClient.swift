@@ -18,9 +18,10 @@ public final class AuctionClient {
         self.apiKey = apiKey
         self.timeout = timeout
         
-        let config = URLSessionConfiguration.default
-        config.timeoutIntervalForRequest = timeout
-        config.timeoutIntervalForResource = timeout * 2
+        let config = URLSessionConfiguration.apexDefault(
+            requestTimeout: timeout,
+            resourceTimeout: timeout * 2
+        )
         self.session = URLSession(configuration: config)
     }
     
@@ -28,7 +29,7 @@ public final class AuctionClient {
     public func requestBid(placementId: String, adType: String) async throws -> AuctionResponse {
         let request = try buildRequest(placementId: placementId, adType: adType)
         
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await session.apexData(for: request)
         
         guard let httpResponse = response as? HTTPURLResponse else {
             throw SDKError.networkError(underlying: "Invalid response type")

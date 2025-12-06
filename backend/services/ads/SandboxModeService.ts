@@ -169,7 +169,7 @@ export class SandboxModeService {
         message: '🧪 Sandbox Mode: Full-screen test ad',
         nextSteps: [
           'Your interstitial ad logic is working correctly',
-          'Email sabel@apexmediation.ee to connect real ad networks',
+          'Email contact@apexmediation.ee to connect real ad networks',
           'Platform ready for production when you are',
         ],
       },
@@ -355,7 +355,7 @@ export class SandboxModeService {
     }
     if (readyForProduction) {
       nextSteps.push(
-        'Your integration is ready! Email sabel@apexmediation.ee to connect your first ad network (AdMob recommended)'
+        'Your integration is ready! Email contact@apexmediation.ee to connect your first ad network (AdMob recommended)'
       );
       nextSteps.push(
         'We can have live ads flowing within 24-48 hours of first contact'

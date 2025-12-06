@@ -40,7 +40,7 @@ class NetworkingAdvancedTests: XCTestCase {
         request.setValue("Bearer test-token", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await session.apexData(for: request)
         
         XCTAssertEqual((response as? HTTPURLResponse)?.statusCode, 200)
         XCTAssertNotNil(data)
@@ -55,7 +55,7 @@ class NetworkingAdvancedTests: XCTestCase {
         request.timeoutInterval = 2.0 // 2 second timeout
         
         do {
-            _ = try await session.data(for: request)
+            _ = try await session.apexData(for: request)
             XCTFail("Expected timeout error")
         } catch let error as URLError {
             XCTAssertEqual(error.code, .timedOut)
@@ -68,14 +68,14 @@ class NetworkingAdvancedTests: XCTestCase {
         // First attempt fails with 503
         MockURLProtocol.mockResponse(url: url, statusCode: 503, body: Data())
         
-        var request = URLRequest(url: url)
-        let (_, response) = try await session.data(for: request)
+        let request = URLRequest(url: url)
+        let (_, response) = try await session.apexData(for: request)
         
         XCTAssertEqual((response as? HTTPURLResponse)?.statusCode, 503)
         
         // Retry should succeed (mock updated response)
         MockURLProtocol.mockResponse(url: url, statusCode: 200, body: Data())
-        let (_, retryResponse) = try await session.data(for: request)
+        let (_, retryResponse) = try await session.apexData(for: request)
         XCTAssertEqual((retryResponse as? HTTPURLResponse)?.statusCode, 200)
     }
     
@@ -83,10 +83,10 @@ class NetworkingAdvancedTests: XCTestCase {
         let url = URL(string: "https://api.example.com/error")!
         MockURLProtocol.mockError(url: url, error: URLError(.notConnectedToInternet))
         
-        var request = URLRequest(url: url)
+        let request = URLRequest(url: url)
         
         do {
-            _ = try await session.data(for: request)
+            _ = try await session.apexData(for: request)
             XCTFail("Expected network error")
         } catch let error as URLError {
             XCTAssertEqual(error.code, .notConnectedToInternet)

@@ -20,7 +20,7 @@ status-website:
     - title: Incident Guide
       href: https://github.com/bel-consulting/Ad-Project/blob/main/docs/Monitoring/STATUS_PAGE_AND_INCIDENT_TAXONOMY.md
     - title: Transparency
-      href: https://docs.apexmediation.ee/transparency
+      href: https://apexmediation.ee/docs/transparency
 
 workflowSchedule:
   uptime: '*/5 * * * *'
@@ -34,8 +34,8 @@ notifications:
     url: ${{ secrets.STATUS_PAGE_SLACK_WEBHOOK }}
   - type: email
     to:
-      - sre@bel-consulting.ee
-      - oncall@bel-consulting.ee
+      - security@apexmediation.ee
+      - support@apexmediation.ee
 
 sites:
   - name: Auction API
@@ -44,7 +44,7 @@ sites:
     expectedStatusCodes:
       - 200
   - name: SDK Config Service
-    url: https://config.apexmediation.ee/readyz
+    url: https://api.apexmediation.ee/v1/config/readyz
     maxResponseTime: 600
     expectedStatusCodes:
       - 200

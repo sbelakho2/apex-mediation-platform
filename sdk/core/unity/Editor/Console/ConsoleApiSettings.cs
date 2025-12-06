@@ -6,7 +6,7 @@ namespace Apex.Mediation.Editor.Console
     [FilePath("ProjectSettings/ApexMediationConsoleSettings.asset", FilePathAttribute.Location.ProjectFolder)]
     internal sealed class ConsoleApiSettings : ScriptableSingleton<ConsoleApiSettings>
     {
-        private const string DefaultBaseUrl = "https://console.rivalapexmediation.ee/api/v1";
+        private const string DefaultBaseUrl = "https://console.apexmediation.ee/api/v1";
 
         [SerializeField] private string apiBaseUrl = DefaultBaseUrl;
         [SerializeField] private string accessToken = string.Empty;
@@ -66,7 +66,7 @@ namespace Apex.Mediation.Editor.Console
             {
                 if (GUILayout.Button("Copy Docs URL"))
                 {
-                    EditorGUIUtility.systemCopyBuffer = "https://docs.rivalapexmediation.ee/unity/console-api";
+                    EditorGUIUtility.systemCopyBuffer = "https://apexmediation.ee/docs/unity/console-api";
                 }
 
                 if (GUILayout.Button("Open Credential Wizard"))

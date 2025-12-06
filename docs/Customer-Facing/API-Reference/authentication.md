@@ -472,9 +472,9 @@ For development, use these test credentials:
 
 ## Support
 
-- **📧 Email**: security@bel-consulting.ee
+- **📧 Email**: security@apexmediation.ee
 - **📚 API Reference**: [docs.apexmediation.ee/api](https://docs.apexmediation.ee/api)
-- **🐛 Report Security Issue**: [security@bel-consulting.ee](mailto:security@bel-consulting.ee)
+- **🐛 Report Security Issue**: [security@apexmediation.ee](mailto:security@apexmediation.ee)
 - **⏱️ Response Time**: < 2 hours for security issues, < 4 hours for other issues
 
 ---

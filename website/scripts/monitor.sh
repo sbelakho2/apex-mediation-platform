@@ -14,7 +14,7 @@ mkdir -p "$LOG_DIR"
 # Configuration
 WEBSITE_URL="${WEBSITE_URL:-https://apexmediation.bel-consulting.ee}"
 CHECK_INTERVAL="${CHECK_INTERVAL:-60}" # seconds
-ALERT_EMAIL="${ALERT_EMAIL:-dev@bel-consulting.ee}"
+ALERT_EMAIL="${ALERT_EMAIL:-security@apexmediation.ee}"
 DRY_RUN=${DRY_RUN:-0}
 
 usage(){ cat <<USAGE
@@ -219,7 +219,7 @@ case "$1" in
         echo "Environment variables:"
         echo "  WEBSITE_URL       - Website URL to monitor (default: https://apexmediation.bel-consulting.ee)"
         echo "  CHECK_INTERVAL    - Check interval in seconds (default: 60)"
-        echo "  ALERT_EMAIL       - Email address for alerts (default: dev@bel-consulting.ee)"
+        echo "  ALERT_EMAIL       - Email address for alerts (default: security@apexmediation.ee)"
         exit 1
         ;;
 esac

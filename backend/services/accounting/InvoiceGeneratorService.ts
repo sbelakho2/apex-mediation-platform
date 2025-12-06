@@ -370,7 +370,7 @@ export class InvoiceGeneratorService {
         doc.fontSize(7)
           .fillColor('#9ca3af')
           .text(
-            'This invoice was generated automatically by RivalApexMediation. For questions, contact accounting@rivalapexmediation.ee',
+            'This invoice was generated automatically by RivalApexMediation. For questions, contact accounting@apexmediation.ee',
             50,
             750,
             { align: 'center', width: 500 }

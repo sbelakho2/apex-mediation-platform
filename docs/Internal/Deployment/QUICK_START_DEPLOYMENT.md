@@ -305,9 +305,9 @@ kubectl get cronjobs -n production
 | Scenario | Contact |
 |----------|---------|
 | Production down | PagerDuty (auto-escalates) |
-| AI spend spike | platform@apexmediation.ee + finance@apexmediation.ee |
+| AI spend spike | contact@apexmediation.ee + billing@apexmediation.ee |
 | Security incident | security@apexmediation.ee |
-| Database issues | dba@apexmediation.ee |
+| Database issues | security@apexmediation.ee |
 | General support | #platform-alerts (Slack) |
 
 ---

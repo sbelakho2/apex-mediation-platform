@@ -19,7 +19,7 @@ services:
       - DATABASE_SSL=${DATABASE_SSL:-false}
       # Local default points to the internal redis service with password
       - REDIS_URL=${REDIS_URL:-redis://:${REDIS_PASSWORD:-local-strong-password}@redis:6379/0}
-      - CORS_ALLOWLIST=https://console.apexmediation.ee,https://apexmediation.ee
+      - CORS_ALLOWLIST=https://console.apexmediation.ee,https://apexmediation.ee,https://www.apexmediation.ee
       # Minimal secrets required to satisfy backend env validation in local prod-like runs
       - JWT_SECRET=${JWT_SECRET:-local-secret-0123456789abcdef0123456789abcd}
       - COOKIE_SECRET=${COOKIE_SECRET:-local-cookie-0123456789abcdef0123456789}

@@ -57,7 +57,7 @@ ingress:
     nginx.ingress.kubernetes.io/ssl-redirect: "true"
     nginx.ingress.kubernetes.io/rate-limit: "100"
   hostnamePrefix: api
-  defaultDomain: rivalapexmediation.ee
+  defaultDomain: apexmediation.ee
   hosts:
     - host: ""
       paths:
@@ -66,7 +66,7 @@ ingress:
   tls:
     - secretName: backend-tls
       hosts:
-        - api.rivalapexmediation.ee
+        - api.apexmediation.ee
 
 resources:
   limits:

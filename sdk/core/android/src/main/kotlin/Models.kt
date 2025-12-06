@@ -195,7 +195,7 @@ data class FeatureFlags(
     // SDK never calls inspector; console/back-end compute and set this flag. Default false.
     val devAppAdsInspectorWarn: Boolean = false,
     // Network TLS pinning (P1.10): enable and provide host->pins mapping (OkHttp sha256/sha1 pins)
-    // Example JSON: { "auction.rivalapexmediation.ee": ["sha256/AAAAAAAA...", "sha256/BBBBBBBB..."] }
+    // Example JSON: { "api.apexmediation.ee": ["sha256/AAAAAAAA...", "sha256/BBBBBBBB..."] }
     val netTlsPinningEnabled: Boolean = false,
     val netTlsPinning: Map<String, List<String>> = emptyMap(),
 )

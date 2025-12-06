@@ -1,7 +1,7 @@
 import Foundation
 import Dispatch
 
-public final class MediationSDK {
+public final class MediationSDK: @unchecked Sendable {
     public static let shared = MediationSDK()
 
     private let sdkVersionValue = "1.0.0"
@@ -44,6 +44,19 @@ public final class MediationSDK {
     
     public var registeredAdapterCount: Int {
         readSnapshot { $0.registeredAdapters }
+    }
+
+    // MARK: - Sandbox/Diagnostics helpers
+    /// Returns the list of registered adapter network names (sorted). Requires initialization; if not yet
+    /// initialized, returns the SDK's built-in registry names.
+    public func adapterNames() async -> [String] {
+        await runtime.adapterNames()
+    }
+
+    /// In sandbox/test mode, restrict loading to a specific set of adapters.
+    /// Pass `nil` to clear the whitelist (restore normal priority behavior).
+    public func setSandboxAdapterWhitelist(_ names: [String]?) async {
+        await runtime.setSandboxAdapterWhitelist(names)
     }
 
     /// Update consent state shared across the SDK.
@@ -102,10 +115,11 @@ public final class MediationSDK {
     /// Shutdown the SDK and release resources.
     public func shutdown() {
         let semaphore = DispatchSemaphore(value: 0)
-        Task {
-            let digest = await runtime.shutdown()
-            updateSnapshot(digest)
-            semaphore.signal()
+        Task.detached(priority: .userInitiated) { [weak self] in
+            defer { semaphore.signal() }
+            guard let self else { return }
+            let digest = await self.runtime.shutdown()
+            self.updateSnapshot(digest)
         }
         semaphore.wait()
     }
@@ -160,6 +174,8 @@ private struct SDKSnapshot {
     )
 }
 
+extension SDKSnapshot: @unchecked Sendable {}
+
 private extension SDKSnapshot {
     func updatingConsentSummary(_ summary: [String: Any]) -> SDKSnapshot {
         SDKSnapshot(
@@ -184,9 +200,11 @@ private actor MediationRuntime {
     private var telemetry: TelemetryCollector?
     private var adapterRegistry: AdapterRegistry?
     private var signatureVerifier: SignatureVerifier?
+    private var testModeLoader: TestModeAdLoader?
     private var initialized = false
     private var adCache: [String: [Ad]] = [:]
     private let consentManager = ConsentManager.shared
+    private var sandboxAdapterWhitelist: Set<String>? = nil
 
     init(sdkVersion: String) {
         self.sdkVersion = sdkVersion
@@ -210,7 +228,21 @@ private actor MediationRuntime {
         }
 
         let manager = ConfigManager(config: resolvedConfig, signatureVerifier: signatureVerifier)
-        let remote = try await manager.loadConfig()
+        // In test mode, prefer mocked network (if registered) so tests can supply remote config.
+        // Only bypass remote fetch when no mocks are registered and we are explicitly in offline test mode.
+        let remote: SDKRemoteConfig
+        if resolvedConfig.testMode && !NetworkTestHooks.hasMockProtocols {
+            remote = SDKRemoteConfig(
+                version: 0,
+                placements: [],
+                adapters: [:],
+                killswitches: [],
+                telemetryEnabled: false,
+                signature: nil
+            )
+        } else {
+            remote = try await manager.loadConfig()
+        }
 
         let registry = AdapterRegistry(sdkVersion: sdkVersion)
         configureAdapters(registry: registry, with: remote)
@@ -218,6 +250,15 @@ private actor MediationRuntime {
         let telemetryCollector = TelemetryCollector(config: resolvedConfig)
         telemetryCollector.start()
         telemetryCollector.recordInitialization()
+
+        if resolvedConfig.testMode {
+            guard let loader = TestModeAdLoader(auctionEndpoint: resolvedConfig.auctionEndpoint) else {
+                throw SDKError.internalError(message: "Invalid test-mode auction endpoint")
+            }
+            testModeLoader = loader
+        } else {
+            testModeLoader = nil
+        }
 
         config = resolvedConfig
         remoteConfig = remote
@@ -234,16 +275,23 @@ private actor MediationRuntime {
             throw SDKError.notInitialized
         }
 
-        let config = try await ensureRemoteConfig()
-        guard let placement = config.placements.first(where: { $0.placementId == placementId }) else {
+        let remote = try await ensureRemoteConfig()
+        guard let placement = remote.placements.first(where: { $0.placementId == placementId }) else {
             throw SDKError.invalidPlacement(placementId)
+        }
+
+        if config?.testMode == true {
+            return try await loadAdUsingTestMode(placement: placement)
         }
 
         guard let registry = adapterRegistry else {
             throw SDKError.internalError(message: "Adapter registry not initialized")
         }
 
-        let adaptersInPriority = placement.adapterPriority
+        var adaptersInPriority = placement.adapterPriority
+        if let whitelist = sandboxAdapterWhitelist, !whitelist.isEmpty {
+            adaptersInPriority = adaptersInPriority.filter { whitelist.contains($0) }
+        }
         guard !adaptersInPriority.isEmpty else {
             return nil
         }
@@ -251,7 +299,7 @@ private actor MediationRuntime {
         assert(!Thread.isMainThread, "MediationRuntime.loadAd should not execute on the main thread")
 
         for networkName in adaptersInPriority {
-            guard let adapterConfig = config.adapters[networkName], adapterConfig.enabled else {
+            guard let adapterConfig = remote.adapters[networkName], adapterConfig.enabled else {
                 continue
             }
 
@@ -313,6 +361,7 @@ private actor MediationRuntime {
         telemetry?.stop()
         adapterRegistry?.destroy()
         configManager?.shutdown()
+        testModeLoader?.shutdown()
 
         telemetry = nil
         adapterRegistry = nil
@@ -320,6 +369,7 @@ private actor MediationRuntime {
         remoteConfig = nil
         config = nil
         signatureVerifier = nil
+        testModeLoader = nil
         initialized = false
         return snapshot()
     }
@@ -392,6 +442,9 @@ private actor MediationRuntime {
             enriched["apx_consent_metadata"] = requestMetadata
         }
         enriched["apx_can_personalize_ads"] = consentManager.canShowPersonalizedAds()
+        if config?.testMode == true {
+            enriched["apx_sandbox"] = true
+        }
         return enriched
     }
 
@@ -418,6 +471,48 @@ private actor MediationRuntime {
         var ads = adCache[ad.placement] ?? []
         ads.append(ad)
         adCache[ad.placement] = ads
+    }
+
+    private func loadAdUsingTestMode(placement: PlacementConfig) async throws -> Ad {
+        guard let loader = testModeLoader else {
+            throw SDKError.internalError(message: "Test mode loader unavailable")
+        }
+
+        let start = Date()
+
+        do {
+            let ad = try await loader.loadAd(for: placement)
+            storeAd(ad)
+            let latency = Int(Date().timeIntervalSince(start) * 1_000)
+            telemetry?.recordAdLoad(
+                placement: placement.placementId,
+                adType: placement.adType,
+                networkName: ad.networkName,
+                latency: latency,
+                success: true
+            )
+            return ad
+        } catch let error as SDKError {
+            let latency = Int(Date().timeIntervalSince(start) * 1_000)
+            telemetry?.recordAdLoad(
+                placement: placement.placementId,
+                adType: placement.adType,
+                networkName: "test_mode",
+                latency: latency,
+                success: false
+            )
+            throw error
+        } catch {
+            let latency = Int(Date().timeIntervalSince(start) * 1_000)
+            telemetry?.recordAdLoad(
+                placement: placement.placementId,
+                adType: placement.adType,
+                networkName: "test_mode",
+                latency: latency,
+                success: false
+            )
+            throw SDKError.internalError(message: error.localizedDescription)
+        }
     }
 
     private func pruneExpiredCache(for placementId: String? = nil) {
@@ -449,6 +544,24 @@ private actor MediationRuntime {
         }
         return false
         #endif
+    }
+
+    // MARK: - Sandbox/Diagnostics helpers
+    func adapterNames() -> [String] {
+        if let registry = adapterRegistry {
+            return registry.allNetworkNames()
+        }
+        // When not initialized, create a temporary registry to discover built-ins
+        let temp = AdapterRegistry(sdkVersion: sdkVersion)
+        return temp.allNetworkNames()
+    }
+
+    func setSandboxAdapterWhitelist(_ names: [String]?) {
+        if let names, !names.isEmpty {
+            sandboxAdapterWhitelist = Set(names)
+        } else {
+            sandboxAdapterWhitelist = nil
+        }
     }
 }
 

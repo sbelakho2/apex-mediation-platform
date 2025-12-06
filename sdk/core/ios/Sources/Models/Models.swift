@@ -119,13 +119,53 @@ public struct Ad: Codable, Sendable {
 // MARK: - Configuration Models
 
 /// Placement configuration
-public struct PlacementConfig: Codable {
+public struct PlacementConfig: Codable, Sendable {
     public let placementId: String
     public let adType: AdType
     public let adapterPriority: [String]
     public let timeoutMs: Int
     public let floorCPM: Double
     public let refreshInterval: Int?
+
+    private enum CodingKeys: String, CodingKey {
+        case placementId
+        case adType
+        case adapterPriority
+        case timeoutMs
+        case floorCPM
+        case refreshInterval
+    }
+
+    private enum AlternateFloorKeys: String, CodingKey {
+        case floorCpm
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        placementId = try container.decode(String.self, forKey: .placementId)
+        adType = try container.decode(AdType.self, forKey: .adType)
+        adapterPriority = try container.decode([String].self, forKey: .adapterPriority)
+        timeoutMs = try container.decode(Int.self, forKey: .timeoutMs)
+        refreshInterval = try container.decodeIfPresent(Int.self, forKey: .refreshInterval)
+
+        if let camelCaseValue = try container.decodeIfPresent(Double.self, forKey: .floorCPM) {
+            floorCPM = camelCaseValue
+        } else {
+            let alternateContainer = try decoder.container(keyedBy: AlternateFloorKeys.self)
+            // Support configs emitted with snake_case floor keys to match other SDKs
+            if let snakeCaseValue = try alternateContainer.decodeIfPresent(Double.self, forKey: .floorCpm) {
+                floorCPM = snakeCaseValue
+            } else {
+                throw DecodingError.keyNotFound(
+                    CodingKeys.floorCPM,
+                    DecodingError.Context(
+                        codingPath: decoder.codingPath,
+                        debugDescription: "Config payload missing floor CPM value"
+                    )
+                )
+            }
+        }
+    }
     
     public init(placementId: String, adType: AdType, adapterPriority: [String], timeoutMs: Int, floorCPM: Double, refreshInterval: Int? = nil) {
         self.placementId = placementId
@@ -138,7 +178,7 @@ public struct PlacementConfig: Codable {
 }
 
 /// Remote configuration
-public struct SDKRemoteConfig: Codable {
+public struct SDKRemoteConfig: Codable, Sendable {
     public let version: Int
     public let placements: [PlacementConfig]
     public let adapters: [String: AdapterConfig]
@@ -157,7 +197,7 @@ public struct SDKRemoteConfig: Codable {
 }
 
 /// Adapter configuration
-public struct AdapterConfig: Codable {
+public struct AdapterConfig: Codable, Sendable {
     public let enabled: Bool
     public let settings: [String: AnyCodable]
     
@@ -260,7 +300,7 @@ public struct TelemetryEvent: Codable, Sendable {
 // MARK: - SDK Configuration
 
 /// SDK configuration
-public struct SDKConfig: Codable, Equatable {
+public struct SDKConfig: Codable, Equatable, Sendable {
     public let appId: String
     public let configEndpoint: String
     public let auctionEndpoint: String
@@ -301,8 +341,8 @@ public struct SDKConfig: Codable, Equatable {
 
     public static func `default`(
         appId: String,
-        configEndpoint: String = "https://config.rivalapexmediation.ee",
-        auctionEndpoint: String = "https://auction.rivalapexmediation.ee",
+        configEndpoint: String = "https://api.apexmediation.ee",
+        auctionEndpoint: String = "https://api.apexmediation.ee",
         telemetryEnabled: Bool = true,
         logLevel: LogLevel = .info,
         testMode: Bool = false,
@@ -321,7 +361,7 @@ public struct SDKConfig: Codable, Equatable {
 }
 
 /// Log levels
-public enum LogLevel: String, Codable {
+public enum LogLevel: String, Codable, Sendable {
     case verbose = "verbose"
     case debug = "debug"
     case info = "info"

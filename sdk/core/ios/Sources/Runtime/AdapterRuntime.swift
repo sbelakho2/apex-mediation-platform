@@ -139,7 +139,6 @@ public final class HedgeManager {
 
 // MARK: - Timeout Enforcer
 
-@available(macOS 12.0, *)
 public final class AdapterTimeoutEnforcer {
     public init() {}
     
@@ -166,8 +165,7 @@ public final class AdapterTimeoutEnforcer {
 
 // MARK: - Adapter Runtime Wrapper
 
-@available(macOS 12.0, *)
-public final class AdapterRuntimeWrapper {
+public final class AdapterRuntimeWrapper: @unchecked Sendable {
     private let adapter: AdNetworkAdapterV2
     private let partnerId: String
     private var circuitBreakers: [String: AdapterCircuitBreaker] = [:]
@@ -213,7 +211,7 @@ public final class AdapterRuntimeWrapper {
             do {
                 let result = try await timeoutEnforcer.withTimeout(timeoutMs: timeoutMs) {
                     return await Task.detached(priority: .userInitiated) {
-                        return self.adapter.loadInterstitial(placementId: placement, meta: meta, timeoutMs: timeoutMs)
+                        self.adapter.loadInterstitial(placementId: placement, meta: meta, timeoutMs: timeoutMs)
                     }.value
                 }
                 

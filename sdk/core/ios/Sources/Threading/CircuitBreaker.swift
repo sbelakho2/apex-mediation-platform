@@ -138,14 +138,15 @@ public final class TimeoutEnforcer {
         self.timeoutMs = timeoutMs
     }
     
-    public func execute<T>(_ action: @escaping () throws -> T) async throws -> T {
-        try await withThrowingTaskGroup(of: T.self) { group in
+    public func execute<T: Sendable>(_ action: @escaping @Sendable () throws -> T) async throws -> T {
+        let timeoutMs = self.timeoutMs
+        return try await withThrowingTaskGroup(of: T.self) { group in
             group.addTask {
                 try action()
             }
             
             group.addTask {
-                try await Task.sleep(nanoseconds: UInt64(self.timeoutMs) * 1_000_000)
+                try await Task.sleep(nanoseconds: UInt64(timeoutMs) * 1_000_000)
                 throw TimeoutError()
             }
             

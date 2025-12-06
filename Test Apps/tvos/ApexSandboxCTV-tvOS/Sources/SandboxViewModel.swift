@@ -18,7 +18,10 @@ final class SandboxViewModel: ObservableObject {
 
     private(set) var config: Config = .init(
         appId: "sandbox-app-tvos",
-        placements: .init(interstitialA: "test_interstitial_a", rewardedA: "test_rewarded_a"),
+        placements: .init(
+            interstitialA: "8a94e8fd-8995-4b17-b308-38f1104d1e84",
+            rewardedA: "090ce110-b9dc-4722-93dd-8bd3fcfdb2e0"
+        ),
         testMode: true
     )
 

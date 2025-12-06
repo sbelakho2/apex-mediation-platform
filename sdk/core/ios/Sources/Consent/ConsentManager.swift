@@ -1,7 +1,7 @@
 import Foundation
 
 /// User consent data for privacy regulations
-public struct ConsentData: Codable, Equatable {
+public struct ConsentData: Codable, Equatable, Sendable {
     /// Whether GDPR applies to this user
     public var gdprApplies: Bool?
     
@@ -34,6 +34,7 @@ public final class ConsentManager {
     private let userDefaultsKey = "apex_consent_data"
     private let storage: UserDefaults
     private var currentConsent: ConsentData
+    private let lock = NSLock()
     
     init(storage: UserDefaults = .standard) {
         self.storage = storage
@@ -47,41 +48,48 @@ public final class ConsentManager {
     
     /// Set user consent and persist
     public func setConsent(_ consent: ConsentData) {
+        lock.lock()
         currentConsent = consent
-        persist()
+        persistLocked(consent)
+        lock.unlock()
     }
     
     /// Get current consent
     public func getConsent() -> ConsentData {
-        return currentConsent
+        lock.lock()
+        let consent = currentConsent
+        lock.unlock()
+        return consent
     }
     
     /// Get redacted consent info for debug panel (no PII)
     public func getRedactedConsentInfo() -> [String: Any] {
+        let consent = getConsent()
         return [
-            "gdprApplies": currentConsent.gdprApplies ?? false,
-            "gdprConsentString": currentConsent.gdprConsentString != nil ? "<redacted>" : "none",
-            "ccpaOptOut": currentConsent.ccpaOptOut,
-            "coppa": currentConsent.coppa
+            "gdprApplies": consent.gdprApplies ?? false,
+            "gdprConsentString": consent.gdprConsentString != nil ? "<redacted>" : "none",
+            "ccpaOptOut": consent.ccpaOptOut,
+            "coppa": consent.coppa
         ]
     }
     
     /// Check if personalized ads are allowed based on consent
     public func canShowPersonalizedAds() -> Bool {
         // COPPA users cannot see personalized ads
-        if currentConsent.coppa {
+        let consent = getConsent()
+        if consent.coppa {
             return false
         }
         
         // CCPA opt-out means no personalized ads
-        if currentConsent.ccpaOptOut {
+        if consent.ccpaOptOut {
             return false
         }
         
         // GDPR: check if consent string indicates consent
-        if let gdprApplies = currentConsent.gdprApplies, gdprApplies {
+        if let gdprApplies = consent.gdprApplies, gdprApplies {
             // If GDPR applies but no consent string, assume no consent
-            if currentConsent.gdprConsentString == nil || currentConsent.gdprConsentString?.isEmpty == true {
+            if consent.gdprConsentString == nil || consent.gdprConsentString?.isEmpty == true {
                 return false
             }
             // TODO: Parse IAB TCF string for specific purposes when needed
@@ -97,21 +105,23 @@ public final class ConsentManager {
     public func toAdRequestMetadata() -> [String: Any] {
         var metadata: [String: Any] = [:]
         
-        if let gdprApplies = currentConsent.gdprApplies {
+        let consent = getConsent()
+
+        if let gdprApplies = consent.gdprApplies {
             metadata["gdpr"] = gdprApplies ? 1 : 0
         }
         
-        if let consentString = currentConsent.gdprConsentString, !consentString.isEmpty {
+        if let consentString = consent.gdprConsentString, !consentString.isEmpty {
             metadata["gdpr_consent"] = consentString
         }
         
-        if currentConsent.ccpaOptOut {
+        if consent.ccpaOptOut {
             metadata["us_privacy"] = "1YNN" // IAB CCPA string: do not sell
         } else {
             metadata["us_privacy"] = "1YYN" // Allow sale
         }
         
-        if currentConsent.coppa {
+        if consent.coppa {
             metadata["coppa"] = 1
         }
         
@@ -120,10 +130,11 @@ public final class ConsentManager {
     
     /// Convert consent to adapter-facing state payload
     public func toAdapterConsentPayload(attStatusProvider: () -> ATTStatus = { .notDetermined }) -> [String: Any] {
+        let consent = getConsent()
         let consentState = ConsentState(
-            iabTCFv2: currentConsent.gdprConsentString,
-            iabUSGPP: currentConsent.ccpaOptOut ? "1YNN" : "1YYN",
-            coppa: currentConsent.coppa,
+            iabTCFv2: consent.gdprConsentString,
+            iabUSGPP: consent.ccpaOptOut ? "1YNN" : "1YYN",
+            coppa: consent.coppa,
             attStatus: attStatusProvider(),
             limitAdTracking: !canShowPersonalizedAds()
         )
@@ -141,15 +152,19 @@ public final class ConsentManager {
         return payload
     }
     
-    private func persist() {
-        if let encoded = try? JSONEncoder().encode(currentConsent) {
+    private func persistLocked(_ consent: ConsentData) {
+        if let encoded = try? JSONEncoder().encode(consent) {
             storage.set(encoded, forKey: userDefaultsKey)
         }
     }
     
     /// Clear all consent data (for testing)
     public func clear() {
+        lock.lock()
         currentConsent = ConsentData()
         storage.removeObject(forKey: userDefaultsKey)
+        lock.unlock()
     }
 }
+
+    extension ConsentManager: @unchecked Sendable {}

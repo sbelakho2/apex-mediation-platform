@@ -151,7 +151,7 @@ This stores headers/TLS details and basic redirect checks into the evidence dire
 1. On the droplet host, issue certificates for API and Console:
    ```bash
    apt-get update && apt-get install -y certbot python3-certbot-nginx
-   certbot certonly --nginx -d api.apexmediation.ee -d console.apexmediation.ee --email ops@apexmediation.ee --agree-tos --non-interactive
+   certbot certonly --nginx -d api.apexmediation.ee -d console.apexmediation.ee --email security@apexmediation.ee --agree-tos --non-interactive
    ```
 2. Ensure compose mounts `/etc/letsencrypt` into Nginx (already present in `infrastructure/docker-compose.prod.yml`).
 3. Mount HTTPS server blocks (already present in repo):

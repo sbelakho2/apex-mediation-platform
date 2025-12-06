@@ -349,7 +349,7 @@ Pay by card (Visa, Mastercard, AMEX) or wallets (Apple Pay, Google Pay). Fees: 2
 
 ### Secondary: PayPal
 
-- PayPal email: payments@apexmediation.ee
+- PayPal email: billing@apexmediation.ee
 - Currencies: USD, EUR, GBP
 - Fees: 2% network fee (passed through)
 

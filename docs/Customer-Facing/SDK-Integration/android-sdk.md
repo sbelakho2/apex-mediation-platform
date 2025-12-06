@@ -71,8 +71,8 @@ class SampleApp : Application() {
         val cfg = SDKConfig.Builder()
             .appId("publisher-demo-app")
             .sdkMode(SdkMode.BYO)                 // default; disables S2S
-            .configEndpoint("https://config.rivalapexmediation.ee")
-            .auctionEndpoint("https://auction.rivalapexmediation.ee")
+            .configEndpoint("https://api.apexmediation.ee")
+            .auctionEndpoint("https://api.apexmediation.ee")
             .configPublicKeyBase64("BASE64_X509_ED25519_PUBLIC_KEY")
             .strictModePenaltyDeath(BuildConfig.DEBUG)
             .observabilityEnabled(true)

@@ -394,7 +394,7 @@ ENABLE_SELF_EVOLVING_AI=false        # Week 3 rollout
 ## 12. Contact Information
 
 ### Emergency Contacts
-- **Platform Team:** platform@apexmediation.ee
+- **Platform Team:** contact@apexmediation.ee
 - **On-Call Engineer:** PagerDuty escalation
 - **CTO:** [INSERT CONTACT]
 
@@ -402,7 +402,7 @@ ENABLE_SELF_EVOLVING_AI=false        # Week 3 rollout
 - **Slack:** #platform-alerts (automated alerts)
 - **Slack:** #platform-team (team coordination)
 - **PagerDuty:** Critical incident escalation
-- **Email:** ops@apexmediation.ee
+- **Email:** security@apexmediation.ee
 
 ### External Dependencies
 - **OpenAI Support:** https://platform.openai.com/support

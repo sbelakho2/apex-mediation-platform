@@ -13,7 +13,7 @@ import Compression
 /// - GZIP compression
 /// - Retry logic with exponential backoff
 /// - Background processing (no main thread blocking)
-public class TelemetryCollector {
+public class TelemetryCollector: @unchecked Sendable {
     private let config: SDKConfig
     private let urlSession: URLSession
     
@@ -32,7 +32,7 @@ public class TelemetryCollector {
     public init(config: SDKConfig) {
         self.config = config
         
-        let configuration = URLSessionConfiguration.default
+        let configuration = URLSessionConfiguration.apexDefault()
         configuration.timeoutIntervalForRequest = 10
         configuration.timeoutIntervalForResource = 30
         self.urlSession = URLSession(configuration: configuration)
@@ -183,11 +183,12 @@ public class TelemetryCollector {
         eventQueue.removeAll()
         queueLock.unlock()
         
-        Task {
+        Task.detached(priority: .utility) { [weak self] in
+            guard let self else { return }
             do {
-                try await sendEvents(eventsToSend)
+                try await self.sendEvents(eventsToSend)
             } catch {
-                backgroundQueue.async { [weak self] in
+                self.backgroundQueue.async { [weak self] in
                     guard let self else { return }
                     self.queueLock.lock()
                     self.eventQueue.insert(contentsOf: eventsToSend, at: 0)
@@ -239,7 +240,7 @@ public class TelemetryCollector {
         #endif
         request.addValue("RivalApexMediation-iOS/1.0.0", forHTTPHeaderField: "User-Agent")
         
-        let (_, response) = try await urlSession.data(for: request)
+        let (_, response) = try await urlSession.apexData(for: request)
         
         guard let httpResponse = response as? HTTPURLResponse,
               httpResponse.statusCode == 200 else {
@@ -258,7 +259,7 @@ public class TelemetryCollector {
             }
             
             let destinationBufferSize = data.count
-            var destinationBuffer = UnsafeMutablePointer<UInt8>.allocate(capacity: destinationBufferSize)
+            let destinationBuffer = UnsafeMutablePointer<UInt8>.allocate(capacity: destinationBufferSize)
             defer { destinationBuffer.deallocate() }
             
             let compressedSize = compression_encode_buffer(

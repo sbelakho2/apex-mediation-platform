@@ -89,6 +89,14 @@ public final class AdapterRegistry {
         adapterClasses[networkName] = adapterClass
         lock.unlock()
     }
+
+    /// Returns all registered adapter network names (sorted)
+    public func allNetworkNames() -> [String] {
+        lock.lock()
+        let names = Array(adapterClasses.keys)
+        lock.unlock()
+        return names.sorted()
+    }
     
     /// Section 3.1: Get count of registered adapters for debug panel
     public var registeredCount: Int {
@@ -297,17 +305,18 @@ public class AdMobAdapter: AdNetworkAdapter {
     public var minSDKVersion: String { "1.0.0" }
     
     private var isInitialized = false
+    private var globalConfig: [String: Any] = [:]
     
     public required init() {}
     
     public func initialize(config: [String: Any]) throws {
-        guard config["app_id"] as? String != nil else {
+        guard let appId = config["app_id"] as? String, !appId.isEmpty else {
             throw AdapterRegistryError.loadFailed("app_id required")
         }
-        
-        // Initialize AdMob SDK
+        // Capture configuration and consent hints for subsequent loads
+        globalConfig = config
+        // Initialize AdMob SDK (real integration would go here)
         // GADMobileAds.sharedInstance().start(completionHandler: nil)
-        
         isInitialized = true
     }
     
@@ -326,12 +335,72 @@ public class AdMobAdapter: AdNetworkAdapter {
             completion(.failure(.unsupportedAdType))
             return
         }
-        
-        // Load ad from AdMob
-        // Implementation depends on AdMob SDK integration
-        
-        // Example failure
-        completion(.failure(.loadFailed("Not implemented")))
+        // Merge global + call-time config
+        var settings = globalConfig
+        config.forEach { settings[$0.key] = $0.value }
+
+        // Simulation controls (for sandbox/testing only)
+        // - no_fill: Bool => emit no-fill
+        // - timeout_ms: Int => simulate timeout if > 0
+        // - cpm: Double => override CPM
+        // - ad_type_override: String => force creative type for banner/video
+        if let noFill = settings["no_fill"] as? Bool, noFill {
+            completion(.failure(.loadFailed("no_fill")))
+            return
+        }
+
+        if let timeoutMs = settings["timeout_ms"] as? Int, timeoutMs > 0 {
+            // Simulate a timeout by delaying and then returning timeout
+            let deadline = DispatchTime.now() + .milliseconds(max(1, timeoutMs))
+            DispatchQueue.global().asyncAfter(deadline: deadline) {
+                completion(.failure(.timeout))
+            }
+            return
+        }
+
+        let cpm = (settings["cpm"] as? Double) ?? 1.20
+        let adId = "admob-\(UUID().uuidString.prefix(8))"
+
+        // Build a basic creative; if rewarded/interstitial we still return a banner creative placeholder
+        // since UI presentation is handled by the host app in this sandbox.
+        let creative: Creative
+        if case .banner = adType {
+            creative = .banner(
+                imageURL: "https://example.invalid/admob/banner.png",
+                clickURL: "https://example.invalid/click",
+                width: 320,
+                height: 50
+            )
+        } else {
+            // Use video placeholder for interstitial/rewarded to simulate richer media
+            creative = .video(
+                videoURL: "https://example.invalid/admob/video.mp4",
+                clickURL: "https://example.invalid/click",
+                duration: 15
+            )
+        }
+
+        // Attach redacted consent metadata if provided
+        var metadata: [String: String] = [:]
+        if let consent = settings["apx_consent_state"] as? [String: Any] {
+            // Persist only coarse signals to metadata for inspection
+            if let gdpr = consent["gdpr"] as? Int { metadata["gdpr"] = String(gdpr) }
+            if let usPrivacy = consent["us_privacy"] as? String { metadata["us_privacy"] = usPrivacy }
+            if let coppa = consent["coppa"] as? Int { metadata["coppa"] = String(coppa) }
+        }
+        if let sandbox = settings["apx_sandbox"] as? Bool, sandbox { metadata["sandbox"] = "1" }
+
+        let ad = Ad(
+            adId: adId,
+            placement: placement,
+            adType: adType,
+            creative: creative,
+            networkName: networkName,
+            cpm: cpm,
+            expiresAt: Date().addingTimeInterval(1800),
+            metadata: metadata
+        )
+        completion(.success(ad))
     }
     
     public func supportsAdType(_ adType: AdType) -> Bool {

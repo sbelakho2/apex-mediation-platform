@@ -1,7 +1,7 @@
 # Alertmanager configuration for ApexMediation
 global:
   resolve_timeout: 5m
-  smtp_from: 'alerts@apexmediation.ee'
+  smtp_from: 'security@apexmediation.ee'
   smtp_smarthost: 'smtp.resend.com:587'
   smtp_auth_username: 'resend'
   smtp_auth_password: '${RESEND_API_KEY}'
@@ -12,7 +12,7 @@ templates:
 
 # Route tree - determines how alerts are grouped and routed
 route:
-  receiver: 'founder-email'
+  receiver: 'security-email'
   group_by: ['alertname', 'cluster', 'service']
   group_wait: 10s
   group_interval: 10s
@@ -30,19 +30,19 @@ route:
     
     - match:
         severity: critical
-      receiver: 'founder-email'
+      receiver: 'security-email'
       group_wait: 0s
     
     # Warning alerts - email only
     - match:
         severity: warning
-      receiver: 'founder-email'
+      receiver: 'security-email'
       group_wait: 5m
     
     # Info alerts - email digest
     - match:
         severity: info
-      receiver: 'founder-email'
+      receiver: 'security-email'
       group_wait: 1h
       repeat_interval: 24h
 
@@ -71,10 +71,10 @@ inhibit_rules:
 
 # Receiver configurations
 receivers:
-  # Founder email (primary contact)
-  - name: 'founder-email'
+  # Security email (primary contact)
+  - name: 'security-email'
     email_configs:
-      - to: 'sabel@apexmediation.ee'
+      - to: 'security@apexmediation.ee'
         headers:
           Subject: '🚨 [{{ .Status | toUpper }}] {{ .GroupLabels.alertname }} - ApexMediation'
         html: |
@@ -126,7 +126,7 @@ receivers:
   # Business metrics digest (daily summary)
   - name: 'business-metrics-email'
     email_configs:
-      - to: 'sabel@apexmediation.ee'
+      - to: 'contact@apexmediation.ee'
         headers:
           Subject: '📊 Daily Business Metrics - ApexMediation'
         html: |

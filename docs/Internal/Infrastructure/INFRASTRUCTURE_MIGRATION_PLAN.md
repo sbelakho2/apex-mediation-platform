@@ -99,7 +99,7 @@ Goal: always-on HTTPS with modern security defaults; optional mTLS for sensitive
 - Install certbot and obtain certificates for both hosts:
   ```bash
   apt-get update && apt-get install -y certbot python3-certbot-nginx
-  certbot --nginx -d api.apexmediation.ee -d console.apexmediation.ee --redirect --email ops@apexmediation.ee --agree-tos
+  certbot --nginx -d api.apexmediation.ee -d console.apexmediation.ee --redirect --email security@apexmediation.ee --agree-tos
   ```
 - Harden Nginx TLS (example snippet):
   ```nginx
@@ -351,7 +351,7 @@ systemctl restart nginx
 # 8. Issue certificates (MANDATORY for prod)
 # Use certbot on the droplet to terminate TLS locally; Cloudflare can remain DNS-only (no proxy) or be configured for Full (strict) if used.
 apt-get update && apt-get install -y certbot python3-certbot-nginx
-certbot --nginx -d api.apexmediation.ee -d console.apexmediation.ee --redirect --email ops@apexmediation.ee --agree-tos
+certbot --nginx -d api.apexmediation.ee -d console.apexmediation.ee --redirect --email security@apexmediation.ee --agree-tos
 certbot renew --dry-run
 ```
 
@@ -546,7 +546,7 @@ services:
       PORT: 8000
       EMAIL_URL: smtp://\${SMTP_USER}:\${SMTP_PASSWORD}@smtp.resend.com:587
       GLITCHTIP_DOMAIN: https://errors.apexmediation.ee
-      DEFAULT_FROM_EMAIL: errors@apexmediation.ee
+      DEFAULT_FROM_EMAIL: support@apexmediation.ee
 
 volumes:
   postgres-data:

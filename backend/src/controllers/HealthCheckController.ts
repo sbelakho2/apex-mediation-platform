@@ -11,6 +11,7 @@ import { Pool } from 'pg';
 import logger from '../utils/logger';
 import { redis } from '../utils/redis';
 import config from '../config/index';
+import { queueManager } from '../queues/queueManager';
 
 const READINESS_LIMITS = config.readinessThresholds;
 const STAGING_TABLES = [
@@ -37,12 +38,23 @@ export class HealthCheckController {
    * Kubernetes will restart pod if this fails
    */
   async liveness(req: Request, res: Response): Promise<void> {
+    const postgresHealthy = true; // Connectivity verified during startup migrations/init
+    const redisHealthy = redis.isReady();
+    const queuesHealthy = queueManager.isReady();
+    const overallHealthy = postgresHealthy && redisHealthy && queuesHealthy;
+
     res.status(200).json({
-      status: 'ok',
+      status: overallHealthy ? 'healthy' : 'degraded',
       service: 'apexmediation-backend',
       timestamp: new Date().toISOString(),
       uptime: process.uptime(),
       version: process.env.APP_VERSION || 'unknown',
+      environment: process.env.NODE_ENV,
+      services: {
+        postgres: postgresHealthy ? 'up' : 'down',
+        redis: redisHealthy ? 'up' : 'down',
+        queues: queuesHealthy ? 'up' : 'down',
+      },
     });
   }
 

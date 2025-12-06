@@ -10,13 +10,15 @@ import { requestContextMiddleware } from './middleware/requestContext';
 import apiRoutes from './routes';
 import { initializeDatabase } from './database';
 import { redis } from './utils/redis';
-import { initializeQueues, shutdownQueues, queueManager } from './queues/queueInitializer';
+import { initializeQueues, shutdownQueues } from './queues/queueInitializer';
 import { promRegister, httpRequestDurationSeconds, httpRequestsTotal } from './utils/prometheus';
 import { authRateLimiter } from './middleware/redisRateLimiter';
 import swaggerUi from 'swagger-ui-express';
 import { getOpenAPIDocument } from './utils/openapi';
 import csrfProtection from './middleware/csrf';
 import metricsRouteMiddleware from './middleware/metricsRouteMiddleware';
+import { createHealthCheckRoutes } from './routes/healthCheck';
+import pool from './utils/postgres';
 
 // Validate environment variables (fails fast with helpful errors)
 import { env } from './config/env';
@@ -144,25 +146,8 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   next();
 });
 
-// Health check endpoint
-app.get('/health', async (req: Request, res: Response) => {
-  const postgresHealthy = true; // DB connection verified during startup migrations/init where applicable
-  const redisHealthy = redis.isReady();
-  const queuesHealthy = queueManager.isReady();
-  const overallHealthy = postgresHealthy && redisHealthy && queuesHealthy;
-  
-  res.json({
-    status: overallHealthy ? 'healthy' : 'degraded',
-    timestamp: new Date().toISOString(),
-    uptime: process.uptime(),
-    environment: process.env.NODE_ENV,
-    services: {
-      postgres: postgresHealthy ? 'up' : 'down',
-      redis: redisHealthy ? 'up' : 'down',
-      queues: queuesHealthy ? 'up' : 'down',
-    },
-  });
-});
+// Kubernetes-compatible health/readiness routes
+app.use(createHealthCheckRoutes(pool));
 
 app.get('/metrics', async (_req: Request, res: Response) => {
   try {

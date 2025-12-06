@@ -4,6 +4,18 @@ import XCTest
 /// Section 3.3: Memory management tests
 /// Verify SDK gracefully handles deinitialization, no retain cycles, and task cancellation
 final class MemoryManagementTests: XCTestCase {
+    override func setUp() {
+        super.setUp()
+        NetworkTestHooks.registerMockProtocol(MockURLProtocolFixture.self)
+        MockURLProtocolFixture.reset()
+    }
+    
+    override func tearDown() {
+        MockURLProtocolFixture.reset()
+        NetworkTestHooks.resetMockProtocols()
+        MediationSDK.shared.shutdown()
+        super.tearDown()
+    }
     
     // MARK: - Retain Cycle Tests
     
@@ -204,10 +216,12 @@ final class MemoryManagementTests: XCTestCase {
         // Note: SDK doesn't currently support reset/reinitialize
         // This test documents the expected behavior
         
+        let config = makeConfig()
+        
         // Attempting to initialize twice should throw
         do {
-            try await sdk.initialize(appId: "test1", configuration: nil)
-            try await sdk.initialize(appId: "test2", configuration: nil)
+            try await sdk.initialize(appId: "test1", configuration: config)
+            try await sdk.initialize(appId: "test2", configuration: config)
             XCTFail("Should not allow reinitialization")
         } catch SDKError.alreadyInitialized {
             // Expected
@@ -241,8 +255,8 @@ final class MemoryManagementTests: XCTestCase {
     ) -> SDKConfig {
         SDKConfig(
             appId: "test_app",
-            configEndpoint: "https://config.example.com",
-            auctionEndpoint: "https://auction.example.com",
+            configEndpoint: "https://mock-config.test/v1/config",
+            auctionEndpoint: "https://mock-auction.test/v1/auction",
             telemetryEnabled: telemetryEnabled,
             logLevel: logLevel,
             testMode: testMode,

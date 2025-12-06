@@ -26,11 +26,11 @@ final class AdaptersInventoryTests: XCTestCase {
 
         // Initialize AdMob and AppLovin (no load expected from their mock implementations)
         if let _ = registry.getAdapter(networkName: "admob") {
-            XCTAssertNoThrow(try registry.initializeAdapter(networkName: "admob", config: ["app_id": "ca-app-pub-TEST"]))
+            XCTAssertNoThrow(registry.initializeAdapter(networkName: "admob", config: ["app_id": "ca-app-pub-TEST"]))
             XCTAssertTrue(registry.isInitialized(networkName: "admob"))
         }
         if let _ = registry.getAdapter(networkName: "applovin") {
-            XCTAssertNoThrow(try registry.initializeAdapter(networkName: "applovin", config: ["sdk_key": "AL-TEST-KEY"]))
+            XCTAssertNoThrow(registry.initializeAdapter(networkName: "applovin", config: ["sdk_key": "AL-TEST-KEY"]))
             XCTAssertTrue(registry.isInitialized(networkName: "applovin"))
         }
 
@@ -39,7 +39,7 @@ final class AdaptersInventoryTests: XCTestCase {
             XCTFail("Unity adapter should be available")
             return
         }
-        XCTAssertNoThrow(try registry.initializeAdapter(networkName: "unity", config: ["game_id": "UNITY-TEST-GAME"]))
+        XCTAssertNoThrow(registry.initializeAdapter(networkName: "unity", config: ["game_id": "UNITY-TEST-GAME"]))
         XCTAssertTrue(registry.isInitialized(networkName: "unity"))
 
         let exp = expectation(description: "Unity mock ad load")

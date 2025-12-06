@@ -36,7 +36,6 @@ public enum SignatureError: Error, Equatable, LocalizedError {
 }
 
 /// Utility responsible for verifying Ed25519 signatures used for OTA config updates.
-@available(macOS 10.15, *)
 public final class SignatureVerifier {
     private static let devTestPublicKeyHex = "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a"
     private static let signatureLength = 64
@@ -52,6 +51,8 @@ public final class SignatureVerifier {
     /// Verify a Base64-encoded Ed25519 signature for the supplied message.
     @discardableResult
     public func verifySignature(message: String, signatureBase64: String) throws -> Bool {
+        let publicKeyHex = try resolvePublicKey()
+        
         guard let signatureData = Data(base64Encoded: signatureBase64) else {
             throw SignatureError.malformedSignature("Invalid Base64 encoding")
         }
@@ -61,7 +62,6 @@ public final class SignatureVerifier {
         }
 
         let messageData = Data(message.utf8)
-        let publicKeyHex = try resolvePublicKey()
 
         let isValid = try verifyEd25519Raw(message: messageData, signature: signatureData, publicKeyHex: publicKeyHex)
         guard isValid else { throw SignatureError.verificationFailed }

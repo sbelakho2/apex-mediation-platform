@@ -95,7 +95,7 @@ final class SignatureVerifierTests: XCTestCase {
         let shortSignature = Data(repeating: 0, count: 32).base64EncodedString()
         
         XCTAssertThrowsError(try verifier.verifySignature(message: message, signatureBase64: shortSignature)) { error in
-            if case SignatureError.invalidSignatureLength = error as? SignatureError {
+            if case SignatureError.invalidSignatureLength? = error as? SignatureError {
                 // expected
             } else {
                 XCTFail("Expected invalidSignatureLength error, got \(error)")
@@ -111,7 +111,7 @@ final class SignatureVerifierTests: XCTestCase {
         let verifier = SignatureVerifier(testMode: false, productionPublicKey: badPublicKey)
         
         XCTAssertThrowsError(try verifier.verifyEd25519Raw(message: message.data(using: .utf8)!, signature: signature, publicKeyHex: badPublicKey)) { error in
-            if case SignatureError.malformedPublicKey = error as? SignatureError {
+            if case SignatureError.malformedPublicKey? = error as? SignatureError {
                 // expected
             } else {
                 XCTFail("Expected malformedPublicKey error, got \(error)")
@@ -125,10 +125,10 @@ final class SignatureVerifierTests: XCTestCase {
         let emptySignature = ""
         
         XCTAssertThrowsError(try verifier.verifySignature(message: message, signatureBase64: emptySignature)) { error in
-            if case SignatureError.malformedSignature = error as? SignatureError {
-                // Empty string will fail base64 decoding - expected
+            if case SignatureError.invalidSignatureLength(let length)? = error as? SignatureError {
+                XCTAssertEqual(length, 0)
             } else {
-                XCTFail("Expected malformedSignature error for empty string, got \(error)")
+                XCTFail("Expected invalidSignatureLength error for empty string, got \(error)")
             }
         }
     }
@@ -143,7 +143,7 @@ final class SignatureVerifierTests: XCTestCase {
         let invalidSignature = Data(repeating: 0xFF, count: 64).base64EncodedString()
         
         XCTAssertThrowsError(try verifier.verifySignature(message: message, signatureBase64: invalidSignature)) { error in
-            if case SignatureError.verificationFailed = error as? SignatureError {
+            if case SignatureError.verificationFailed? = error as? SignatureError {
                 // expected
             } else {
                 XCTFail("Expected verificationFailed error, got \(error)")
@@ -164,7 +164,7 @@ final class SignatureVerifierTests: XCTestCase {
     func testValidSignatureWithWrongKeyFails() throws {
         // Generate key pair A
         let keyA = Curve25519.Signing.PrivateKey()
-        let publicKeyAHex = keyA.publicKey.rawRepresentation.hexString
+        _ = keyA.publicKey.rawRepresentation.hexString
         
         // Generate key pair B
         let keyB = Curve25519.Signing.PrivateKey()
@@ -181,7 +181,7 @@ final class SignatureVerifierTests: XCTestCase {
         let verifier = SignatureVerifier(testMode: false, productionPublicKey: publicKeyBHex)
         
         XCTAssertThrowsError(try verifier.verifySignature(message: message, signatureBase64: signatureABase64)) { error in
-            if case SignatureError.verificationFailed = error as? SignatureError {
+            if case SignatureError.verificationFailed? = error as? SignatureError {
                 // expected - signature is valid format but signed by wrong key
             } else {
                 XCTFail("Expected verificationFailed error, got \(error)")

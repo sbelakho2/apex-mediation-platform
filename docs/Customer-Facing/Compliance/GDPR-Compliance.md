@@ -147,7 +147,7 @@ if (ApexMediation.IsConsentRequired()) {
 - Your core activities involve large-scale systematic monitoring
 - Your core activities involve large-scale processing of special category data
 
-**Contact ApexMediation DPO:** dpo@apexmediation.ee (for questions about our processing)
+**Privacy & security contact:** security@apexmediation.ee (for questions about our processing)
 
 ### 5. Conduct DPIA (if required)
 
@@ -699,7 +699,7 @@ ApexMediation provides a **Data Processing Agreement (DPA)** compliant with Arti
 - AWS (Ireland) - Hosting
 
 **Notification:** 14 days advance notice of new sub-processors
-**Objection:** Email dpo@apexmediation.ee with reasons
+**Objection:** Email security@apexmediation.ee with reasons
 
 ---
 
@@ -826,8 +826,8 @@ We're CCPA-compliant too! See separate CCPA guide: [CCPA Compliance](./CCPA-Comp
 
 ## Support
 
-**DPO Email:** dpo@apexmediation.ee
-**Legal inquiries:** legal@apexmediation.ee
+**Privacy & Security:** security@apexmediation.ee
+**Legal inquiries:** security@apexmediation.ee
 **Dashboard:** https://console.apexmediation.ee/privacy
 **Documentation:** https://apexmediation.bel-consulting.ee/docs/gdpr
 

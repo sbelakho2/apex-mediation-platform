@@ -1,6 +1,6 @@
 # Frequently Asked Questions (FAQ)
 
-Common questions about the ApexMediation Platform. Can't find your answer? [Contact support](mailto:support@bel-consulting.ee).
+Common questions about the ApexMediation Platform. Can't find your answer? [Contact support](mailto:support@apexmediation.ee).
 
 ---
 
@@ -149,7 +149,7 @@ eCPM = (€50 / 25,000) × 1000 = €2.00
 5. **Ad Blockers** - Ask testers to disable ad blockers
 6. **Integration Error** - Check console for error messages
 
-**Still stuck?** [Contact support](mailto:support@bel-consulting.ee) with your app ID.
+**Still stuck?** [Contact support](mailto:support@apexmediation.ee) with your app ID.
 
 ---
 
@@ -218,7 +218,7 @@ To cancel: **Dashboard → Billing → Cancel Account**
 **Answer**: Since we use a **platform fee on the revenue you already earn**, there are no upfront payments to refund.
 
 **However**, if you believe we incorrectly calculated our share:
-1. Contact billing@bel-consulting.ee within 30 days
+1. Contact billing@apexmediation.ee within 30 days
 2. Provide transaction IDs
 3. We'll audit and issue credit if error confirmed
 
@@ -230,7 +230,7 @@ To cancel: **Dashboard → Billing → Cancel Account**
 
 **Answer**: **Yes**. To transfer account ownership:
 
-1. Email legal@bel-consulting.ee with:
+1. Email security@apexmediation.ee with:
    - Current owner details
    - New owner details
    - Reason for transfer
@@ -341,7 +341,7 @@ To cancel: **Dashboard → Billing → Cancel Account**
 **Answer**: **Yes**, we support **custom ad network integrations** (Enterprise plan only).
 
 **Process**:
-1. Contact enterprise@bel-consulting.ee
+1. Contact sales@apexmediation.ee
 2. Provide ad network API documentation
 3. We build custom adapter (typically 2-4 weeks)
 4. You test integration
@@ -374,7 +374,7 @@ To cancel: **Dashboard → Billing → Cancel Account**
 
 **Answer**: Multiple channels available:
 
-- **📧 Email**: support@bel-consulting.ee (< 4 hours response time)
+- **📧 Email**: support@apexmediation.ee (< 4 hours response time)
 - **💬 Live Chat**: Available in dashboard (Mon-Fri, 9AM-5PM EET)
 - **📞 Phone**: +372 5XXX XXXX (Enterprise customers only)
 - **📚 Documentation**: [docs.apexmediation.ee](https://docs.apexmediation.ee)
@@ -435,7 +435,7 @@ To cancel: **Dashboard → Billing → Cancel Account**
 
 **Can't find your answer?** We're here to help!
 
-- **📧 Email**: support@bel-consulting.ee
+- **📧 Email**: support@apexmediation.ee
 - **💬 Live Chat**: [Dashboard](https://apexmediation.bel-consulting.ee/dashboard)
 - **📞 Schedule a Call**: [Book a demo](https://apexmediation.bel-consulting.ee/demo)
 

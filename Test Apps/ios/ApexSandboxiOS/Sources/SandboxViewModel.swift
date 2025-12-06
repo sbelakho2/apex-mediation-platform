@@ -35,8 +35,9 @@ final class SandboxViewModel: ObservableObject {
         let consent: Consent?
         let appId: String?
     }
-    private(set) var config: Config = .init(apiBase: "https://staging-api.example.test",
-                                            placements: .init(interstitialA: "test_interstitial_a", rewardedA: "test_rewarded_a"),
+    private(set) var config: Config = .init(apiBase: "https://api.apexmediation.ee/api/v1",
+                                            placements: .init(interstitialA: "26c8907d-7635-4a13-a94b-6c3b12af1779",
+                                                              rewardedA: "ca610a0c-8607-4a38-8a21-9cbfd3018b7b"),
                                             consent: .init(gdpr: false, ccpa: false, coppa: false, lat: true),
                                             appId: "sandbox-app-ios")
 
@@ -185,14 +186,20 @@ final class SandboxViewModel: ObservableObject {
     }
 
     private func defaultConfigEndpoint() -> String {
-        // Derive a config endpoint from apiBase when possible; fall back to defaults
-        if config.apiBase.contains("staging") { return "https://config.rivalapexmediation.ee" }
-        return SDKConfig.default(appId: "x").configEndpoint
+        return apiOrigin() ?? SDKConfig.default(appId: "x").configEndpoint
     }
 
     private func defaultAuctionEndpoint() -> String {
-        if config.apiBase.contains("staging") { return "https://auction.rivalapexmediation.ee" }
-        return SDKConfig.default(appId: "x").auctionEndpoint
+        return apiOrigin() ?? SDKConfig.default(appId: "x").auctionEndpoint
+    }
+
+    private func apiOrigin() -> String? {
+        guard let url = URL(string: config.apiBase),
+              let scheme = url.scheme,
+              let host = url.host else { return nil }
+        var origin = "\(scheme)://\(host)"
+        if let port = url.port { origin += ":\(port)" }
+        return origin
     }
 
     func log(_ line: String) {

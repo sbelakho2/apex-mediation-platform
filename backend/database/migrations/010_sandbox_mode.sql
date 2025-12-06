@@ -172,7 +172,7 @@ VALUES
   ('sandbox_mode', '{"enabled": true, "auto_enable_for_new_customers": true, "max_days": 30, "production_ready_threshold_requests": 100, "production_ready_threshold_days": 7}', 'Sandbox mode configuration for cold start customers', NOW()),
   ('cold_start_pricing', '{"first_10_customers": true, "month_1_2_take_rate": 0.0, "month_3_take_rate": 0.05, "month_4_plus_take_rate": 0.10, "testimonial_discount_rate": 0.08, "testimonial_bonus_months": 999}', 'Cold start pricing model for first customers', NOW()),
   ('ad_network_priority', '{"recommended_first_network": "admob", "recommended_networks": ["admob", "unity", "meta", "applovin", "ironsource"], "integration_time_hours": 4, "testing_time_hours": 2, "go_live_time_hours": 24}', 'Ad network setup recommendations and timelines', NOW()),
-  ('founder_notifications', '{"sandbox_ready_enabled": true, "sandbox_ready_throttle_days": 7, "email": "sabel@apexmediation.ee", "phone": "+1234567890", "availability": "Mon-Fri 9am-6pm EST"}', 'Founder notification preferences for customer milestones', NOW())
+  ('founder_notifications', '{"sandbox_ready_enabled": true, "sandbox_ready_throttle_days": 7, "email": "contact@apexmediation.ee", "phone": "+1234567890", "availability": "Mon-Fri 9am-6pm EST"}', 'Founder notification preferences for customer milestones', NOW())
 ON CONFLICT (key) DO NOTHING;
 
 -- ============================================================================

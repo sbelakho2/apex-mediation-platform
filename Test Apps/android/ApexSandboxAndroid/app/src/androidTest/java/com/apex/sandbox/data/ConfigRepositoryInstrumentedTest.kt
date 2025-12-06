@@ -26,11 +26,11 @@ class ConfigRepositoryInstrumentedTest {
     @Test
     fun `loads sandbox_config json with expected defaults`() {
         val cfg = repo.loadConfig()
-        assertEquals("https://staging-api.example.test", cfg.apiBase)
-        assertEquals("test_interstitial_a", cfg.placements.interstitialA)
-        assertEquals("test_interstitial_b", cfg.placements.interstitialB)
-        assertEquals("test_rewarded_a", cfg.placements.rewardedA)
-        assertEquals("test_banner_a", cfg.placements.bannerA)
+        assertEquals("https://api.apexmediation.ee/api/v1", cfg.apiBase)
+        assertEquals("edcbe420-5e96-4c0f-b7ee-e5a10eb11db3", cfg.placements.interstitialA)
+        assertEquals("92fe3cb3-8028-4a65-aacf-c9916b2efc29", cfg.placements.interstitialB)
+        assertEquals("b8372490-f300-49e8-b7c2-a77fc04f85e9", cfg.placements.rewardedA)
+        assertEquals("47998e9f-dfbe-4ba9-922c-3001f106722e", cfg.placements.bannerA)
 
         // Consent defaults from asset + prefs overlay (testMode default true from prefs)
         assertEquals(false, cfg.consent.gdpr)

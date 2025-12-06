@@ -68,7 +68,7 @@ curl -X POST https://api.apexmediation.ee/v1/webhooks \
 ```
 
 **Via Dashboard:**
-1. Go to [dashboard.apexmediation.ee/webhooks](https://dashboard.apexmediation.ee/webhooks)
+1. Go to [console.apexmediation.ee/webhooks](https://console.apexmediation.ee/webhooks)
 2. Click "Add Webhook"
 3. Enter your endpoint URL
 4. Select events to subscribe to
@@ -393,7 +393,7 @@ ngrok http 3000
 
 Trigger test events from dashboard:
 
-1. Go to [dashboard.apexmediation.ee/webhooks](https://dashboard.apexmediation.ee/webhooks)
+1. Go to [console.apexmediation.ee/webhooks](https://console.apexmediation.ee/webhooks)
 2. Click on your webhook
 3. Click "Send Test Event"
 4. Select event type
@@ -407,7 +407,7 @@ Trigger test events from dashboard:
 
 View webhook delivery logs in dashboard:
 
-1. Go to [dashboard.apexmediation.ee/webhooks](https://dashboard.apexmediation.ee/webhooks)
+1. Go to [console.apexmediation.ee/webhooks](https://console.apexmediation.ee/webhooks)
 2. Click on your webhook
 3. View "Delivery History"
 
@@ -458,7 +458,7 @@ View webhook delivery logs in dashboard:
 ## Support
 
 For webhook issues:
-- **Email**: support@bel-consulting.ee
+- **Email**: support@apexmediation.ee
 - **Discord**: [discord.gg/apexmediation](https://discord.gg/apexmediation)
 - **Status**: [status.apexmediation.ee](https://status.apexmediation.ee)
 

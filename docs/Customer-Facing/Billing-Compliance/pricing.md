@@ -129,7 +129,7 @@ Invoices are denominated in **EUR**. We display your mediated revenue in your lo
 2. [Integrate the SDK](/docs/getting-started/quickstart) – typically under 10 minutes per platform.
 3. Point your adapters at ApexMediation, verify Migration Studio mappings, and go live with full transparency.
 
-Questions? Email sales@bel-consulting.ee or [schedule a demo](https://apexmediation.bel-consulting.ee/demo).
+Questions? Email sales@apexmediation.ee or [schedule a demo](https://apexmediation.bel-consulting.ee/demo).
 
 ---
 
@@ -173,7 +173,7 @@ All channels count toward the same tier. We break out CTV/web video vs. mobile r
 
 Yes! Non-profit organizations and educational institutions qualify for **50% off** the platform fee.
 
-**Contact**: support@bel-consulting.ee with proof of non-profit status.
+**Contact**: support@apexmediation.ee with proof of non-profit status.
 
 ---
 

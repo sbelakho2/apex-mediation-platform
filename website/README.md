@@ -983,7 +983,7 @@ Internal project. For contributions:
 
 For issues or questions:
 
-- **Email**: <dev@bel-consulting.ee>
+- **Email**: <contact@apexmediation.ee>
 - **Internal Docs**: `/Docs/Internal/`
 - **Architecture**: `/WEBSITE_ARCHITECTURE.md`
 - **TODO List**: `/WEBSITE_TODO.md`

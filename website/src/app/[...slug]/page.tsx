@@ -472,7 +472,7 @@ Body: {
             <section className="rounded-3xl bg-brand-50 p-8 text-gray-900 shadow-xl ring-1 ring-brand-100 space-y-3">
               <h2 className="text-h3 font-bold uppercase">Talk to us</h2>
               <p className="text-sm text-gray-700">
-                Non-profits receive 50% off the BYO platform fee. Contact <a href="mailto:sales@bel-consulting.ee" className="underline">sales@bel-consulting.ee</a> or <Link href="/contact" className="font-bold underline">schedule a demo</Link> to lock in Starter/Growth/Scale pricing (30 days’ notice before changes).
+                Non-profits receive 50% off the BYO platform fee. Contact <a href="mailto:sales@apexmediation.ee" className="underline">sales@apexmediation.ee</a> or <Link href="/contact" className="font-bold underline">schedule a demo</Link> to lock in Starter/Growth/Scale pricing (30 days’ notice before changes).
               </p>
             </section>
           </div>
@@ -493,7 +493,7 @@ Body: {
               <ul className="mt-4 space-y-3 text-sm text-gray-700">
                 <li>Reset your password via <Link href="/signin?redirect=%2Fdashboard" className="font-bold underline">Sign In</Link> → “Forgot password”.</li>
                 <li>Invite teammates from <Link href="/dashboard/settings?tab=security" className="font-bold underline">Settings → Security</Link>.</li>
-                <li>Contact us at <a href="mailto:support@bel-consulting.ee" className="underline">support@bel-consulting.ee</a> for account merges.</li>
+                <li>Contact us at <a href="mailto:support@apexmediation.ee" className="underline">support@apexmediation.ee</a> for account merges.</li>
               </ul>
             </section>
             <section className="rounded-3xl bg-white p-8 text-gray-900 shadow-xl ring-1 ring-gray-200">
@@ -502,7 +502,7 @@ Body: {
                 Troubleshoot low fill, enable new demand sources, or schedule a mediation audit. Include app ID, platform, and SDK version for the fastest response.
               </p>
               <a
-                href="mailto:support@bel-consulting.ee?subject=Monetisation%20support"
+                href="mailto:support@apexmediation.ee?subject=Monetisation%20support"
                 className="mt-6 inline-flex items-center gap-2 btn-primary text-sm"
               >
                 Email Monetisation Team →
@@ -513,7 +513,7 @@ Body: {
               <p className="mt-4 text-sm text-gray-700">
                 Monthly payouts with NET 30 terms - invoiced on the 1st of each month, payment processed 30 days later. Bank transfers can take 2-5 business days. View invoices and remittance files in <Link href="/dashboard/settings?tab=payment" className="font-bold underline">Settings → Payment Methods</Link>.
               </p>
-              <p className="mt-4 text-sm text-gray-700">To update banking info, submit a signed W-9/W-8BEN to <a href="mailto:billing@bel-consulting.ee" className="underline">billing@bel-consulting.ee</a>.</p>
+              <p className="mt-4 text-sm text-gray-700">To update banking info, submit a signed W-9/W-8BEN to <a href="mailto:billing@apexmediation.ee" className="underline">billing@apexmediation.ee</a>.</p>
             </section>
             <section className="rounded-3xl bg-white p-8 text-gray-900 shadow-xl ring-1 ring-gray-200">
               <h2 className="text-h3 font-bold uppercase">Live chat & SLA</h2>
@@ -621,7 +621,7 @@ Body: {
                 <p className="mt-1 text-xs font-bold uppercase tracking-wide text-brand-700">{role.location}</p>
                 <p className="mt-4 text-sm text-gray-700">{role.description}</p>
                 <a
-                  href="mailto:careers@bel-consulting.ee"
+                  href="mailto:contact@apexmediation.ee"
                   className="mt-6 inline-flex items-center gap-2 btn-primary text-sm"
                 >
                   Apply via Email →
@@ -646,7 +646,7 @@ Body: {
               <ul className="mt-4 space-y-3 text-sm text-gray-700">
                 <li><a href="/press/apexmediation-media-kit.zip" className="underline">Media kit (logos, product shots)</a></li>
                 <li><a href="/press/fact-sheet.pdf" className="underline">Fact sheet</a></li>
-                <li><a href="mailto:press@bel-consulting.ee" className="underline">press@bel-consulting.ee</a></li>
+                <li><a href="mailto:sales@apexmediation.ee" className="underline">sales@apexmediation.ee</a></li>
               </ul>
             </section>
             <section className="rounded-3xl bg-white p-6 text-gray-900 shadow-xl ring-1 ring-gray-200">
@@ -880,8 +880,8 @@ Body: {
               <h2 className="text-h3 font-bold uppercase">Your rights & contacts</h2>
               <ul className="mt-4 list-disc space-y-3 pl-6 text-sm text-gray-700">
                 <li>Access, deletion, portability, rectification, and objection rights honoured within 30 days.</li>
-                <li>Use the documented `/v1/gdpr/access` and `/v1/gdpr/delete` endpoints or email <a href="mailto:privacy@bel-consulting.ee" className="underline">privacy@bel-consulting.ee</a>.</li>
-                <li>Our Data Protection Officer: <a href="mailto:dpo@apexmediation.ee" className="underline">dpo@apexmediation.ee</a>.</li>
+                <li>Use the documented `/v1/gdpr/access` and `/v1/gdpr/delete` endpoints or email <a href="mailto:security@apexmediation.ee" className="underline">security@apexmediation.ee</a>.</li>
+                <li>Privacy inquiries: <a href="mailto:security@apexmediation.ee" className="underline">security@apexmediation.ee</a>.</li>
                 <li>Sub-processors are limited to the ad networks you enable plus audited infrastructure vendors with SOC 2 Type II-aligned controls.</li>
               </ul>
             </section>
@@ -922,7 +922,7 @@ Body: {
               <h2 className="text-h3 font-bold uppercase">3. Accounts, security & acceptable use</h2>
               <ul className="list-disc space-y-3 pl-6 text-sm text-gray-700">
                 <li>Maintain accurate profile information, enforce least-privilege roles, and enable MFA for Admin and Finance seats.</li>
-                <li>You are responsible for all activity under your credentials. Notify <a href="mailto:security@bel-consulting.ee" className="underline">security@bel-consulting.ee</a> within 24 hours of any suspected compromise.</li>
+                <li>You are responsible for all activity under your credentials. Notify <a href="mailto:security@apexmediation.ee" className="underline">security@apexmediation.ee</a> within 24 hours of any suspected compromise.</li>
                 <li>Do not reverse engineer, benchmark for competitive purposes without consent, or use the platform to transmit malware, prohibited content, invalid traffic, or privacy-invasive signals.</li>
                 <li>Provide truthful consent signals (GDPR/TCF v2.2, COPPA, US state laws) and honour user opt-outs captured via ApexMediation APIs or our consent helpers.</li>
               </ul>
@@ -1054,7 +1054,7 @@ Body: {
             <section className="rounded-3xl bg-white p-8 text-gray-900 shadow-xl ring-1 ring-gray-200 space-y-4">
               <h2 className="text-h3 font-bold uppercase">Need help?</h2>
               <p className="text-sm text-gray-700">
-                Contact <a href="mailto:dpo@apexmediation.ee" className="underline">dpo@apexmediation.ee</a> for privacy questions or <a href="mailto:support@bel-consulting.ee" className="underline">support@bel-consulting.ee</a> for integration help. Sample consent copy, DPIA templates, and audit checklists live inside the Customer-Facing GDPR guide.
+                Contact <a href="mailto:security@apexmediation.ee" className="underline">security@apexmediation.ee</a> for privacy questions or <a href="mailto:support@apexmediation.ee" className="underline">support@apexmediation.ee</a> for integration help. Sample consent copy, DPIA templates, and audit checklists live inside the Customer-Facing GDPR guide.
               </p>
             </section>
           </div>
@@ -1090,7 +1090,7 @@ Body: {
             <section className="rounded-3xl bg-white p-6 text-gray-900 shadow-xl ring-1 ring-gray-200">
               <h2 className="text-h3 font-bold uppercase">Report an issue</h2>
               <p className="mt-3 text-sm text-gray-700">
-                Email <a href="mailto:security@bel-consulting.ee" className="underline">security@bel-consulting.ee</a> or open a ticket through the dashboard. We run a responsible disclosure program with cash rewards and publish RCAs within 48 hours of closing incidents.
+                Email <a href="mailto:security@apexmediation.ee" className="underline">security@apexmediation.ee</a> or open a ticket through the dashboard. We run a responsible disclosure program with cash rewards and publish RCAs within 48 hours of closing incidents.
               </p>
             </section>
           </div>
@@ -1123,7 +1123,7 @@ Body: {
               <ul className="mt-4 list-disc space-y-3 pl-6 text-sm text-gray-700">
                 <li>Update or withdraw consent from the banner or by visiting <Link href="/cookie-settings" className="font-bold underline">Cookie Settings</Link>.</li>
                 <li>Essential cookies can only be removed by clearing your browser storage or closing the account.</li>
-                <li>Contact <a href="mailto:privacy@bel-consulting.ee" className="underline">privacy@bel-consulting.ee</a> for detailed cookie inventories or vendor agreements.</li>
+                <li>Contact <a href="mailto:security@apexmediation.ee" className="underline">security@apexmediation.ee</a> for detailed cookie inventories or vendor agreements.</li>
               </ul>
             </section>
           </div>

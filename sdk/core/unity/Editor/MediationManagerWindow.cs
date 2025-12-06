@@ -91,7 +91,7 @@ namespace Apex.Mediation.Editor
 
                 if (GUILayout.Button("Docs"))
                 {
-                    Application.OpenURL("https://docs.rivalapexmediation.ee");
+                    Application.OpenURL("https://apexmediation.ee/docs");
                 }
 
                 if (GUILayout.Button("Config-as-Code"))

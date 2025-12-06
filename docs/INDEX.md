@@ -273,4 +273,4 @@ Operational procedures for production systems:
 
 **Last Updated**: 2025-12-03
 **Maintained By**: ApexMediation Engineering Team
-**Questions?** Contact: dev@bel-consulting.ee
+**Questions?** Contact: contact@apexmediation.ee

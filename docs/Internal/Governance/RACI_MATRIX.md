@@ -9,10 +9,9 @@ This matrix establishes Responsible, Accountable, Consulted, and Informed roles 
 | SDKs (Android, iOS, Unity, Web/CTV) | `@bel-consulting/sdk-owners` (SDK Platform Eng) | `@bel-consulting/ad-stack-maintainers` (Product/Eng leads) | Product Ops, SRE | Support, Sales | `docs/Internal/Development/SDK_IMPLEMENTATION.md`, `.github/CODEOWNERS` |
 | Adapters & Auction Core | `@bel-consulting/backend-owners` | `@bel-consulting/ad-stack-maintainers` | SDK Eng, Observability | SRE, Support | `backend/Adapters.md`, `backend/auction` README |
 | Observability & Reporting | `@bel-consulting/platform-infra` | `@bel-consulting/ad-stack-maintainers` | Data/ML, Billing | All engineering | `docs/Internal/Infrastructure/observability.md`, `docs/Monitoring/ALERTS.md` |
-| Billing & Business Systems | Billing Eng rotation (`billing@bel-consulting.ee`) | CFO / Biz Ops lead | Support, Legal, Privacy | Account Mgmt | `docs/Internal/Operations/BILLING_PLAYBOOK.md`, `docs/Internal/Security/DATA_MAP.md` |
-| Privacy & Security | Security Eng (`security@bel-consulting.ee`) | DPO / CTO | Legal, SDK Eng, Backend | Entire company | `docs/Internal/Security/COMPREHENSIVE_AUDIT_REPORT.md`, `docs/Internal/Security/DATA_RETENTION_MATRIX.md` |
-| SRE / Production Operations | `@bel-consulting/platform-infra` (SRE) | CTO | Backend, SDK, Observability | All Eng, Customer Success | `docs/Internal/Operations/ON_CALL_RUNBOOK.md`, `docs/Monitoring/STATUS_PAGE_AND_INCIDENT_TAXONOMY.md` |
-| Reporting & Analytics | Data Eng (`data@bel-consulting.ee`) | VP Analytics | Billing, Product | Sales, CS | `docs/Internal/Development/ANALYTICS_IMPLEMENTATION.md`, `data/schemas` README |
+| Billing & Business Systems | Billing Eng rotation (`billing@apexmediation.ee`) | CFO / Biz Ops lead | Support, Legal, Privacy | Account Mgmt | `docs/Internal/Operations/BILLING_PLAYBOOK.md`, `docs/Internal/Security/DATA_MAP.md` |
+| Privacy & Security | Security Eng (`security@apexmediation.ee`) | CTO | Legal, SDK Eng, Backend | Entire company | `docs/Internal/Security/COMPREHENSIVE_AUDIT_REPORT.md`, `docs/Internal/Security/DATA_RETENTION_MATRIX.md` |
+| Reporting & Analytics | Data Eng (`contact@apexmediation.ee`) | VP Analytics | Billing, Product | Sales, CS | `docs/Internal/Development/ANALYTICS_IMPLEMENTATION.md`, `data/schemas` README |
 
 ## Escalation Notes
 

@@ -20,7 +20,7 @@ namespace RivalApex.Mediation.Tests.Integration
             var config = ScriptableObject.CreateInstance<SDKConfig>();
             config.AppId = "device-test-app";
             config.ApiKey = "device-test-key";
-            config.AuctionEndpoint = "https://auction.apexmediation.ee/v1";
+            config.AuctionEndpoint = "https://api.apexmediation.ee/v1";
             config.EnablePerformanceBudgetChecks = true;
             config.RemoteConfigTimeoutMs = 1000;
 

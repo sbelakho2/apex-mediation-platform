@@ -2,7 +2,6 @@ import Foundation
 
 /// Primary SDK entry point matching Android's BelAds API.
 /// Provides initialization, configuration, and global SDK settings.
-@available(macOS 12.0, *)
 @MainActor
 public enum BelAds {
     

@@ -40,9 +40,9 @@ interface EmailJob {
 
 
 export class EmailAutomationService {
-  private readonly FROM_EMAIL = 'ApexMediation <noreply@apexmediation.ee>';
+  private readonly FROM_EMAIL = 'ApexMediation Support <support@apexmediation.ee>';
   private readonly SUPPORT_EMAIL = SUPPORT_EMAIL_ADDRESS;
-  private readonly FOUNDER_EMAIL = 'Sabel @ ApexMediation <sabel@apexmediation.ee>';
+  private readonly FOUNDER_EMAIL = 'ApexMediation Contact <contact@apexmediation.ee>';
 
   /**
    * Process email event queue (run every minute via cron)

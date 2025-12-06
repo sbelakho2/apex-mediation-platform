@@ -696,7 +696,7 @@ GET /analytics/events?limit=100&cursor=abc123xyz
 ## Support
 
 - **Documentation**: [docs.apexmediation.ee](https://docs.apexmediation.ee)
-- **Email**: support@bel-consulting.ee
+- **Email**: support@apexmediation.ee
 - **Discord**: [discord.gg/apexmediation](https://discord.gg/apexmediation)
 - **API Status**: [status.apexmediation.ee](https://status.apexmediation.ee)
 

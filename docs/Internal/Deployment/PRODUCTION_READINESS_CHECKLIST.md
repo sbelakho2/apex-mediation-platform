@@ -43,13 +43,16 @@ This is the single, self-contained runbook to take the system to production on D
 - [x] Evidence capture: run `npm run do:tls` from laptop and archive artifacts under `docs/Internal/Deployment/do-readiness-YYYY-MM-DD`.
 - [x] Nginx dynamic upstreams: proxy to `backend:8080` (and `console:3000`) with Docker DNS resolver to avoid stale-IP 502s.
 - [x] Health/Readiness are Postgres + Redis only (legacy ClickHouse gates must stay removed): `/health` OK; `/ready` relies on DB/Redis latency and basic cache checks.
+  - `2025-12-06` verification snapshot (post redeploy):
+    - `curl -Is https://api.apexmediation.ee/health` → `HTTP/2 200` with HSTS; same hardened headers emitted via nginx + backend middleware.
+    - `curl -s https://api.apexmediation.ee/ready | jq` → `{ "status": "ready", "database": { "connected": true, "latency_ms": 73 }, "redis": { "ready": true }, "replica": { "hasReplicas": false }, "staging": { "totalRows": 0 }, ... }`. Readiness gate is live and returns HTTP 200 for operators/CI.
 ### Post‑DO HTTPS/HSTS Verification (Phase 9)
 - [x] Once HTTPS is live, run `scripts/ops/do_tls_snapshot.sh` (or `npm run do:tls`) from your workstation to archive redirects/TLS/HSTS output — executed on **2025-12-03** against `api.apexmediation.ee`; artifacts live under `docs/Internal/Deployment/do-readiness-2025-12-03/`.
 - [x] Ensure the bundle contains `verify-redirects.txt`, `verify-tls.txt`, and `verify-hsts.txt` with SSL Labs A/A+ notations — latest run includes all three files with HTTP→HTTPS, HTTP/2/TLS 1.3, Strict-Transport-Security evidence plus the "✅ A+ SSL rating" deliverable captured in `docs/Internal/Deployment/DEPLOYMENT_ROADMAP.md` (Week 6 summary).
 - [x] Keep HSTS commented until the API cert consistently scores A/A+, then re-run the script and capture the enforcement snapshot — HSTS stayed disabled in `infrastructure/nginx/snippets/ssl-params.conf` until the 2025-12-03 SSL Labs pass; production nodes now emit the header via `backend/src/middleware/securityHeaders.ts` (NODE_ENV=production) and the same snapshot preserved the enforcement state. Re-run `scripts/ops/do_tls_snapshot.sh api.apexmediation.ee` after each cert renewal.
 
 ### 0.0.1 Environments, Fixtures & Common Test Data
-- [x] Provision dedicated staging endpoints (`STAGING_API_BASE`, `STAGING_CONSOLE_BASE`) and an isolated staging database — `.github/workflows/deploy-staging.yml` and `docs/Internal/Deployment/CI_CD_GUIDE.md` define the hosts (`https://api-staging.rivalapexmediation.ee`, `https://console-staging.rivalapexmediation.ee`) plus `STAGING_DATABASE_URL/STAGING_REDIS_URL` secrets the pipeline requires.
+- [x] Provision dedicated staging endpoints (`STAGING_API_BASE`, `STAGING_CONSOLE_BASE`) and an isolated staging database — `.github/workflows/deploy-staging.yml` and `docs/Internal/Deployment/CI_CD_GUIDE.md` define the hosts (`https://api-staging.apexmediation.ee`, `https://console-staging.apexmediation.ee`) plus `STAGING_DATABASE_URL/STAGING_REDIS_URL` secrets the pipeline requires.
 - [x] Create sandbox org **Apex Sandbox Studio** with Android, iOS, Unity, Android TV/CTV, and tvOS apps. *(Seeded 2025-12-04 via managed Postgres using `doadmin` — connection string `postgres://doadmin@apexmediation-db-do-user-29825488-0.m.db.ondigitalocean.com:25060/apexmediation?sslmode=no-verify`.)*
   - Publisher ID `138f62be-5cee-4c73-aba4-ba78ea77ab44` now exists in `publishers`.
   - App inventory (all tied to the publisher above):
@@ -285,6 +288,26 @@ Postgres-only analytics/readiness (from migration plan and changelog):
 - [ ] Website, Billing, VRA, Cron/Automation checkpoints planned or executed as applicable; any deferred items are tracked with owners/dates.
 - [ ] Rollback/runbook documented; on‑call dashboards and alerts show the new Postgres‑only signals (replica lag, cache hit, query p95).
 
+### 0.0.14 SDK Privacy, Lifecycle & Observability Audit
+- [ ] Privacy & identifiers
+  - [ ] iOS: enforce ATT gating for IDFA, ensure zero IDFA access when denied, wire SKAdNetwork participation without IDFA, document SKAN 4 coarse conversion value mapping, and keep SKOverlay presentation/dismissal on the main thread.
+  - [ ] Android: integrate the latest UMP Consent SDK, respect GAID vs App Set ID fallbacks, and handle the new user-level ad-tracking toggles plus Privacy Sandbox flows when enabled.
+  - [ ] Global: propagate COPPA/child-directed flags, CCPA US Privacy Strings, and GDPR TCF v2 strings to every network adapter consistently; unit tests assert outbound metadata per adapter.
+- [ ] Lifecycle & threading
+  - [ ] iOS/tvOS: guarantee main-thread UI presentation only (Scene-based apps & multi-scene), block double presentations, cancel timers/observers on background, and avoid presenter retain cycles.
+  - [ ] Android/CTV: use the correct Activity/Application context, survive configuration changes, PiP, Doze, and background restrictions, never block the UI thread, and enforce exactly-once callbacks.
+  - [ ] Unity: marshal callbacks onto the Unity main thread and prevent duplicate bridges between the iOS/Android layers and C# handlers.
+- [ ] Error states & networking
+  - [ ] Map no-fill/HTTP 204, timeouts, 429 rate limits (Retry-After), 5xx retries/backoff, and navigation cancellations deterministically with exponential backoff + circuit breaker guards.
+  - [ ] Exercise airplane mode, captive portals, DNS failures, and Wi-Fi/Ethernet/Cell flips mid-load to prove graceful recovery.
+- [ ] Caching & state
+  - [ ] Validate bid/ad object expiry, show-once semantics, one-ad-at-a-time guarantees, cold vs warm cache behavior, and banner refresh timing/back-to-back load+show sequences.
+- [ ] Platform-specific polish
+  - [ ] tvOS: focus engine + long-press menu/back handling, single presenter at a time, responsive dismissal.
+  - [ ] CTV (Android TV/Fire TV): 4K performance, safe-area/overscan compliance, and remote key-repeat spam tolerance.
+- [ ] Observability
+  - [ ] Ensure PII redaction in logs, expose adapter-level telemetry for auction reasons/no-bids, and keep `/ready` scoped to Postgres/Redis with alerts on replica lag and cache hit ratios.
+
 ## Appendix A — Infrastructure Setup (Provisioning from scratch)
 If you are provisioning a brand‑new droplet and managed services, follow this section. If a droplet already exists, use 0.0.0 above and skip this appendix.
 
@@ -500,7 +523,7 @@ References
     --window 5m \
     --enabled true \
     --entities "$DROPLET_ID" \
-    --emails oncall@apexmediation.ee
+    --emails security@apexmediation.ee
   doctl monitoring alert create \
     --type droplet_memory \
     --description "Apex RAM > 80%" \
@@ -509,7 +532,7 @@ References
     --window 5m \
     --enabled true \
     --entities "$DROPLET_ID" \
-    --emails oncall@apexmediation.ee
+    --emails security@apexmediation.ee
   ```
 - [ ] Configure alerts (CPU>80%, Memory>80%, Disk>80%, droplet unreachable).
 

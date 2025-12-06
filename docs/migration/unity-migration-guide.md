@@ -38,17 +38,17 @@ Complete migration guide for publishers transitioning from Unity LevelPlay to Ri
 
 #### 1.1 Create Rival Account
 ```bash
-# Register at console.rivalapexmediation.ee
+# Register at console.apexmediation.ee
 # Or use CLI
-npx @rivalapexmediation/cli auth:login
-npx @rivalapexmediation/cli publisher:create \
+npx @apexmediation/cli auth:login
+npx @apexmediation/cli publisher:create \
   --name "Your Company" \
   --email "ops@yourcompany.com"
 ```
 
 #### 1.2 Install Migration Tool
 ```bash
-npm install -g @rivalapexmediation/migrate
+npm install -g @apexmediation/migrate
 rival-migrate init
 ```
 
@@ -60,7 +60,7 @@ rival-migrate unity:export \
   --api-key YOUR_UNITY_API_KEY \
   --output unity-config.json
 
-# Import to Rival
+# Import to Apex
 rival-migrate import unity-config.json
 ```
 
@@ -485,7 +485,7 @@ rival-migrate revenue:compare \
 - Direct engineering access
 
 **Contact:**
-- Email: migrate@rivalapexmediation.ee
+- Email: support@apexmediation.ee
 - Slack: rivalapexmediation.slack.com
 - Emergency: +1-XXX-XXX-XXXX
 
@@ -504,15 +504,15 @@ Track these throughout migration:
 
 ## 🎓 Training Resources
 
-- **Video Tutorials**: https://docs.rivalapexmediation.ee/videos
+- **Video Tutorials**: https://apexmediation.ee/docs/videos
 - **Live Workshops**: Bi-weekly on Wednesdays
 - **Sample Apps**: https://github.com/rivalapexmediation/samples
-- **API Reference**: https://docs.rivalapexmediation.ee/api
+- **API Reference**: https://apexmediation.ee/docs/api
 
 ## Next Steps
 
 1. ✅ Complete pre-migration checklist
-2. 📝 Schedule kickoff call: https://calendly.com/rivalapexmediation/migration
+2. 📝 Schedule kickoff call: https://calendly.com/apexmediation/migration
 3. 🚀 Begin Phase 1 setup
 4. 📊 Monitor daily metrics
 5. 🎉 Celebrate successful migration!

@@ -112,7 +112,7 @@ Update `.env` for production:
 ```bash
 CORS_ORIGIN=https://console.apexmediation.ee
 # Or multiple origins
-CORS_ALLOWLIST=https://console.apexmediation.ee,https://dashboard.apexmediation.ee
+CORS_ALLOWLIST=https://console.apexmediation.ee,https://www.apexmediation.ee
 ```
 
 ---
