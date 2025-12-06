@@ -1,1 +1,0 @@
-{"status":"degraded","timestamp":"2025-12-03T11:11:22.353Z","uptime":1176.858096,"environment":"development","services":{"postgres":"up","redis":"down","queues":"down"}}
