@@ -38,16 +38,30 @@ public enum BelRewarded {
             return false
         }
 
+        let presentationToken: AdPresentationCoordinator.Token
+        do {
+            presentationToken = try AdPresentationCoordinator.shared.beginPresentation(placementId: placement)
+        } catch {
+            listener?.onAdFailedToShow(placementId: placement, error: error)
+            return false
+        }
+
         Task { @MainActor in
             guard let ad = await MediationSDK.shared.claimAd(placementId: placement) else {
+                AdPresentationCoordinator.shared.finishPresentation(presentationToken)
                 listener?.onAdFailedToShow(placementId: placement, error: SDKError.noFill)
                 return
             }
             listener?.onAdShown(placementId: placement)
+            SKAdNetworkCoordinator.shared.recordImpression(
+                for: ad,
+                presentingScene: viewController.view.window?.windowScene
+            )
             presentDebugRewarded(from: viewController, networkName: ad.networkName) { didEarnReward in
                 if didEarnReward {
                     listener?.onUserEarnedReward(placementId: placement, reward: BelReward(label: "reward", amount: 1))
                 }
+                AdPresentationCoordinator.shared.finishPresentation(presentationToken)
                 listener?.onAdClosed(placementId: placement)
             }
         }
@@ -75,7 +89,7 @@ public enum BelRewarded {
         })
         viewController.present(alert, animated: true)
         #else
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+        AdPresentationCoordinator.shared.schedule(after: 1.0) {
             completion(true)
         }
         #endif

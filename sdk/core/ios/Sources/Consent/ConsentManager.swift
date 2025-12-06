@@ -8,6 +8,9 @@ public struct ConsentData: Codable, Equatable, Sendable {
     /// IAB TCF consent string (if GDPR applies)
     public var gdprConsentString: String?
     
+    /// Raw IAB US Privacy string (CCPA/CPRA)
+    public var usPrivacyString: String?
+    
     /// CCPA "Do Not Sell" opt-out flag
     public var ccpaOptOut: Bool
     
@@ -17,11 +20,13 @@ public struct ConsentData: Codable, Equatable, Sendable {
     public init(
         gdprApplies: Bool? = nil,
         gdprConsentString: String? = nil,
+        usPrivacyString: String? = nil,
         ccpaOptOut: Bool = false,
         coppa: Bool = false
     ) {
         self.gdprApplies = gdprApplies
         self.gdprConsentString = gdprConsentString
+        self.usPrivacyString = usPrivacyString
         self.ccpaOptOut = ccpaOptOut
         self.coppa = coppa
     }
@@ -68,6 +73,7 @@ public final class ConsentManager {
         return [
             "gdprApplies": consent.gdprApplies ?? false,
             "gdprConsentString": consent.gdprConsentString != nil ? "<redacted>" : "none",
+            "usPrivacyString": consent.usPrivacyString != nil ? "<redacted>" : "none",
             "ccpaOptOut": consent.ccpaOptOut,
             "coppa": consent.coppa
         ]
@@ -82,7 +88,7 @@ public final class ConsentManager {
         }
         
         // CCPA opt-out means no personalized ads
-        if consent.ccpaOptOut {
+        if ccpaOptedOut(consent) {
             return false
         }
         
@@ -115,10 +121,8 @@ public final class ConsentManager {
             metadata["gdpr_consent"] = consentString
         }
         
-        if consent.ccpaOptOut {
-            metadata["us_privacy"] = "1YNN" // IAB CCPA string: do not sell
-        } else {
-            metadata["us_privacy"] = "1YYN" // Allow sale
+        if let usp = normalizedUsPrivacyString(consent) {
+            metadata["us_privacy"] = usp
         }
         
         if consent.coppa {
@@ -131,9 +135,10 @@ public final class ConsentManager {
     /// Convert consent to adapter-facing state payload
     public func toAdapterConsentPayload(attStatusProvider: () -> ATTStatus = { .notDetermined }) -> [String: Any] {
         let consent = getConsent()
+        let usPrivacy = normalizedUsPrivacyString(consent)
         let consentState = ConsentState(
             iabTCFv2: consent.gdprConsentString,
-            iabUSGPP: consent.ccpaOptOut ? "1YNN" : "1YYN",
+            iabUSPrivacy: usPrivacy,
             coppa: consent.coppa,
             attStatus: attStatusProvider(),
             limitAdTracking: !canShowPersonalizedAds()
@@ -146,8 +151,9 @@ public final class ConsentManager {
         if let tcf = consentState.iabTCFv2, !tcf.isEmpty {
             payload["iab_tcf_v2"] = tcf
         }
-        if let gpp = consentState.iabUSGPP, !gpp.isEmpty {
-            payload["iab_us_gpp"] = gpp
+        if let usp = consentState.iabUSPrivacy, !usp.isEmpty {
+            payload["iab_us_privacy"] = usp
+            payload["us_privacy"] = usp
         }
         return payload
     }
@@ -164,6 +170,22 @@ public final class ConsentManager {
         currentConsent = ConsentData()
         storage.removeObject(forKey: userDefaultsKey)
         lock.unlock()
+    }
+
+    private func normalizedUsPrivacyString(_ consent: ConsentData) -> String? {
+        if let raw = consent.usPrivacyString?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty {
+            return raw
+        }
+        return consent.ccpaOptOut ? "1YNN" : "1YYN"
+    }
+
+    private func ccpaOptedOut(_ consent: ConsentData) -> Bool {
+        if consent.ccpaOptOut { return true }
+        guard let raw = consent.usPrivacyString?.trimmingCharacters(in: .whitespacesAndNewlines), raw.count >= 2 else {
+            return false
+        }
+        let flag = raw[raw.index(raw.startIndex, offsetBy: 1)]
+        return flag == "Y" || flag == "y"
     }
 }
 

@@ -3,6 +3,7 @@ package com.rivalapexmediation.sdk.adapter
 import android.content.Context
 import com.rivalapexmediation.sdk.models.Ad
 import com.rivalapexmediation.sdk.models.AdType
+import com.rivalapexmediation.sdk.BuildConfig
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -77,6 +78,9 @@ class AdapterRegistry(
      * Public diagnostics: how many adapters are registered (discovered or manually registered)
      */
     val registeredCount: Int get() = adapterClasses.size
+
+    /** Return all registered adapter network names (sorted) */
+    fun getAdapterNames(): List<String> = adapterClasses.keys().toList().sorted()
     
     /**
      * Adapter wrapper with metadata
@@ -88,7 +92,10 @@ class AdapterRegistry(
     )
     
     init {
-        discoverAdapters()
+        // Only attempt reflection-based discovery in debug or when explicitly enabled.
+        if (isSandboxAdapterDiscoveryEnabled()) {
+            discoverAdapters()
+        }
     }
     
     /**
@@ -128,6 +135,17 @@ class AdapterRegistry(
                 // Adapter not included in build
             }
         }
+    }
+
+    private fun isSandboxAdapterDiscoveryEnabled(): Boolean {
+        // Enabled in debug builds or when a system property is set (e.g., in CI):
+        // -DAPEX_SANDBOX_ADAPTERS=1 → java/system property "apex.sandbox.adapters=1"
+        val prop = try {
+            System.getProperty("apex.sandbox.adapters")
+        } catch (_: Throwable) {
+            null
+        }
+        return BuildConfig.DEBUG || prop == "1"
     }
     
     /**

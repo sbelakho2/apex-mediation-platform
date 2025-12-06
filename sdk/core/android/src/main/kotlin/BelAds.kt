@@ -2,6 +2,7 @@ package com.rivalapexmediation.sdk
 
 import android.app.Activity
 import android.content.Context
+import com.rivalapexmediation.sdk.consent.UmpConsentClient
 import com.rivalapexmediation.sdk.logging.Logger
 import com.rivalapexmediation.sdk.debug.DebugPanel
 
@@ -60,6 +61,7 @@ object BelAds {
         coppa: Boolean? = null,
         ldu: Boolean? = null,
         limitAdTracking: Boolean? = null,
+        privacySandboxOptIn: Boolean? = null,
     ) {
         try {
             MediationSDK.getInstance().setConsent(
@@ -68,8 +70,27 @@ object BelAds {
                 usPrivacy = usPrivacy,
                 coppa = coppa,
                 limitAdTracking = limitAdTracking,
+                privacySandboxOptIn = privacySandboxOptIn,
             )
         } catch (_: Throwable) {}
+    }
+
+    /** Kick off the Google UMP consent flow via the SDK. */
+    @JvmStatic
+    fun requestGoogleConsentForm(activity: Activity, tagForUnderAge: Boolean = false, callback: UmpConsentClient.Callback) {
+        try {
+            MediationSDK.getInstance().requestGoogleConsent(
+                activity,
+                UmpConsentClient.Params(tagForUnderAgeOfConsent = tagForUnderAge),
+                callback
+            )
+        } catch (_: Throwable) {}
+    }
+
+    /** Refresh GAID/AppSet identifiers respecting the latest privacy settings. */
+    @JvmStatic
+    fun refreshPrivacyIdentifiers() {
+        try { MediationSDK.getInstance().refreshPrivacyIdentifiers() } catch (_: Throwable) {}
     }
 
     /** Register a test device ID (e.g., hashed Android ID) for safer test ads. */

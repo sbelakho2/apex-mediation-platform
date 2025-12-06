@@ -1,7 +1,6 @@
 package com.rivalapexmediation.sdk
 
 import android.content.Context
-import com.rivalapexmediation.sdk.adapters.ironsource.IronSourceAdapter
 import com.rivalapexmediation.sdk.contract.AdHandle
 import com.rivalapexmediation.sdk.contract.AdNetworkAdapterV2
 import com.rivalapexmediation.sdk.contract.InitResult
@@ -28,8 +27,8 @@ class AdapterRegistry {
     private val runtimeAdapters = ConcurrentHashMap<String, RuntimeAdapterEntry>()
 
     init {
-        // Default runtime adapters (can be overridden by host apps before initialize)
-        runtimeFactories.putIfAbsent("ironsource") { ctx -> IronSourceAdapter(ctx) }
+        // No default vendor adapters in core. Host apps (BYO) must register adapters explicitly
+        // via registerRuntimeAdapterFactory() before initialize().
     }
 
     /**

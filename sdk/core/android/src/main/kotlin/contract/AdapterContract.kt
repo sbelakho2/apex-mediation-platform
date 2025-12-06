@@ -36,7 +36,10 @@ data class ConsentState(
     val iabUsPrivacy: String? = null,
     val coppa: Boolean = false,
     val attStatus: AttStatus = AttStatus.NOT_DETERMINED,
-    val limitAdTracking: Boolean = false
+    val limitAdTracking: Boolean = false,
+    val privacySandboxOptIn: Boolean? = null,
+    val advertisingId: String? = null,
+    val appSetId: String? = null
 )
 
 enum class AttStatus { AUTHORIZED, DENIED, NOT_DETERMINED, RESTRICTED }
@@ -59,7 +62,9 @@ data class DeviceMeta(
 
 data class UserMeta(
     val ageRestricted: Boolean,
-    val consent: ConsentState
+    val consent: ConsentState,
+    val advertisingId: String? = null,
+    val appSetId: String? = null
 )
 
 data class NetworkMeta(

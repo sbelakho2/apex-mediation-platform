@@ -3,12 +3,16 @@ package com.rivalapexmediation.sdk
 import android.app.Activity
 import android.content.Context
 import androidx.annotation.NonNull
+import com.rivalapexmediation.sdk.logging.Logger
 import com.rivalapexmediation.sdk.models.Ad
+import com.rivalapexmediation.sdk.models.AdType
+import com.rivalapexmediation.sdk.runtime.AdPresentationCoordinator
 
 /**
  * Simple, stable public API for Interstitials, backed by MediationSDK.
  */
 object BelInterstitial {
+    private const val TAG = "BelInterstitial"
     @Volatile private var lastPlacement: String? = null
 
     /**
@@ -27,21 +31,24 @@ object BelInterstitial {
     fun show(@NonNull activity: Activity): Boolean {
         val placement = lastPlacement ?: return false
         val sdk = MediationSDK.getInstance()
-        val ad: Ad = sdk.consumeCachedAd(placement) ?: return false
-        if (sdk.renderAd(ad, activity)) {
-            return true
+        val preview = sdk.getCachedAd(placement) ?: return false
+        return AdPresentationCoordinator.begin(activity, placement, preview.adType) { hostActivity ->
+            val ad: Ad = sdk.consumeCachedAd(placement) ?: run {
+                Logger.w(TAG, "cached ad missing when attempting to present placement=$placement")
+                return@begin false
+            }
+            if (sdk.renderAd(ad, hostActivity)) {
+                return@begin true
+            }
+            try {
+                com.rivalapexmediation.sdk.measurement.OmSdkRegistry.controller.startDisplaySession(
+                    hostActivity, placement, ad.networkName, "interstitial"
+                )
+            } catch (_: Throwable) {}
+            ad.show(hostActivity)
+            try { com.rivalapexmediation.sdk.measurement.OmSdkRegistry.controller.endSession(placement) } catch (_: Throwable) {}
+            true
         }
-        // Start OM display session (no-op by default)
-        try {
-            com.rivalapexmediation.sdk.measurement.OmSdkRegistry.controller.startDisplaySession(
-                activity, placement, ad.networkName, "interstitial"
-            )
-        } catch (_: Throwable) {}
-        // Delegate to ad rendering (placeholder for now)
-        ad.show(activity)
-        // End OM session immediately in this MVP (real renderers should manage lifecycle)
-        try { com.rivalapexmediation.sdk.measurement.OmSdkRegistry.controller.endSession(placement) } catch (_: Throwable) {}
-        return true
     }
 
     /**

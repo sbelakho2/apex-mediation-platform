@@ -2,6 +2,7 @@ package com.rivalapexmediation.sdk.consent
 
 import android.content.Context
 import com.rivalapexmediation.sdk.network.AuctionClient
+import com.rivalapexmediation.sdk.privacy.PrivacyIdentifiers
 import com.rivalapexmediation.sdk.contract.ConsentState as RuntimeConsentState
 import com.rivalapexmediation.sdk.contract.AttStatus as RuntimeAttStatus
 
@@ -17,7 +18,18 @@ object ConsentManager {
         val usPrivacy: String? = null,     // IAB US Privacy string (e.g., "1YNN")
         val coppa: Boolean? = null,
         val limitAdTracking: Boolean? = null,
+        val privacySandboxOptIn: Boolean? = null,
+        val identifiers: IdentifierState = IdentifierState()
     )
+
+    data class IdentifierState(
+        val advertisingId: String? = null,
+        val appSetId: String? = null,
+        val source: IdentifierSource = IdentifierSource.NONE,
+        val limitAdTracking: Boolean = true
+    )
+
+    enum class IdentifierSource { NONE, GAID, APP_SET }
 
     /**
      * Normalize app-provided consent inputs to an internal State.
@@ -30,6 +42,7 @@ object ConsentManager {
         gdprApplies: Boolean? = null,
         coppa: Boolean? = null,
         limitAdTracking: Boolean? = null,
+        privacySandboxOptIn: Boolean? = null,
     ): State {
         val t = tcf?.trim().orEmpty().ifEmpty { null }
         val u = usp?.trim().orEmpty().ifEmpty { null }
@@ -39,6 +52,7 @@ object ConsentManager {
             usPrivacy = u,
             coppa = coppa,
             limitAdTracking = limitAdTracking,
+            privacySandboxOptIn = privacySandboxOptIn,
         )
     }
 
@@ -84,6 +98,9 @@ object ConsentManager {
         usPrivacy = state.usPrivacy,
         coppa = state.coppa,
         limitAdTracking = state.limitAdTracking,
+        privacySandbox = state.privacySandboxOptIn,
+        advertisingId = state.identifiers.advertisingId,
+        appSetId = state.identifiers.appSetId
     )
 
     /** Convert to runtime adapter consent payload. */
@@ -93,6 +110,9 @@ object ConsentManager {
         coppa = state.coppa == true,
         attStatus = RuntimeAttStatus.NOT_DETERMINED,
         limitAdTracking = state.limitAdTracking == true,
+        privacySandboxOptIn = state.privacySandboxOptIn,
+        advertisingId = state.identifiers.advertisingId,
+        appSetId = state.identifiers.appSetId
     )
 
     /** Lightweight debug summary with redacted strings for UI/debugger panels. */
@@ -101,8 +121,44 @@ object ConsentManager {
         "us_privacy" to state.usPrivacy?.let { redact(it) },
         "tc_string" to state.consentString?.let { redact(it) },
         "coppa" to state.coppa,
-        "limit_ad_tracking" to state.limitAdTracking
+        "limit_ad_tracking" to state.limitAdTracking,
+        "privacy_sandbox" to state.privacySandboxOptIn,
+        "id_source" to state.identifiers.source.name.lowercase(),
+        "has_ad_id" to (state.identifiers.advertisingId?.isNotBlank() == true),
+        "has_app_set" to (state.identifiers.appSetId?.isNotBlank() == true)
     )
+
+    fun attachIdentifiers(state: State, ids: IdentifierState): State {
+        return state.copy(
+            identifiers = ids,
+            limitAdTracking = if (ids.limitAdTracking) true else state.limitAdTracking
+        )
+    }
+
+    fun fromPrivacyIdentifiers(ids: PrivacyIdentifiers): IdentifierState {
+        val source = when (ids.source) {
+            PrivacyIdentifiers.Source.APP_SET -> IdentifierSource.APP_SET
+            PrivacyIdentifiers.Source.GAID -> IdentifierSource.GAID
+            else -> IdentifierSource.NONE
+        }
+        return IdentifierState(
+            advertisingId = ids.advertisingId,
+            appSetId = ids.appSetId,
+            source = source,
+            limitAdTracking = ids.limitAdTracking
+        )
+    }
+
+    /**
+     * Determines whether we should re-fetch identifiers after a consent update.
+     * Triggers when the app explicitly disables LAT and we still lack an ad ID snapshot.
+     */
+    fun shouldRefetchIdentifiers(previous: State, requestedLimitAdTracking: Boolean?): Boolean {
+        if (requestedLimitAdTracking != false) return false
+        val wasLatEnabled = (previous.limitAdTracking == true) || previous.identifiers.limitAdTracking
+        if (!wasLatEnabled) return false
+        return previous.identifiers.advertisingId.isNullOrBlank()
+    }
 
     /** Redact consent strings for logs (keeps first 8 and last 4 chars). */
     fun redact(s: String?): String? {

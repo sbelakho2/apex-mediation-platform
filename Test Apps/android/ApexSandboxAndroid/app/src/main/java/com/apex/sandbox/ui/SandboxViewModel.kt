@@ -51,6 +51,12 @@ class SandboxViewModel(app: Application) : AndroidViewModel(app) {
             _config.value = cfg.copy(consent = loadedConsent)
             _consent.value = loadedConsent
             appendLog("Config loaded: apiBase=${cfg.apiBase}")
+            if (!cfg.adapterWhitelist.isNullOrEmpty()) {
+                appendLog("Sandbox adapter whitelist (from config): ${cfg.adapterWhitelist.joinToString(",")}")
+            }
+            if (cfg.forceAdapterPipeline == true) {
+                appendLog("Sandbox force adapter pipeline: enabled")
+            }
         }
     }
 
@@ -81,6 +87,15 @@ class SandboxViewModel(app: Application) : AndroidViewModel(app) {
             )
             _status.value = if (res.isSuccess) "SDK: initialized" else "SDK: init failed"
             appendLog("Initialize result: ${res.fold({ it }, { it.message ?: "error" })}")
+
+            // Note: This sample uses FakeMediationSdk; if wired to real MediationSDK,
+            // apply adapter whitelist and force-pipeline here using the core SDK APIs.
+            cfg.adapterWhitelist?.let { names ->
+                if (names.isNotEmpty()) appendLog("Applying adapter whitelist: ${names.joinToString(",")}")
+            }
+            if (cfg.forceAdapterPipeline == true) {
+                appendLog("Force adapter pipeline is ON (sandbox)")
+            }
         }
     }
 
@@ -153,6 +168,25 @@ class SandboxViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun clearLog() { _log.value = emptyList() }
+
+    fun runAllAdaptersInterstitial(placementId: String) {
+        // Iterate the fake networks to simulate per-adapter runs in this demo app
+        viewModelScope.launch {
+            appendLog("[RunAll] Starting interstitial runs over FakeNetwork variants")
+            for (nw in FakeNetwork.values()) {
+                _network.value = nw
+                appendLog("[RunAll] Loading interstitial via $nw")
+                when (val r = sdk.loadInterstitial(placementId, nw, _airplane.value, _invalidPlacement.value)) {
+                    is AdResult.Loaded -> appendLog("[RunAll] Loaded: ${r.placementId}")
+                    is AdResult.Error -> appendLog("[RunAll] Error ${r.code}: ${r.message}")
+                    else -> {}
+                }
+                // small delay between iterations
+                kotlinx.coroutines.delay(300)
+            }
+            appendLog("[RunAll] Completed interstitial runs")
+        }
+    }
 
     private fun appendLog(line: String) {
         val ts = SimpleDateFormat("HH:mm:ss.SSS", Locale.US).format(Date())

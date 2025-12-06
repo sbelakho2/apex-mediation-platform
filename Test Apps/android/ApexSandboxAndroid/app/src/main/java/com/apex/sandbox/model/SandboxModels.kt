@@ -19,4 +19,6 @@ data class SandboxConfig(
     val apiBase: String = "",
     val placements: Placements = Placements(),
     val consent: ConsentState = ConsentState(),
+    val adapterWhitelist: List<String>? = null,
+    val forceAdapterPipeline: Boolean? = null,
 )

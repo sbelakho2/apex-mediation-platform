@@ -158,6 +158,11 @@ class IronSourceAdapter(
             usPrivacy = userConsent.iabUsPrivacy ?: consent.iabUsPrivacy,
             coppa = userConsent.coppa || consent.coppa
         )
+        val advertisingId = if (userConsent.limitAdTracking) {
+            null
+        } else {
+            meta.user.advertisingId ?: userConsent.advertisingId
+        }
         val floor = chooseFloor(meta, cfg.options)
         val adUnit = when (adType) {
             AdType.INTERSTITIAL -> "interstitial"
@@ -181,7 +186,7 @@ class IronSourceAdapter(
             test = cfg.options?.testMode == true,
             consent = mergedConsent,
             country = cfg.region?.name,
-            advertisingId = null // supplied by host SDK when available
+            advertisingId = advertisingId
         )
     }
 

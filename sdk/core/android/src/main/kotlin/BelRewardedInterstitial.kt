@@ -3,13 +3,17 @@ package com.rivalapexmediation.sdk
 import android.app.Activity
 import android.content.Context
 import androidx.annotation.NonNull
+import com.rivalapexmediation.sdk.logging.Logger
 import com.rivalapexmediation.sdk.models.Ad
+import com.rivalapexmediation.sdk.models.AdType
+import com.rivalapexmediation.sdk.runtime.AdPresentationCoordinator
 
 /**
  * Simple, stable public API for Rewarded Interstitials.
  * Mirrors BelRewarded/BelInterstitial ergonomics and uses the internal cache.
  */
 object BelRewardedInterstitial {
+    private const val TAG = "BelRewardedInterstitial"
     @Volatile private var lastPlacement: String? = null
 
     @JvmStatic
@@ -23,21 +27,24 @@ object BelRewardedInterstitial {
     fun show(@NonNull activity: Activity): Boolean {
         val placement = lastPlacement ?: return false
         val sdk = MediationSDK.getInstance()
-        val ad: Ad = sdk.consumeCachedAd(placement) ?: return false
-        if (sdk.renderAd(ad, activity)) {
-            return true
+        val preview = sdk.getCachedAd(placement) ?: return false
+        return AdPresentationCoordinator.begin(activity, placement, preview.adType) { hostActivity ->
+            val ad: Ad = sdk.consumeCachedAd(placement) ?: run {
+                Logger.w(TAG, "cached ad missing when attempting to present placement=$placement")
+                return@begin false
+            }
+            if (sdk.renderAd(ad, hostActivity)) {
+                return@begin true
+            }
+            try {
+                com.rivalapexmediation.sdk.measurement.OmSdkRegistry.controller.startVideoSession(
+                    hostActivity, placement, ad.networkName, durationSec = null
+                )
+            } catch (_: Throwable) {}
+            ad.show(hostActivity)
+            try { com.rivalapexmediation.sdk.measurement.OmSdkRegistry.controller.endSession(placement) } catch (_: Throwable) {}
+            true
         }
-        // Start OM video session for rewarded interstitials
-        try {
-            com.rivalapexmediation.sdk.measurement.OmSdkRegistry.controller.startVideoSession(
-                activity, placement, ad.networkName, durationSec = null
-            )
-        } catch (_: Throwable) {}
-        // Delegate to ad rendering
-        ad.show(activity)
-        // End OM session for MVP; real renderer should manage lifecycle
-        try { com.rivalapexmediation.sdk.measurement.OmSdkRegistry.controller.endSession(placement) } catch (_: Throwable) {}
-        return true
     }
 
     @JvmStatic

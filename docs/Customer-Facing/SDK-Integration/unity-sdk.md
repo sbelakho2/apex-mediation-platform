@@ -1,4 +1,4 @@
-# Unity SDK Integration Guide (BYO)
+# Unity SDK Integration Guide (BYO-first, single-entry)
 
 > Updated: 20 Nov 2025 -- Unity 2020.3+ (URP/HDRP compatible)  
 > Scope: Bring-Your-Own demand mode with Config-as-Code, transparency proofs, and debugger overlay.
@@ -11,6 +11,14 @@
 5. **Press Play:** the component initializes the SDK, verifies the signature, spawns the Mediation Debugger (toggle with backquote `\``), and logs sanitized ad events to the Console.
 
 The rest of this guide breaks each step down in detail.
+
+---
+
+## BYO-first at a glance
+- Core package does not include vendor Unity SDKs. You control which vendor packages you import.
+- Single entry point (`ApexMediationEntryPoint`) initializes once per session and centralizes consent.
+- Sandbox flags let you iterate adapters quickly without changing code (DEBUG/dev builds only).
+- Adapter Dev Kit (iOS/tvOS) and Android parity allow validating adapters without bundling them in core.
 
 ---
 
@@ -126,6 +134,24 @@ API snapshot:
 
 ---
 
+## 5. BYO adapters (native or C#)
+
+There are two common patterns for adapters in Unity:
+
+- Native adapters (recommended)
+  - Bring native iOS/Android adapters and vendor SDKs into your Unity project as platform plugins.
+  - The Unity entry point forwards placement requests to the native cores (iOS/tvOS/Android), which call your native adapters.
+  - Pros: best performance, full feature parity with native cores; no duplicate logic.
+
+- Unity-side adapters (advanced)
+  - Define `INetworkAdapter` interfaces in C# and implement wrappers around vendor Unity SDKs.
+  - The entry point maps requests to your C# implementations.
+  - Pros: all-Unity code; Cons: more work to keep parity and feature coverage.
+
+Release safety: The ApexMediation Unity package does not include vendor SDKs. All vendor packages remain your choice and responsibility.
+
+---
+
 ## 5. Transparency & debugging
 
 - **Debugger Overlay:** Toggle with backquote once attached. Shows the latest 50 traces plus the head of the transparency ledger (hash snippet). Safe for development builds only.
@@ -142,7 +168,31 @@ API snapshot:
 
 ---
 
-## 7. Config-as-Code tips
+## 7. Sandbox flags (adapter whitelist & force adapter pipeline)
+
+In development, you can narrow testing to specific adapters and force the adapter pipeline (bypassing server-to-server in eligible modes) to keep iterations deterministic.
+
+```csharp
+using Apex.Mediation;
+
+public class SandboxControls : MonoBehaviour
+{
+    void Start()
+    {
+        // Force client adapters even if S2S is eligible
+        SdkBridge.SetSandboxForceAdapterPipeline(true);
+
+        // Restrict to a single adapter, e.g. admob
+        SdkBridge.SetSandboxAdapterWhitelist(new [] { "admob" });
+    }
+}
+```
+
+These flags affect only dev/test builds. Production builds should not call them.
+
+---
+
+## 8. Config-as-Code tips
 
 - **Signing keys:** Keep the signing key outside of source control. For CI, set it via environment variables and feed it into the editor window using scripting, or supply it through the entry point at runtime.
 - **Diff-friendly reviews:** Commit the exported JSON (with signature) next to your Unity scenes and treat it like any other asset. Because it is camelCase and sorted, diffs are stable.
@@ -150,7 +200,7 @@ API snapshot:
 
 ---
 
-## 8. Troubleshooting
+## 9. Troubleshooting
 
 | Symptom | Likely cause | Fix |
 | --- | --- | --- |
@@ -160,3 +210,9 @@ API snapshot:
 | CI fails `Unity Footprint Gate` | Runtime exceeded 100KB compressed or .NET tests failed | Run `./scripts/check_package_constraints.sh` locally, prune unused runtime code/assets, fix tests |
 
 Need more help? Reach out via `support@apexmediation.ee` with your latest transparency proof hash and telemetry snapshot.
+
+---
+
+### Links
+- Cross-platform Adapter Dev Kit guide: `docs/Developer-Facing/AdapterDevKit.md`
+- Networked sandbox runbook (console/site/billing/VRA/soak): `docs/Internal/QA/networked-sandbox-runbook-2025-12-06.md`

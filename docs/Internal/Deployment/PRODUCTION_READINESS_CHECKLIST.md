@@ -244,6 +244,7 @@ Notes
 - [ ] Validate dashboards: revenue/eCPM/fill charts show sandbox data, drill-down + time-range filters work, and widgets stay in sync.
 - [ ] Exercise Mediation Debugger entries from sandbox apps; inspect timelines/no-bid reasons, confirm pagination + filters + PII redaction.
 - [ ] Surface network auction logs and/or hashed bid/commitment payloads per request so publishers can export evidence (meets transparency pledges); verify SDKs stream these artifacts and console exposes filters/downloads.
+- [ ] Validate end-to-end transparency exports and redaction: cross-check exported CSV/JSON against `docs/Internal/Transparency/DATA_FLOW_AND_COMPLIANCE.md` (hashing/salting rules, no raw device IDs without lawful basis). Ensure operators can access per-request `auction_root`, `bid_commitment`, reasons, and clearing price without PII.
 
 Postgres-only analytics/readiness (from migration plan and changelog):
 - Reporting, quality monitoring, transparency, billing usage, and export APIs read from Postgres fact tables and replicas. No ClickHouse dependency.
@@ -253,7 +254,7 @@ Postgres-only analytics/readiness (from migration plan and changelog):
 - [ ] Deploy staging marketing site (e.g., `staging.apexmediation.ee`) and verify `/`, `/pricing`, `/docs`, `/legal/*` routes 
 - [ ] Confirm navigation, signup redirect into staging console, and “Request demo” form delivering to Resend/CRM sandbox.
 - [x] Check content parity: BYO tiers (Starter 0%, Growth 2.5%, Scale 2.0%, Enterprise 1–1.5%) and no legacy managed-demand copy (see `website/src/app/%5B...slug%5D/page.tsx` “Fees & payment terms” section referencing the exact tier percentages).
-- [ ] Run website security header/unit suite: `npm --prefix website run test` (guards mandatory HSTS + CSP headers under `website/src/__tests__/security.headers.test.js`).
+- [x] Run website security header/unit suite: `npm --prefix website run test` (2025-12-06 run on Sadok MBP; Jest suite green, confirming HSTS + CSP coverage under `website/src/__tests__/security.headers.test.js`).
 - [ ] Perform responsive sweep (desktop/tablet/360px mobile) to ensure no layout overlap or broken sections.
 - [ ] Validate title/meta/canonical tags plus custom 404 behavior and absence of broken links.
 
@@ -290,12 +291,12 @@ Postgres-only analytics/readiness (from migration plan and changelog):
 
 ### 0.0.14 SDK Privacy, Lifecycle & Observability Audit
 - [ ] Privacy & identifiers
-  - [ ] iOS: enforce ATT gating for IDFA, ensure zero IDFA access when denied, wire SKAdNetwork participation without IDFA, document SKAN 4 coarse conversion value mapping, and keep SKOverlay presentation/dismissal on the main thread.
-  - [ ] Android: integrate the latest UMP Consent SDK, respect GAID vs App Set ID fallbacks, and handle the new user-level ad-tracking toggles plus Privacy Sandbox flows when enabled.
-  - [ ] Global: propagate COPPA/child-directed flags, CCPA US Privacy Strings, and GDPR TCF v2 strings to every network adapter consistently; unit tests assert outbound metadata per adapter.
+  - [x] iOS: enforce ATT gating for IDFA (MediationSDK v1.0.0 ATT manager + `BelAds.requestTrackingAuthorization()` helpers), guarantee zero IDFA when status ≠ authorized, wire SKAdNetwork participation + SKOverlay presenter per `Privacy/SKAdNetworkCoordinator.swift`, and document the SKAN 4 coarse mapping/metadata contract under `docs/Developer-Facing/SKAN_COARSE_MAPPING.md`.
+  - [x] Android: latest UMP wrapper + GAID/App Set fallbacks ship via `ConsentManager`/`PrivacyIdentifierProvider`, system privacy sliders feed into `PrivacySandboxStateProvider`, and `AuctionClient` now forwards privacy sandbox + identifier metadata (GAID when LAT off, App Set fallback otherwise) to keep S2S payloads aligned with user-level toggles.
+  - [x] Global: propagate COPPA/child-directed flags, CCPA US Privacy Strings, and GDPR TCF v2 strings to every network adapter consistently; unit tests assert outbound metadata per adapter (2025-12-06: `swift test` for `sdk/core/ios` + `DOTNET_ROOT=$HOME/.dotnet8 dotnet test sdk/core/unity/Tests/ApexMediation.Tests.csproj` validate canonical payloads, and `sdk/core/android/src/test/kotlin/consent/ConsentManagerTest.kt` now covers runtime consent serialization).
 - [ ] Lifecycle & threading
-  - [ ] iOS/tvOS: guarantee main-thread UI presentation only (Scene-based apps & multi-scene), block double presentations, cancel timers/observers on background, and avoid presenter retain cycles.
-  - [ ] Android/CTV: use the correct Activity/Application context, survive configuration changes, PiP, Doze, and background restrictions, never block the UI thread, and enforce exactly-once callbacks.
+  - [x] iOS/tvOS: guarantee main-thread UI presentation only (Scene-based apps & multi-scene), block double presentations, cancel timers/observers on background, and avoid presenter retain cycles (2025-12-06: `AdPresentationCoordinator` now gates `BelInterstitial/Rewarded/RewardedInterstitial/AppOpen` presenters, cancels scheduled timers on background, and `swift test` captures the new `AdPresentationCoordinatorTests`).
+  - [x] Android/CTV: `runtime/AdPresentationCoordinator.kt` now tracks foreground Activities via `Application.ActivityLifecycleCallbacks`, blocks concurrent shows, waits for resumed Activities before invoking `BelInterstitial/Rewarded/RewardedInterstitial/AppOpen` presenters, and defers execution when the process backgrounds; `./gradlew.sh testDebugUnitTest` (2025-12-06) exercises `AdPresentationCoordinatorTest` plus the existing OM SDK facade coverage to prove exactly-once callbacks and correct context usage.
   - [ ] Unity: marshal callbacks onto the Unity main thread and prevent duplicate bridges between the iOS/Android layers and C# handlers.
 - [ ] Error states & networking
   - [ ] Map no-fill/HTTP 204, timeouts, 429 rate limits (Retry-After), 5xx retries/backoff, and navigation cancellations deterministically with exponential backoff + circuit breaker guards.

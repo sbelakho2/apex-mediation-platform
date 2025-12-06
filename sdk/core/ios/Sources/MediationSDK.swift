@@ -65,6 +65,13 @@ public final class MediationSDK: @unchecked Sendable {
         await runtime.setSandboxForceAdapterPipeline(enabled)
     }
 
+    /// BYO-first: Allow host apps to register their own adapter types at runtime (before initialize()).
+    /// This API is available in all build configurations so publishers can bring their own adapters
+    /// without the SDK shipping vendor code.
+    public func registerAdapter(networkName: String, adapterType: AdNetworkAdapter.Type) async {
+        await runtime.registerAdapter(networkName: networkName, adapterType: adapterType)
+    }
+
     /// Update consent state shared across the SDK.
     public func setConsent(_ consent: ConsentData) {
         ConsentManager.shared.setConsent(consent)
@@ -212,6 +219,7 @@ private actor MediationRuntime {
     private let consentManager = ConsentManager.shared
     private var sandboxAdapterWhitelist: Set<String>? = nil
     private var sandboxForceAdapterPipeline = false
+    private var pendingAdapterRegistrations: [(String, AdNetworkAdapter.Type)] = []
 
     init(sdkVersion: String) {
         self.sdkVersion = sdkVersion
@@ -252,6 +260,13 @@ private actor MediationRuntime {
         }
 
         let registry = AdapterRegistry(sdkVersion: sdkVersion)
+        // Apply any adapters registered by the host app before initialization
+        if !pendingAdapterRegistrations.isEmpty {
+            for (name, type) in pendingAdapterRegistrations {
+                registry.registerAdapter(networkName: name, adapterClass: type)
+            }
+            pendingAdapterRegistrations.removeAll()
+        }
         configureAdapters(registry: registry, with: remote)
 
         let telemetryCollector = TelemetryCollector(config: resolvedConfig)
@@ -440,7 +455,9 @@ private actor MediationRuntime {
 
     private func adapterSettingsWithConsent(_ base: [String: Any]) -> [String: Any] {
         var enriched = base
-        let adapterConsent = consentManager.toAdapterConsentPayload()
+        let trackingManager = TrackingAuthorizationManager.shared
+        let attStatus = trackingManager.currentStatus()
+        let adapterConsent = consentManager.toAdapterConsentPayload(attStatusProvider: { attStatus })
         if !adapterConsent.isEmpty {
             enriched["apx_consent_state"] = adapterConsent
         }
@@ -449,6 +466,11 @@ private actor MediationRuntime {
             enriched["apx_consent_metadata"] = requestMetadata
         }
         enriched["apx_can_personalize_ads"] = consentManager.canShowPersonalizedAds()
+        enriched["apx_att_status"] = attStatus.rawValue
+        enriched["apx_limit_ad_tracking"] = trackingManager.isLimitAdTrackingEnabled()
+        if let idfa = trackingManager.advertisingIdentifier() {
+            enriched["apx_idfa"] = idfa
+        }
         if config?.testMode == true {
             enriched["apx_sandbox"] = true
         }
@@ -574,6 +596,15 @@ private actor MediationRuntime {
     func setSandboxForceAdapterPipeline(_ enabled: Bool) {
         sandboxForceAdapterPipeline = enabled
     }
+
+    // MARK: - BYO Adapters
+    func registerAdapter(networkName: String, adapterType: AdNetworkAdapter.Type) {
+        if let registry = adapterRegistry {
+            registry.registerAdapter(networkName: networkName, adapterClass: adapterType)
+        } else {
+            pendingAdapterRegistrations.append((networkName, adapterType))
+        }
+    }
 }
 
 // MARK: - Section 3.3 Enhanced Error Taxonomy
@@ -587,6 +618,7 @@ public enum SDKError: Error, LocalizedError, Equatable {
     case timeout
     case networkError(underlying: String?)
     case internalError(message: String?)
+    case presentationInProgress
     
     // Section 3.3: HTTP status code errors for parity with Android
     case status_429(message: String)
@@ -616,6 +648,8 @@ public enum SDKError: Error, LocalizedError, Equatable {
                 return "Internal error: \(msg)"
             }
             return "Internal error occurred."
+        case .presentationInProgress:
+            return "Another ad is already being presented."
         case .status_429(let message):
             return "Rate limit exceeded (429): \(message)"
         case .status_5xx(let code, let message):

@@ -1,6 +1,6 @@
-# iOS SDK Integration Guide
+# iOS SDK Integration Guide (BYO‑first, single‑entry)
 
-Integrate ApexMediation into your iOS app with Swift or Objective-C.
+Integrate ApexMediation into your iOS or tvOS app using a Bring‑Your‑Own (BYO) adapters model. Core principle: the core SDK ships without any vendor SDKs in Release builds. You register your own adapters at runtime, preserving a single point of entry and simple consent handling.
 
 ---
 
@@ -49,7 +49,9 @@ pod install
 
 ---
 
-## Initial Setup
+## Initial Setup (modern API)
+
+Most new apps should use the modern `MediationSDK` API. Legacy `ApexMediationSDK/ApexMediationConfig` is shown later for backwards compatibility.
 
 ### 1. Configure Info.plist
 
@@ -75,44 +77,44 @@ Add required keys to `Info.plist`:
 </dict>
 ```
 
-### 2. Initialize SDK (Swift)
+### 2. Initialize (Swift, BYO‑first single‑entry)
 
-In your `AppDelegate.swift`:
+In your app bootstrap (e.g., `AppDelegate` or first scene), register BYO adapters before initialize if you have adapter modules. Then initialize once.
 
 ```swift
-import UIKit
-import ApexMediationSDK
+import RivalApexMediationSDK
 
 @main
 class AppDelegate: UIResponder, UIApplicationDelegate {
+  func application(_ application: UIApplication,
+                   didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
+    Task {
+      // Optional: Register your BYO adapters prior to initialize (example types)
+      // await MediationSDK.shared.registerAdapter(networkName: "admob", adapterType: PublisherAdMobAdapter.self)
+      // await MediationSDK.shared.registerAdapter(networkName: "applovin", adapterType: PublisherAppLovinAdapter.self)
 
-    func application(
-        _ application: UIApplication,
-        didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
-    ) -> Bool {
+      // Build config (use defaults unless you need overrides)
+      let cfg = SDKConfig.default(appId: "your-app-id")
+      _ = try await MediationSDK.shared.initialize(appId: cfg.appId, configuration: cfg)
 
-        // Configure SDK
-        let config = ApexMediationConfig(
-            publisherId: "YOUR_PUBLISHER_ID",
-            apiKey: "YOUR_API_KEY"
-        )
-        config.testMode = true // Remove in production
+      // Consent: keep it simple and central
+      MediationSDK.shared.setConsent(ConsentData(
+        gdprApplies: true,
+        gdprConsentString: "<TCF string>",
+        ccpaOptOut: false,
+        limitAdTracking: false
+      ))
 
-        // Initialize
-        ApexMediationSDK.initialize(with: config) { success in
-            if success {
-                print("ApexMediation initialized successfully")
-            } else {
-                print("ApexMediation initialization failed")
-            }
-        }
-
-        return true
+      // (Optional, DEBUG/testing) Force adapter pipeline and/or restrict to a single network
+      await MediationSDK.shared.setSandboxForceAdapterPipeline(true)
+      await MediationSDK.shared.setSandboxAdapterWhitelist(["admob"]) // e.g., iterate adapters in a sandbox
     }
+    return true
+  }
 }
 ```
 
-### 3. Initialize SDK (Objective-C)
+### 3. Initialize SDK (Objective‑C, legacy)
 
 In your `AppDelegate.m`:
 
@@ -191,7 +193,7 @@ override func viewDidAppear(_ animated: Bool) {
 
 ---
 
-## Ad Formats
+## Ad Formats (facade components)
 
 ### Banner Ads
 
@@ -502,7 +504,20 @@ func application(
 
 ---
 
-## GDPR Compliance
+## Consent & privacy (GDPR/CCPA/COPPA/LAT)
+
+For the modern API, set a single consent object. The SDK normalizes and forwards the data to adapters and (if enabled) S2S.
+
+```swift
+MediationSDK.shared.setConsent(ConsentData(
+  gdprApplies: true,
+  gdprConsentString: "<TCF>",
+  ccpaOptOut: false,
+  limitAdTracking: false
+))
+```
+
+If you use the legacy facade (`ApexMediationSDK`), the older helpers remain available. New apps should prefer the modern call above.
 
 ```swift
 import ApexMediationSDK
@@ -540,16 +555,25 @@ config.coppaCompliant = true // Disables personalized ads
 
 ---
 
-## Testing
+## Testing & sandbox (BYO adapters)
 
-### Test Mode
+### Adapter Dev Kit (iOS/tvOS)
+
+Use the iOS/tvOS Adapter Dev Kit to validate adapters without shipping them in the core:
+
+```bash
+pushd sdk/adapter-dev-kit/ios
+xcrun swift run apex-adapter-runner --adapter admob \
+  --appId test-app --inter test_interstitial --reward test_rewarded --timeout 10
+popd
+```
+
+### Sandbox flags (DEBUG/testing)
 
 ```swift
-let config = ApexMediationConfig(
-    publisherId: "YOUR_PUBLISHER_ID",
-    apiKey: "YOUR_API_KEY"
-)
-config.testMode = true // Remove in production!
+await MediationSDK.shared.setSandboxForceAdapterPipeline(true)
+await MediationSDK.shared.setSandboxAdapterWhitelist(["admob"]) // or iterate returned names from adapterNames()
+let names = await MediationSDK.shared.adapterNames()
 ```
 
 ### Test Device
@@ -637,3 +661,10 @@ ApexMediationAnalytics.logPurchase(
 **Last Updated**: November 2025
 **SDK Version**: 2.0.0
 **iOS Version**: 12.0+
+
+---
+
+### Notes
+- BYO‑first: the core Release artifact does not include vendor SDKs. Register your adapters at runtime from your app or private modules.
+- Single‑entry: call `MediationSDK.initialize(...)` once per app session; all load/show calls go through the same instance.
+- tvOS: no ATT prompt; focus/remote navigation differ; otherwise the integration is identical. Use the same BYO registration and sandbox flags.

@@ -3,13 +3,17 @@ package com.rivalapexmediation.sdk
 import android.app.Activity
 import android.content.Context
 import androidx.annotation.NonNull
+import com.rivalapexmediation.sdk.logging.Logger
 import com.rivalapexmediation.sdk.models.Ad
+import com.rivalapexmediation.sdk.models.AdType
+import com.rivalapexmediation.sdk.runtime.AdPresentationCoordinator
 
 /**
  * Simple, stable public API for Rewarded ads, backed by MediationSDK.
  * Mirrors BelInterstitial ergonomics.
  */
 object BelRewarded {
+    private const val TAG = "BelRewarded"
     @Volatile private var lastPlacement: String? = null
 
     @JvmStatic
@@ -25,19 +29,24 @@ object BelRewarded {
     fun show(@NonNull activity: Activity): Boolean {
         val placement = lastPlacement ?: return false
         val sdk = MediationSDK.getInstance()
-        val ad: Ad = sdk.consumeCachedAd(placement) ?: return false
-        if (sdk.renderAd(ad, activity)) {
-            return true
+        val preview = sdk.getCachedAd(placement) ?: return false
+        return AdPresentationCoordinator.begin(activity, placement, preview.adType) { hostActivity ->
+            val ad: Ad = sdk.consumeCachedAd(placement) ?: run {
+                Logger.w(TAG, "cached ad missing when attempting to present placement=$placement")
+                return@begin false
+            }
+            if (sdk.renderAd(ad, hostActivity)) {
+                return@begin true
+            }
+            try {
+                com.rivalapexmediation.sdk.measurement.OmSdkRegistry.controller.startVideoSession(
+                    hostActivity, placement, ad.networkName, durationSec = null
+                )
+            } catch (_: Throwable) {}
+            ad.show(hostActivity)
+            try { com.rivalapexmediation.sdk.measurement.OmSdkRegistry.controller.endSession(placement) } catch (_: Throwable) {}
+            true
         }
-        // Start OM session (video/rewarded assumed)
-        try {
-            com.rivalapexmediation.sdk.measurement.OmSdkRegistry.controller.startVideoSession(
-                activity, placement, ad.networkName, durationSec = null
-            )
-        } catch (_: Throwable) {}
-        ad.show(activity) // Placeholder: real rewarded flow handled by creative/ad renderer
-        try { com.rivalapexmediation.sdk.measurement.OmSdkRegistry.controller.endSession(placement) } catch (_: Throwable) {}
-        return true
     }
 
     @JvmStatic

@@ -44,7 +44,27 @@ namespace Apex.Mediation.Consent
 
         public bool CanShowPersonalizedAds()
         {
-            return _current.GdprApplies != true || !string.IsNullOrEmpty(_current.TcfString);
+            if (_current.CoppaApplies == true)
+            {
+                return false;
+            }
+
+            if (IsUsPrivacyOptOut(_current.UsPrivacyString))
+            {
+                return false;
+            }
+
+            if (_current.LimitAdTracking == true)
+            {
+                return false;
+            }
+
+            if (_current.GdprApplies == true)
+            {
+                return !string.IsNullOrEmpty(_current.TcfString);
+            }
+
+            return true;
         }
 
         private void Merge(ConsentOptions incoming)
@@ -68,6 +88,32 @@ namespace Apex.Mediation.Consent
             {
                 _current.UsPrivacyString = incoming.UsPrivacyString;
             }
+
+            if (incoming.GdprApplies.HasValue)
+            {
+                _current.GdprApplies = incoming.GdprApplies;
+            }
+
+            if (incoming.CoppaApplies.HasValue)
+            {
+                _current.CoppaApplies = incoming.CoppaApplies;
+            }
+
+            if (incoming.LimitAdTracking.HasValue)
+            {
+                _current.LimitAdTracking = incoming.LimitAdTracking;
+            }
+        }
+
+        private static bool IsUsPrivacyOptOut(string? usp)
+        {
+            if (string.IsNullOrWhiteSpace(usp) || usp!.Length < 2)
+            {
+                return false;
+            }
+
+            var flag = char.ToUpperInvariant(usp[1]);
+            return flag == 'Y';
         }
     }
 }

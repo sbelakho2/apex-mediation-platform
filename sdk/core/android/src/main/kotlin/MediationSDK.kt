@@ -18,7 +18,9 @@ import okhttp3.CertificatePinner
 import okhttp3.OkHttpClient
 import com.rivalapexmediation.sdk.config.ConfigManager
 import com.rivalapexmediation.sdk.consent.ConsentManager
+import com.rivalapexmediation.sdk.consent.UmpConsentClient
 import com.rivalapexmediation.sdk.contract.AdHandle
+import com.rivalapexmediation.sdk.contract.AdNetworkAdapterV2
 import com.rivalapexmediation.sdk.contract.AdapterError
 import com.rivalapexmediation.sdk.contract.AdapterConfig as RuntimeAdapterConfig
 import com.rivalapexmediation.sdk.contract.AdapterCredentials as RuntimeAdapterCredentials
@@ -42,6 +44,9 @@ import com.rivalapexmediation.sdk.telemetry.TelemetryCollector
 import com.rivalapexmediation.sdk.models.*
 import com.rivalapexmediation.sdk.threading.CircuitBreaker
 import com.rivalapexmediation.sdk.network.AuctionClient
+import com.rivalapexmediation.sdk.privacy.PrivacyIdentifierProvider
+import com.rivalapexmediation.sdk.privacy.PrivacyIdentifiers
+import com.rivalapexmediation.sdk.privacy.PrivacySandboxStateProvider
 import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.runBlocking
 
@@ -138,6 +143,8 @@ class MediationSDK private constructor(
     }
     private val telemetry = TelemetryCollector(context, config)
     private val adapterRegistry = AdapterRegistry()
+    private val privacyIdentifierProvider = PrivacyIdentifierProvider(context)
+    private val privacySandboxStateProvider = PrivacySandboxStateProvider(context)
     private val sessionDepth = AtomicInteger(0)
     private val runtimeHandles = ConcurrentHashMap<String, RuntimeHandleBinding>()
     private val runtimeShowCallbacks = object : RewardedCallbacks {
@@ -159,6 +166,9 @@ class MediationSDK private constructor(
     @Volatile private var testModeOverride: Boolean? = null
     @Volatile private var testDeviceId: String? = null
     @Volatile private var adapterConfigProvider: AdapterConfigProvider? = null
+    // Sandbox controls (DEBUG/CI/testing): adapter whitelist and force adapter pipeline
+    @Volatile private var sandboxAdapterWhitelist: Set<String>? = null
+    @Volatile private var sandboxForceAdapterPipeline: Boolean = false
 
     // Debug/diagnostic getters used by DebugPanel (safe, read-only)
     fun getAppId(): String = config.appId
@@ -213,14 +223,23 @@ class MediationSDK private constructor(
         usPrivacy: String? = null,
         coppa: Boolean? = null,
         limitAdTracking: Boolean? = null,
+        privacySandboxOptIn: Boolean? = null,
     ) {
-        this.consentState = ConsentManager.normalize(
+        val previous = consentState
+        val normalized = ConsentManager.normalize(
             tcf = consentString,
             usp = usPrivacy,
             gdprApplies = gdprApplies,
             coppa = coppa,
-            limitAdTracking = limitAdTracking,
+            limitAdTracking = limitAdTracking ?: previous.limitAdTracking,
+            privacySandboxOptIn = privacySandboxOptIn ?: previous.privacySandboxOptIn,
         )
+        val updated = ConsentManager.attachIdentifiers(normalized, previous.identifiers)
+        this.consentState = updated
+        applyPrivacySandboxSnapshot()
+        if (ConsentManager.shouldRefetchIdentifiers(previous, limitAdTracking)) {
+            refreshPrivacyIdentifiers(overrideLimitAdTracking = false)
+        }
     }
 
     /**
@@ -229,6 +248,84 @@ class MediationSDK private constructor(
      */
     fun setAdapterConfigProvider(provider: AdapterConfigProvider?) {
         adapterConfigProvider = provider
+    }
+
+    // Sandbox: restrict adapters to a specific set (BYO/debug/testing). Pass null or empty to clear.
+    fun setSandboxAdapterWhitelist(names: List<String>?) {
+        sandboxAdapterWhitelist = names?.map { it.lowercase() }?.toSet()?.takeIf { it.isNotEmpty() }
+    }
+
+    // Sandbox: force adapter pipeline even in test mode (skip S2S path)
+    fun setSandboxForceAdapterPipeline(enabled: Boolean) {
+        sandboxForceAdapterPipeline = enabled
+    }
+
+    // Diagnostics: list registered adapter names
+    fun getAdapterNames(): List<String> = adapterRegistry.getRegisteredNetworks().map { it.lowercase() }.sorted()
+
+    // BYO: allow host apps to register a runtime adapter factory before initialize()
+    fun registerRuntimeAdapterFactory(network: String, factory: (Context) -> AdNetworkAdapterV2) {
+        adapterRegistry.registerRuntimeAdapterFactory(network.lowercase(), factory)
+    }
+
+    fun refreshPrivacyIdentifiers(
+        callback: ((PrivacyIdentifiers) -> Unit)? = null,
+        overrideLimitAdTracking: Boolean? = null
+    ) {
+        val task = Runnable {
+            try {
+                val optOut = overrideLimitAdTracking ?: (consentState.limitAdTracking == true)
+                val ids = privacyIdentifierProvider.collect(optOut)
+                val identifierState = ConsentManager.fromPrivacyIdentifiers(ids)
+                consentState = ConsentManager.attachIdentifiers(consentState, identifierState)
+                applyPrivacySandboxSnapshot()
+                callback?.let { postToMainThread { it(ids) } }
+            } catch (t: Throwable) {
+                telemetry.recordError("identifier_refresh_failed", t)
+            }
+        }
+        if (isTestRuntime()) task.run() else backgroundExecutor.execute(task)
+    }
+
+    fun requestGoogleConsent(
+        activity: Activity,
+        params: UmpConsentClient.Params = UmpConsentClient.Params(),
+        callback: UmpConsentClient.Callback
+    ) {
+        val client = UmpConsentClient(activity)
+        client.request(params, object : UmpConsentClient.Callback {
+            override fun onConsentUpdated(state: ConsentManager.State) {
+                consentState = ConsentManager.attachIdentifiers(state, consentState.identifiers)
+                callback.onConsentUpdated(consentState)
+                applyPrivacySandboxSnapshot()
+                refreshPrivacyIdentifiers(null)
+            }
+
+            override fun onConsentUpdateFailed(throwable: Throwable) {
+                callback.onConsentUpdateFailed(throwable)
+            }
+        })
+    }
+
+    private fun applyPrivacySandboxSnapshot() {
+        val snapshot = privacySandboxStateProvider.snapshot()
+        var updated = consentState
+        var changed = false
+        snapshot.sandboxEnabled?.let {
+            if (updated.privacySandboxOptIn != it) {
+                updated = updated.copy(privacySandboxOptIn = it)
+                changed = true
+            }
+        }
+        snapshot.adIdEnabled?.let { adIdEnabled ->
+            if (!adIdEnabled && updated.limitAdTracking != true) {
+                updated = updated.copy(limitAdTracking = true)
+                changed = true
+            }
+        }
+        if (changed) {
+            consentState = updated
+        }
     }
 
     /**
@@ -335,6 +432,7 @@ class MediationSDK private constructor(
     }
 
     private fun shouldUseS2SForPlacement(placementConfig: PlacementConfig): Boolean {
+        if (sandboxForceAdapterPipeline) return false
         if (!config.enableS2SWhenCapable) return false
         if (auctionApiKey.isBlank()) return false
         return if (config.sdkMode == SdkMode.BYO) {
@@ -422,6 +520,9 @@ class MediationSDK private constructor(
 
                 // Record initialization time
                 telemetry.recordInitialization()
+
+                // Prefetch privacy-friendly identifiers off the UI thread
+                refreshPrivacyIdentifiers()
 
                 // Developer-only banner warning for app-ads.txt issues (flag propagated via remote config).
                 // SDK never calls the inspector; this is purely a UI hint controlled by console.
@@ -575,8 +676,10 @@ class MediationSDK private constructor(
                 }
 
                 // 2) Adapter fallback: prefer runtime V2 adapters, fallback to legacy when needed.
-                val runtimeEntries = adapterRegistry.getRuntimeAdapters(placementConfig.enabledNetworks)
-                val legacyAdapters = getEnabledAdapters(placementConfig)
+                val enabledNetworks = applyAdapterWhitelist(placementConfig.enabledNetworks)
+                val runtimeEntries = adapterRegistry.getRuntimeAdapters(enabledNetworks)
+                val legacyAdapters = enabledNetworks.mapNotNull { adapterRegistry.getAdapter(it) }
+                    .filter { adapter -> adapter.isAvailable() && !isAdapterInCircuit(adapter) }
 
                 if (runtimeEntries.isEmpty() && legacyAdapters.isEmpty()) {
                     postToMainThread {
@@ -757,6 +860,15 @@ class MediationSDK private constructor(
     private fun isAdapterInCircuit(adapter: AdAdapter): Boolean {
         return circuitBreakers[adapter.name]?.isOpen() ?: false
     }
+
+    /**
+     * Apply sandbox adapter whitelist if present; otherwise, return networks unchanged.
+     */
+    private fun applyAdapterWhitelist(networks: List<String>): List<String> {
+        val wl = sandboxAdapterWhitelist
+        if (wl == null || wl.isEmpty()) return networks
+        return networks.filter { wl.contains(it.lowercase()) }
+    }
     
     /**
      * Select best ad based on eCPM
@@ -903,7 +1015,9 @@ class MediationSDK private constructor(
         )
         val user = RuntimeUserMeta(
             ageRestricted = consent.coppa,
-            consent = consent
+            consent = consent,
+            advertisingId = consent.advertisingId?.takeIf { !consent.limitAdTracking },
+            appSetId = consent.appSetId
         )
         val net = RuntimeNetworkMeta(
             ipPrefixed = "",

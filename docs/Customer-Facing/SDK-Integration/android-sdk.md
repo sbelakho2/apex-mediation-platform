@@ -1,8 +1,8 @@
-# Android SDK Integration Guide
+# Android SDK Integration Guide (BYO-first, single-entry)
 
 _Last updated: 2025-11-21_
 
-This guide explains how to integrate the ApexMediation Android SDK (`sdk/core/android`) with a BYO-first posture, optional server-to-server (S2S) auctions, normalized consent plumbing, and runtime adapter rendering.
+This guide explains how to integrate the ApexMediation Android SDK (`sdk/core/android`) with a Bring‑Your‑Own (BYO) adapters posture, optional server‑to‑server (S2S) auctions, normalized consent plumbing, and runtime adapter rendering — while keeping a single entry point and simple consent.
 
 ---
 
@@ -87,6 +87,31 @@ class SampleApp : Application() {
 
 `BelAds.initialize(...)` is idempotent. If you hot-reload config in tests the SDK tears down adapters, telemetry, and caches before re-instantiating.
 
+### 4.1 BYO adapters (runtime registration)
+
+The core Release artifact does not ship vendor SDKs. You register adapters from your app or a private module at runtime before initialization:
+
+```kotlin
+class SampleApp : Application() {
+  override fun onCreate() {
+    super.onCreate()
+
+    // Register BYO adapter factories (example types; you own these modules)
+    MediationSDK.registerRuntimeAdapterFactory("admob") { ctx -> PublisherAdMobAdapter(ctx) }
+    MediationSDK.registerRuntimeAdapterFactory("applovin") { ctx -> PublisherAppLovinAdapter(ctx) }
+
+    val cfg = SDKConfig.Builder()
+      .appId("publisher-demo-app")
+      .sdkMode(SdkMode.BYO)
+      .build()
+
+    BelAds.initialize(this, cfg.appId, cfg)
+  }
+}
+```
+
+Release safety: vendor SDK dependencies live in your modules, not in the ApexMediation core. In Release, no default adapters are registered by the core.
+
 ---
 
 ## 5. Operating modes & S2S
@@ -141,6 +166,22 @@ BelAds.setConsent(
 ```
 
 `MediationSDK.currentAuctionConsent()` maps these values into S2S metadata, while runtime adapters receive the same via `RuntimeAdapterConfig.privacy`.
+
+### Sandbox flags (DEBUG/testing only)
+
+To exercise one adapter at a time and/or to bypass S2S in tests:
+
+```kotlin
+// Force client adapters even if S2S would be eligible
+MediationSDK.setSandboxForceAdapterPipeline(true)
+
+// Restrict selection to specific adapters
+MediationSDK.setSandboxAdapterWhitelist(listOf("admob"))
+
+// Diagnostics: see which adapters are registered
+val names: List<String> = MediationSDK.getAdapterNames()
+Log.d("Apex", "registeredAdapters=$names")
+```
 
 ---
 
@@ -255,6 +296,10 @@ Key points:
   ```
 - The primary CI job also runs `strictmodeSmoke`, Dokka (`generateApiDocs`), and an AAR size gate. Ensure these pass before release candidates.
 
+### Conformance suites and runbooks
+- iOS/tvOS Adapter Dev Kit and CLI runner: see `docs/Developer-Facing/AdapterDevKit.md` for cross‑platform parity, and how to validate adapters end‑to‑end without bundling them in core.
+- Networked sandbox testing (console/site/billing/VRA/soak): see `docs/Internal/QA/networked-sandbox-runbook-2025-12-06.md`.
+
 ---
 
 ## 12. Troubleshooting checklist
@@ -281,3 +326,12 @@ JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 ./gradlew generateApiDocs
 ```
 
 Need help? Reach out via the console’s Support workspace with your app ID, SDK log snippet, and consent state summary from the debug panel.
+
+---
+
+### BYO-first at a glance
+- Core Release ships with zero vendor adapters (no binaries bundled).
+- Register adapters via `registerRuntimeAdapterFactory(...)` before init.
+- Keep a single entry (`BelAds.initialize(...)`) in `Application.onCreate`.
+- Set consent once (`BelAds.setConsent(...)`); the SDK normalizes and forwards it.
+- Use sandbox flags in DEBUG to iterate adapters quickly and to bypass S2S deterministically.

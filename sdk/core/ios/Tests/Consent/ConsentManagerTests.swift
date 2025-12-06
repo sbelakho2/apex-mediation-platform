@@ -26,6 +26,7 @@ final class ConsentManagerTests: XCTestCase {
         let consent = ConsentData(
             gdprApplies: true,
             gdprConsentString: "test-string",
+            usPrivacyString: "1YNN",
             ccpaOptOut: true,
             coppa: false
         )
@@ -35,6 +36,7 @@ final class ConsentManagerTests: XCTestCase {
         
         XCTAssertEqual(retrieved.gdprApplies, true)
         XCTAssertEqual(retrieved.gdprConsentString, "test-string")
+        XCTAssertEqual(retrieved.usPrivacyString, "1YNN")
         XCTAssertEqual(retrieved.ccpaOptOut, true)
         XCTAssertEqual(retrieved.coppa, false)
     }
@@ -78,6 +80,12 @@ final class ConsentManagerTests: XCTestCase {
         let canShow = ConsentManager.shared.canShowPersonalizedAds()
         XCTAssertFalse(canShow, "CCPA opt-out should prevent personalized ads")
     }
+
+    func testCanShowPersonalizedAds_UsesRawUSPrivacyString() {
+        let consent = ConsentData(usPrivacyString: "1YNN", ccpaOptOut: false)
+        ConsentManager.shared.setConsent(consent)
+        XCTAssertFalse(ConsentManager.shared.canShowPersonalizedAds())
+    }
     
     func testCanShowPersonalizedAds_GDPRWithConsent() {
         let consent = ConsentData(
@@ -120,6 +128,13 @@ final class ConsentManagerTests: XCTestCase {
         XCTAssertEqual(metadata["us_privacy"] as? String, "1YNN")
     }
     
+    func testToAdRequestMetadata_UsesProvidedUSPrivacyString() {
+        let consent = ConsentData(usPrivacyString: "1N--", ccpaOptOut: false)
+        ConsentManager.shared.setConsent(consent)
+        let metadata = ConsentManager.shared.toAdRequestMetadata()
+        XCTAssertEqual(metadata["us_privacy"] as? String, "1N--")
+    }
+    
     func testToAdRequestMetadata_COPPA() {
         let consent = ConsentData(coppa: true)
         ConsentManager.shared.setConsent(consent)
@@ -133,6 +148,7 @@ final class ConsentManagerTests: XCTestCase {
         let consent = ConsentData(
             gdprApplies: true,
             gdprConsentString: "sensitive-string-should-be-redacted",
+            usPrivacyString: "1YYN",
             ccpaOptOut: true,
             coppa: false
         )
@@ -142,6 +158,7 @@ final class ConsentManagerTests: XCTestCase {
         
         XCTAssertEqual(redacted["gdprApplies"] as? Bool, true)
         XCTAssertEqual(redacted["gdprConsentString"] as? String, "<redacted>")
+        XCTAssertEqual(redacted["usPrivacyString"] as? String, "<redacted>")
         XCTAssertEqual(redacted["ccpaOptOut"] as? Bool, true)
         XCTAssertEqual(redacted["coppa"] as? Bool, false)
     }
@@ -150,12 +167,14 @@ final class ConsentManagerTests: XCTestCase {
         let consent = ConsentData(
             gdprApplies: true,
             gdprConsentString: "consent-string",
+            usPrivacyString: "1---",
             ccpaOptOut: false,
             coppa: false
         )
         ConsentManager.shared.setConsent(consent)
         let payload = ConsentManager.shared.toAdapterConsentPayload { .authorized }
         XCTAssertEqual(payload["iab_tcf_v2"] as? String, "consent-string")
+        XCTAssertEqual(payload["iab_us_privacy"] as? String, "1---")
         XCTAssertEqual(payload["att_status"] as? String, ATTStatus.authorized.rawValue)
         XCTAssertEqual(payload["limit_ad_tracking"] as? Bool, false)
     }

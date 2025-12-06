@@ -48,15 +48,29 @@ public enum BelAppOpen {
             listener?.onAdFailedToShow(placementId: placement, error: SDKError.noFill)
             return false
         }
+
+        let presentationToken: AdPresentationCoordinator.Token
+        do {
+            presentationToken = try AdPresentationCoordinator.shared.beginPresentation(placementId: placement)
+        } catch {
+            listener?.onAdFailedToShow(placementId: placement, error: error)
+            return false
+        }
         
         Task { @MainActor in
             guard let ad = await MediationSDK.shared.claimAd(placementId: placement) else {
+                AdPresentationCoordinator.shared.finishPresentation(presentationToken)
                 listener?.onAdFailedToShow(placementId: placement, error: SDKError.noFill)
                 return
             }
             lastShowTime = Date()
             listener?.onAdShown(placementId: placement)
+            SKAdNetworkCoordinator.shared.recordImpression(
+                for: ad,
+                presentingScene: viewController.view.window?.windowScene
+            )
             presentDebugAppOpen(from: viewController, networkName: ad.networkName) {
+                AdPresentationCoordinator.shared.finishPresentation(presentationToken)
                 listener?.onAdClosed(placementId: placement)
             }
         }
@@ -95,12 +109,16 @@ public enum BelAppOpen {
         ])
         
         viewController.present(vc, animated: true) {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-                vc.dismiss(animated: true, completion: completion)
+            AdPresentationCoordinator.shared.schedule(after: 2.0) { [weak vc] in
+                guard let placeholder = vc else {
+                    completion()
+                    return
+                }
+                placeholder.dismiss(animated: true, completion: completion)
             }
         }
         #else
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: completion)
+        AdPresentationCoordinator.shared.schedule(after: 0.5, perform: completion)
         #endif
     }
 }

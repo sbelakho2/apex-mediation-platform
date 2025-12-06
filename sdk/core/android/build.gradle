@@ -87,6 +87,11 @@ dependencies {
     implementation "com.squareup.okhttp3:okhttp:4.12.0"
     implementation "com.google.code.gson:gson:2.10.1"
 
+    // Privacy/consent services
+    implementation "com.google.android.gms:play-services-ads-identifier:18.1.0"
+    implementation "com.google.android.gms:play-services-appset:16.0.2"
+    implementation "com.google.android.ump:user-messaging-platform:2.2.0"
+
     // Crypto (optional fallback via reflection only; do not ship at runtime)
     compileOnly "com.google.crypto.tink:tink-android:1.11.0"
 

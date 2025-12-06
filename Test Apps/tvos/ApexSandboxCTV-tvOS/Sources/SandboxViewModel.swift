@@ -14,6 +14,8 @@ final class SandboxViewModel: ObservableObject {
         let appId: String
         let placements: Placements
         let testMode: Bool
+        let adapterWhitelist: [String]?
+        let forceAdapterPipeline: Bool?
     }
 
     private(set) var config: Config = .init(
@@ -44,6 +46,15 @@ final class SandboxViewModel: ObservableObject {
             )
             try MediationSDK.shared.initializeSync(appId: config.appId, configuration: cfg)
             initialized = MediationSDK.shared.isInitialized
+            Task { @MainActor in
+                await MediationSDK.shared.setSandboxForceAdapterPipeline(config.forceAdapterPipeline ?? true)
+                if let names = config.adapterWhitelist, !names.isEmpty {
+                    await MediationSDK.shared.setSandboxAdapterWhitelist(names)
+                    log("adapter_whitelist set=\(names.joined(separator: ",")) platform=tvos")
+                }
+                let names = await MediationSDK.shared.adapterNames()
+                log("adapters registered=\(names.joined(separator: ",")) platform=tvos")
+            }
             log("initialize ok platform=tvos")
         } catch {
             lastError = "Initialize failed: \(error.localizedDescription)"

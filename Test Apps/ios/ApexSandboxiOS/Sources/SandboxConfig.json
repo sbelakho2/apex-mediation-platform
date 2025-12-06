@@ -11,5 +11,9 @@
     "ccpa": false,
     "coppa": false,
     "lat": true
-  }
+  },
+  "appId": "sandbox-app-ios",
+  "testMode": true,
+  "forceAdapterPipeline": true,
+  "adapterWhitelist": ["admob"]
 }

@@ -14,6 +14,24 @@ public enum BelAds {
     public static var isInitialized: Bool {
         return MediationSDK.shared.isInitialized
     }
+
+    /// Current ATT authorization state for UI surfaces/debug screens.
+    public static func trackingAuthorizationStatus() -> ATTStatus {
+        TrackingAuthorizationManager.shared.currentStatus()
+    }
+
+    /// Awaitable ATT authorization request helper for host apps.
+    public static func requestTrackingAuthorization() async -> ATTStatus {
+        await TrackingAuthorizationManager.shared.requestAuthorizationIfNeeded()
+    }
+
+    /// Completion-based ATT authorization helper to match legacy codebases.
+    public static func requestTrackingAuthorization(completion: @escaping (ATTStatus) -> Void) {
+        Task { @MainActor in
+            let status = await TrackingAuthorizationManager.shared.requestAuthorizationIfNeeded()
+            completion(status)
+        }
+    }
     
     /// Initialize the Apex Mediation SDK
     /// - Parameters:

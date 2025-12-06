@@ -11,6 +11,32 @@ struct ContentView: View {
                 VStack(alignment: .leading, spacing: 16) {
                     header
 
+                    GroupBox(label: Text("Adapters")) {
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack {
+                                Picker("Adapter", selection: $vm.selectedAdapter) {
+                                    ForEach(vm.adapterNamesList, id: \.self) { name in
+                                        Text(name).tag(Optional(name))
+                                    }
+                                }
+                                .pickerStyle(.menu)
+                                .frame(maxWidth: 240)
+                                Button("Refresh list") { vm.refreshAdapters() }
+                                    .buttonStyle(.bordered)
+                                    .disabled(!vm.isInitialized)
+                            }
+                            HStack(spacing: 12) {
+                                Button("Run Selected (Interstitial)") { vm.runSelectedAdapterInterstitial() }
+                                    .buttonStyle(.bordered)
+                                    .disabled(!vm.isInitialized)
+                                Button("Run All") { vm.runAllAdapters() }
+                                    .buttonStyle(.borderedProminent)
+                                    .disabled(!vm.isInitialized)
+                            }
+                        }
+                        .padding(.top, 4)
+                    }
+
                     GroupBox(label: Text("Lifecycle")) {
                         VStack(alignment: .leading, spacing: 8) {
                             HStack {

@@ -82,6 +82,50 @@ namespace ApexSandboxUnity
             }
         }
 
+        // Sandbox controls (BYO/testing): adapter whitelist and force adapter pipeline
+        public static void SetSandboxAdapterWhitelist(string[] names)
+        {
+            try
+            {
+#if UNITY_IOS && !UNITY_EDITOR
+                var payload = names != null ? string.Join(",", names) : "";
+                apex_set_sandbox_adapter_whitelist(payload);
+#elif UNITY_ANDROID && !UNITY_EDITOR
+                using (var bridge = new AndroidJavaClass("ee.apexmediation.unity.Bridge"))
+                {
+                    bridge.CallStatic("setSandboxAdapterWhitelist", (object)names);
+                }
+#else
+                Debug.Log($"[SdkBridge] Sandbox whitelist set: [{string.Join(",", names ?? new string[0])}]");
+#endif
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning($"[SdkBridge] setSandboxAdapterWhitelist not available: {e.Message}");
+            }
+        }
+
+        public static void SetSandboxForceAdapterPipeline(bool enabled)
+        {
+            try
+            {
+#if UNITY_IOS && !UNITY_EDITOR
+                apex_set_sandbox_force_adapter_pipeline(enabled);
+#elif UNITY_ANDROID && !UNITY_EDITOR
+                using (var bridge = new AndroidJavaClass("ee.apexmediation.unity.Bridge"))
+                {
+                    bridge.CallStatic("setSandboxForceAdapterPipeline", enabled);
+                }
+#else
+                Debug.Log($"[SdkBridge] Sandbox force adapter pipeline: {enabled}");
+#endif
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning($"[SdkBridge] setSandboxForceAdapterPipeline not available: {e.Message}");
+            }
+        }
+
         public static void LoadInterstitial(string placementId)
         {
             if (!_initialized) { Debug.LogWarning("[SdkBridge] LoadInterstitial before initialize"); return; }
@@ -154,6 +198,8 @@ namespace ApexSandboxUnity
 #if UNITY_IOS && !UNITY_EDITOR
         [DllImport("__Internal")] private static extern void apex_init(string appId, bool testMode);
         [DllImport("__Internal")] private static extern void apex_set_consent(string json);
+        [DllImport("__Internal")] private static extern void apex_set_sandbox_adapter_whitelist(string csvNames);
+        [DllImport("__Internal")] private static extern void apex_set_sandbox_force_adapter_pipeline(bool enabled);
         [DllImport("__Internal")] private static extern void apex_load_interstitial(string placementId);
         [DllImport("__Internal")] private static extern void apex_show_interstitial(string placementId);
         [DllImport("__Internal")] private static extern void apex_load_rewarded(string placementId);

@@ -1,3 +1,68 @@
+Changelog — Android Presentation Guardrails (2025-12-06)
+
+Summary
+- Added an Android `AdPresentationCoordinator` that enforces one fullscreen show at a time, waits for resumed Activities, and pauses when the process backgrounds so lifecycle/threading requirements match the new iOS coordinator.
+- Updated every Android facade (`BelInterstitial/Rewarded/RewardedInterstitial/AppOpen`) to reserve the coordinator slot before consuming cached ads, log cache races, and keep OM SDK session hooks on the guarded path.
+- Documented the Android lifecycle evidence in the production readiness checklist alongside the Gradle test command that now gates the module.
+
+What changed
+- Android SDK: `sdk/core/android/src/main/kotlin/runtime/AdPresentationCoordinator.kt` registers `Application.ActivityLifecycleCallbacks`, tracks resumed/foreground Activities, blocks concurrent requests, and exposes `begin` for facades to run UI work on the main thread only when the host Activity is safe.
+- Android SDK: `BelInterstitial.kt`, `BelRewarded.kt`, `BelRewardedInterstitial.kt`, and `BelAppOpen.kt` peek at the cache before calling `AdPresentationCoordinator.begin`, emit diagnostics when ads disappear, and continue to start/stop OM sessions after the coordinator hands off.
+- Tests: `sdk/core/android/src/test/kotlin/runtime/AdPresentationCoordinatorTest.kt` covers immediate vs deferred presentations and rejects overlapping shows; existing OM SDK facade tests continue to pass under the new guard.
+- Docs: `docs/Internal/Deployment/PRODUCTION_READINESS_CHECKLIST.md` now marks the 0.0.14 Android/CTV lifecycle row complete with `./gradlew.sh testDebugUnitTest` as evidence.
+
+Validation
+- `cd sdk/core/android && ./gradlew.sh testDebugUnitTest`
+
+---
+
+Changelog — iOS Presentation Guardrails (2025-12-06)
+
+Summary
+- Added `AdPresentationCoordinator` to centralize iOS/tvOS ad presentation lifecycle, ensuring every facade shows on the main actor, blocks concurrent shows, and cancels scheduled timers when the app backgrounds.
+- Updated `BelInterstitial`, `BelRewarded`, `BelRewardedInterstitial`, and `BelAppOpen` to reserve the coordinator slot before claiming ads, release it when the UI closes, and route debug timers through the coordinator, satisfying the 0.0.14 lifecycle requirement.
+
+What changed
+- iOS SDK: `sdk/core/ios/Sources/Facades/AdPresentationCoordinator.swift` (new) listens for `UIApplication.didEnterBackground`, tracks active tokens, and exposes a scheduler API so debug placeholders don’t leak timers or retain controllers after dismissal.
+- iOS SDK: facade `show` methods now call `beginPresentation`/`finishPresentation`, emit `SDKError.presentationInProgress` when a second show is attempted, and hook SKAdNetwork logging plus listener callbacks into the new lifecycle guard.
+- Tests: `sdk/core/ios/Tests/Facades/AdPresentationCoordinatorTests.swift` verifies that concurrent presentations are rejected until the token is released; existing `swift test` run captures the suite.
+
+Validation
+- `cd sdk/core/ios && swift test`
+
+---
+
+Changelog — Unity .NET 8 Test Host & Consent Evidence (2025-12-06)
+
+Summary
+- Installed a local .NET 8 arm64 runtime so the Unity consent/unit suite can run on macOS without the global SDK downgrade, and re-ran the suite to capture passing evidence for the 0.0.14 privacy audit.
+- Updated the production readiness checklist to mark the global consent propagation requirement complete with direct references to the test commands that now gate iOS, Android, and Unity adapters.
+
+What changed
+- Tooling: provisioned `~/.dotnet8` via `dotnet-install.sh --channel 8.0` and documented the exact `DOTNET_ROOT=$HOME/.dotnet8 dotnet test sdk/core/unity/Tests/ApexMediation.Tests.csproj` invocation required to keep adapter tests pinned to .NET 8.
+- Docs: `docs/Internal/Deployment/PRODUCTION_READINESS_CHECKLIST.md` now records the Swift + .NET consent tests and Android runtime coverage as evidence for the “Global privacy propagation” checklist entry.
+
+Validation
+- `DOTNET_ROOT=$HOME/.dotnet8 $HOME/.dotnet8/dotnet test sdk/core/unity/Tests/ApexMediation.Tests.csproj`
+- `cd sdk/core/ios && swift test`
+
+---
+
+Changelog — iOS SKAdNetwork Guards & Swift Tests (2025-12-06)
+
+Summary
+- Gated SKAdNetwork + SKOverlay helpers to iOS builds and provided macOS no-ops so SwiftPM can compile without unavailable StoreKit symbols.
+- Added a mac-compatible stub for `TrackingAuthorizationManager` so ATT/AdSupport references no longer break mac test hosts while preserving real behavior on iOS/tvOS.
+
+What changed
+- iOS SDK: `sdk/core/ios/Sources/Privacy/SKAdNetworkCoordinator.swift` now compiles only on iOS and ships a lightweight stub elsewhere; `SKOverlayPresenter.swift` mirrors that guard so overlay helpers remain a no-op outside iOS.
+- iOS SDK: `sdk/core/ios/Sources/Privacy/TrackingAuthorizationManager.swift` splits the ATT/IDFA logic into iOS/tvOS and mac stubs, keeping the public API identical but preventing macOS builds from referencing `ATTrackingManager` or `ASIdentifierManager`.
+
+Validation
+- `cd sdk/core/ios && swift test`
+
+---
+
 Changelog — DigitalOcean `/ready` Redeploy & Verification (2025-12-06)
 
 Summary
@@ -3100,5 +3165,86 @@ Validation
 
 Notes
 - Production runtime code was not modified; all changes live under `Test Apps/tvos/ApexSandboxCTV-tvOS/`.
+
+---
+
+Changelog — BYO‑first Adapter Dev Kit & Cross‑Platform Parity (2025-12-06)
+
+Summary
+- Enforced BYO‑first across all SDKs (iOS/tvOS, Android/Android TV, Unity, Web): no vendor SDKs ship inside the core Release artifacts; adapters are registered by publishers at runtime.
+- Delivered iOS/tvOS Adapter Dev Kit (SPM) with a Conformance Suite and CLI runner, plus an iOS sandbox Adapter Picker and Run‑All flow.
+- Added Android sandbox controls (adapter whitelist, force adapter pipeline), removed default vendor adapters, and gated reflection discovery to debug/sandbox only.
+- Added Unity sandbox bridge methods for adapter whitelist/force flags; documented Web BYO plugin interface.
+- Performed documentation pass with a new Adapter Dev Kit guide and updated iOS/Android integration docs. Tests are green on iOS; Android conformance smoke test added; further networked sandbox testing is prepared per the production readiness checklist.
+
+What changed
+- iOS/tvOS Core (RivalApexMediationSDK):
+  - New public APIs:
+    - `registerAdapter(networkName:adapterType:)` (BYO runtime registration)
+    - `adapterNames()` (diagnostics)
+    - `setSandboxAdapterWhitelist(_:)`, `setSandboxForceAdapterPipeline(_:)` (DEBUG/testing)
+  - Gated all example adapters under `#if DEBUG || APEX_SANDBOX_ADAPTERS`. Release builds ship an empty registry by default.
+- iOS/tvOS Dev Kit (new):
+  - `sdk/adapter-dev-kit/ios` with `ApexAdapterDevKit` library (ConformanceSuite, AdapterTestContext) and `apex-adapter-runner` CLI.
+- iOS Sandbox App:
+  - Adapter Picker + Run All buttons; ViewModel supports adapter enumeration and whitelist application.
+- Android Core:
+  - Adapter discovery gated to `BuildConfig.DEBUG` or `apex.sandbox.adapters=1`.
+  - Removed default runtime vendor adapter registrations from `AdapterRegistry`.
+  - New MediationSDK APIs: `setSandboxAdapterWhitelist(List<String>)`, `setSandboxForceAdapterPipeline(Boolean)`, `getAdapterNames()`, and BYO `registerRuntimeAdapterFactory(...)`.
+  - Adapter whitelist filtering applied in load path; S2S disabled when force‑pipeline is true.
+- Android Tests/Sandbox:
+  - Added instrumentation smoke test registering a fake runtime adapter and asserting registry state.
+  - Sandbox config model extended with `adapterWhitelist` and `forceAdapterPipeline` keys (ready for application on init).
+- Unity:
+  - `SdkBridge` exposes `SetSandboxAdapterWhitelist(string[])` and `SetSandboxForceAdapterPipeline(bool)`; no vendor SDK references.
+- Docs:
+  - New `docs/Developer-Facing/AdapterDevKit.md` (BYO‑first guide, parity across platforms, CLI and CI runbooks).
+  - Updated iOS/Android customer‑facing integration docs with BYO registration and sandbox flags.
+
+Validation
+- iOS: `swift test` passes; Dev Kit CLI executes on simulators; iOS sandbox builds; adapter picker works in DEBUG.
+- Android: core unit/instrumentation tests compile; smoke test validates runtime registration; sandbox config extended; Gradle tasks prepared.
+- Unity/Web: interface/bridges documented; Unity wrapper compiles; Web approach fully BYO.
+
+Next steps
+- Add Android adapter conformance test matrix mirroring the iOS Dev Kit; wire Android/TV sandboxes to apply new config keys by default.
+- Execute the networked sandbox testing plan (console/dashboard flows, website, Stripe/dunning, VRA, cron/worker, 1–5 RPS soak) and archive evidence per checklist.
+
+---
+
+Changelog — Networked Sandbox Execution Plan & Status (2025-12-06)
+
+Context
+- This section coordinates the end‑to‑end staging validation defined in `docs/Internal/Deployment/PRODUCTION_READINESS_CHECKLIST.md` (0.0.7–0.0.12) and the runbook `docs/Internal/QA/networked-sandbox-runbook-2025-12-06.md`.
+- It also references already completed items captured in earlier changelog entries and scripts.
+
+Already completed (from previous entries)
+- Billing/Stripe dry‑run automation (local): see “Local Stripe Billing Dry Run Automation (2025‑12‑03)” — script and evidence path created; webhook listener and test invoice flow verified locally.
+- Sandbox fake networks and Stripe bootstrap: see “Sandbox Fake Networks & Stripe Bootstrap (2025‑12‑04)” — staging sandbox org provisioning and fake networks wiring.
+- SDK test baselines:
+  - iOS/tvOS: `swift test` green; Dev Kit (SPM) and CLI in place.
+  - Android: unit + instrumented smoke tests added for BYO runtime adapters; discovery gated.
+  - Website: security header test suite exists under website; to run in this cycle and capture output.
+
+To execute now (staging networked run, evidence under `evidence-2025-12-06/`)
+1) 0.0.7 Console & Dashboard
+   - Status: Pending. Actions per runbook (auth flows; org/apps; API keys; placements CRUD; mediation debugger timelines/no‑bid with PII redaction; auction log exports).
+2) 0.0.8 Website / Landing Page
+   - Status: Pending. Actions: run security header tests, responsive sweep, SEO/canonical/404, broken‑link scan. Save outputs to `website/` folder.
+3) 0.0.9 Billing, Usage & Stripe
+   - Status: Partially Complete (local dry‑run automation verified 2025‑12‑03). Remaining on staging: synthetic usage tiers, cap transition, Customer Portal add card, webhooks open→paid, email previews, dunning simulation. Save artifacts to `billing/`.
+4) 0.0.10 VRA / Reconciliation
+   - Status: Pending. Actions: multi‑day sandbox traffic; statements (match/under/FX); run pipeline; verify tables; console deltas; dispute‑kit; proof‑of‑revenue roots/digest. Save to `vra/`.
+5) 0.0.11 Cron Jobs, Emails & Automation
+   - Status: Pending. Actions: bring up cron/worker stack; confirm health and alerting; render sandbox emails. Save logs to `cron/`.
+6) 0.0.12 Light Load & Soak Test
+   - Status: Pending. Actions: 1–5 RPS load ≥1h; verify p95 and error rate; capture system metrics. Save to `soak/`.
+
+Helper script
+- `scripts/ops/run_networked_sandbox.sh` bootstraps evidence directories and runs local/automatable parts (website/backend tests, iOS/Android unit tests). Manual steps remain for console/Stripe/VRA/soak.
+
+Submission
+- Zip `evidence-2025-12-06/` and link from checklist sections after completion.
 
 ---

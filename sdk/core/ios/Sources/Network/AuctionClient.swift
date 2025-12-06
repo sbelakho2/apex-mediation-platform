@@ -111,10 +111,11 @@ public final class AuctionClient {
         info["screenHeight"] = Int(screen.bounds.height * screen.scale)
         info["screenScale"] = screen.scale
         
-        // Add advertising identifier if available and consent allows
-        if MediationSDK.shared.canShowPersonalizedAds() {
-            // TODO: Implement IDFA retrieval with ATT framework
-            // For now, omit until ATTrackingManager integration is added
+        let trackingManager = TrackingAuthorizationManager.shared
+        info["attStatus"] = trackingManager.currentStatus().rawValue
+        info["limitAdTracking"] = trackingManager.isLimitAdTrackingEnabled()
+        if MediationSDK.shared.canShowPersonalizedAds(), let idfa = trackingManager.advertisingIdentifier() {
+            info["idfa"] = idfa
         }
         #endif
         

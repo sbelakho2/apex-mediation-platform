@@ -25,6 +25,8 @@ final class SandboxViewModel: ObservableObject {
     @Published var consentCCPA: Bool = false
     @Published var consentCOPPA: Bool = false
     @Published var testMode: Bool = true
+    @Published var adapterNamesList: [String] = []
+    @Published var selectedAdapter: String? = nil
 
     // Sandbox configuration
     struct Config: Codable {
@@ -34,6 +36,9 @@ final class SandboxViewModel: ObservableObject {
         struct Consent: Codable { let gdpr: Bool; let ccpa: Bool; let coppa: Bool; let lat: Bool }
         let consent: Consent?
         let appId: String?
+        let adapterWhitelist: [String]?
+        let forceAdapterPipeline: Bool?
+        let testMode: Bool?
     }
     private(set) var config: Config = .init(apiBase: "https://api.apexmediation.ee/api/v1",
                                             placements: .init(interstitialA: "26c8907d-7635-4a13-a94b-6c3b12af1779",
@@ -52,6 +57,8 @@ final class SandboxViewModel: ObservableObject {
             consentCCPA = c.ccpa
             consentCOPPA = c.coppa
         }
+        // Apply test mode from config if present
+        if let tm = config.testMode { self.testMode = tm }
         // Capture initial ATT status for debug overlay
         Task { @MainActor in
             attStatusText = await ATT.statusDescription()
@@ -79,11 +86,59 @@ final class SandboxViewModel: ObservableObject {
                 isInitialized = MediationSDK.shared.isInitialized
                 updateConfigVersion()
                 applyConsent()
+                // In sandbox, exercise adapter pipeline and optionally restrict to a whitelist
+                await MediationSDK.shared.setSandboxForceAdapterPipeline(config.forceAdapterPipeline ?? true)
+                if let names = config.adapterWhitelist, !names.isEmpty {
+                    await MediationSDK.shared.setSandboxAdapterWhitelist(names)
+                    log("Sandbox adapter whitelist set: \(names.joined(separator: ", "))")
+                }
+                let names = await MediationSDK.shared.adapterNames()
+                adapterNamesList = names
+                selectedAdapter = names.first
+                log("Registered adapters: \(names.joined(separator: ", "))")
                 log("Initialize: OK (sdkVersion=\(MediationSDK.shared.sdkVersion), testMode=\(MediationSDK.shared.isTestMode))")
             } catch {
                 lastError = "Initialize failed: \(error.localizedDescription)"
                 log(lastError!)
             }
+        }
+    }
+
+    func refreshAdapters() {
+        Task { @MainActor in
+            let names = await MediationSDK.shared.adapterNames()
+            adapterNamesList = names
+            if selectedAdapter == nil || !(names.contains(selectedAdapter!)) {
+                selectedAdapter = names.first
+            }
+            log("Adapter list refreshed: \(names.joined(separator: ", "))")
+        }
+    }
+
+    func runSelectedAdapterInterstitial() {
+        guard isInitialized else { log("Initialize first"); return }
+        guard let name = selectedAdapter else { log("No adapter selected"); return }
+        Task { @MainActor in
+            await MediationSDK.shared.setSandboxAdapterWhitelist([name])
+            log("Running interstitial for adapter=\(name)")
+            loadInterstitial()
+        }
+    }
+
+    func runAllAdapters() {
+        guard isInitialized else { log("Initialize first"); return }
+        let names = adapterNamesList
+        if names.isEmpty { log("No adapters to run"); return }
+        Task { @MainActor in
+            await MediationSDK.shared.setSandboxForceAdapterPipeline(true)
+            for name in names {
+                await MediationSDK.shared.setSandboxAdapterWhitelist([name])
+                log("[RunAll] Loading interstitial for \(name)")
+                loadInterstitial()
+                try? await Task.sleep(nanoseconds: 1_000_000_000) // 1s between runs
+            }
+            await MediationSDK.shared.setSandboxAdapterWhitelist(nil)
+            log("[RunAll] Completed")
         }
     }
 

@@ -27,6 +27,7 @@ import okhttp3.mockwebserver.MockWebServer
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -81,6 +82,51 @@ class IronSourceAdapterTest {
         assertTrue(callback.impression)
         assertTrue(callback.closed)
         assertNotNull(callback.paid)
+    }
+
+    @Test
+    fun loadInterstitial_includesPrivacyMetadata() {
+        enqueueAdResponse()
+        val consent = ConsentState(
+            iabTcfV2 = "tc_string",
+            iabUsPrivacy = "1YNN",
+            coppa = true,
+            limitAdTracking = false,
+            advertisingId = "gaid-123"
+        )
+        val meta = requestMeta().copy(
+            user = UserMeta(
+                ageRestricted = true,
+                consent = consent,
+                advertisingId = "gaid-123",
+                appSetId = "set-abc"
+            )
+        )
+        adapter.loadInterstitial("placement_a", meta, 500)
+        val recorded = server.takeRequest()
+        val payload = Gson().fromJson(recorded.body.readUtf8(), IronSourceBidRequest::class.java)
+        assertEquals("tc_string", payload.consent.gdpr)
+        assertEquals("1YNN", payload.consent.usPrivacy)
+        assertTrue(payload.consent.coppa)
+        assertEquals("gaid-123", payload.advertisingId)
+        assertFalse(payload.lmt)
+    }
+
+    @Test
+    fun loadRewarded_includesPrivacyMetadata() {
+        enqueueAdResponse()
+        val base = requestMeta()
+        val meta = base.copy(
+            user = base.user.copy(
+                advertisingId = "gaid-999",
+                consent = base.user.consent.copy(limitAdTracking = false, advertisingId = "gaid-999")
+            )
+        )
+        adapter.loadRewarded("placement_a", meta, 500)
+        val recorded = server.takeRequest()
+        val payload = Gson().fromJson(recorded.body.readUtf8(), IronSourceBidRequest::class.java)
+        assertEquals("gaid-999", payload.advertisingId)
+        assertFalse(payload.lmt)
     }
 
     private fun enqueueAdResponse() {

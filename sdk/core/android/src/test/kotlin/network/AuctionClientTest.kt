@@ -127,6 +127,9 @@ class AuctionClientTest {
                     usPrivacy = "1YNN",
                     coppa = false,
                     limitAdTracking = true,
+                    privacySandbox = true,
+                    advertisingId = "gaid-will-be-ignored",
+                    appSetId = "appset-123"
                 )
             )
             fail("expected no_fill")
@@ -140,6 +143,43 @@ class AuctionClientTest {
         assertEquals("1", meta["gdpr_applies"]) // true → "1"
         assertEquals("1YNN", meta["us_privacy"])
         assertEquals("0", meta["coppa"]) // false → "0"
+        assertEquals("1", meta["privacy_sandbox"])
+        @Suppress("UNCHECKED_CAST")
+        val userInfo = payload["user_info"] as Map<String, Any?>
+        assertEquals(true, userInfo["privacy_sandbox"])
+        assertEquals(true, userInfo["limit_ad_tracking"])
+        assertEquals("appset-123", userInfo["app_set_id"])
+        assertNull(userInfo["advertising_id"])
+    }
+
+    @Test
+    fun advertisingIdSentWhenLatDisabled() {
+        server.enqueue(MockResponse().setResponseCode(204))
+        try {
+            client.requestInterstitial(
+                opts(),
+                AuctionClient.ConsentOptions(
+                    gdprApplies = false,
+                    consentString = null,
+                    usPrivacy = null,
+                    coppa = null,
+                    limitAdTracking = false,
+                    privacySandbox = false,
+                    advertisingId = "gaid-789",
+                    appSetId = "appset-should-not-send"
+                )
+            )
+            fail("expected no_fill")
+        } catch (_: AuctionClient.AuctionException) {
+            // expected
+        }
+        val recorded = takeRequestOrFail()
+        val payload = Gson().fromJson(recorded.body.readUtf8(), Map::class.java)
+        @Suppress("UNCHECKED_CAST")
+        val userInfo = payload["user_info"] as Map<String, Any?>
+        assertEquals("gaid-789", userInfo["advertising_id"])
+        assertFalse(userInfo["limit_ad_tracking"] as Boolean)
+        assertFalse(userInfo.containsKey("app_set_id"))
     }
 
     @Test

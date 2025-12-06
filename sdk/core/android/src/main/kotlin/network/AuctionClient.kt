@@ -42,6 +42,9 @@ class AuctionClient(
         val usPrivacy: String? = null,
         val coppa: Boolean? = null,
         val limitAdTracking: Boolean? = null,
+        val privacySandbox: Boolean? = null,
+        val advertisingId: String? = null,
+        val appSetId: String? = null,
     )
 
     data class InterstitialOptions(
@@ -226,15 +229,27 @@ class AuctionClient(
             "ip" to "",
             "user_agent" to "",
         )
-        val userInfo = mapOf(
-            "advertising_id" to "", // not accessed in SDK core; respect privacy
-            "limit_ad_tracking" to (consent?.limitAdTracking ?: false),
-            "consent_string" to (consent?.consentString ?: ""),
+        val userInfo = mutableMapOf<String, Any?>(
+            "limit_ad_tracking" to (consent?.limitAdTracking ?: false)
         )
+        consent?.consentString
+            ?.takeUnless { it.isBlank() }
+            ?.let { userInfo["consent_string"] = it }
+        consent?.privacySandbox?.let { userInfo["privacy_sandbox"] = it }
+
+        val adId = consent?.advertisingId?.takeUnless { it.isNullOrBlank() }
+        val appSetId = consent?.appSetId?.takeUnless { it.isNullOrBlank() }
+        if (!adId.isNullOrBlank() && consent?.limitAdTracking != true) {
+            userInfo["advertising_id"] = adId
+        } else if (!appSetId.isNullOrBlank()) {
+            userInfo["app_set_id"] = appSetId
+        }
+
         val baseMeta = opts.metadata.toMutableMap()
         consent?.gdprApplies?.let { baseMeta["gdpr_applies"] = if (it) "1" else "0" }
         consent?.usPrivacy?.let { baseMeta["us_privacy"] = it }
         consent?.coppa?.let { baseMeta["coppa"] = if (it) "1" else "0" }
+        consent?.privacySandbox?.let { baseMeta["privacy_sandbox"] = if (it) "1" else "0" }
 
         val adapters = if (opts.adapters != null && opts.adapters.isNotEmpty()) opts.adapters
         else listOf("admob", "meta", "unity", "applovin", "ironsource")

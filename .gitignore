@@ -65,6 +65,23 @@ test-results*/
 playwright-report/
 .lighthouse/
 *.lcov
+# JUnit/NUnit/TRX outputs and automation drops
+docs/Internal/QA/*-test-results/
+docs/Internal/QA/**/binary/
+docs/Internal/QA/**/TEST-*.xml
+docs/Internal/QA/**/*.trx
+docs/Internal/QA/sdk-automation-*/
+docs/Internal/QA/sandbox-execution/
+# Stripe dry-run transient outputs
+docs/Internal/QA/stripe-dry-run/latest-run/
+docs/Internal/QA/stripe-dry-run/20*/
+docs/Internal/QA/stripe-dry-run/**/backend.pid
+docs/Internal/QA/stripe-dry-run/**/stripe_listen.pid
+docs/Internal/QA/stripe-dry-run/**/local-invoice.pdf
+docs/Internal/QA/stripe-dry-run/**/invoice.pdf.url
+# Evidence bundles and run logs
+evidence-*/
+evidence-*/**
 .output.txt
 sdk/core/unity/Tests/TestResults/
 
@@ -158,6 +175,10 @@ ML/ML Data/Criteo/gitattributes
 sbom-*.json
 trivy-*-results.sarif
 trivy-*-report.txt
+
+# Data caches
+data/**/cache/
+data/**/cache/**
 
 # Bundle analyzer
 bundle-report/
