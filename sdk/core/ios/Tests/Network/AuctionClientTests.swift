@@ -2,72 +2,151 @@ import XCTest
 @testable import RivalApexMediationSDK
 
 final class AuctionClientTests: XCTestCase {
-    
-    var client: AuctionClient!
-    
+    private var session: URLSession!
+    private var client: AuctionClient!
+    private let baseURL = "https://test.example.com"
+
+    private var requestURL: URL {
+        URL(string: "https://test.example.com/v1/auction")!
+    }
+
     override func setUp() {
         super.setUp()
-        client = AuctionClient(
-            baseURL: "https://test.example.com",
-            apiKey: "test-key",
-            timeout: 5.0
-        )
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [AuctionClientProtocolStub.self]
+        session = URLSession(configuration: config)
+        AuctionClientProtocolStub.reset()
+        client = AuctionClient(baseURL: baseURL, apiKey: "key", timeout: 1.0, session: session)
     }
-    
+
     override func tearDown() {
         client = nil
+        session.invalidateAndCancel()
+        session = nil
+        AuctionClientProtocolStub.reset()
         super.tearDown()
     }
-    
-    func testInitialization() {
-        XCTAssertNotNil(client)
+
+    func testNoFill204MapsToSDKError() async {
+        AuctionClientProtocolStub.handler = { [requestURL] _ in
+            let response = HTTPURLResponse(url: requestURL, statusCode: 204, httpVersion: "HTTP/1.1", headerFields: nil)!
+            return (response, Data())
+        }
+
+        do {
+            _ = try await client.requestBid(placementId: "p1", adType: "interstitial")
+            XCTFail("expected no-fill error")
+        } catch let error as SDKError {
+            XCTAssertEqual(error, .noFill)
+        } catch {
+            XCTFail("unexpected error: \(error)")
+        }
     }
-    
-    func testUserAgentGeneration() async {
-        // User agent should contain SDK version and platform info
-        // This is tested indirectly through request building
-        // Since userAgent() is private, we verify it's set in actual requests
-        XCTAssertNotNil(client)
+
+    func testHTTP429MapsToStatus429() async {
+        let payload = Data("Rate limited".utf8)
+        AuctionClientProtocolStub.handler = { [requestURL] _ in
+            let response = HTTPURLResponse(url: requestURL, statusCode: 429, httpVersion: "HTTP/1.1", headerFields: nil)!
+            return (response, payload)
+        }
+
+        do {
+            _ = try await client.requestBid(placementId: "p1", adType: "rewarded")
+            XCTFail("expected 429 error")
+        } catch let error as SDKError {
+            XCTAssertEqual(error, .status_429(message: "Rate limited"))
+        } catch {
+            XCTFail("unexpected error: \(error)")
+        }
     }
-    
-    func testDeviceInfoGeneration() {
-        // Device info should include platform, OS version, screen dimensions
-        // Tested indirectly through request body building
-        XCTAssertNotNil(client)
+
+    func testHTTP503MapsToServerError() async {
+        let payload = Data("oops".utf8)
+        AuctionClientProtocolStub.handler = { [requestURL] _ in
+            let response = HTTPURLResponse(url: requestURL, statusCode: 503, httpVersion: "HTTP/1.1", headerFields: nil)!
+            return (response, payload)
+        }
+
+        do {
+            _ = try await client.requestBid(placementId: "p1", adType: "rewarded")
+            XCTFail("expected server error")
+        } catch let error as SDKError {
+            XCTAssertEqual(error, .status_5xx(code: 503, message: "oops"))
+        } catch {
+            XCTFail("unexpected error: \(error)")
+        }
     }
-    
-    func testConsentPropagation() {
-        // Set consent
-        let consent = ConsentData(
-            gdprApplies: true,
-            gdprConsentString: "test-consent",
-            ccpaOptOut: false,
-            coppa: false
-        )
-        MediationSDK.shared.setConsent(consent)
-        
-        // Verify consent metadata is generated
-        let metadata = MediationSDK.shared.consentMetadata()
-        XCTAssertEqual(metadata["gdpr"] as? Int, 1)
-        XCTAssertEqual(metadata["gdpr_consent"] as? String, "test-consent")
-        
-        // Clean up
-        ConsentManager.shared.clear()
+
+    func testTimeoutMapsToTimeoutError() async {
+        AuctionClientProtocolStub.handler = { _ in
+            throw URLError(.timedOut)
+        }
+
+        do {
+            _ = try await client.requestBid(placementId: "p1", adType: "rewarded")
+            XCTFail("expected timeout error")
+        } catch let error as SDKError {
+            XCTAssertEqual(error, .timeout)
+        } catch {
+            XCTFail("unexpected error: \(error)")
+        }
     }
-    
-    // Note: Network request tests would require URLProtocol mocking
-    // or a real test server. For comprehensive testing, implement
-    // MockURLProtocol similar to the Demo app approach.
-    
-    func testErrorTaxonomyMapping() {
-        // Test SDK error creation from HTTP status codes
-        let error429 = SDKError.fromHTTPStatus(code: 429, message: "Rate limited")
-        XCTAssertEqual(error429, SDKError.status_429(message: "Rate limited"))
-        
-        let error503 = SDKError.fromHTTPStatus(code: 503, message: "Service unavailable")
-        XCTAssertEqual(error503, SDKError.status_5xx(code: 503, message: "Service unavailable"))
-        
-        let error204 = SDKError.fromHTTPStatus(code: 204)
-        XCTAssertEqual(error204, SDKError.noFill)
+
+    func testDnsFailureMapsToNetworkError() async {
+        AuctionClientProtocolStub.handler = { _ in
+            throw URLError(.cannotFindHost)
+        }
+
+        do {
+            _ = try await client.requestBid(placementId: "p1", adType: "banner")
+            XCTFail("expected network error")
+        } catch let error as SDKError {
+            XCTAssertEqual(error, .networkError(underlying: URLError(.cannotFindHost).localizedDescription))
+        } catch {
+            XCTFail("unexpected error: \(error)")
+        }
+    }
+
+    func testCaptivePortalRedirectMapsToNetworkError() async {
+        AuctionClientProtocolStub.handler = { [requestURL] _ in
+            let response = HTTPURLResponse(url: requestURL, statusCode: 302, httpVersion: "HTTP/1.1", headerFields: nil)!
+            return (response, Data())
+        }
+
+        do {
+            _ = try await client.requestBid(placementId: "p1", adType: "banner")
+            XCTFail("expected redirect error")
+        } catch let error as SDKError {
+            XCTAssertEqual(error, .networkError(underlying: "HTTP 302"))
+        } catch {
+            XCTFail("unexpected error: \(error)")
+        }
+    }
+}
+
+final class AuctionClientProtocolStub: URLProtocol {
+    static var handler: ((URLRequest) throws -> (HTTPURLResponse, Data))?
+
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+    override func startLoading() {
+        guard let handler = Self.handler else {
+            fatalError("handler not set")
+        }
+        do {
+            let (response, data) = try handler(request)
+            client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+            client?.urlProtocol(self, didLoad: data)
+            client?.urlProtocolDidFinishLoading(self)
+        } catch {
+            client?.urlProtocol(self, didFailWithError: error)
+        }
+    }
+
+    override func stopLoading() {}
+
+    static func reset() {
+        handler = nil
     }
 }

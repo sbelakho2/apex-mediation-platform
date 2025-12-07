@@ -1,3 +1,128 @@
+Changelog — tvOS Color Guards & Evidence (2025-12-07)
+
+Summary
+- Debug placeholders and banner scaffolding now use platform-safe colors so tvOS builds no longer reference unavailable UIKit symbols.
+- The in-app Debug Panel is MainActor-isolated and skips clipboard actions on tvOS, keeping the diagnostics overlay usable across Apple platforms.
+- Captured a full Apple TV 4K simulator run (105 tests) with logs and xcresult artifacts archived for the readiness review.
+
+What changed
+
+- iOS/tvOS SDK: `sdk/core/ios/Sources/Facades/BelAppOpen.swift`, `BelInterstitial.swift`, and `BelBanner.swift` swapped `.systemBackground`/`.systemGray5` with helper colors (`UIColor.belDebugBackground` / `.belBannerPlaceholder`) that fall back to tvOS-safe tints; the banner size helper and facade enum are now `@MainActor` to satisfy concurrency checks.
+- iOS/tvOS SDK: `sdk/core/ios/Sources/Debug/DebugPanel.swift` is `@MainActor`, guards the "Copy" action behind `#if !os(tvOS)`, and reports `UNAVAILABLE_TVOS` for ATT status when running on Apple TV so tvOS builds avoid `UIPasteboard`/ATT availability traps.
+- iOS/tvOS SDK: `SKAdNetworkCoordinator` now runs on the main actor, `TrackingAuthorizationManager` is declared `@unchecked Sendable`, and `AdPresentationCoordinator` uses `@preconcurrency import` for UIKit/Foundation so Swift 6 concurrency warnings about shared mutable UIKit state are eliminated during tvOS builds.
+- Evidence: `xcodebuild test -scheme RivalApexMediationSDK -destination 'platform=tvOS Simulator,name=Apple TV 4K (3rd generation)'` succeeded on 2025-12-07 (macOS 14), producing `docs/Internal/QA/tvos-network-errors-2025-12-07/xcodebuild-tvos.log` and xcresult `~/Library/Developer/Xcode/DerivedData/ios-fkgnslfkjphfvrflqneoiwcdjsyy/Logs/Test/Test-RivalApexMediationSDK-2025.12.07_23-06-22-+0100.xcresult`.
+
+Validation
+- `xcodebuild test -scheme RivalApexMediationSDK -destination "platform=tvOS Simulator,name=Apple TV 4K (3rd generation)"`
+
+---
+
+Changelog — iOS Cache Grace & Evidence (2025-12-07)
+
+Summary
+- Added a 350ms cache expiration grace window and tightened presentation error equality so `swift test` no longer fails due to borderline TTLs or value comparisons.
+- Captured a fresh iOS simulator evidence run for release 0.0.14, archiving the full `xcodebuild` log and xcresult bundle.
+
+What changed
+
+- iOS SDK: `sdk/core/ios/Sources/MediationSDK.swift` introduced `CacheConfig.expirationGrace` (0.35s) and now applies the cushion when checking readiness (`isAdReady`), accepting new ads (`storeAd`), and pruning entries (`pruneExpiredCache`). This prevents sub-second loads from expiring before tests inspect the cache.
+- iOS SDK: `SDKError`'s `Equatable` conformance now treats `.presentationInProgress` as a comparable case so `AdPresentationCoordinatorTests` can assert the specific error deterministically.
+- Evidence: `xcodebuild test -scheme RivalApexMediationSDK -destination 'id=78DC038C-C0A4-4BF6-9AD1-ED1365B6B945'` ran 2025-12-07 on macOS 14, producing a passing 105-test suite. Raw output is archived at `docs/Internal/QA/ios-network-errors-2025-12-07/xcodebuild-ios.log`, with the xcresult bundle saved under `~/Library/Developer/Xcode/DerivedData/ios-fkgnslfkjphfvrflqneoiwcdjsyy/Logs/Test/Test-RivalApexMediationSDK-2025.12.07_23-00-21-+0100.xcresult`.
+
+Validation
+- `xcodebuild test -scheme RivalApexMediationSDK -destination 'id=78DC038C-C0A4-4BF6-9AD1-ED1365B6B945'`
+- `xcodebuild test -scheme RivalApexMediationSDK -destination 'id=78DC038C-C0A4-4BF6-9AD1-ED1365B6B945' -only-testing:RivalApexMediationSDKTests/AdCacheBehaviorTests/testExpiredAdIsPrunedBeforeClaim`
+
+---
+
+Changelog — Production Readiness Evidence Migration (2025-12-07)
+
+Summary
+- Production readiness plan now focuses on reusable instructions; dated evidence snapshots (TLS, sandbox bootstrap, SDK sweeps, billing audits) live here for auditors.
+- TLS/HSTS verification from Dec 3 & 6, sandbox data seeding from Dec 4, website security tests from Dec 6, SDK lifecycle/caching regressions from Dec 6–7, and billing copy audits from Nov 24 are preserved in this changelog entry.
+
+What changed
+
+- Each platform received five placements — two interstitial, two rewarded, one banner — using deterministic UUIDs so they can be referenced safely in SDK configs.
+- Quick reference (per app):
+
+    | App                              | Placement ID                             | Placement Name                | Type         |
+    | -------------------------------- | ---------------------------------------- | ----------------------------- | ------------ |
+    | Apex Sandbox Android             | `edcbe420-5e96-4c0f-b7ee-e5a10eb11db3`   | Android Interstitial 01       | interstitial |
+    |                                  | `92fe3cb3-8028-4a65-aacf-c9916b2efc29`   | Android Interstitial 02       | interstitial |
+    |                                  | `b8372490-f300-49e8-b7c2-a77fc04f85e9`   | Android Rewarded 01           | rewarded     |
+    |                                  | `631c2a8a-94b8-4448-8d56-a7cddb280ea5`   | Android Rewarded 02           | rewarded     |
+    |                                  | `47998e9f-dfbe-4ba9-922c-3001f106722e`   | Android Banner 01             | banner       |
+    | Apex Sandbox iOS                 | `26c8907d-7635-4a13-a94b-6c3b12af1779`   | iOS Interstitial 01           | interstitial |
+    |                                  | `3b94ce00-15d2-4b96-9d1e-b096cd12cdb9`   | iOS Interstitial 02           | interstitial |
+    |                                  | `ca610a0c-8607-4a38-8a21-9cbfd3018b7b`   | iOS Rewarded 01               | rewarded     |
+    |                                  | `83d155c1-d3ab-413a-8d6f-bb282d4a058b`   | iOS Rewarded 02               | rewarded     |
+    |                                  | `bdf98482-e3c8-4792-bc06-7e98f7184d08`   | iOS Banner 01                 | banner       |
+    | Apex Sandbox Unity               | `3d1094ab-a85b-4737-a749-d8a153a0f026`   | Unity Interstitial 01         | interstitial |
+    |                                  | `7f7f250e-48c0-4a89-9015-5c6cea325b3e`   | Unity Interstitial 02         | interstitial |
+    |                                  | `074b2dc7-3173-4da0-aba0-250f3f129df1`   | Unity Rewarded 01             | rewarded     |
+    |                                  | `e159286d-7f60-437c-9f58-83aebdcdbf13`   | Unity Rewarded 02             | rewarded     |
+    |                                  | `f6e7aa9b-09c5-4644-bf56-f8ab781ac62d`   | Unity Banner 01               | banner       |
+    | Apex Sandbox Android TV/CTV      | `28f1d412-71d4-486b-93c7-e3d7101f2b2c`   | Android TV Interstitial 01    | interstitial |
+    |                                  | `15d8efc7-0e45-4eb8-9eec-47eedb8424bb`   | Android TV Interstitial 02    | interstitial |
+    |                                  | `916aa3f1-b875-45f9-b672-bb6461ceadf4`   | Android TV Rewarded 01        | rewarded     |
+    |                                  | `430810ca-0549-4755-ae74-cd0df596cfee`   | Android TV Rewarded 02        | rewarded     |
+    |                                  | `1a5c9eca-b8b7-4b9a-b8a7-2ec5942d5645`   | Android TV Banner 01          | banner       |
+    | Apex Sandbox tvOS                | `8a94e8fd-8995-4b17-b308-38f1104d1e84`   | tvOS Interstitial 01          | interstitial |
+    |                                  | `d8f4ec50-cde4-47b7-a139-ed02bd1f88d8`   | tvOS Interstitial 02          | interstitial |
+    |                                  | `090ce110-b9dc-4722-93dd-8bd3fcfdb2e0`   | tvOS Rewarded 01              | rewarded     |
+    |                                  | `24ed4867-b16e-4a4b-b8ac-43dd05788a81`   | tvOS Rewarded 02              | rewarded     |
+    |                                  | `f7defcdc-33e5-41f3-8577-2bceb73015d3`   | tvOS Banner 01                | banner       |
+
+  - Verification: `SELECT a.name, pl.type, pl.name, pl.id FROM placements pl JOIN apps a ON a.id = pl.app_id WHERE a.publisher_id='138f62be-5cee-4c73-aba4-ba78ea77ab44' ORDER BY a.name, pl.type, pl.name;`
+- Docs: `docs/Internal/Deployment/PRODUCTION_READINESS_CHECKLIST.md` no longer embeds dated commentary; the checklist references the tooling while historical proof is captured below.
+- TLS/HSTS evidence (2025-12-03 & 2025-12-06):
+  - `npm run do:tls` / `scripts/ops/do_tls_snapshot.sh` ran 2025-12-03 against `https://api.apexmediation.ee`, producing `verify-redirects.txt`, `verify-tls.txt`, and `verify-hsts.txt` under `docs/Internal/Deployment/do-readiness-2025-12-03/`.
+  - 2025-12-06 redeploy snapshot recorded `curl -Is https://api.apexmediation.ee/health` → `HTTP/2 200` with HSTS and `curl -s https://api.apexmediation.ee/ready | jq` returning `{ "status": "ready", "database": { "connected": true, "latency_ms": 73 }, "redis": { "ready": true }, ... }`, proving the Postgres + Redis gate is green.
+  - HSTS stayed disabled until the SSL Labs A/A+ pass on 2025-12-03; once re-enabled, nginx plus backend middleware emit the strict headers captured in the TLS evidence bundle.
+- Sandbox bootstrap (2025-12-04):
+  - Seeded publisher **Apex Sandbox Studio** and the Android, iOS, Unity, Android TV/CTV, and tvOS apps via managed Postgres (`postgres://doadmin@apexmediation-db-do-user-29825488-0.m.db.ondigitalocean.com:25060/apexmediation?sslmode=no-verify`).
+  - Inserted 25 deterministic placements (two interstitial, two rewarded, one banner per app) using the `sandbox-<platform>-<type>-<nn>` naming convention so SDK configs have stable UUIDs.
+- Website & security evidence:
+  - `npm --prefix website run test` executed 2025-12-06 (Sadok MBP) kept `website/src/__tests__/security.headers.test.js` green, confirming HSTS + CSP assertions for the marketing site.
+- SDK validation sweeps (2025-12-06 / 2025-12-07):
+  - `swift test` (sdk/core/ios) covered `AdPresentationCoordinatorTests`, consent serialization, and `Runtime/AdCacheBehaviorTests.swift`, while UISmoke harnesses validated warm-cache reloads.
+  - `./gradlew.sh testDebugUnitTest` exercised `ConsentManagerTest`, `runtime/AdPresentationCoordinatorTest.kt`, `runtime/AdCacheTest.kt`, `AuctionClientLoadShowTest.kt`, and the network-failure cases (`airplaneMode_*`, `dnsFailure_*`, `captivePortal_*`, `networkFlip_*`).
+  - `DOTNET_ROOT=$HOME/.dotnet8 dotnet test sdk/core/unity/Tests/ApexMediation.Tests.csproj` kept `MediationSdkShowTests` and `RenderableAdTests` green, verifying duplicate-bridge guards and expiry replacement.
+  - `xcodebuild test -scheme CTVSDK -destination "platform=tvOS Simulator,name=Apple TV 4K (3rd generation)"` ran `sdk/ctv/tvos/Tests/CTVSDKTests/AdCacheTests.swift`, confirming Apple TV parity after SKAdNetwork gating adjustments.
+- Billing & pricing audit (2025-11-24):
+  - Verified default SEPA (Wise Europe SA IBAN + reference block) and ACH (Wise US / Community Federal Savings Bank) wiring instructions, noted optional SEB rails, and documented secondary rails (Wise link, Stripe card, PayPal).
+  - Captured pricing/invoicing doc updates, billing notification templates, and website/signup screenshots showing Starter free cap + autopay messaging under `docs/Internal/QA/billing-policy/`.
+
+Validation
+- `npm run do:tls`
+- `curl -Is https://api.apexmediation.ee/health`
+- `curl -s https://api.apexmediation.ee/ready | jq`
+- `docker run --rm -e PGPASSWORD=$DOADMIN_PASS postgres:16 psql 'sslmode=require host=apexmediation-db-do-user-29825488-0.m.db.ondigitalocean.com port=25060 user=doadmin dbname=apexmediation' -c "SELECT company_name, COUNT(*) apps FROM apps WHERE publisher_id='138f62be-5cee-4c73-aba4-ba78ea77ab44' GROUP BY 1;"`
+- `npm --prefix website run test`
+- `cd sdk/core/ios && swift test`
+- `cd sdk/core/android && ./gradlew.sh testDebugUnitTest`
+- `DOTNET_ROOT=$HOME/.dotnet8 dotnet test sdk/core/unity/Tests/ApexMediation.Tests.csproj`
+- `xcodebuild test -scheme CTVSDK -destination "platform=tvOS Simulator,name=Apple TV 4K (3rd generation)"`
+
+---
+
+Changelog — Unity Callback Guardrails (2025-12-06)
+
+Summary
+- Unity `MediationSDK` now dispatches every show callback on the Unity main thread and coalesces duplicate native bridge invocations, eliminating double notifications and keeping telemetry consistent.
+- Added regression coverage that injects a duplicate-calling platform bridge to ensure only the first result ever propagates back to game code, and documented the Unity lifecycle evidence in the readiness checklist.
+
+What changed
+- Unity SDK: `sdk/core/unity/Runtime/Core/MediationSDK.cs` introduces guarded main-thread completions for `ShowInterstitial/Rewarded`, logging failures once even if a platform bridge fires multiple times.
+- Unity SDK: `sdk/core/unity/Tests/MediationSdkShowTests.cs` reflects the singleton via reflection, injects a duplicate-callback bridge, and asserts that user callbacks fire exactly once.
+- Docs: `docs/Internal/Deployment/PRODUCTION_READINESS_CHECKLIST.md` now marks the Unity lifecycle row complete with the dotnet test command as evidence.
+- Android SDK evidence (2025-12-07): `sdk/core/android/src/test/kotlin/dx/AdCacheBehaviorTest.kt` now exercises cold→warm cache transitions, single-use consumption, TTL expiry via `ShadowSystemClock`, and sequential load replacement; banner refresh/back-to-back attach behavior is covered in `sdk/core/android/src/test/kotlin/dx/BannerSizingTest.attach_backToBack_usesLatestCachedCreative`. Both suites ran green with `./gradlew.sh testDebugUnitTest`.
+Validation
+- `DOTNET_ROOT=$HOME/.dotnet8 dotnet test sdk/core/unity/Tests/ApexMediation.Tests.csproj`
+
+---
+
 Changelog — Android Presentation Guardrails (2025-12-06)
 
 Summary

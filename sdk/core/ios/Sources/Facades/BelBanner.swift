@@ -4,6 +4,7 @@ import UIKit
 
 /// Public facade for Banner ads, mirroring Android's BelBanner API.
 /// Provides load/show/hide/destroy methods for persistent banner ad display.
+@MainActor
 public enum BelBanner {
     private static var activeBanners: [String: BannerView] = [:]
     
@@ -14,7 +15,7 @@ public enum BelBanner {
         case leaderboard   // 728x90
         case adaptive      // Adapts to screen width
         
-        var dimensions: CGSize {
+        @MainActor var dimensions: CGSize {
             switch self {
             case .standard:
                 return CGSize(width: 320, height: 50)
@@ -184,7 +185,7 @@ public enum BelBanner {
             
             // Placeholder rendering (debug mode)
             #if DEBUG
-            backgroundColor = .systemGray5
+            backgroundColor = .belBannerPlaceholder
             let label = UILabel()
             label.text = "Banner Ad\n\(ad.networkName)"
             label.textAlignment = .center
@@ -210,4 +211,20 @@ public enum BelBanner {
     }
 }
 
+#endif
+
+#if canImport(UIKit)
+private extension UIColor {
+    /// Provides a placeholder tint that is valid on both iOS and tvOS.
+    static var belBannerPlaceholder: UIColor {
+        #if os(tvOS)
+        return UIColor(red: 0.24, green: 0.24, blue: 0.28, alpha: 1.0)
+        #else
+        if #available(iOS 13.0, *) {
+            return .systemGray5
+        }
+        return UIColor(white: 0.9, alpha: 1.0)
+        #endif
+    }
+}
 #endif

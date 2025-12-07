@@ -10,7 +10,7 @@ import AdSupport
 
 /// Centralized helper for ATT authorization status and IDFA availability.
 /// Keeps access serialized because adapters may query from background queues.
-final class TrackingAuthorizationManager {
+final class TrackingAuthorizationManager: @unchecked Sendable {
     static let shared = TrackingAuthorizationManager()
 
     private let lock = NSLock()
@@ -142,7 +142,7 @@ final class TrackingAuthorizationManager {
 }
 #else
 /// Minimal stub so macOS SwiftPM builds do not depend on ATT/AdSupport frameworks.
-final class TrackingAuthorizationManager {
+final class TrackingAuthorizationManager: @unchecked Sendable {
     static let shared = TrackingAuthorizationManager()
 
     private init() {}

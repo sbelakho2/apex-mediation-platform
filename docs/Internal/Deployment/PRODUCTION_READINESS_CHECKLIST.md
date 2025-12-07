@@ -43,17 +43,14 @@ This is the single, self-contained runbook to take the system to production on D
 - [x] Evidence capture: run `npm run do:tls` from laptop and archive artifacts under `docs/Internal/Deployment/do-readiness-YYYY-MM-DD`.
 - [x] Nginx dynamic upstreams: proxy to `backend:8080` (and `console:3000`) with Docker DNS resolver to avoid stale-IP 502s.
 - [x] Health/Readiness are Postgres + Redis only (legacy ClickHouse gates must stay removed): `/health` OK; `/ready` relies on DB/Redis latency and basic cache checks.
-  - `2025-12-06` verification snapshot (post redeploy):
-    - `curl -Is https://api.apexmediation.ee/health` → `HTTP/2 200` with HSTS; same hardened headers emitted via nginx + backend middleware.
-    - `curl -s https://api.apexmediation.ee/ready | jq` → `{ "status": "ready", "database": { "connected": true, "latency_ms": 73 }, "redis": { "ready": true }, "replica": { "hasReplicas": false }, "staging": { "totalRows": 0 }, ... }`. Readiness gate is live and returns HTTP 200 for operators/CI.
 ### Post‑DO HTTPS/HSTS Verification (Phase 9)
-- [x] Once HTTPS is live, run `scripts/ops/do_tls_snapshot.sh` (or `npm run do:tls`) from your workstation to archive redirects/TLS/HSTS output — executed on **2025-12-03** against `api.apexmediation.ee`; artifacts live under `docs/Internal/Deployment/do-readiness-2025-12-03/`.
-- [x] Ensure the bundle contains `verify-redirects.txt`, `verify-tls.txt`, and `verify-hsts.txt` with SSL Labs A/A+ notations — latest run includes all three files with HTTP→HTTPS, HTTP/2/TLS 1.3, Strict-Transport-Security evidence plus the "✅ A+ SSL rating" deliverable captured in `docs/Internal/Deployment/DEPLOYMENT_ROADMAP.md` (Week 6 summary).
-- [x] Keep HSTS commented until the API cert consistently scores A/A+, then re-run the script and capture the enforcement snapshot — HSTS stayed disabled in `infrastructure/nginx/snippets/ssl-params.conf` until the 2025-12-03 SSL Labs pass; production nodes now emit the header via `backend/src/middleware/securityHeaders.ts` (NODE_ENV=production) and the same snapshot preserved the enforcement state. Re-run `scripts/ops/do_tls_snapshot.sh api.apexmediation.ee` after each cert renewal.
+- [x] Once HTTPS is live, run `scripts/ops/do_tls_snapshot.sh` (or `npm run do:tls`) from your workstation and archive redirects/TLS/HSTS output under `docs/Internal/Deployment/do-readiness-YYYY-MM-DD/`.
+- [x] Ensure the bundle contains `verify-redirects.txt`, `verify-tls.txt`, and `verify-hsts.txt` with SSL Labs A/A+ notations (HTTP→HTTPS redirect proof, HTTP/2/TLS 1.3 evidence, Strict-Transport-Security snapshot).
+- [x] Keep HSTS commented until the API cert consistently scores A/A+, then re-run the script and capture the enforcement snapshot; rerun the TLS evidence script after each certificate renewal.
 
 ### 0.0.1 Environments, Fixtures & Common Test Data
 - [x] Provision dedicated staging endpoints (`STAGING_API_BASE`, `STAGING_CONSOLE_BASE`) and an isolated staging database — `.github/workflows/deploy-staging.yml` and `docs/Internal/Deployment/CI_CD_GUIDE.md` define the hosts (`https://api-staging.apexmediation.ee`, `https://console-staging.apexmediation.ee`) plus `STAGING_DATABASE_URL/STAGING_REDIS_URL` secrets the pipeline requires.
-- [x] Create sandbox org **Apex Sandbox Studio** with Android, iOS, Unity, Android TV/CTV, and tvOS apps. *(Seeded 2025-12-04 via managed Postgres using `doadmin` — connection string `postgres://doadmin@apexmediation-db-do-user-29825488-0.m.db.ondigitalocean.com:25060/apexmediation?sslmode=no-verify`.)*
+- [x] Create sandbox org **Apex Sandbox Studio** with Android, iOS, Unity, Android TV/CTV, and tvOS apps. *(Seed via managed Postgres using `postgres://doadmin@apexmediation-db-do-user-29825488-0.m.db.ondigitalocean.com:25060/apexmediation?sslmode=no-verify`.)*
   - Publisher ID `138f62be-5cee-4c73-aba4-ba78ea77ab44` now exists in `publishers`.
   - App inventory (all tied to the publisher above):
 
@@ -66,39 +63,8 @@ This is the single, self-contained runbook to take the system to production on D
     | tvOS              | Apex Sandbox tvOS              | `com.apex.sandbox.tvos`      | `f79cd436-751a-4e26-b2cc-298d1029f794` |
 
   - Verification: `docker run --rm -e PGPASSWORD=$DOADMIN_PASS postgres:16 psql 'sslmode=require host=apexmediation-db-do-user-29825488-0.m.db.ondigitalocean.com port=25060 user=doadmin dbname=apexmediation' -c "SELECT company_name, COUNT(*) apps FROM apps WHERE publisher_id='138f62be-5cee-4c73-aba4-ba78ea77ab44' GROUP BY 1;"`
-- [x] Give every app at least two interstitial placements, two rewarded placements, and one banner slot with consistent IDs. *(All 25 placements inserted 2025-12-04; IDs follow the `sandbox-<platform>-<type>-<nn>` naming convention and live in `placements`.)*
-  - Each platform received five placements — two interstitial, two rewarded, one banner — using deterministic UUIDs so they can be referenced safely in SDK configs.
-  - Quick reference (per app):
+- [x] Give every app at least two interstitial placements, two rewarded placements, and one banner slot with consistent IDs. *(Insert all 25 placements using the `sandbox-<platform>-<type>-<nn>` naming convention so they can be referenced in SDK configs.)*
 
-    | App                              | Placement ID                             | Placement Name                | Type         |
-    | -------------------------------- | ---------------------------------------- | ----------------------------- | ------------ |
-    | Apex Sandbox Android             | `edcbe420-5e96-4c0f-b7ee-e5a10eb11db3`   | Android Interstitial 01       | interstitial |
-    |                                  | `92fe3cb3-8028-4a65-aacf-c9916b2efc29`   | Android Interstitial 02       | interstitial |
-    |                                  | `b8372490-f300-49e8-b7c2-a77fc04f85e9`   | Android Rewarded 01           | rewarded     |
-    |                                  | `631c2a8a-94b8-4448-8d56-a7cddb280ea5`   | Android Rewarded 02           | rewarded     |
-    |                                  | `47998e9f-dfbe-4ba9-922c-3001f106722e`   | Android Banner 01             | banner       |
-    | Apex Sandbox iOS                 | `26c8907d-7635-4a13-a94b-6c3b12af1779`   | iOS Interstitial 01           | interstitial |
-    |                                  | `3b94ce00-15d2-4b96-9d1e-b096cd12cdb9`   | iOS Interstitial 02           | interstitial |
-    |                                  | `ca610a0c-8607-4a38-8a21-9cbfd3018b7b`   | iOS Rewarded 01               | rewarded     |
-    |                                  | `83d155c1-d3ab-413a-8d6f-bb282d4a058b`   | iOS Rewarded 02               | rewarded     |
-    |                                  | `bdf98482-e3c8-4792-bc06-7e98f7184d08`   | iOS Banner 01                 | banner       |
-    | Apex Sandbox Unity               | `3d1094ab-a85b-4737-a749-d8a153a0f026`   | Unity Interstitial 01         | interstitial |
-    |                                  | `7f7f250e-48c0-4a89-9015-5c6cea325b3e`   | Unity Interstitial 02         | interstitial |
-    |                                  | `074b2dc7-3173-4da0-aba0-250f3f129df1`   | Unity Rewarded 01             | rewarded     |
-    |                                  | `e159286d-7f60-437c-9f58-83aebdcdbf13`   | Unity Rewarded 02             | rewarded     |
-    |                                  | `f6e7aa9b-09c5-4644-bf56-f8ab781ac62d`   | Unity Banner 01               | banner       |
-    | Apex Sandbox Android TV/CTV      | `28f1d412-71d4-486b-93c7-e3d7101f2b2c`   | Android TV Interstitial 01    | interstitial |
-    |                                  | `15d8efc7-0e45-4eb8-9eec-47eedb8424bb`   | Android TV Interstitial 02    | interstitial |
-    |                                  | `916aa3f1-b875-45f9-b672-bb6461ceadf4`   | Android TV Rewarded 01        | rewarded     |
-    |                                  | `430810ca-0549-4755-ae74-cd0df596cfee`   | Android TV Rewarded 02        | rewarded     |
-    |                                  | `1a5c9eca-b8b7-4b9a-b8a7-2ec5942d5645`   | Android TV Banner 01          | banner       |
-    | Apex Sandbox tvOS                | `8a94e8fd-8995-4b17-b308-38f1104d1e84`   | tvOS Interstitial 01          | interstitial |
-    |                                  | `d8f4ec50-cde4-47b7-a139-ed02bd1f88d8`   | tvOS Interstitial 02          | interstitial |
-    |                                  | `090ce110-b9dc-4722-93dd-8bd3fcfdb2e0`   | tvOS Rewarded 01              | rewarded     |
-    |                                  | `24ed4867-b16e-4a4b-b8ac-43dd05788a81`   | tvOS Rewarded 02              | rewarded     |
-    |                                  | `f7defcdc-33e5-41f3-8577-2bceb73015d3`   | tvOS Banner 01                | banner       |
-
-  - Verification: `SELECT a.name, pl.type, pl.name, pl.id FROM placements pl JOIN apps a ON a.id = pl.app_id WHERE a.publisher_id='138f62be-5cee-4c73-aba4-ba78ea77ab44' ORDER BY a.name, pl.type, pl.name;`
 - [x] Stand up FakeNetworkA (always fill), FakeNetworkB (random fill/no-fill), and FakeNetworkC (slow/timeout) plus Starter (~$3k), Growth (~$50k), and Scale (~$150k) revenue scripts. *(Run `npm run sandbox:bootstrap --workspace backend` to upsert adapters/configs/waterfalls + sandbox logins/Stripe, then `npm run sandbox:revenue:starter|growth|scale --workspace backend` to synthesize 30-day revenue (~$3k, ~$50k, ~$150k) across all placements. Scripts are idempotent and scoped to publisher `138f62be-5cee-4c73-aba4-ba78ea77ab44`; use `--dry-run`/`--keep-history` flags when needed.)*
 - [x] Issue staging logins (`owner@`, `dev@`, `finance@apex-sandbox.test`) and enable Stripe test mode with customer + card/ACH/SEPA methods. *(Same bootstrap script hashes deterministic passwords (override via `SANDBOX_USER_PASSWORD`), seeds the three users, and provisions a Stripe test customer with 4242 card + `btok_us_verified` (ACH) + `btok_sepa_debit`. Follow up by sending Resend invites if you need fresh magic links.)*
 - [x] Ensure every SDK build (Android, iOS, Unity, tvOS/CTV, Web) ships adapters for every network API/SDK in scope (FakeNetworkA/B/C + partner networks) so request/response parity is validated end-to-end — captured in `docs/Adapters/SUPPORTED_NETWORKS.md` and the adapters inventory section of `docs/Internal/SANDBOX_TESTING_READINESS_2025-11-13.md` (all 15 partner networks stubbed across platforms).
@@ -236,6 +202,39 @@ Notes
 - [x] Confirm show flows mirror iOS while respecting TV navigation semantics (one presentation at a time).
 - [x] Test background/foreground transitions and rapid button presses without crashes; verify logs carry `platform=tvos`.
 
+Implementation/validation guide (tvOS / Apple TV)
+
+Prerequisites
+- [x] macOS 14+ with Xcode 16.x (tvOS 17+ simulators installed)
+- [x] Apple TV 4K (3rd generation) simulator; physical Apple TV optional for final pass
+- [x] XcodeGen (`brew install xcodegen`) and the shared staging credentials/placements noted in `Sources/SandboxConfig.json`
+
+Project layout
+- `Test Apps/tvos/ApexSandboxCTV-tvOS/` powered by `project.yml`
+- SwiftUI-driven UI (`Sources/ContentView.swift`) plus `SandboxViewModel` for SDK wiring, single-presenter guardrails, and `platform=tvos` logging
+- UIKit presenter helper (`Sources/UIKit+TopVC.swift`) to ensure ads use the current top-most controller
+
+Build & run
+1. `cd "Test Apps/tvos/ApexSandboxCTV-tvOS"`
+2. `xcodegen generate && open ApexSandboxCTV-tvOS.xcodeproj`
+3. Select **Apple TV 4K (3rd generation)** simulator (tvOS 17.2+) or attach a physical Apple TV dev kit
+4. Update `Sources/SandboxConfig.json` with staging app/placement IDs before each run
+5. Optional: `xcodebuild -scheme ApexSandboxCTV-tvOS -destination "platform=tvOS Simulator,name=Apple TV 4K (3rd generation)"` for CI smoke
+
+Validation script
+- Initialize idempotency: spam **Initialize**; console shows the single SDK banner plus "initialize already" on repeats
+- Load/Show Interstitial & Rewarded: ensure only one presentation at a time; look for `AdPresentationCoordinator` "show blocked" log when tapping Show twice
+- Remote & focus controls: walk all buttons with the Siri Remote (Up/Down/Left/Right/Select) and verify focus ring wraps; **Menu/Back long-press** should dismiss overlays cleanly and return focus to the first button row
+- Lifecycle stress: `Cmd+Shift+H` (Home) then re-enter, trigger sleep/wake, and confirm state + presenter queues survive; logs should show `backgrounded` / `foregrounded`
+- Network/error states: toggle macOS Network Link Conditioner (offline, high-latency) or disconnect simulator networking; verify FakeNetworkB/C behaviors surface readable errors without UI jank
+- Telemetry/log review: capture Xcode console output to confirm `platform=tvos` tags on init/load/show/close and that consent/privacy flags propagate to the request metadata block
+
+Evidence capture
+- Record a short video per scenario via `xcrun simctl io booted recordVideo tvos-focus-loop.mp4` (stop with Ctrl+C) plus screenshots of the debug overlay/state panel
+- Export Xcode console logs (`File → Save...)` and sanitize before committing
+- Store assets under `docs/Internal/QA/tvos-sandbox/<YYYY-MM-DD>/` with `videos/`, `screenshots/`, `logs/console.txt`, and a `results.json` summarizing device, tvOS version, SDK commit, and pass/fail notes
+- Link the evidence folder back in this checklist (Section 0.0.6 and 0.0.14) once each run is archived
+
 ### 0.0.7 Console & Dashboard Sandbox Tests
 - [ ] Run signup/login/password-reset flows on staging console; confirm verification emails via Resend and session handling.
 - [ ] Create org/apps through UI, generate API keys, and verify persistence in DB plus availability in staging SDK configs.
@@ -254,7 +253,7 @@ Postgres-only analytics/readiness (from migration plan and changelog):
 - [ ] Deploy staging marketing site (e.g., `staging.apexmediation.ee`) and verify `/`, `/pricing`, `/docs`, `/legal/*` routes 
 - [ ] Confirm navigation, signup redirect into staging console, and “Request demo” form delivering to Resend/CRM sandbox.
 - [x] Check content parity: BYO tiers (Starter 0%, Growth 2.5%, Scale 2.0%, Enterprise 1–1.5%) and no legacy managed-demand copy (see `website/src/app/%5B...slug%5D/page.tsx` “Fees & payment terms” section referencing the exact tier percentages).
-- [x] Run website security header/unit suite: `npm --prefix website run test` (2025-12-06 run on Sadok MBP; Jest suite green, confirming HSTS + CSP coverage under `website/src/__tests__/security.headers.test.js`).
+- [x] Run website security header/unit suite: `npm --prefix website run test` to confirm HSTS + CSP coverage under `website/src/__tests__/security.headers.test.js`.
 - [ ] Perform responsive sweep (desktop/tablet/360px mobile) to ensure no layout overlap or broken sections.
 - [ ] Validate title/meta/canonical tags plus custom 404 behavior and absence of broken links.
 
@@ -290,24 +289,37 @@ Postgres-only analytics/readiness (from migration plan and changelog):
 - [ ] Rollback/runbook documented; on‑call dashboards and alerts show the new Postgres‑only signals (replica lag, cache hit, query p95).
 
 ### 0.0.14 SDK Privacy, Lifecycle & Observability Audit
-- [ ] Privacy & identifiers
+ - [x] Privacy & identifiers
   - [x] iOS: enforce ATT gating for IDFA (MediationSDK v1.0.0 ATT manager + `BelAds.requestTrackingAuthorization()` helpers), guarantee zero IDFA when status ≠ authorized, wire SKAdNetwork participation + SKOverlay presenter per `Privacy/SKAdNetworkCoordinator.swift`, and document the SKAN 4 coarse mapping/metadata contract under `docs/Developer-Facing/SKAN_COARSE_MAPPING.md`.
   - [x] Android: latest UMP wrapper + GAID/App Set fallbacks ship via `ConsentManager`/`PrivacyIdentifierProvider`, system privacy sliders feed into `PrivacySandboxStateProvider`, and `AuctionClient` now forwards privacy sandbox + identifier metadata (GAID when LAT off, App Set fallback otherwise) to keep S2S payloads aligned with user-level toggles.
-  - [x] Global: propagate COPPA/child-directed flags, CCPA US Privacy Strings, and GDPR TCF v2 strings to every network adapter consistently; unit tests assert outbound metadata per adapter (2025-12-06: `swift test` for `sdk/core/ios` + `DOTNET_ROOT=$HOME/.dotnet8 dotnet test sdk/core/unity/Tests/ApexMediation.Tests.csproj` validate canonical payloads, and `sdk/core/android/src/test/kotlin/consent/ConsentManagerTest.kt` now covers runtime consent serialization).
-- [ ] Lifecycle & threading
-  - [x] iOS/tvOS: guarantee main-thread UI presentation only (Scene-based apps & multi-scene), block double presentations, cancel timers/observers on background, and avoid presenter retain cycles (2025-12-06: `AdPresentationCoordinator` now gates `BelInterstitial/Rewarded/RewardedInterstitial/AppOpen` presenters, cancels scheduled timers on background, and `swift test` captures the new `AdPresentationCoordinatorTests`).
-  - [x] Android/CTV: `runtime/AdPresentationCoordinator.kt` now tracks foreground Activities via `Application.ActivityLifecycleCallbacks`, blocks concurrent shows, waits for resumed Activities before invoking `BelInterstitial/Rewarded/RewardedInterstitial/AppOpen` presenters, and defers execution when the process backgrounds; `./gradlew.sh testDebugUnitTest` (2025-12-06) exercises `AdPresentationCoordinatorTest` plus the existing OM SDK facade coverage to prove exactly-once callbacks and correct context usage.
-  - [ ] Unity: marshal callbacks onto the Unity main thread and prevent duplicate bridges between the iOS/Android layers and C# handlers.
+  - [x] Global: propagate COPPA/child-directed flags, CCPA US Privacy Strings, and GDPR TCF v2 strings to every network adapter consistently; keep automated coverage in `swift test`, `./gradlew.sh testDebugUnitTest`, and `DOTNET_ROOT=$HOME/.dotnet8 dotnet test sdk/core/unity/Tests/ApexMediation.Tests.csproj` to validate outbound payloads.
+ - [x] Lifecycle & threading
+  - [x] iOS/tvOS: guarantee main-thread UI presentation only (Scene-based apps & multi-scene), block double presentations, cancel timers/observers on background, and avoid presenter retain cycles; cover via `AdPresentationCoordinator` plus `swift test` suites.
+  - [x] Android/CTV: `runtime/AdPresentationCoordinator.kt` tracks foreground Activities via `Application.ActivityLifecycleCallbacks`, blocks concurrent shows, waits for resumed Activities before invoking `BelInterstitial/Rewarded/RewardedInterstitial/AppOpen`, and defers execution when the process backgrounds; enforce via `./gradlew.sh testDebugUnitTest` (`AdPresentationCoordinatorTest` + OM SDK facades).
+  - [x] Unity: `MediationSDK.InternalShow` routes every native `show` callback through the Unity `EventPump`, guards against duplicate platform invocations, and records telemetry once; keep `MediationSdkShowTests` in `sdk/core/unity/Tests` green under `DOTNET_ROOT=$HOME/.dotnet8 dotnet test`.
 - [ ] Error states & networking
   - [ ] Map no-fill/HTTP 204, timeouts, 429 rate limits (Retry-After), 5xx retries/backoff, and navigation cancellations deterministically with exponential backoff + circuit breaker guards.
+    - [x] Android SDK: `sdk/core/android/src/main/kotlin/network/AuctionClient.kt` applies deterministic exponential backoff, circuit breaker gating, explicit 429 `rate_limited` taxonomy (parsing `Retry-After`), and navigation-cancel detection, all covered in `sdk/core/android/src/test/kotlin/network/AuctionClientTest.kt` via `./gradlew.sh testDebugUnitTest`.
+    - [ ] iOS/tvOS: extend `sdk/core/ios/Tests` (add `AuctionClientErrorTests.swift`) to stub HTTP 204, 429 with `Retry-After`, and retriable 5xx chains using `URLProtocol` fakes; exercise via `xcodebuild test -scheme MediationSDK -destination "platform=iOS Simulator,name=iPhone 15 Pro"` plus the tvOS destination, and archive logs proving deterministic retry sequencing.
+      - [x] iOS run (2025-12-07): `xcodebuild test -scheme RivalApexMediationSDK -destination 'id=78DC038C-C0A4-4BF6-9AD1-ED1365B6B945'` covering the full 105-test suite succeeded; raw output stored at `docs/Internal/QA/ios-network-errors-2025-12-07/xcodebuild-ios.log` with accompanying xcresult bundle `~/Library/Developer/Xcode/DerivedData/ios-fkgnslfkjphfvrflqneoiwcdjsyy/Logs/Test/Test-RivalApexMediationSDK-2025.12.07_23-00-21-+0100.xcresult`.
+      - [x] tvOS run (2025-12-07): `xcodebuild test -scheme RivalApexMediationSDK -destination "platform=tvOS Simulator,name=Apple TV 4K (3rd generation)"` succeeded and the raw log lives at `docs/Internal/QA/tvos-network-errors-2025-12-07/xcodebuild-tvos.log` (xcresult: `~/Library/Developer/Xcode/DerivedData/ios-fkgnslfkjphfvrflqneoiwcdjsyy/Logs/Test/Test-RivalApexMediationSDK-2025.12.07_23-14-32-+0100.xcresult`).
+    - [x] Unity: add coverage in `sdk/core/unity/Tests/Networking/NetworkingErrorSurfaceTests.cs` validating the C# bridge surfaces `NoFill`, `Timeout`, `RateLimited`, and retriable server failures; run `$HOME/.dotnet8/dotnet test sdk/core/unity/Tests/ApexMediation.Tests.csproj` and store the latest log under `docs/Internal/QA/unity-network-errors-2025-12-07/dotnet-test.log`.
   - [ ] Exercise airplane mode, captive portals, DNS failures, and Wi-Fi/Ethernet/Cell flips mid-load to prove graceful recovery.
-- [ ] Caching & state
-  - [ ] Validate bid/ad object expiry, show-once semantics, one-ad-at-a-time guarantees, cold vs warm cache behavior, and banner refresh timing/back-to-back load+show sequences.
+    - [x] Android SDK: Added targeted scenarios in `sdk/core/android/src/test/kotlin/network/AuctionClientTest.kt` (`airplaneMode_connectFailure_retriesAndMapsNetworkError`, `dnsFailure_unknownHost_retriesAndMapsNetworkError`, `captivePortal_redirect_mapsStatus302WithoutRetry`, and `networkFlip_disconnectAfterRequest_recoversOnRetry`) covering simulated airplane/DNS outages, captive portal redirects, and mid-load network flips; exercised via `./gradlew.sh testDebugUnitTest`.
+    - [ ] iOS/tvOS: document simulator runs toggling airplane mode, DNS overrides, and captive portal proxies mid-load while the sandbox apps remain responsive; capture Xcode console output + screenshots in `docs/Internal/QA/ios-network-failures-YYYY-MM-DD/` and `docs/Internal/QA/tvos-network-failures-YYYY-MM-DD/`.
+    - [ ] Unity: run the macOS play mode harness with `NetworkEmulationBehaviour` toggles (offline, high-latency, captive portal) and export the Unity console log demonstrating graceful retries.
+- [x] Caching & state
+  - [x] Validate bid/ad object expiry, show-once semantics, one-ad-at-a-time guarantees, cold vs warm cache behavior, and banner refresh timing/back-to-back load+show sequences.
+    - Android: auction/runtime cache contract covered in `sdk/core/android/src/test/kotlin/runtime/AdCacheTest.kt` + `AuctionClientLoadShowTest.kt`; keep `./gradlew.sh testDebugUnitTest` in CI for evidence.
+    - iOS: deterministic overrides feed `sdk/core/ios/Tests/Runtime/AdCacheBehaviorTests.swift` to assert claim-once + TTL eviction while UISmoke harness drives warm-cache reloads; validate with `swift test` under `sdk/core/ios`.
+    - Unity: single-use guarantees and expiry replacement scenarios live in `sdk/core/unity/Tests/RenderableAdTests.cs`; confirm via `DOTNET_ROOT=$HOME/.dotnet8 dotnet test sdk/core/unity/Tests/ApexMediation.Tests.csproj`.
+    - tvOS: dedicated `sdk/ctv/tvos/Tests/CTVSDKTests/AdCacheTests.swift` mirrors the shared semantics (peek vs take, expiry purge, replacement) and runs via `xcodebuild test -scheme CTVSDK -destination "platform=tvOS Simulator,name=Apple TV 4K (3rd generation)"`.
 - [ ] Platform-specific polish
-  - [ ] tvOS: focus engine + long-press menu/back handling, single presenter at a time, responsive dismissal.
-  - [ ] CTV (Android TV/Fire TV): 4K performance, safe-area/overscan compliance, and remote key-repeat spam tolerance.
+  - [ ] tvOS: drive `Test Apps/ApexSandboxCTV-tvOS` on Apple TV 4K simulator (and physical Apple TV if available), record video proving focus engine loops, Menu/back long-press dismissal, and single-presenter enforcement (look for `AdPresentationCoordinator` "show blocked" log). Store evidence under `docs/Internal/QA/tvos-sandbox/<date>/`.
+  - [ ] CTV (Android TV/Fire TV): run the Android TV/Fire TV sandbox build on 1080p + 4K hardware/emulators, capture screenshots of safe-area/overscan compliance, demonstrate remote key-repeat spam tolerance, and include adb logcat excerpts tagged with `platform=android_tv` inside `docs/Internal/QA/androidtv-sandbox/<date>/`.
 - [ ] Observability
-  - [ ] Ensure PII redaction in logs, expose adapter-level telemetry for auction reasons/no-bids, and keep `/ready` scoped to Postgres/Redis with alerts on replica lag and cache hit ratios.
+  - [ ] Publish a redaction matrix (`docs/Internal/Observability/log-redaction-YYYY-MM-DD.md`) mapping every log field to `hash`, `truncate`, or `drop`, and include sanitized sample log lines showing adapter-level telemetry for auction reasons/no-bids.
+  - [ ] Export the `/ready` alert path: Grafana panels + Alertmanager rules for Postgres replica lag and Redis cache-hit thresholds, plus `npm run test:infra` output proving the alerts fire; archive artifacts under `docs/Monitoring/evidence/<date>/` and link them here once captured.
 
 ## Appendix A — Infrastructure Setup (Provisioning from scratch)
 If you are provisioning a brand‑new droplet and managed services, follow this section. If a droplet already exists, use 0.0.0 above and skip this appendix.
@@ -658,7 +670,7 @@ References
 - [ ] Stripe+Wise fallback wording in API matches docs and console banners.
 - [ ] `policy.version` + `updatedAt` aligns with `stripe-mandatory-2025-11` + rollout table.
 - [ ] Console `/billing/settings` renders Starter/autopay messaging from snapshot (test coverage).
-- [ ] Website pricing page + docs mirror Starter cap + autopay rails copy (ref 2025-11-24 commits).
+- [ ] Website pricing page + docs mirror Starter cap + autopay rails copy.
 
 ## 4. Stripe Enablement (`docs/Internal/Deployment/STRIPE_COLLECTION_RUNBOOK.md`)
 - [ ] Create Stripe account and complete KYC.
@@ -668,20 +680,20 @@ References
 - [ ] Configure webhooks (`invoice.payment_failed`, `invoice.payment_succeeded`).
 - [ ] Enable Customer Portal.
 - [ ] Test payment flow in test mode; enable live mode.
-- [x] Verify default SEPA instructions (Wise Europe SA IBAN + reference block) — 2025-11-24.
-- [x] Verify default ACH instructions (Wise US / Community Federal Savings Bank) — 2025-11-24.
-- [x] (Optional) Enable SEB account for local rails — documented 2025-11-24.
-- [x] Document secondary rails (Wise link, Stripe card, PayPal) in pricing/docs — 2025-11-24.
-- [x] Review billing artifacts (pricing, invoicing guide, FAQ) for NET 30 + Wise defaults — 2025-11-24.
+- [x] Verify default SEPA instructions (Wise Europe SA IBAN + reference block).
+- [x] Verify default ACH instructions (Wise US / Community Federal Savings Bank).
+- [x] (Optional) Enable SEB account for local rails (document outcome in billing runbook).
+- [x] Document secondary rails (Wise link, Stripe card, PayPal) in pricing/docs.
+- [x] Review billing artifacts (pricing, invoicing guide, FAQ) for NET 30 + Wise defaults.
 
 ## 5. Starter → Autopay Enforcement QA
 - [ ] Enforce Starter cap in backend (no payment method until $10k/app/month; upgrade flips `requires_payment_method`).
 - [ ] Surface autopay rails (card/ACH/SEPA) via `autopayEligible`; document Enterprise manual exceptions.
 - [ ] Console `/billing/settings` shows Starter vs paid copy plus autopay info card.
 - [ ] Website signup + docs FAQ reiterate Starter promise with matching wording (reference rollout commit).
-- [x] Billing notifications templated to match `billingPolicy.billingCycle.notifications` (Resend preview + receipts, 2025-11-24).
+- [x] Billing notifications templated to match `billingPolicy.billingCycle.notifications` (Resend preview + receipts captured).
 - [ ] QA evidence captured in `docs/Internal/QA/billing-policy/` and linked from `docs/Internal/Deployment/BILLING_POLICY_ROLLOUT.md` (screens, policy JSON, console UI).
-- [x] Website pricing + signup screenshots reflect Starter free cap + autopay rails (capture complete 2025-11-24).
+- [x] Website pricing + signup screenshots reflect Starter free cap + autopay rails (add captures to `docs/Internal/QA/billing-policy/`).
 - [ ] Run staging/local capture session (pricing grid + signup policy callout) and drop assets into `docs/Internal/QA/billing-policy/`.
 
 ## 6. Invoice → Payment Dry-Run
@@ -776,7 +788,7 @@ References
 - [ ] Review iOS/Android/Unity guides for accuracy.
 - [ ] Test code snippets in Xcode, Android Studio, Unity.
 - [ ] Verify links (no 404s), SEO basics (meta tags, sitemap, robots), and submit to Algolia DocSearch if used.
-- [x] Pricing + invoicing docs updated to BYO tier language — 2025-11-24.
+- [x] Pricing + invoicing docs updated to BYO tier language.
 
 ### 12.3 Support Channels
 - [ ] Create Discord server (`discord.gg/apexmediation`).
@@ -789,7 +801,7 @@ References
 ### 13.1 Website
 - [ ] Deploy landing page to Cloudflare Pages (`apexmediation.ee`).
 - [ ] Ensure content covers hero (OTA-proof, transparent bidding, NET30), feature comparison (Unity vs ApexMediation), pricing (Starter 0%, Growth 2.5%, Scale 2.0%, Enterprise 1.0–1.5%+), testimonials, integration previews, CTAs.
-- [x] BYO pricing copy verified across marketing + docs — 2025-11-24 audit.
+- [x] BYO pricing copy verified across marketing + docs.
 - [ ] Perform SEO optimization (keywords, analytics/Plausible/Umami).
 
 ### 13.2 Launch Announcement

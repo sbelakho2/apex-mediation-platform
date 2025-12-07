@@ -91,7 +91,7 @@ public enum BelAppOpen {
     private static func presentDebugAppOpen(from viewController: UIViewController, networkName: String, completion: @escaping () -> Void) {
         #if DEBUG
         let vc = UIViewController()
-        vc.view.backgroundColor = .systemBackground
+        vc.view.backgroundColor = .belDebugBackground
         vc.modalPresentationStyle = .fullScreen
         
         let label = UILabel(frame: .zero)
@@ -123,4 +123,20 @@ public enum BelAppOpen {
     }
 }
 
+#endif
+
+#if canImport(UIKit)
+private extension UIColor {
+    /// Provides a debug background color that works on tvOS and iOS.
+    static var belDebugBackground: UIColor {
+        #if os(tvOS)
+        return UIColor(red: 0.08, green: 0.08, blue: 0.1, alpha: 1.0)
+        #else
+        if #available(iOS 13.0, *) {
+            return .systemBackground
+        }
+        return .white
+        #endif
+    }
+}
 #endif

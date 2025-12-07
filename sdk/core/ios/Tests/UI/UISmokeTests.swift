@@ -311,9 +311,39 @@ enum MockScenario {
 
 class MockURLProtocolFixture: URLProtocol {
     static var scenario: MockScenario = .success
+    private static var adResponseQueue: [AdResponseOverride] = []
     
     static func reset() {
         scenario = .success
+        adResponseQueue.removeAll()
+    }
+
+    struct AdResponseOverride {
+        let adId: String
+        let placementId: String
+        let adType: AdType
+        let expiresIn: TimeInterval
+        let cpm: Double
+        init(adId: String,
+             placementId: String,
+             adType: AdType = .interstitial,
+             expiresIn: TimeInterval = 3600,
+             cpm: Double = 3.5) {
+            self.adId = adId
+            self.placementId = placementId
+            self.adType = adType
+            self.expiresIn = expiresIn
+            self.cpm = cpm
+        }
+    }
+
+    static func enqueueAdResponse(_ override: AdResponseOverride) {
+        adResponseQueue.append(override)
+    }
+    
+    private static func dequeueOverride() -> AdResponseOverride? {
+        guard !adResponseQueue.isEmpty else { return nil }
+        return adResponseQueue.removeFirst()
     }
     
     override class func canInit(with request: URLRequest) -> Bool {
@@ -354,15 +384,21 @@ class MockURLProtocolFixture: URLProtocol {
     override func stopLoading() {}
 
     private func sendAuctionSuccess() {
+        let override = MockURLProtocolFixture.dequeueOverride()
+        let resolvedPlacement = override?.placementId ?? "test_placement"
+        let resolvedAdId = override?.adId ?? "test_ad_123"
+        let resolvedType = override?.adType.rawValue ?? "interstitial"
+        let resolvedCpm = override?.cpm ?? 3.50
+        let ttlSeconds = override?.expiresIn ?? 3600
         let json = """
         {
-            "ad_id": "test_ad_123",
-            "placement": "test_placement",
-            "ad_type": "interstitial",
+            "ad_id": "\(resolvedAdId)",
+            "placement": "\(resolvedPlacement)",
+            "ad_type": "\(resolvedType)",
             "creative": {"banner": {"url": "https://example.com/ad.jpg", "width": 320, "height": 480}},
             "network_name": "MockNetwork",
-            "cpm": 3.50,
-            "expires_at": "\(futureISODate())",
+            "cpm": \(resolvedCpm),
+            "expires_at": "\(futureISODate(offset: ttlSeconds))",
             "metadata": {}
         }
         """
@@ -405,9 +441,9 @@ class MockURLProtocolFixture: URLProtocol {
         client?.urlProtocolDidFinishLoading(self)
     }
     
-    private func futureISODate() -> String {
+    private func futureISODate(offset seconds: TimeInterval = 3600) -> String {
         let formatter = ISO8601DateFormatter()
-        return formatter.string(from: Date().addingTimeInterval(3600))
+        return formatter.string(from: Date().addingTimeInterval(seconds))
     }
 
     private static let configPayload: String = {

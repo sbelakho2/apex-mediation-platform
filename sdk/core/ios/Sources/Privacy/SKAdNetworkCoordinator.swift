@@ -5,6 +5,7 @@ import StoreKit
 import UIKit
 
 /// Handles SKAdNetwork registration, conversion updates, and optional SKOverlay surfaces.
+@MainActor
 final class SKAdNetworkCoordinator {
     static let shared = SKAdNetworkCoordinator()
 
@@ -43,7 +44,7 @@ final class SKAdNetworkCoordinator {
     private func applyConversionUpdates(payload: SKAdMetadata) {
         guard let fineValue = payload.conversionValue ?? payload.derivedFineValue else { return }
         if #available(iOS 16.1, *) {
-            let coarseValue = payload.coarseValue?.storeKitValue
+            let coarseValue = payload.coarseValue?.storeKitValue ?? .low
             SKAdNetwork.updatePostbackConversionValue(fineValue, coarseValue: coarseValue, lockWindow: payload.lockWindow) { error in
                 if let error {
                     debugPrint("[SKAdNetwork] Failed to update postback conversion value: \(error.localizedDescription)")
@@ -129,6 +130,7 @@ private struct SKAdMetadata {
 }
 #else
 /// macOS/tvOS build stub so SwiftPM tests can compile without StoreKit SKAdNetwork symbols.
+@MainActor
 final class SKAdNetworkCoordinator {
     static let shared = SKAdNetworkCoordinator()
     private init() {}

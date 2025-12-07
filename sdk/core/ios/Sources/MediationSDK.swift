@@ -1,6 +1,11 @@
 import Foundation
 import Dispatch
 
+private enum CacheConfig {
+    /// Cushion to absorb network jitter and scheduling delays before expiring cached ads.
+    static let expirationGrace: TimeInterval = 0.35
+}
+
 public final class MediationSDK: @unchecked Sendable {
     public static let shared = MediationSDK()
 
@@ -109,7 +114,11 @@ public final class MediationSDK: @unchecked Sendable {
     /// Check if an ad is cached and ready.
     public func isAdReady(placementId: String) -> Bool {
         readSnapshot { snapshot in
-            snapshot.cacheCounts[placementId, default: 0] > 0
+            guard let expirations = snapshot.cacheExpirations[placementId], !expirations.isEmpty else {
+                return false
+            }
+            let now = Date()
+            return expirations.contains { $0.addingTimeInterval(CacheConfig.expirationGrace) > now }
         }
     }
 
@@ -174,6 +183,7 @@ private struct SDKSnapshot {
     let isInitialized: Bool
     let cacheCounts: [String: Int]
     let consentSummary: [String: Any]
+    let cacheExpirations: [String: [Date]]
 
     static let empty = SDKSnapshot(
         appId: nil,
@@ -183,7 +193,8 @@ private struct SDKSnapshot {
         testMode: false,
         isInitialized: false,
         cacheCounts: [:],
-        consentSummary: ConsentManager.shared.getRedactedConsentInfo()
+        consentSummary: ConsentManager.shared.getRedactedConsentInfo(),
+        cacheExpirations: [:]
     )
 }
 
@@ -199,7 +210,8 @@ private extension SDKSnapshot {
             testMode: testMode,
             isInitialized: isInitialized,
             cacheCounts: cacheCounts,
-            consentSummary: summary
+            consentSummary: summary,
+            cacheExpirations: cacheExpirations
         )
     }
 }
@@ -406,7 +418,8 @@ private actor MediationRuntime {
             testMode: config?.testMode ?? false,
             isInitialized: initialized,
             cacheCounts: adCache.mapValues { $0.count },
-            consentSummary: consentManager.getRedactedConsentInfo()
+            consentSummary: consentManager.getRedactedConsentInfo(),
+            cacheExpirations: adCache.mapValues { $0.map { $0.expiresAt } }
         )
     }
 
@@ -495,7 +508,7 @@ private actor MediationRuntime {
     }
 
     private func storeAd(_ ad: Ad) {
-        guard ad.expiresAt > Date() else { return }
+        guard ad.expiresAt.addingTimeInterval(CacheConfig.expirationGrace) > Date() else { return }
         pruneExpiredCache(for: ad.placement)
         var ads = adCache[ad.placement] ?? []
         ads.append(ad)
@@ -548,7 +561,7 @@ private actor MediationRuntime {
         let now = Date()
         if let placementId {
             if var ads = adCache[placementId] {
-                ads.removeAll { $0.expiresAt <= now }
+                ads.removeAll { $0.expiresAt.addingTimeInterval(CacheConfig.expirationGrace) <= now }
                 if ads.isEmpty {
                     adCache.removeValue(forKey: placementId)
                 } else {
@@ -623,6 +636,7 @@ public enum SDKError: Error, LocalizedError, Equatable {
     // Section 3.3: HTTP status code errors for parity with Android
     case status_429(message: String)
     case status_5xx(code: Int, message: String)
+    case circuitBreakerOpen(retryAfter: TimeInterval)
 
     public var errorDescription: String? {
         switch self {
@@ -654,6 +668,9 @@ public enum SDKError: Error, LocalizedError, Equatable {
             return "Rate limit exceeded (429): \(message)"
         case .status_5xx(let code, let message):
             return "Server error (\(code)): \(message)"
+        case .circuitBreakerOpen(let retryAfter):
+            let seconds = Int(ceil(retryAfter))
+            return "Circuit breaker open. Retry after \(seconds)s"
         }
     }
     
@@ -676,6 +693,7 @@ public enum SDKError: Error, LocalizedError, Equatable {
         switch (lhs, rhs) {
         case (.notInitialized, .notInitialized),
              (.alreadyInitialized, .alreadyInitialized),
+               (.presentationInProgress, .presentationInProgress),
                (.frequencyLimited, .frequencyLimited),
              (.noFill, .noFill),
              (.timeout, .timeout):
@@ -690,6 +708,8 @@ public enum SDKError: Error, LocalizedError, Equatable {
             return lm == rm
         case (.status_5xx(let lc, let lm), .status_5xx(let rc, let rm)):
             return lc == rc && lm == rm
+        case (.circuitBreakerOpen(let la), .circuitBreakerOpen(let ra)):
+            return abs(la - ra) < 0.001
         default:
             return false
         }

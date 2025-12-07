@@ -8,6 +8,7 @@ import AppTrackingTransparency
 /// Enriched in-app debug panel for iOS mirroring Android's DebugPanel.
 /// Safe to ship; shows comprehensive SDK state with redacted consent info.
 /// Section 3.1 enhancement: SDK version, test mode, config version, consent snapshot, adapter count.
+@MainActor
 public enum DebugPanel {
     /// Redacted consent snapshot for debugging - PII is masked
     public struct ConsentSnapshot: Codable {
@@ -52,7 +53,7 @@ public enum DebugPanel {
         let testMode = sdk.isTestMode ? "ON ⚠️" : "OFF"
         
         // Config version (Section 3.1 requirement)
-        let configVersion = sdk.remoteConfigVersion ?? "N/A"
+        let configVersion = sdk.remoteConfigVersion.map(String.init) ?? "N/A"
         
         // Redacted consent snapshot (Section 3.1 requirement)
         let consentInfo = buildConsentSnapshot()
@@ -78,9 +79,11 @@ public enum DebugPanel {
         """
         
         let alert = UIAlertController(title: "Mediation Debugger", message: message, preferredStyle: .alert)
+        #if !os(tvOS)
         alert.addAction(UIAlertAction(title: "Copy", style: .default, handler: { _ in
             UIPasteboard.general.string = message
         }))
+        #endif
         alert.addAction(UIAlertAction(title: "Close", style: .cancel, handler: nil))
         viewController.present(alert, animated: true)
     }
@@ -89,7 +92,9 @@ public enum DebugPanel {
     private static func buildConsentSnapshot() -> ConsentSnapshot {
         var attStatus = "UNKNOWN"
         
-        #if canImport(AppTrackingTransparency)
+        #if os(tvOS)
+        attStatus = "UNAVAILABLE_TVOS"
+        #elseif canImport(AppTrackingTransparency)
         if #available(iOS 14, *) {
             switch ATTrackingManager.trackingAuthorizationStatus {
             case .authorized:

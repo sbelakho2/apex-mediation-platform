@@ -1,6 +1,6 @@
 #if canImport(UIKit)
-import Foundation
-import UIKit
+@preconcurrency import Foundation
+@preconcurrency import UIKit
 
 /// Coordinates ad presentations to guarantee main-thread execution and prevent overlapping shows.
 @MainActor
