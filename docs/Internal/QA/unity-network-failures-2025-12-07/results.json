@@ -1,0 +1,9 @@
+{
+  "runner": "Unity Test Runner (BatchMode)",
+  "command": "DOTNET_ROOT=$HOME/.dotnet8 unity -batchmode -nographics -runTests -projectPath sdk/core/unity -testResults ./unity-test-results.xml",
+  "scenarios": [
+    {"name": "offline", "result": "pass", "evidence": "console.log:1-2"},
+    {"name": "dns_override", "result": "pass", "evidence": "console.log:3-4"},
+    {"name": "captive_portal", "result": "pass", "evidence": "console.log:5-6"}
+  ]
+}

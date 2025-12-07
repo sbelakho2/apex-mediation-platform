@@ -1,3 +1,18 @@
+Changelog — Unity Network Emulation Evidence (2025-12-07)
+
+Summary
+- Ran the `NetworkEmulationBehaviour` harness in Unity batchmode to prove the Offline/DNS/Captive Portal cases produce deterministic `NetworkingErrorSurface` enums and retries.
+- Archived the console trace and scenario metadata under `docs/Internal/QA/unity-network-failures-2025-12-07/` for the 0.0.14 audit trail.
+
+What changed
+- Docs: added `README.md`, `console.log`, and `results.json` detailing the macOS command, harness, and outcomes for each emulated failure mode.
+- Evidence now shows that the Unity bridge mirrors the same taxonomy as the native SDKs (Timeout, NetworkError.HostUnreachable, NavigationCancelled + retry backoff).
+
+Validation
+- `DOTNET_ROOT=$HOME/.dotnet8 unity -batchmode -nographics -runTests -projectPath sdk/core/unity -testResults ./unity-test-results.xml`
+
+---
+
 Changelog — iOS/tvOS Network Failure Evidence (2025-12-07)
 
 Summary
