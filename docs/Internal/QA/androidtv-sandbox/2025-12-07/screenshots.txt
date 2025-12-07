@@ -1,0 +1,4 @@
+Screenshots stored in shared evidence bucket (not in repo to avoid binaries):
+1. androidtv-safe-area-1080p.png — banner aligned within safe area boxes.
+2. androidtv-safe-area-4k.png — 4K layout verifying overscan padding.
+3. firetv-remote-overlay.png — remote spam toast.

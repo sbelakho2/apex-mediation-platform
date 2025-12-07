@@ -1,3 +1,19 @@
+Changelog — CTV Sandbox Evidence (2025-12-07)
+
+Summary
+- Captured platform-specific polish for tvOS and Android TV so the 0.0.14 checklist items (focus loops, remote spam tolerance, lifecycle recovery) have concrete artifacts.
+- Stored the write-ups, console excerpts, and screenshot/video references under `docs/Internal/QA/tvos-sandbox/2025-12-07/` and `docs/Internal/QA/androidtv-sandbox/2025-12-07/`.
+
+What changed
+- tvOS: Added `README.md`, `console.txt`, and `video-notes.md` describing the Apple TV 4K simulator run (focus navigation, Menu dismissal, presenter guardrails). Video reference lives on the workstation but is documented for reviewers.
+- Android TV/Fire TV: Added `README.md`, `screenshots.txt`, and `logcat.txt` summarizing safe-area captures, remote spam behavior, and network flip retries with `platform=android_tv` logging.
+
+Validation
+- `xcodebuild -scheme ApexSandboxCTV-tvOS -destination "platform=tvOS Simulator,name=Apple TV 4K (3rd generation)"`
+- `./gradlew :TestApps:AndroidTV:connectedDebugAndroidTest`
+
+---
+
 Changelog — Unity Network Emulation Evidence (2025-12-07)
 
 Summary

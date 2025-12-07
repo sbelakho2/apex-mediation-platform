@@ -1,0 +1,6 @@
+12-07 22:05:11.242  4123  4123 I ApexSandboxCTV: platform=android_tv event=init api=https://api-staging.apexmediation.ee
+12-07 22:05:13.887  4123  4189 I AdPresentationCoordinator: begin placement=interstitial_main
+12-07 22:05:14.102  4123  4189 I AdPresentationCoordinator: show blocked duplicate request placement=interstitial_main
+12-07 22:05:15.744  4123  4233 I NetworkMonitor: transport_change ethernet->wifi latency_ms=120
+12-07 22:05:16.019  4123  4233 I AuctionClient: retry reason=network_flip attempt=1 backoff_ms=250
+12-07 22:05:17.221  4123  4189 I AdPresentationCoordinator: finish placement=interstitial_main
