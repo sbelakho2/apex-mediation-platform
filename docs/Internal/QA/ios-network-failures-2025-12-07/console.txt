@@ -1,0 +1,4 @@
+2025-12-07 23:42:11.482 xctest[31542:2012873] [network] AuctionClientTests.testTimeoutMapsToTimeoutError -> URLError(-1001) mapped to SDKError.timeout
+2025-12-07 23:42:14.107 xctest[31542:2012873] [network] AuctionClientTests.testDnsFailureMapsToNetworkError -> cannotFindHost mapped to SDKError.networkError(underlying: "A server with the specified hostname could not be found.")
+2025-12-07 23:42:18.554 xctest[31542:2012951] [network] AuctionClientTests.testCaptivePortalRedirectMapsToNetworkError -> HTTP 302 mapped to SDKError.networkError(underlying: "HTTP 302")
+2025-12-07 23:42:23.992 xctest[31542:2012951] [network] UISmokeTests.testTimeoutHandling -> LocalDataTask ... Error Domain=NSURLErrorDomain Code=-1001 (null)

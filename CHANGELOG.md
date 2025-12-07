@@ -1,3 +1,19 @@
+Changelog — iOS/tvOS Network Failure Evidence (2025-12-07)
+
+Summary
+- Captured simulator runs covering airplane mode, DNS override, and captive-portal redirects for both iOS and tvOS so checklist 0.0.14’s recovery scenarios have concrete artifacts.
+- Archived console excerpts plus structured `results.json` manifests under `docs/Internal/QA/ios-network-failures-2025-12-07/` and `docs/Internal/QA/tvos-network-failures-2025-12-07/`.
+
+What changed
+- iOS: documented the scenarios in `ios-network-failures-2025-12-07/README.md`, including the `simctl` commands used to toggle Wi-Fi, DNS, and proxies; stored representative logs in `console.txt` and scenario verdicts in `results.json`.
+- tvOS: mirrored the same coverage in `tvos-network-failures-2025-12-07/` so Apple TV focus/lifecycle evidence matches handheld; console excerpts show the deterministic `SDKError` mappings introduced by the retry/circuit-breaker work.
+
+Validation
+- `xcodebuild test -scheme RivalApexMediationSDK -destination 'id=78DC038C-C0A4-4BF6-9AD1-ED1365B6B945'`
+- `xcodebuild test -scheme RivalApexMediationSDK -destination 'platform=tvOS Simulator,name=Apple TV 4K (3rd generation)'`
+
+---
+
 Changelog — iOS Auction Error Taxonomy & Evidence (2025-12-07)
 
 Summary

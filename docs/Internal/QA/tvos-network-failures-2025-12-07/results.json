@@ -1,0 +1,10 @@
+{
+  "device": "Apple TV 4K (3rd generation) Simulator",
+  "tvos_version": "17.2",
+  "sdk_commit": "main",
+  "scenarios": [
+    {"name": "airplane_mode", "result": "pass", "evidence": "console.txt:1"},
+    {"name": "dns_override", "result": "pass", "evidence": "console.txt:2"},
+    {"name": "captive_portal", "result": "pass", "evidence": "console.txt:3"}
+  ]
+}

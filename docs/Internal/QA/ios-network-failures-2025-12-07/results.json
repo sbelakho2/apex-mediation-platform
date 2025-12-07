@@ -1,0 +1,11 @@
+{
+  "device": "iPhone 15 Pro Simulator",
+  "ios_version": "17.2",
+  "sdk_commit": "main",
+  "scenarios": [
+    {"name": "airplane_mode", "result": "pass", "evidence": "console.txt:1"},
+    {"name": "dns_override", "result": "pass", "evidence": "console.txt:2"},
+    {"name": "captive_portal", "result": "pass", "evidence": "console.txt:3"},
+    {"name": "timeout_recovery", "result": "pass", "evidence": "console.txt:4"}
+  ]
+}
