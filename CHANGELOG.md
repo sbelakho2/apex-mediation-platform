@@ -1,3 +1,22 @@
+Changelog — iOS Auction Error Taxonomy & Evidence (2025-12-07)
+
+Summary
+- iOS/tvOS `AuctionClient` now applies deterministic exponential backoff, rate-limit parsing, and a circuit breaker so HTTP 204/429/5xx/timeouts map into stable `SDKError` cases across Apple platforms.
+- Added focused suites (`sdk/core/ios/Tests/Network/AuctionClientErrorTests.swift`, updated `AuctionClientTests.swift`, new `sdk/core/ios/Tests/Runtime/AdCacheBehaviorTests.swift`, richer `MockURLProtocolFixture`) to assert cache semantics plus retry sequencing under Swift 6 concurrency.
+- Archived fresh iOS + tvOS `xcodebuild` evidence under `docs/Internal/QA/ios-network-errors-2025-12-07/xcodebuild-ios.log` and `docs/Internal/QA/tvos-network-errors-2025-12-07/xcodebuild-tvos.log`, with matching `.xcresult` bundles in DerivedData for audit.
+
+What changed
+- iOS SDK: `sdk/core/ios/Sources/Network/AuctionClient.swift` now injects configurable retry/circuit-breaker settings, parses `Retry-After` headers, normalizes timeout/nav-cancel URLErrors, and centralizes rate-limit messaging so adapters reuse the exact taxonomy as Android.
+- iOS SDK: `sdk/core/ios/Tests/Network/AuctionClientTests.swift` was rewritten to run entirely on `URLProtocol` fakes, covering HTTP 204/429/5xx/timeouts/captive portals/DNS failures, while the new `AuctionClientErrorTests.swift` exercises exponential backoff and circuit breaker cooldown math via injected sleep/date hooks.
+- iOS SDK: Introduced `sdk/core/ios/Tests/Runtime/AdCacheBehaviorTests.swift` plus `MockURLProtocolFixture.enqueueAdResponse`, enabling deterministic TTL eviction and multi-ad queue assertions that mirror Android/Unity cache behavior.
+- Docs/Evidence: Captured the iOS simulator run (`xcodebuild test -scheme RivalApexMediationSDK -destination 'id=78DC038C-C0A4-4BF6-9AD1-ED1365B6B945'`) and the Apple TV 4K simulator run (`-destination "platform=tvOS Simulator,name=Apple TV 4K (3rd generation)"`) and stored the raw logs/paths above for the 0.0.14 audit.
+
+Validation
+- `xcodebuild test -scheme RivalApexMediationSDK -destination 'id=78DC038C-C0A4-4BF6-9AD1-ED1365B6B945'`
+- `xcodebuild test -scheme RivalApexMediationSDK -destination 'platform=tvOS Simulator,name=Apple TV 4K (3rd generation)'`
+
+---
+
 Changelog — tvOS Color Guards & Evidence (2025-12-07)
 
 Summary
