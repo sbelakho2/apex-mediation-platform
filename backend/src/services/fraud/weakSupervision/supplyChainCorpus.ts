@@ -92,8 +92,12 @@ export class SupplyChainCorpus {
     return this.sellers[sellerId];
   }
 
+  listDomainEntries(domain: string): AppAdsEntry[] | undefined {
+    return this.appAds[domain.toLowerCase().trim()];
+  }
+
   evaluateAuthorization(context: SupplyChainContext): AuthorizationResult {
-    const domainEntries = this.appAds[context.domain.toLowerCase().trim()];
+    const domainEntries = this.listDomainEntries(context.domain);
 
     if (!domainEntries || domainEntries.length === 0) {
       return {
