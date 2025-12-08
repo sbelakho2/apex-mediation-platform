@@ -10,6 +10,7 @@ import org.junit.After
 import org.junit.Assert.assertNull
 import org.junit.Before
 import org.junit.Test
+import org.junit.Assert.assertThrows
 
 /**
  * Validates that ConfigManager rejects malformed remote configs via validateSchema().
@@ -94,9 +95,11 @@ class ConfigSchemaValidationTest {
             sdkConfig = sdkCfg
         )
 
-        mgr.loadConfig()
+        assertThrows(IllegalStateException::class.java) {
+            mgr.loadConfig()
+        }
+        // Should fail-closed and not populate placements
         val pl = mgr.getPlacementConfig("pl_toobig")
-        // Expect rejection → placement not loaded
         assertNull(pl)
     }
 
@@ -144,7 +147,9 @@ class ConfigSchemaValidationTest {
             sdkConfig = sdkCfg
         )
 
-        mgr.loadConfig()
+        assertThrows(IllegalStateException::class.java) {
+            mgr.loadConfig()
+        }
         val pl = mgr.getPlacementConfig("pl_blank")
         assertNull(pl)
     }

@@ -6,11 +6,12 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/bel-consulting/rival-ad-stack/config/internal/killswitch"
-	"github.com/bel-consulting/rival-ad-stack/config/internal/rollout"
-	"github.com/bel-consulting/rival-ad-stack/config/internal/signing"
 	"github.com/gorilla/mux"
 	"github.com/redis/go-redis/v9"
+	"github.com/sbelakho2/Ad-Project/backend/config/internal/killswitch"
+	"github.com/sbelakho2/Ad-Project/backend/config/internal/rollout"
+	"github.com/sbelakho2/Ad-Project/backend/config/internal/signing"
+	"github.com/sbelakho2/Ad-Project/backend/config/internal/validation"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -20,6 +21,7 @@ type Handler struct {
 	rolloutController *rollout.Controller
 	killSwitchManager *killswitch.Manager
 	redis             *redis.Client
+	validator         *validation.Validator
 }
 
 // NewHandler creates a new API handler
@@ -28,12 +30,14 @@ func NewHandler(
 	rolloutController *rollout.Controller,
 	killSwitchManager *killswitch.Manager,
 	redis *redis.Client,
+	validator *validation.Validator,
 ) *Handler {
 	return &Handler{
 		signer:            signer,
 		rolloutController: rolloutController,
 		killSwitchManager: killSwitchManager,
 		redis:             redis,
+		validator:         validator,
 	}
 }
 
@@ -71,6 +75,13 @@ func (h *Handler) GetConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Verify signature before returning to clients
+	if err := h.signer.Verify(signedConfig); err != nil {
+		log.Errorf("Signature verification failed for config %s: %v", configID, err)
+		respondError(w, http.StatusInternalServerError, "Configuration verification failed")
+		return
+	}
+
 	// Return configuration
 	respondJSON(w, http.StatusOK, signedConfig)
 }
@@ -97,6 +108,16 @@ func (h *Handler) DeployConfig(w http.ResponseWriter, r *http.Request) {
 
 	if len(req.Payload) == 0 {
 		respondError(w, http.StatusBadRequest, "payload is required")
+		return
+	}
+
+	// Basic validation (size + required fields) before signing
+	if err := h.validator.ValidateSize(req.Payload); err != nil {
+		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if err := h.validator.ValidateJSON(req.Payload); err != nil {
+		respondError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 

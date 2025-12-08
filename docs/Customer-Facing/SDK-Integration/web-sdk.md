@@ -4,6 +4,17 @@ Integrate ApexMediation into your web-based games and applications.
 
 ---
 
+## Adapter Dev Kit (Web)
+
+If you are implementing your own web adapter (e.g., wrapping Prebid.js or Google Ad Manager), see the Developer‑Facing Dev Kits:
+
+- Web Adapter Dev Kit deep‑dive: `docs/Developer-Facing/DevKits/web.md`
+- Dev Kit index (all platforms): `docs/Developer-Facing/AdapterDevKit.md`
+
+The BYO model ensures ApexMediation core does not bundle third‑party scripts. You supply and configure your web tags and implement a thin adapter that conforms to the documented interface.
+
+---
+
 ## Prerequisites
 
 - Modern web browser (Chrome 90+, Firefox 88+, Safari 14+, Edge 90+)

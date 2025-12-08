@@ -20,6 +20,11 @@ The rest of this guide breaks each step down in detail.
 - Sandbox flags let you iterate adapters quickly without changing code (DEBUG/dev builds only).
 - Adapter Dev Kit (iOS/tvOS) and Android parity allow validating adapters without bundling them in core.
 
+### Adapter Dev Kit (Unity)
+See also (Developer‑Facing):
+- Unity Adapter Dev Kit deep‑dive: `docs/Developer-Facing/DevKits/unity.md`
+- Dev Kit index (all platforms): `docs/Developer-Facing/AdapterDevKit.md`
+
 ---
 
 ## 1. Installing the Unity package

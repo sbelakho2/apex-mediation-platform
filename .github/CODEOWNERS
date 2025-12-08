@@ -1,9 +1,9 @@
 # Default code owners for the repository
 # These users or teams will be requested for review on every pull request.
-* @bel-consulting/ad-stack-maintainers
+* @sbelakho2
 
-# Domain-specific ownership
-backend/ @bel-consulting/backend-owners
-console/ @bel-consulting/console-owners
-sdks/ @bel-consulting/sdk-owners
-infrastructure/ @bel-consulting/platform-infra
+# Domain-specific ownership (single maintainer)
+backend/ @sbelakho2
+console/ @sbelakho2
+sdks/ @sbelakho2
+infrastructure/ @sbelakho2

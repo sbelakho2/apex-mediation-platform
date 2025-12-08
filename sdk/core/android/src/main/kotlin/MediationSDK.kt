@@ -373,9 +373,9 @@ class MediationSDK private constructor(
                             net to ValidationResult.error("missing_credentials", "No credentials provided for $net")
                         } else {
                             try {
-                                val start = System.currentTimeMillis()
+                                val start = com.rivalapexmediation.sdk.util.ClockProvider.clock.monotonicNow()
                                 val vr = adapter.validateConfig(creds)
-                                val latency = System.currentTimeMillis() - start
+                                val latency = com.rivalapexmediation.sdk.util.ClockProvider.clock.monotonicNow() - start
                                 val meta: Map<String, Any> = mapOf(
                                     "network" to net,
                                     "hasCreds" to true,
@@ -562,8 +562,9 @@ class MediationSDK private constructor(
      */
     fun loadAd(placement: String, callback: AdLoadCallback) {
         val loadTask = Runnable {
-            val startTime = System.currentTimeMillis()
-            val traceId = try { java.util.UUID.randomUUID().toString() } catch (_: Throwable) { "trace-${System.currentTimeMillis()}" }
+            val clock = com.rivalapexmediation.sdk.util.ClockProvider.clock
+            val startTime = clock.monotonicNow()
+            val traceId = try { java.util.UUID.randomUUID().toString() } catch (_: Throwable) { "trace-${clock.now()}" }
 
             try {
                 if (config.validationModeEnabled) {
@@ -600,7 +601,7 @@ class MediationSDK private constructor(
                             "s2s",
                             runtimeTelemetryMetadata(LoadStrategy.S2S)
                         )
-                        val s2sStart = System.currentTimeMillis()
+                        val s2sStart = clock.monotonicNow()
                         val client = ensureAuctionClient()
                         val meta = mutableMapOf<String, String>()
                         val effectiveTest = isTestModeEffective()
@@ -619,24 +620,24 @@ class MediationSDK private constructor(
                         // Map to Ad model and callback success
                         val ttlMs = computeDefaultExpiryMs(placementConfig)
                         val ad = Ad(
-                            id = result.creativeId ?: ("ad-" + System.currentTimeMillis()),
+                            id = result.creativeId ?: ("ad-" + clock.now()),
                             placementId = placement,
                             networkName = result.adapter,
                             adType = AdType.INTERSTITIAL,
                             ecpm = result.ecpm,
                             creative = Creative.Banner(width = 0, height = 0, markupHtml = result.adMarkup ?: ""),
                             metadata = buildRuntimeAdMetadata(LoadStrategy.S2S),
-                            expiryTimeMs = System.currentTimeMillis() + ttlMs
+                            expiryTimeMs = clock.monotonicNow() + ttlMs
                         )
                         cacheAd(placement, ad)
-                        val latency = System.currentTimeMillis() - startTime
+                        val latency = clock.monotonicNow() - startTime
                         telemetry.recordAdLoad(placement, latency, true)
                         telemetry.recordAdapterSpanFinish(
                             traceId = traceId,
                             placement = placement,
                             adapter = "s2s",
                             outcome = "fill",
-                            latencyMs = System.currentTimeMillis() - s2sStart,
+                            latencyMs = clock.monotonicNow() - s2sStart,
                             metadata = runtimeTelemetryMetadata(LoadStrategy.S2S)
                         )
                         postToMainThread { callback.onAdLoaded(ad) }
@@ -650,7 +651,7 @@ class MediationSDK private constructor(
                                 placement = placement,
                                 adapter = "s2s",
                                 outcome = "no_fill",
-                                latencyMs = System.currentTimeMillis() - startTime,
+                                latencyMs = clock.monotonicNow() - startTime,
                                 errorCode = reason,
                                 errorMessage = ae.message,
                                 metadata = runtimeTelemetryMetadata(LoadStrategy.S2S)
@@ -658,13 +659,13 @@ class MediationSDK private constructor(
                             // proceed to adapters
                         } else {
                             val err = mapAuctionReasonToAdError(reason)
-                            telemetry.recordAdLoad(placement, System.currentTimeMillis() - startTime, false)
+                            telemetry.recordAdLoad(placement, clock.monotonicNow() - startTime, false)
                             telemetry.recordAdapterSpanFinish(
                                 traceId = traceId,
                                 placement = placement,
                                 adapter = "s2s",
                                 outcome = if (reason == "timeout") "timeout" else "error",
-                                latencyMs = System.currentTimeMillis() - startTime,
+                                latencyMs = clock.monotonicNow() - startTime,
                                 errorCode = reason,
                                 errorMessage = ae.message,
                                 metadata = runtimeTelemetryMetadata(LoadStrategy.S2S)
@@ -692,7 +693,7 @@ class MediationSDK private constructor(
 
                 runtimeEntries.forEach { entry ->
                     futures += networkExecutor.submit(Callable {
-                        val adapterStart = System.currentTimeMillis()
+                        val adapterStart = com.rivalapexmediation.sdk.util.ClockProvider.clock.monotonicNow()
                         val metadata = runtimeTelemetryMetadata(
                             LoadStrategy.CLIENT_ADAPTER,
                             mapOf("path" to "adapter", "api" to "runtime_v2")
@@ -705,7 +706,7 @@ class MediationSDK private constructor(
                         )
                         try {
                             val payload = loadViaRuntime(entry, placement, placementConfig)
-                            val latency = System.currentTimeMillis() - adapterStart
+                            val latency = com.rivalapexmediation.sdk.util.ClockProvider.clock.monotonicNow() - adapterStart
                             val response = payload?.response?.copy(loadTime = latency)
                             val outcome = if (response?.isValid() == true) "fill" else "no_fill"
                             telemetry.recordAdapterSpanFinish(
@@ -718,7 +719,7 @@ class MediationSDK private constructor(
                             )
                             AdapterResult(response, payload?.binding)
                         } catch (t: Throwable) {
-                            val latency = System.currentTimeMillis() - adapterStart
+                            val latency = com.rivalapexmediation.sdk.util.ClockProvider.clock.monotonicNow() - adapterStart
                             telemetry.recordAdapterSpanFinish(
                                 traceId = traceId,
                                 placement = placement,
@@ -736,7 +737,7 @@ class MediationSDK private constructor(
 
                 legacyAdapters.forEach { adapter ->
                     futures += networkExecutor.submit(Callable {
-                        val adapterStart = System.currentTimeMillis()
+                        val adapterStart = com.rivalapexmediation.sdk.util.ClockProvider.clock.monotonicNow()
                         val metadata = runtimeTelemetryMetadata(
                             LoadStrategy.CLIENT_ADAPTER,
                             mapOf("path" to "adapter", "api" to "legacy_v1")
@@ -744,7 +745,7 @@ class MediationSDK private constructor(
                         telemetry.recordAdapterSpanStart(traceId, placement, adapter.name, metadata)
                         try {
                             val resp = loadWithCircuitBreaker(adapter, placement, placementConfig)
-                            val latency = System.currentTimeMillis() - adapterStart
+                            val latency = com.rivalapexmediation.sdk.util.ClockProvider.clock.monotonicNow() - adapterStart
                             val outcome = if (resp?.isValid() == true) "fill" else "no_fill"
                             telemetry.recordAdapterSpanFinish(
                                 traceId = traceId,
@@ -756,7 +757,7 @@ class MediationSDK private constructor(
                             )
                             AdapterResult(resp, null)
                         } catch (t: Throwable) {
-                            val latency = System.currentTimeMillis() - adapterStart
+                            val latency = com.rivalapexmediation.sdk.util.ClockProvider.clock.monotonicNow() - adapterStart
                             telemetry.recordAdapterSpanFinish(
                                 traceId = traceId,
                                 placement = placement,
@@ -791,14 +792,14 @@ class MediationSDK private constructor(
                 handleRuntimeBindings(adapterResults, bestAd)
 
                 if (bestAd != null) {
-                    val expiry = bestAd.expiryTimeMs ?: (System.currentTimeMillis() + computeDefaultExpiryMs(placementConfig))
+                    val expiry = bestAd.expiryTimeMs ?: (com.rivalapexmediation.sdk.util.ClockProvider.clock.monotonicNow() + computeDefaultExpiryMs(placementConfig))
                     val cached = bestAd.copy(expiryTimeMs = expiry)
                     cacheAd(placement, cached)
-                    val latency = System.currentTimeMillis() - startTime
+                    val latency = com.rivalapexmediation.sdk.util.ClockProvider.clock.monotonicNow() - startTime
                     telemetry.recordAdLoad(placement, latency, true)
                     postToMainThread { callback.onAdLoaded(cached) }
                 } else {
-                    telemetry.recordAdLoad(placement, System.currentTimeMillis() - startTime, false)
+                    telemetry.recordAdLoad(placement, com.rivalapexmediation.sdk.util.ClockProvider.clock.monotonicNow() - startTime, false)
                     postToMainThread { callback.onError(AdError.NO_FILL, "No valid bids received") }
                 }
 
@@ -847,7 +848,9 @@ class MediationSDK private constructor(
      * Get adapters enabled for this placement
      */
     private fun getEnabledAdapters(config: PlacementConfig): List<AdAdapter> {
-        return config.enabledNetworks.mapNotNull { networkId ->
+        // Apply sandbox whitelist if present to limit candidates
+        val filteredNetworks = filterByWhitelist(config.enabledNetworks, sandboxAdapterWhitelist)
+        return filteredNetworks.mapNotNull { networkId ->
             adapterRegistry.getAdapter(networkId)
         }.filter { adapter ->
             adapter.isAvailable() && !isAdapterInCircuit(adapter)
@@ -864,10 +867,21 @@ class MediationSDK private constructor(
     /**
      * Apply sandbox adapter whitelist if present; otherwise, return networks unchanged.
      */
-    private fun applyAdapterWhitelist(networks: List<String>): List<String> {
-        val wl = sandboxAdapterWhitelist
-        if (wl == null || wl.isEmpty()) return networks
-        return networks.filter { wl.contains(it.lowercase()) }
+    private fun applyAdapterWhitelist(networks: List<String>): List<String> =
+        filterByWhitelist(networks, sandboxAdapterWhitelist)
+
+    companion object {
+        /**
+         * Public helper primarily for tests: filters network ids by a whitelist.
+         * Matching is case-insensitive against the whitelist set, but original
+         * casing of items in [networks] is preserved in the returned list.
+         */
+        @JvmStatic
+        fun filterByWhitelist(networks: List<String>, whitelist: Set<String>?): List<String> {
+            val wl = whitelist
+            if (wl == null || wl.isEmpty()) return networks
+            return networks.filter { wl.contains(it.lowercase()) }
+        }
     }
     
     /**
@@ -915,13 +929,15 @@ class MediationSDK private constructor(
         synchronized(adCache) {
             pruneExpiredLocked()
             val cached = adCache[placement]
-            return cached != null && System.currentTimeMillis() < cached.expiryAtMs
+            val now = com.rivalapexmediation.sdk.util.ClockProvider.clock.monotonicNow()
+            return cached != null && now < cached.expiryAtMs
         }
     }
 
     // Cache helpers
     private fun cacheAd(placement: String, ad: Ad) {
-        val expiry = ad.expiryTimeMs ?: (System.currentTimeMillis() + 60_000L)
+        val now = com.rivalapexmediation.sdk.util.ClockProvider.clock.monotonicNow()
+        val expiry = ad.expiryTimeMs ?: (now + 60_000L)
         synchronized(adCache) {
             adCache[placement]?.ad?.let { releaseRuntimeBinding(it) }
             adCache[placement] = CachedAd(ad, expiry)
@@ -930,7 +946,7 @@ class MediationSDK private constructor(
     }
 
     private fun pruneExpiredLocked() {
-        val now = System.currentTimeMillis()
+        val now = com.rivalapexmediation.sdk.util.ClockProvider.clock.monotonicNow()
         val it = adCache.entries.iterator()
         while (it.hasNext()) {
             val e = it.next()
@@ -1072,7 +1088,7 @@ class MediationSDK private constructor(
             metadata["partner_$k"] = v?.toString() ?: ""
         }
         val ttlMs = loadResult.ttlMs.coerceAtLeast(1_000)
-        val expiry = System.currentTimeMillis() + ttlMs
+        val expiry = com.rivalapexmediation.sdk.util.ClockProvider.clock.now() + ttlMs
         val ecpm = loadResult.priceMicros?.let { it.toDouble() / 1_000_000.0 } ?: 0.0
         val ad = Ad(
             id = loadResult.handle.id,

@@ -1,4 +1,4 @@
-module github.com/bel-consulting/rival-ad-stack/config
+module github.com/sbelakho2/Ad-Project/backend/config
 
 go 1.21
 

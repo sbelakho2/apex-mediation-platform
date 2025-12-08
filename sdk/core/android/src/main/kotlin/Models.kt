@@ -14,7 +14,7 @@ data class Ad(
     // Optional absolute expiry timestamp for the ad (epoch millis). If null, ad does not expire by time.
     val expiryTimeMs: Long? = null,
     // Creation time (epoch millis) recorded by the SDK; informative only.
-    val createdAtMs: Long = System.currentTimeMillis()
+    val createdAtMs: Long = com.rivalapexmediation.sdk.util.ClockProvider.clock.monotonicNow()
 ) {
     @Suppress("UNUSED_PARAMETER")
     fun show(activity: android.app.Activity) {
@@ -23,7 +23,7 @@ data class Ad(
     
     fun isExpired(): Boolean {
         val exp = expiryTimeMs
-        return exp != null && System.currentTimeMillis() >= exp
+        return exp != null && com.rivalapexmediation.sdk.util.ClockProvider.clock.monotonicNow() >= exp
     }
 }
 
@@ -134,7 +134,7 @@ interface AdAdapter {
  */
 data class TelemetryEvent(
     val eventType: EventType,
-    val timestamp: Long = System.currentTimeMillis(),
+    val timestamp: Long = com.rivalapexmediation.sdk.util.ClockProvider.clock.now(),
     val placement: String? = null,
     val networkName: String? = null,
     val ecpm: Double? = null,

@@ -1,12 +1,33 @@
 import XCTest
 @testable import RivalApexMediationSDK
 
+private final class MutableClock: ClockProtocol {
+    var wallSeconds: TimeInterval
+    var monotonicSecondsValue: TimeInterval
+
+    init(wallSeconds: TimeInterval, monotonicSeconds: TimeInterval = 0) {
+        self.wallSeconds = wallSeconds
+        self.monotonicSecondsValue = monotonicSeconds
+    }
+
+    func now() -> Date { Date(timeIntervalSince1970: wallSeconds) }
+    func nowMillis() -> Int64 { Int64(wallSeconds * 1000) }
+    func monotonicMillis() -> Int64 { Int64(monotonicSecondsValue * 1000) }
+    func monotonicSeconds() -> TimeInterval { monotonicSecondsValue }
+
+    func advance(seconds: TimeInterval) {
+        wallSeconds += seconds
+        monotonicSecondsValue += seconds
+    }
+}
+
 final class AuctionClientErrorTests: XCTestCase {
     private var session: URLSession!
     private var client: AuctionClient!
     private let baseURL = "https://test.example.com"
     private var recordedSleeps: [TimeInterval] = []
-    private var currentDate = Date(timeIntervalSince1970: 1_735_000_000)
+    private var previousClock: ClockProtocol!
+    private var testClock: MutableClock!
 
     private var requestURL: URL {
         URL(string: "https://test.example.com/v1/auction")!
@@ -19,7 +40,10 @@ final class AuctionClientErrorTests: XCTestCase {
         session = URLSession(configuration: config)
         AuctionClientProtocolStub.reset()
         recordedSleeps = []
-        currentDate = Date(timeIntervalSince1970: 1_735_000_000)
+        let seedSeconds = TimeInterval(1_735_000_000)
+        previousClock = Clock.shared
+        testClock = MutableClock(wallSeconds: seedSeconds, monotonicSeconds: 1000)
+        Clock.shared = testClock
         client = makeClient()
     }
 
@@ -29,6 +53,7 @@ final class AuctionClientErrorTests: XCTestCase {
         session = nil
         AuctionClientProtocolStub.reset()
         recordedSleeps = []
+        Clock.shared = previousClock
         super.tearDown()
     }
 
@@ -96,7 +121,7 @@ final class AuctionClientErrorTests: XCTestCase {
         XCTAssertEqual(failureAttempts, 2)
 
         // Advance clock beyond cooldown and ensure requests reach the network again
-        currentDate = currentDate.addingTimeInterval(31)
+        testClock.advance(seconds: 31)
         AuctionClientProtocolStub.handler = { [requestURL] _ in
             let response = HTTPURLResponse(url: requestURL, statusCode: 204, httpVersion: "HTTP/1.1", headerFields: nil)!
             return (response, Data())
@@ -159,7 +184,8 @@ final class AuctionClientErrorTests: XCTestCase {
                 guard let self else { return }
                 try await self.recordSleep(duration)
             },
-            dateProvider: { [weak self] in self?.currentDate ?? Date() }
+            dateProvider: { [weak self] in self?.testClock.now() ?? Date() },
+            clock: testClock
         )
     }
 

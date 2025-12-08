@@ -1,7 +1,7 @@
 {
   "name": "rival-ad-stack",
   "version": "0.1.0",
-  "description": "Unity-rival ad mediation platform with OTA-proof reliability",
+  "description": "ad mediation platform with OTA-proof reliability",
   "private": true,
   "workspaces": [
     "backend",
@@ -34,7 +34,16 @@
     "capture:all": "npm run capture:website && npm run capture:console",
     "local:health": "bash scripts/ops/local_health_snapshot.sh",
     "do:tls": "bash scripts/ops/do_tls_snapshot.sh api.apexmediation.ee",
-    "dryrun:stripe:local": "bash scripts/stripe_dry_run_local.sh"
+    "dryrun:stripe:local": "bash scripts/stripe_dry_run_local.sh",
+    "ops:source-env": "bash scripts/ops/source_env.sh infrastructure/production/.env.backend",
+    "ops:console-up": "bash scripts/ops/console_up.sh",
+    "ops:console-capture": "bash scripts/ops/staging_console_capture.sh",
+    "ops:console-check": "bash scripts/ops/console_check.sh",
+    "ops:billing": "bash scripts/ops/billing_staging.sh",
+    "ops:vra-export": "bash scripts/ops/vra_export.sh",
+    "ops:soak": "bash scripts/ops/run_soak.sh",
+    "ops:evidence-zip": "bash scripts/ops/zip_evidence.sh",
+    "ops:ssh": "bash scripts/ops/do_ssh.sh"
   },
   "devDependencies": {
     "@types/cookie-parser": "^1.4.10",
@@ -60,7 +69,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/bel-consulting/rival-ad-stack.git"
+    "url": "https://github.com/sbelakho2/Ad-Project.git"
   },
   "keywords": [
     "ad-mediation",

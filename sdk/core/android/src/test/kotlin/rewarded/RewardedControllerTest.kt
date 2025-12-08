@@ -14,7 +14,7 @@ import org.junit.Test
 class RewardedControllerTest {
 
     private fun fakeAd(expireInMs: Long = 60_000): Ad {
-        val ttl = if (expireInMs > 0) System.currentTimeMillis() + expireInMs else null
+        val ttl = if (expireInMs > 0) com.rivalapexmediation.sdk.util.ClockProvider.clock.monotonicNow() + expireInMs else null
         return Ad(
             id = "ad-r1",
             placementId = "placementR",

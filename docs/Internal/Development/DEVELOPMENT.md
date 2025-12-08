@@ -115,8 +115,8 @@ ApexMediation is a Unity-rival ad mediation platform designed to address Unity's
 
 ```bash
 # Clone repository
-git clone https://github.com/bel-consulting/rival-ad-stack.git
-cd rival-ad-stack
+git clone https://github.com/sbelakho2/Ad-Project.git
+cd Ad-Project
 
 # Install dependencies
 npm install

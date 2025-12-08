@@ -6,6 +6,7 @@ import com.rivalapexmediation.sdk.SDKConfig
 import com.rivalapexmediation.sdk.models.EventType
 import com.rivalapexmediation.sdk.models.TelemetryEvent
 import com.google.gson.Gson
+import com.rivalapexmediation.sdk.util.ClockProvider
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -434,7 +435,7 @@ class PerformanceMetrics {
     data class Metric(
         val name: String,
         val value: Double,
-        val timestamp: Long = System.currentTimeMillis()
+        val timestamp: Long = ClockProvider.clock.now()
     )
     
     private val metrics = mutableListOf<Metric>()

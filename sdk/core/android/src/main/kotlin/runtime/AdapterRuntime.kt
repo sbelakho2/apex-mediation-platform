@@ -3,6 +3,7 @@ package com.rivalapexmediation.sdk.runtime
 import android.os.Handler
 import android.os.Looper
 import com.rivalapexmediation.sdk.contract.*
+import com.rivalapexmediation.sdk.util.ClockProvider
 import kotlinx.coroutines.*
 import java.util.concurrent.*
 import java.util.concurrent.atomic.AtomicInteger
@@ -31,9 +32,11 @@ class CircuitBreaker(
     enum class State { CLOSED, OPEN, HALF_OPEN }
     
     fun getState(): State {
-        if (state == State.OPEN && System.currentTimeMillis() - openedAt >= recoveryTimeMs) {
+        val now = ClockProvider.clock.monotonicNow()
+        if (state == State.OPEN && now - openedAt >= recoveryTimeMs) {
             synchronized(this) {
-                if (state == State.OPEN && System.currentTimeMillis() - openedAt >= recoveryTimeMs) {
+                val refreshedNow = ClockProvider.clock.monotonicNow()
+                if (state == State.OPEN && refreshedNow - openedAt >= recoveryTimeMs) {
                     state = State.HALF_OPEN
                 }
             }
@@ -51,7 +54,7 @@ class CircuitBreaker(
     }
     
     fun recordFailure() {
-        val now = System.currentTimeMillis()
+        val now = ClockProvider.clock.monotonicNow()
         failures.add(now)
         
         // Remove old failures outside window
@@ -172,7 +175,7 @@ class AdapterRuntimeWrapper(
             throw AdapterError.Fatal(ErrorCode.CIRCUIT_OPEN, "Circuit breaker open for $partnerId:$placement")
         }
         
-        val startTime = System.currentTimeMillis()
+        val startTime = ClockProvider.clock.monotonicNow()
         var attemptCount = 0
         var lastError: AdapterError? = null
         
@@ -189,7 +192,7 @@ class AdapterRuntimeWrapper(
                 }
                 
                 result.onSuccess { loadResult ->
-                    val latency = System.currentTimeMillis() - startTime
+                    val latency = ClockProvider.clock.monotonicNow() - startTime
                     hedgeManager.recordLatency("$partnerId:$placement", latency)
                     cb.recordSuccess()
                     return loadResult

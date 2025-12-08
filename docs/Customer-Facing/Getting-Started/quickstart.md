@@ -68,7 +68,7 @@ public class AdManager : MonoBehaviour
 
 1. Install via Swift Package Manager:
    ```
-   https://github.com/bel-consulting/apexmediation-ios-sdk.git
+    https://github.com/sbelakho2/Ad-Project.git
    ```
 
 2. Initialize in `AppDelegate`:
@@ -220,7 +220,7 @@ ApexMediation.loadAd('banner-ad');
 - **📧 Email**: support@apexmediation.ee
 - **💬 Live Chat**: Available in the dashboard
 - **📚 Documentation**: [docs.apexmediation.ee](https://docs.apexmediation.ee)
-- **🐛 Report a Bug**: [GitHub Issues](https://github.com/bel-consulting/apexmediation-sdk/issues)
+- **🐛 Report a Bug**: [GitHub Issues](https://github.com/sbelakho2/Ad-Project/issues)
 - **⏱️ Response Time**: < 4 hours during business hours (Mon-Fri, 9AM-5PM EET)
 
 ---

@@ -52,6 +52,7 @@ public final class AuctionClient {
     private let circuitBreakerState = CircuitBreakerState()
     private let sleep: SleepFunction
     private let dateProvider: () -> Date
+    private let clock: ClockProtocol
 
     private static let retryAfterFormatter: DateFormatter = {
         let formatter = DateFormatter()
@@ -69,7 +70,8 @@ public final class AuctionClient {
         retryConfiguration: RetryConfiguration = .standard,
         circuitBreakerConfiguration: CircuitBreakerConfiguration = .standard,
         sleep: (@Sendable (UInt64) async throws -> Void)? = nil,
-        dateProvider: @escaping () -> Date = { Date() }
+        dateProvider: @escaping () -> Date = { Date() },
+        clock: ClockProtocol = Clock.shared
     ) {
         self.baseURL = baseURL
         self.apiKey = apiKey
@@ -82,6 +84,7 @@ public final class AuctionClient {
             self.sleep = { duration in try await Task.sleep(nanoseconds: duration) }
         }
         self.dateProvider = dateProvider
+        self.clock = clock
 
         if let customSession = session {
             self.session = customSession
@@ -97,7 +100,7 @@ public final class AuctionClient {
     /// Request a bid from the auction service
     public func requestBid(placementId: String, adType: String) async throws -> AuctionResponse {
         if let remaining = await circuitBreakerState.remainingCooldown(
-            now: dateProvider(),
+            now: clock.monotonicSeconds(),
             cooldown: circuitBreakerConfiguration.cooldown
         ) {
             throw SDKError.circuitBreakerOpen(retryAfter: remaining)
@@ -282,7 +285,7 @@ public final class AuctionClient {
     private func handlePostFailure(for error: SDKError) async {
         if shouldTripCircuit(for: error) {
             await circuitBreakerState.recordFailure(
-                now: dateProvider(),
+                now: clock.monotonicSeconds(),
                 threshold: circuitBreakerConfiguration.failureThreshold,
                 cooldown: circuitBreakerConfiguration.cooldown
             )
@@ -336,28 +339,28 @@ public final class AuctionClient {
 
 private actor CircuitBreakerState {
     private var consecutiveFailures = 0
-    private var openedAt: Date?
+    private var openedAtMs: Int64?
 
     func reset() {
         consecutiveFailures = 0
-        openedAt = nil
+        openedAtMs = nil
     }
 
-    func recordFailure(now: Date, threshold: Int, cooldown: TimeInterval) {
+    func recordFailure(now: TimeInterval, threshold: Int, cooldown: TimeInterval) {
         consecutiveFailures += 1
         guard consecutiveFailures >= threshold else { return }
-        openedAt = now
+        openedAtMs = Int64(now * 1000)
     }
 
-    func remainingCooldown(now: Date, cooldown: TimeInterval) -> TimeInterval? {
-        guard let openedAt else { return nil }
-        let elapsed = now.timeIntervalSince(openedAt)
-        if elapsed >= cooldown {
-            self.openedAt = nil
+    func remainingCooldown(now: TimeInterval, cooldown: TimeInterval) -> TimeInterval? {
+        guard let openedAtMs else { return nil }
+        let elapsedSeconds = ((now * 1000) - Double(openedAtMs)) / 1000
+        if elapsedSeconds >= cooldown {
+            self.openedAtMs = nil
             consecutiveFailures = 0
             return nil
         }
-        return cooldown - elapsed
+        return cooldown - elapsedSeconds
     }
 }
 

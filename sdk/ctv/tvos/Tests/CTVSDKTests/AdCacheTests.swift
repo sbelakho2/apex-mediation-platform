@@ -3,10 +3,12 @@ import XCTest
 
 final class AdCacheTests: XCTestCase {
     private var cache: AdCache!
+    private var clock: MutableClock!
 
     override func setUp() {
         super.setUp()
-        cache = AdCache()
+        clock = MutableClock()
+        cache = AdCache(clock: clock)
     }
 
     func testTakeRemovesEntry() {
@@ -31,10 +33,26 @@ final class AdCacheTests: XCTestCase {
     }
 
     func testExpiredEntriesArePurged() {
-        cache.store(win: makeWin(ttlSeconds: 0), for: "placement")
-
+        cache.store(win: makeWin(ttlSeconds: 1), for: "placement")
+        clock.advance(seconds: 2)
         XCTAssertNil(cache.peek(placementId: "placement"))
         XCTAssertNil(cache.take(placementId: "placement"))
+    }
+
+    func testBackwardClockJumpDoesNotReviveExpiredAd() {
+        cache.store(win: makeWin(ttlSeconds: 1), for: "placement")
+        clock.advance(seconds: 2)
+        XCTAssertNil(cache.peek(placementId: "placement"))
+        clock.advance(seconds: -5) // simulate wall-clock jump backward
+        XCTAssertNil(cache.peek(placementId: "placement"))
+    }
+
+    func testForwardDriftExpiresAdDeterministically() {
+        cache.store(win: makeWin(ttlSeconds: 5), for: "placement")
+        clock.advance(seconds: 4)
+        XCTAssertNotNil(cache.peek(placementId: "placement"))
+        clock.advance(seconds: 2)
+        XCTAssertNil(cache.peek(placementId: "placement"))
     }
 
     func testStoreReplacesExistingEntry() {
@@ -71,5 +89,15 @@ final class AdCacheTests: XCTestCase {
             creativeUrl: "https://example.com/asset",
             tracking: tracking
         )
+    }
+}
+
+final class MutableClock: ClockProtocol {
+    private var now: TimeInterval = 0
+
+    func monotonicNow() -> TimeInterval { now }
+
+    func advance(seconds: TimeInterval) {
+        now += seconds
     }
 }

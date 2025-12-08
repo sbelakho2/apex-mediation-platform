@@ -5,6 +5,7 @@ import com.rivalapexmediation.sdk.contract.AdapterError
 import com.rivalapexmediation.sdk.contract.ErrorCode
 import com.rivalapexmediation.sdk.contract.LoadResult
 import com.rivalapexmediation.sdk.models.AdType
+import com.rivalapexmediation.sdk.util.ClockProvider
 import java.util.concurrent.ConcurrentHashMap
 
 internal data class IronSourceAd(
@@ -16,7 +17,7 @@ internal data class IronSourceAd(
     val priceMicros: Long?,
     val currency: String?,
     val partnerMeta: Map<String, Any?>,
-    val createdAtMs: Long = System.currentTimeMillis()
+    val createdAtMs: Long = ClockProvider.clock.monotonicNow()
 ) {
     fun isFresh(nowMs: Long): Boolean = nowMs < createdAtMs + ttlMs
 }
@@ -44,13 +45,13 @@ internal class IronSourceHandleStore {
 
     fun validateReadiness(handle: AdHandle): Boolean {
         val entry = entries[handle.id] ?: return false
-        return entry.isFresh(System.currentTimeMillis())
+        return entry.isFresh(ClockProvider.clock.monotonicNow())
     }
 
     fun ensureReady(handle: AdHandle): IronSourceAd {
         val ad = entries[handle.id]
             ?: throw AdapterError.Recoverable(ErrorCode.NO_AD_READY, "Handle ${handle.id} missing")
-        if (!ad.isFresh(System.currentTimeMillis())) {
+        if (!ad.isFresh(ClockProvider.clock.monotonicNow())) {
             remove(handle)
             throw AdapterError.Recoverable(ErrorCode.NO_AD_READY, "Handle ${handle.id} expired")
         }

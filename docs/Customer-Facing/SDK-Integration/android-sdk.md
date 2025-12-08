@@ -298,6 +298,7 @@ Key points:
 
 ### Conformance suites and runbooks
 - iOS/tvOS Adapter Dev Kit and CLI runner: see `docs/Developer-Facing/AdapterDevKit.md` for cross‑platform parity, and how to validate adapters end‑to‑end without bundling them in core.
+- Android & Android TV Adapter Dev Kit (Developer‑Facing deep‑dive): `docs/Developer-Facing/DevKits/android-androidtv.md`
 - Networked sandbox testing (console/site/billing/VRA/soak): see `docs/Internal/QA/networked-sandbox-runbook-2025-12-06.md`.
 
 ---

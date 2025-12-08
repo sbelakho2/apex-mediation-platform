@@ -7,6 +7,7 @@ public final class AdapterCircuitBreaker {
     private let failureThreshold: Int
     private let timeWindowMs: Int64
     private let recoveryTimeMs: Int64
+    private let clock: ClockProtocol
     
     private var failures: [Int64] = []
     private var state: State = .closed
@@ -15,17 +16,23 @@ public final class AdapterCircuitBreaker {
     
     public enum State { case closed, open, halfOpen }
     
-    public init(failureThreshold: Int = 3, timeWindowMs: Int64 = 30_000, recoveryTimeMs: Int64 = 15_000) {
+    public init(
+        failureThreshold: Int = 3,
+        timeWindowMs: Int64 = 30_000,
+        recoveryTimeMs: Int64 = 15_000,
+        clock: ClockProtocol = Clock.shared
+    ) {
         self.failureThreshold = failureThreshold
         self.timeWindowMs = timeWindowMs
         self.recoveryTimeMs = recoveryTimeMs
+        self.clock = clock
     }
     
     public func getState() -> State {
         lock.lock()
         defer { lock.unlock() }
         
-        let now = Int64(Date().timeIntervalSince1970 * 1000)
+        let now = clock.monotonicMillis()
         if state == .open && now - openedAt >= recoveryTimeMs {
             state = .halfOpen
         }
@@ -46,7 +53,7 @@ public final class AdapterCircuitBreaker {
         lock.lock()
         defer { lock.unlock() }
         
-        let now = Int64(Date().timeIntervalSince1970 * 1000)
+        let now = clock.monotonicMillis()
         failures.append(now)
         
         // Remove old failures
@@ -172,10 +179,12 @@ public final class AdapterRuntimeWrapper: @unchecked Sendable {
     private let hedgeManager = HedgeManager()
     private let timeoutEnforcer = AdapterTimeoutEnforcer()
     private let lock = NSLock()
+    private let clock: ClockProtocol
     
-    public init(adapter: AdNetworkAdapterV2, partnerId: String) {
+    public init(adapter: AdNetworkAdapterV2, partnerId: String, clock: ClockProtocol = Clock.shared) {
         self.adapter = adapter
         self.partnerId = partnerId
+        self.clock = clock
     }
     
     private func getCircuitBreaker(placement: String) -> AdapterCircuitBreaker {
@@ -184,7 +193,7 @@ public final class AdapterRuntimeWrapper: @unchecked Sendable {
         
         let key = "\(partnerId):\(placement)"
         if circuitBreakers[key] == nil {
-            circuitBreakers[key] = AdapterCircuitBreaker()
+            circuitBreakers[key] = AdapterCircuitBreaker(clock: clock)
         }
         return circuitBreakers[key]!
     }
@@ -201,7 +210,7 @@ public final class AdapterRuntimeWrapper: @unchecked Sendable {
             throw AdapterError(code: .circuitOpen, detail: "Circuit breaker open for \(partnerId):\(placement)", vendorCode: nil, recoverable: true)
         }
         
-        let startTime = Date()
+        let startTimeMs = clock.monotonicMillis()
         var attemptCount = 0
         var lastError: AdapterError?
         
@@ -215,7 +224,7 @@ public final class AdapterRuntimeWrapper: @unchecked Sendable {
                     }.value
                 }
                 
-                let latency = Int64(Date().timeIntervalSince(startTime) * 1000)
+                let latency = clock.monotonicMillis() - startTimeMs
                 hedgeManager.recordLatency(key: "\(partnerId):\(placement)", latencyMs: latency)
                 cb.recordSuccess()
                 return result

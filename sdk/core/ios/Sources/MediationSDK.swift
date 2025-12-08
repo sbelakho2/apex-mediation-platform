@@ -14,12 +14,14 @@ public final class MediationSDK: @unchecked Sendable {
     public static let shared = MediationSDK()
 
     private let sdkVersionValue = "1.0.0"
-    private let runtime: MediationRuntime
+    private var clock: ClockProtocol
+    private var runtime: MediationRuntime
     private let snapshotLock = NSLock()
     private var snapshot: SDKSnapshot = .empty
 
-    private init() {
-        runtime = MediationRuntime(sdkVersion: sdkVersionValue)
+    private init(clock: ClockProtocol = Clock.shared) {
+        self.clock = clock
+        runtime = MediationRuntime(sdkVersion: sdkVersionValue, clock: clock)
     }
     
     // MARK: - Debug/Diagnostics accessors (read-only)
@@ -74,6 +76,15 @@ public final class MediationSDK: @unchecked Sendable {
         await runtime.setSandboxForceAdapterPipeline(enabled)
     }
 
+    #if DEBUG
+    /// Testing hook to rebuild runtime with a custom clock.
+    func _resetRuntimeForTesting(clock: ClockProtocol = Clock.shared) {
+        self.clock = clock
+        runtime = MediationRuntime(sdkVersion: sdkVersionValue, clock: clock)
+        snapshot = .empty
+    }
+    #endif
+
     /// BYO-first: Allow host apps to register their own adapter types at runtime (before initialize()).
     /// This API is available in all build configurations so publishers can bring their own adapters
     /// without the SDK shipping vendor code.
@@ -119,11 +130,12 @@ public final class MediationSDK: @unchecked Sendable {
     /// Check if an ad is cached and ready.
     public func isAdReady(placementId: String) -> Bool {
         readSnapshot { snapshot in
-            guard let expirations = snapshot.cacheExpirations[placementId], !expirations.isEmpty else {
+            guard let expirations = snapshot.cacheExpirationsMs[placementId], !expirations.isEmpty else {
                 return false
             }
-            let now = Date()
-            return expirations.contains { $0.addingTimeInterval(CacheConfig.expirationGrace) > now }
+            let nowMs = clock.monotonicMillis()
+            let graceMs = Int64(CacheConfig.expirationGrace * 1000)
+            return expirations.contains { $0 + graceMs > nowMs }
         }
     }
 
@@ -188,7 +200,7 @@ private struct SDKSnapshot {
     let isInitialized: Bool
     let cacheCounts: [String: Int]
     let consentSummary: [String: Any]
-    let cacheExpirations: [String: [Date]]
+    let cacheExpirationsMs: [String: [Int64]]
 
     static let empty = SDKSnapshot(
         appId: nil,
@@ -199,7 +211,7 @@ private struct SDKSnapshot {
         isInitialized: false,
         cacheCounts: [:],
         consentSummary: ConsentManager.shared.getRedactedConsentInfo(),
-        cacheExpirations: [:]
+        cacheExpirationsMs: [:]
     )
 }
 
@@ -216,13 +228,19 @@ private extension SDKSnapshot {
             isInitialized: isInitialized,
             cacheCounts: cacheCounts,
             consentSummary: summary,
-            cacheExpirations: cacheExpirations
+            cacheExpirationsMs: cacheExpirationsMs
         )
     }
 }
 
 private actor MediationRuntime {
     private let sdkVersion: String
+    private let clock: ClockProtocol
+
+    private struct CachedAd {
+        let ad: Ad
+        let expiresAtMs: Int64
+    }
 
     private var config: SDKConfig?
     private var remoteConfig: SDKRemoteConfig?
@@ -232,14 +250,15 @@ private actor MediationRuntime {
     private var signatureVerifier: SignatureVerifier?
     private var testModeLoader: TestModeAdLoader?
     private var initialized = false
-    private var adCache: [String: [Ad]] = [:]
+    private var adCache: [String: [CachedAd]] = [:]
     private let consentManager = ConsentManager.shared
     private var sandboxAdapterWhitelist: Set<String>? = nil
     private var sandboxForceAdapterPipeline = false
     private var pendingAdapterRegistrations: [(String, AdapterTypeToken)] = []
 
-    init(sdkVersion: String) {
+    init(sdkVersion: String, clock: ClockProtocol = Clock.shared) {
         self.sdkVersion = sdkVersion
+        self.clock = clock
     }
 
     func initialize(appId: String, configuration: SDKConfig?) async throws -> SDKSnapshot {
@@ -259,7 +278,7 @@ private actor MediationRuntime {
             signatureVerifier = nil
         }
 
-        let manager = ConfigManager(config: resolvedConfig, signatureVerifier: signatureVerifier)
+        let manager = ConfigManager(config: resolvedConfig, signatureVerifier: signatureVerifier, clock: clock)
         // In test mode, prefer mocked network (if registered) so tests can supply remote config.
         // Only bypass remote fetch when no mocks are registered and we are explicitly in offline test mode.
         let remote: SDKRemoteConfig
@@ -353,12 +372,12 @@ private actor MediationRuntime {
             ensureAdapterInitialized(networkName: networkName, adapterConfig: adapterConfig)
 
             let settings = adapterSettingsWithConsent(adapterConfig.settings.mapValues { $0.value })
-            let start = Date()
+            let startMs = clock.monotonicMillis()
 
             do {
                 let ad = try await loadAd(from: adapter, placement: placementId, adType: placement.adType, settings: settings)
                 storeAd(ad)
-                let latency = Int(Date().timeIntervalSince(start) * 1_000)
+                let latency = Int(clock.monotonicMillis() - startMs)
                 telemetry?.recordAdLoad(
                     placement: placementId,
                     adType: placement.adType,
@@ -370,7 +389,7 @@ private actor MediationRuntime {
             } catch let adapterError as AdapterError where adapterError.code == .timeout {
                 telemetry?.recordTimeout(placement: placementId, adType: placement.adType, reason: "adapter_timeout")
             } catch {
-                let latency = Int(Date().timeIntervalSince(start) * 1_000)
+                let latency = Int(clock.monotonicMillis() - startMs)
                 telemetry?.recordAdLoad(
                     placement: placementId,
                     adType: placement.adType,
@@ -424,7 +443,7 @@ private actor MediationRuntime {
             isInitialized: initialized,
             cacheCounts: adCache.mapValues { $0.count },
             consentSummary: consentManager.getRedactedConsentInfo(),
-            cacheExpirations: adCache.mapValues { $0.map { $0.expiresAt } }
+            cacheExpirationsMs: adCache.mapValues { $0.map { $0.expiresAtMs } }
         )
     }
 
@@ -498,25 +517,31 @@ private actor MediationRuntime {
     func claimAd(placementId: String) -> Ad? {
         pruneExpiredCache(for: placementId)
         guard var ads = adCache[placementId], !ads.isEmpty else { return nil }
-        let ad = ads.removeFirst()
+        let cachedAd = ads.removeFirst()
         if ads.isEmpty {
             adCache.removeValue(forKey: placementId)
         } else {
             adCache[placementId] = ads
         }
-        return ad
+        return cachedAd.ad
     }
 
     func peekAd(placementId: String) -> Ad? {
         pruneExpiredCache(for: placementId)
-        return adCache[placementId]?.first
+        return adCache[placementId]?.first?.ad
     }
 
     private func storeAd(_ ad: Ad) {
-        guard ad.expiresAt.addingTimeInterval(CacheConfig.expirationGrace) > Date() else { return }
+        let now = clock.now()
+        let ttlSeconds = ad.expiresAt.timeIntervalSince(now)
+        let graceMs = Int64(CacheConfig.expirationGrace * 1000)
+        let ttlMs = Int64(ttlSeconds * 1000)
+        guard ttlMs + graceMs > 0 else { return }
+
         pruneExpiredCache(for: ad.placement)
         var ads = adCache[ad.placement] ?? []
-        ads.append(ad)
+        let expirationMs = clock.monotonicMillis() + ttlMs
+        ads.append(CachedAd(ad: ad, expiresAtMs: expirationMs))
         adCache[ad.placement] = ads
     }
 
@@ -525,12 +550,12 @@ private actor MediationRuntime {
             throw SDKError.internalError(message: "Test mode loader unavailable")
         }
 
-        let start = Date()
+        let startMs = clock.monotonicMillis()
 
         do {
             let ad = try await loader.loadAd(for: placement)
             storeAd(ad)
-            let latency = Int(Date().timeIntervalSince(start) * 1_000)
+            let latency = Int(clock.monotonicMillis() - startMs)
             telemetry?.recordAdLoad(
                 placement: placement.placementId,
                 adType: placement.adType,
@@ -540,7 +565,7 @@ private actor MediationRuntime {
             )
             return ad
         } catch let error as SDKError {
-            let latency = Int(Date().timeIntervalSince(start) * 1_000)
+            let latency = Int(clock.monotonicMillis() - startMs)
             telemetry?.recordAdLoad(
                 placement: placement.placementId,
                 adType: placement.adType,
@@ -550,7 +575,7 @@ private actor MediationRuntime {
             )
             throw error
         } catch {
-            let latency = Int(Date().timeIntervalSince(start) * 1_000)
+            let latency = Int(clock.monotonicMillis() - startMs)
             telemetry?.recordAdLoad(
                 placement: placement.placementId,
                 adType: placement.adType,
@@ -563,10 +588,11 @@ private actor MediationRuntime {
     }
 
     private func pruneExpiredCache(for placementId: String? = nil) {
-        let now = Date()
+        let nowMs = clock.monotonicMillis()
+        let graceMs = Int64(CacheConfig.expirationGrace * 1000)
         if let placementId {
             if var ads = adCache[placementId] {
-                ads.removeAll { $0.expiresAt.addingTimeInterval(CacheConfig.expirationGrace) <= now }
+                ads.removeAll { $0.expiresAtMs + graceMs <= nowMs }
                 if ads.isEmpty {
                     adCache.removeValue(forKey: placementId)
                 } else {

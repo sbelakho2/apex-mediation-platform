@@ -5,15 +5,17 @@
 	- How to verify: Env flip propagates in ≤5 min; GET /v1/status returns env + flag hashes; SDK debug panel shows the same hash
 	- (Why) OTA safety & reproducibility; prevents “split brain” during rollouts.
 
-- [ ] Immutable config schema + signed rollouts
+- [X] Immutable config schema + signed rollouts
 	- Where: Config service (/services/config), SDK SafeConfigManager (Android/iOS)
 	- How to verify: Invalid or unsigned config fails closed; staged rollout 1%→5%→25%→100% with auto-rollback on SLO breach
 	- (Why) OTA-proofing avoids Unity-style config outages; staged guardrails.
+	- Status (2025-12-08): Android/iOS SafeConfigManager now fail-closed in production when the signing key is missing/invalid, signature verification fails, or schema bounds/required fields are violated; tests added (`xcodebuild test -scheme RivalApexMediationSDK -destination 'platform=iOS Simulator,name=iPhone 15,OS=17.5'`, `cd sdk/core/android && ./gradlew.sh testDebugUnitTest`). Backend `/api/v1/config/validate` now enforces schema + Ed25519 signature verification and exposes staged rollout helper; tests cover valid/tampered/missing/invalid-key cases and rollout steps (`cd backend && npm test -- config.routes.test.ts`).
 
 - [ ] Clock-drift tolerance on clients
-	- Where: SDK time provider wrapper in Android/iOS/Unity
-	- How to verify: If device clock drifts ±10 min, TTL, throttles and backoffs remain correct (simulation test)
+	- Where: SDK time provider wrapper in Android/iOS/Unity/CTV
+	- How to verify: If device clock drifts ±10 min (forward/backward), TTL, throttles and backoffs remain correct (simulation test)
 	- (Why) Prevents burst storms & stale caches.
+	- Status (2025-12-08): Android complete with monotonic ClockProvider + expiry/cache drift tests (forward/backward). iOS uses shared `ClockProtocol` across cache, circuit breaker, auction client, and BelAppOpen throttling; ad cache uses monotonic expirations with backward-drift regression test (tested via `xcodebuild test -scheme RivalApexMediationSDK -destination 'platform=iOS Simulator,name=iPhone 15,OS=17.5'`). CTV (tvOS) ad cache now uses monotonic uptime with injected `ClockProtocol` and drift tests (`cd sdk/ctv/tvos && xcodebuild test -scheme CTVSDK -destination "platform=tvOS Simulator,name=Apple TV 4K (3rd generation)"`). Unity now uses an injectable monotonic clock (Stopwatch-based) for `RenderableAd` with ±10m drift tests (`cd sdk/core/unity/Tests && DOTNET_ROLL_FORWARD=LatestMajor dotnet test`). Android TV cache uses an injectable monotonic clock with forward/backward drift tests (`cd sdk/ctv/android-tv && JAVA_HOME=/Library/Java/JavaVirtualMachines/temurin-17.jdk/Contents/Home gradle clean testDebugUnitTest`).
 
 ## 1) App-ads.txt / sellers.json enforcement (publisher-help, don’t block)
 
@@ -21,11 +23,13 @@
 	- Where: services/quality/appadstxt-crawler/ + nightly job
 	- How to verify: Console “Supply Chain” tab shows “OK/Missing/Mismatch” per store app ID; warning banners in placements page
 	- (Why) IAB supply chain integrity is expected by buyers; even for BYO you should surface issues so devs get paid.
+	- Status (2025-12-08): Pending. Next: implement crawler + cache (nightly), surface “Supply Chain” tab + placements warning banner, and store per-app verdicts.
 
 - [ ] sellers.json & schain parsing (adaptor-agnostic)
 	- Where: services/quality/supplychain/
 	- How to verify: Stored per partner; exposed in auction logs & bid-landscape; “unauthorized reseller” weak-label for fraud model
 	- (Why) Standardized transparency for buyers; improves trust and troubleshooting.
+	- Status (2025-12-08): Pending parser + storage hook; next wire ingestion, persist per partner, expose in logs/bid-landscape, and emit weak-label for fraud model.
 
 ## 2) Open Measurement (OMSDK) readiness (non-blocking in BYO)
 
@@ -33,11 +37,13 @@
 	- Where: sdk/*/viewability/OmSdkHelper.*
 	- How to verify: Start/finish sessions per impression; friendly obstructions list; no leaks in teardown
 	- (Why) Verification vendors rely on OM SDK; must not crash/ANR.
+	- Status (2025-12-08): Pending after clock parity. Next: add `OmSdkHelper` scaffolding per platform (start/finish per impression; friendly obstructions list; teardown guard), unit tests for lifecycle/leak checks, and integration smoke with a mock OM SDK to ensure no ANRs/crashes.
 
 - [ ] Disable-by-default if publisher doesn’t bundle OM SDK (BYO)
 	- Where: Adapter registry feature flag enable_om_sdk
 	- How to verify: No runtime class-not-found; health counters show “OMSDK disabled (BYO)”
 	- (Why) BYO means you don’t ship vendor binaries.
+	- Status (2025-12-08): Pending flag + guards.
 
 - [ ] (CTV) Track OM SDK device attestation roadmap
 	- Where: Backlog note + console flag placeholder

@@ -97,7 +97,7 @@ public struct AdHandle: Codable, Equatable, Sendable {
     public let partnerPlacementId: String?
     public let createdAtMs: Int64
     
-    public init(id: String, adType: AdType, partnerPlacementId: String?, createdAtMs: Int64 = Int64(Date().timeIntervalSince1970 * 1000)) {
+    public init(id: String, adType: AdType, partnerPlacementId: String?, createdAtMs: Int64 = Clock.shared.nowMillis()) {
         self.id = id
         self.adType = adType
         self.partnerPlacementId = partnerPlacementId

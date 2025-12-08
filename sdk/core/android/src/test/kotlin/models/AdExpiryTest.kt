@@ -28,7 +28,7 @@ class AdExpiryTest {
             adType = AdType.INTERSTITIAL,
             ecpm = 1.23,
             creative = Creative.Banner(0, 0, "<div></div>"),
-            expiryTimeMs = System.currentTimeMillis() + 5_000
+            expiryTimeMs = com.rivalapexmediation.sdk.util.ClockProvider.clock.monotonicNow() + 5_000
         )
         assertFalse(ad.isExpired())
     }
@@ -42,7 +42,7 @@ class AdExpiryTest {
             adType = AdType.INTERSTITIAL,
             ecpm = 1.23,
             creative = Creative.Banner(0, 0, "<div></div>"),
-            expiryTimeMs = System.currentTimeMillis() - 1
+            expiryTimeMs = com.rivalapexmediation.sdk.util.ClockProvider.clock.monotonicNow() - 1
         )
         assertTrue(ad.isExpired())
     }

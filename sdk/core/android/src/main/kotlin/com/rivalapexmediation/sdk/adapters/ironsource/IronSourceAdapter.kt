@@ -20,6 +20,8 @@ import com.rivalapexmediation.sdk.contract.RequestMeta
 import com.rivalapexmediation.sdk.contract.RewardedCallbacks
 import com.rivalapexmediation.sdk.contract.ShowCallbacks
 import com.rivalapexmediation.sdk.models.AdType
+import com.rivalapexmediation.sdk.util.Clock
+import com.rivalapexmediation.sdk.util.ClockProvider
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicBoolean
@@ -28,7 +30,7 @@ import java.util.concurrent.atomic.AtomicReference
 class IronSourceAdapter(
     private val context: Context,
     private val renderer: IronSourceCreativeRenderer = IronSourceCreativeRenderer(),
-    private val clock: () -> Long = { System.currentTimeMillis() }
+    private val clock: Clock = ClockProvider.clock
 ) : AdNetworkAdapterV2 {
 
     private val initialized = AtomicBoolean(false)
@@ -126,7 +128,7 @@ class IronSourceAdapter(
             id = UUID.randomUUID().toString(),
             adType = adType,
             partnerPlacementId = partnerPlacementId,
-            createdAtMs = clock()
+            createdAtMs = clock.monotonicNow()
         )
         val ttl = payload.ttl?.takeIf { it > 0 } ?: DEFAULT_TTL_MS
         val priceMicros = payload.revenue?.let { (it * 1_000_000L).toLong() }

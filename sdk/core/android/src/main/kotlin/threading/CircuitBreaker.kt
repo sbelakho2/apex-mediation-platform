@@ -1,5 +1,7 @@
 package com.rivalapexmediation.sdk.threading
 
+import com.rivalapexmediation.sdk.util.Clock
+import com.rivalapexmediation.sdk.util.SystemClockClock
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
@@ -17,7 +19,8 @@ import java.util.concurrent.atomic.AtomicReference
 class CircuitBreaker(
     private val failureThreshold: Int = 5,
     private val resetTimeoutMs: Long = 60000,
-    private val halfOpenMaxAttempts: Int = 3
+    private val halfOpenMaxAttempts: Int = 3,
+    private val clock: Clock = SystemClockClock
 ) {
     private enum class State {
         CLOSED, OPEN, HALF_OPEN
@@ -93,7 +96,7 @@ class CircuitBreaker(
      * Record failed execution
      */
     private fun onFailure() {
-        lastFailureTime.set(System.currentTimeMillis())
+        lastFailureTime.set(clock.monotonicNow())
         
         when (state.get()) {
             State.HALF_OPEN -> {
@@ -119,7 +122,7 @@ class CircuitBreaker(
      */
     private fun shouldAttemptReset(): Boolean {
         val lastFailure = lastFailureTime.get()
-        return System.currentTimeMillis() - lastFailure >= resetTimeoutMs
+        return clock.monotonicNow() - lastFailure >= resetTimeoutMs
     }
     
     /**
@@ -166,13 +169,14 @@ class TimeoutEnforcer(
  * Rate limiter for API calls
  */
 class RateLimiter(
-    private val maxRequestsPerSecond: Int
+    private val maxRequestsPerSecond: Int,
+    private val clock: com.rivalapexmediation.sdk.util.Clock = com.rivalapexmediation.sdk.util.ClockProvider.clock
 ) {
     private val timestamps = mutableListOf<Long>()
     
     @Synchronized
     fun acquire(): Boolean {
-        val now = System.currentTimeMillis()
+        val now = clock.monotonicNow()
         
         // Remove timestamps older than 1 second
         timestamps.removeAll { it < now - 1000 }

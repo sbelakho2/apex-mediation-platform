@@ -57,7 +57,7 @@ class PrewiredAdapterConformanceTest {
             callbacks.onViewAttached(); callbacks.onViewDetached(CloseReason.DISMISSED)
         }
         override fun isAdReady(handle: AdHandle): Boolean = true
-        override fun expiresAt(handle: AdHandle): Long = System.currentTimeMillis() + 60000
+        override fun expiresAt(handle: AdHandle): Long = com.rivalapexmediation.sdk.util.ClockProvider.clock.monotonicNow() + 60000
         override fun invalidate(handle: AdHandle) {}
     }
 

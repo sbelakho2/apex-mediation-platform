@@ -15,6 +15,7 @@ import okhttp3.mockwebserver.MockWebServer
 import org.junit.After
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertThrows
 import org.junit.Before
 import org.junit.Test
 import java.security.KeyPairGenerator
@@ -152,11 +153,12 @@ class ConfigSignatureTest {
             auctionEndpoint = "http://localhost"
         )
         val context = mockContext(mockPrefs())
-
         val mgr = ConfigManager(context, sdkCfg, client = null, configPublicKey = pubKeyX509)
-        mgr.loadConfig()
+
+        assertThrows(IllegalStateException::class.java) {
+            mgr.loadConfig()
+        }
         val pl = mgr.getPlacementConfig("pl1")
-        // Expect rejection → no placement loaded
         assertNull(pl)
     }
 
@@ -206,10 +208,12 @@ class ConfigSignatureTest {
             auctionEndpoint = "http://localhost"
         )
         val context = mockContext(mockPrefs())
-
         val invalidKeyBytes = ByteArray(0)
         val mgr = ConfigManager(context, sdkCfg, client = null, configPublicKey = invalidKeyBytes)
-        mgr.loadConfig()
+
+        assertThrows(IllegalStateException::class.java) {
+            mgr.loadConfig()
+        }
         val pl = mgr.getPlacementConfig("pl1")
         assertNull(pl)
     }

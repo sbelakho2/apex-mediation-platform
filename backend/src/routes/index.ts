@@ -26,6 +26,7 @@ import flagsRoutes from './flags.routes';
 import dashboardRoutes from './dashboard.routes';
 import byoRoutes from './byo.routes';
 import toolsRoutes from './tools.routes';
+import configRoutes from './config.routes';
 import { killSwitchGuard } from '../middleware/featureFlags';
 import vraRoutes from './vra.routes';
 
@@ -59,6 +60,7 @@ router.use('/data-export', dataExportRoutes);
 router.use('/queues', queuesRoutes);
 router.use('/transparency', transparencyRoutes);
 router.use('/billing', billingRoutes);
+router.use('/config', configRoutes);
 // Migration before admin (ordering requirement per FIX-11/694)
 router.use('/migration', migrationRoutes);
 router.use('/admin', adminRoutes);

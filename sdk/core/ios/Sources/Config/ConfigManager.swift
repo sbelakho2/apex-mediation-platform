@@ -15,19 +15,22 @@ public final class ConfigManager: @unchecked Sendable {
     private let urlSession: URLSession
     private let userDefaults: UserDefaults
     private let signatureVerifier: SignatureVerifier?
+    private let clock: ClockProtocol
     
     private let cacheKey = "com.rivalapexmediation.config"
     private let cacheVersionKey = "com.rivalapexmediation.config.version"
     private let cacheTimestampKey = "com.rivalapexmediation.config.timestamp"
+    private let cacheMonotonicKey = "com.rivalapexmediation.config.timestamp.mono"
     
     private let cacheTTL: TimeInterval = 3600 // 1 hour
     
     private var cachedConfig: SDKRemoteConfig?
     
     /// Initialize config manager
-    public init(config: SDKConfig, signatureVerifier: SignatureVerifier?) {
+    public init(config: SDKConfig, signatureVerifier: SignatureVerifier?, clock: ClockProtocol = Clock.shared) {
         self.config = config
         self.signatureVerifier = signatureVerifier
+        self.clock = clock
         
         let configuration = URLSessionConfiguration.apexDefault(
             requestTimeout: 10,
@@ -40,6 +43,10 @@ public final class ConfigManager: @unchecked Sendable {
     
     /// Load configuration (cache-first)
     public func loadConfig() async throws -> SDKRemoteConfig {
+        // Production builds must have a verifier configured to enforce signatures.
+        if !config.testMode && signatureVerifier == nil {
+            throw ConfigError.missingSignature
+        }
         // Check cache first
         if let cached = loadCachedConfig(), !isCacheExpired() {
             cachedConfig = cached
@@ -185,7 +192,8 @@ public final class ConfigManager: @unchecked Sendable {
         if let data = try? encoder.encode(config) {
             userDefaults.set(data, forKey: cacheKey)
             userDefaults.set(config.version, forKey: cacheVersionKey)
-            userDefaults.set(Date().timeIntervalSince1970, forKey: cacheTimestampKey)
+            userDefaults.set(clock.now().timeIntervalSince1970, forKey: cacheTimestampKey)
+            userDefaults.set(clock.monotonicSeconds(), forKey: cacheMonotonicKey)
         }
     }
     
@@ -204,12 +212,19 @@ public final class ConfigManager: @unchecked Sendable {
     /// Check if cache is expired
     private func isCacheExpired() -> Bool {
         let timestamp = userDefaults.double(forKey: cacheTimestampKey)
+        let monotonicStamped = userDefaults.double(forKey: cacheMonotonicKey)
+        let nowMonotonic = clock.monotonicSeconds()
         
         if timestamp == 0 {
             return true
         }
-        
-        let age = Date().timeIntervalSince1970 - timestamp
+
+        let age: TimeInterval
+        if monotonicStamped > 0, nowMonotonic >= monotonicStamped {
+            age = nowMonotonic - monotonicStamped
+        } else {
+            age = clock.now().timeIntervalSince1970 - timestamp
+        }
         return age > cacheTTL
     }
     
@@ -223,6 +238,7 @@ public final class ConfigManager: @unchecked Sendable {
         userDefaults.removeObject(forKey: cacheKey)
         userDefaults.removeObject(forKey: cacheVersionKey)
         userDefaults.removeObject(forKey: cacheTimestampKey)
+        userDefaults.removeObject(forKey: cacheMonotonicKey)
         cachedConfig = nil
     }
     

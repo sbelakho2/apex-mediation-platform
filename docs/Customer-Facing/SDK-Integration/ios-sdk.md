@@ -568,6 +568,10 @@ xcrun swift run apex-adapter-runner --adapter admob \
 popd
 ```
 
+See also (Developer‑Facing):
+- iOS/tvOS Adapter Dev Kit deep‑dive: `docs/Developer-Facing/DevKits/ios-tvos.md`
+- Dev Kit index (all platforms): `docs/Developer-Facing/AdapterDevKit.md`
+
 ### Sandbox flags (DEBUG/testing)
 
 ```swift

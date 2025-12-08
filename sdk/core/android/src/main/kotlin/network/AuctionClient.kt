@@ -3,6 +3,8 @@ package com.rivalapexmediation.sdk.network
 import android.os.Build
 import com.google.gson.Gson
 import com.rivalapexmediation.sdk.threading.CircuitBreaker
+import com.rivalapexmediation.sdk.util.Clock
+import com.rivalapexmediation.sdk.util.ClockProvider
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -30,6 +32,7 @@ class AuctionClient(
     circuitBreakerFactory: () -> CircuitBreaker = {
         CircuitBreaker(failureThreshold = 4, resetTimeoutMs = 15_000, halfOpenMaxAttempts = 1)
     },
+    private val clock: Clock = ClockProvider.clock,
 ) {
     private val gson = Gson()
     private val base = baseUrl.trimEnd('/')
@@ -292,7 +295,7 @@ class AuctionClient(
             val sdf = SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss zzz", Locale.US)
             sdf.timeZone = TimeZone.getTimeZone("GMT")
             val date = sdf.parse(header)
-            date?.time?.let { (it - System.currentTimeMillis()).coerceAtLeast(0) }
+            date?.time?.let { (it - clock.now()).coerceAtLeast(0) }
         } catch (_: Exception) {
             null
         }
@@ -309,7 +312,7 @@ class AuctionClient(
     }
 
     private fun buildRequestBody(opts: InterstitialOptions, consent: ConsentOptions?): Map<String, Any?> {
-        val now = System.currentTimeMillis()
+        val now = clock.now()
         val rand = (0..999_999).random()
         val reqId = "android-$now-$rand"
         val deviceInfo = mapOf(
@@ -325,8 +328,9 @@ class AuctionClient(
             "ip" to "",
             "user_agent" to "",
         )
+        val limitAdTracking = consent?.limitAdTracking == true
         val userInfo = mutableMapOf<String, Any?>(
-            "limit_ad_tracking" to (consent?.limitAdTracking ?: false)
+            "limit_ad_tracking" to limitAdTracking
         )
         consent?.consentString
             ?.takeUnless { it.isBlank() }
@@ -335,7 +339,7 @@ class AuctionClient(
 
         val adId = consent?.advertisingId?.takeUnless { it.isNullOrBlank() }
         val appSetId = consent?.appSetId?.takeUnless { it.isNullOrBlank() }
-        if (!adId.isNullOrBlank() && consent?.limitAdTracking != true) {
+        if (!adId.isNullOrBlank() && !limitAdTracking) {
             userInfo["advertising_id"] = adId
         } else if (!appSetId.isNullOrBlank()) {
             userInfo["app_set_id"] = appSetId

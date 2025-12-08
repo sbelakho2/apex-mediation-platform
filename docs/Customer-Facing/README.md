@@ -20,6 +20,9 @@ This directory contains all customer-facing documentation for the ApexMediation 
 - Prebid Adapter
 - Server-to-Server Integration
 
+See also (Developer‑Facing):
+- Adapter Dev Kits (BYO adapters, all platforms): `docs/Developer-Facing/AdapterDevKit.md`
+
 ### 3. API Reference
 - Authentication
 - RESTful API Endpoints

@@ -9,7 +9,7 @@ import com.google.gson.Gson
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import com.rivalapexmediation.sdk.util.Clock
-import com.rivalapexmediation.sdk.util.SystemClockClock
+import com.rivalapexmediation.sdk.util.ClockProvider
 import java.io.IOException
 import java.security.MessageDigest
 import java.util.concurrent.TimeUnit
@@ -28,7 +28,7 @@ class ConfigManager(
     private val sdkConfig: SDKConfig,
     private val client: OkHttpClient? = null,
     private val configPublicKey: ByteArray? = null,
-    private val clock: Clock = SystemClockClock
+    private val clock: Clock = ClockProvider.clock
 ) {
     private val prefs: SharedPreferences = context.getSharedPreferences(
         "rival_ad_stack_config",
@@ -58,13 +58,20 @@ class ConfigManager(
         // Fetch remote if cache is stale or missing
         if (shouldFetchRemote()) {
             try {
+                if (!sdkConfig.testMode && configPublicKey == null) {
+                    throw IllegalStateException("Missing config public key in production mode")
+                }
                 val remoteConfig = fetchRemoteConfig()
                 val sigOk = if (sdkConfig.testMode) true else verifySignature(remoteConfig)
-                if (sigOk && validateSchema(remoteConfig)) {
-                    currentConfig = remoteConfig
-                    saveToCache(remoteConfig)
-                    lastFetchTime = clock.monotonicNow()
+                if (!sdkConfig.testMode && !sigOk) {
+                    throw IllegalStateException("Config signature verification failed")
                 }
+                if (!validateSchema(remoteConfig)) {
+                    throw IllegalStateException("Config schema validation failed")
+                }
+                currentConfig = remoteConfig
+                saveToCache(remoteConfig)
+                lastFetchTime = clock.monotonicNow()
             } catch (e: IOException) {
                 // Use cached config if network fails
                 if (currentConfig == null) {
@@ -106,8 +113,9 @@ class ConfigManager(
      * Check if config is valid and not expired
      */
     fun isConfigValid(): Boolean {
-        val config = currentConfig ?: return false
+        if (currentConfig == null) return false
         val age = clock.monotonicNow() - lastFetchTime
+        if (age < 0) return false
         return age < configTTL
     }
     
@@ -209,7 +217,7 @@ class ConfigManager(
     private fun saveToCache(config: SDKRemoteConfig) {
         prefs.edit()
             .putString("config_json", gson.toJson(config))
-            .putLong("last_fetch", System.currentTimeMillis())
+            .putLong("last_fetch", clock.monotonicNow())
             .apply()
     }
     
@@ -219,6 +227,10 @@ class ConfigManager(
     private fun loadFromCache(): SDKRemoteConfig? {
         val json = prefs.getString("config_json", null) ?: return null
         lastFetchTime = prefs.getLong("last_fetch", 0)
+        val nowMono = clock.monotonicNow()
+        if (lastFetchTime <= 0 || lastFetchTime > nowMono) {
+            lastFetchTime = 0
+        }
         
         return try {
             gson.fromJson(json, SDKRemoteConfig::class.java)
@@ -242,6 +254,7 @@ class ConfigManager(
         }
         
         val age = clock.monotonicNow() - lastFetchTime
+        if (age < 0) return true
         return age >= configTTL
     }
     

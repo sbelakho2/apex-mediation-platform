@@ -15,6 +15,8 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import com.rivalapexmediation.sdk.util.Clock
+import com.rivalapexmediation.sdk.util.ClockProvider
 
 /**
  * Validates caching/state guarantees for interstitial placements: expiry, single-use,
@@ -63,7 +65,7 @@ class AdCacheBehaviorTest {
         loadPlacement(placement)
         val cached = MediationSDK.getInstance().getCachedAd(placement)
         assertNotNull(cached)
-        val ttlMs = cached!!.expiryTimeMs!! - System.currentTimeMillis()
+        val ttlMs = cached!!.expiryTimeMs!! - com.rivalapexmediation.sdk.util.ClockProvider.clock.monotonicNow()
         assertTrue("TTL should honor refresh window multiplier", ttlMs in 1_000..10_000)
         forceExpire(placement)
         assertFalse("Expired ads must be pruned from cache", BelInterstitial.isReady())
@@ -83,6 +85,42 @@ class AdCacheBehaviorTest {
         assertNotNull(cached)
         assertEquals("cr-second", cached!!.id)
         assertTrue("Cache should report ready after replacement", BelInterstitial.isReady())
+    }
+
+    @Test
+    fun cachedAdReadinessIgnoresWallClockDriftAndExpiresOnMonotonic() {
+        val originalClock = ClockProvider.clock
+        val driftClock = object : Clock {
+            var wall: Long = 1_000L
+            var mono: Long = 1_000L
+            override fun now(): Long = wall
+            override fun monotonicNow(): Long = mono
+            fun advanceWall(delta: Long) { wall += delta }
+            fun advanceMono(delta: Long) { mono += delta }
+        }
+        ClockProvider.clock = driftClock
+        try {
+            val placement = "pl_drift"
+            startSdk(placement, refreshInterval = 1)
+            server.enqueue(MockResponse().setResponseCode(200).setBody(winnerBody("cr-drift")))
+
+            loadPlacement(placement)
+            assertTrue("Cache should be ready after load", BelInterstitial.isReady())
+
+            // Large wall-clock jump must not expire cached ad because expiry is monotonic
+            driftClock.advanceWall(5 * 60_000L)
+            assertTrue("Cache should remain ready after wall-clock jump", BelInterstitial.isReady())
+
+            // Advancing monotonic time past TTL should expire the ad deterministically
+            driftClock.advanceMono(10_000L)
+            assertFalse("Cache should expire when monotonic time passes TTL", BelInterstitial.isReady())
+
+            // Backward wall-clock jump should not un-expire a cached ad once monotonic time is past TTL
+            driftClock.advanceWall(-120_000L)
+            assertFalse("Cache should remain expired after backward wall-clock jump", BelInterstitial.isReady())
+        } finally {
+            ClockProvider.clock = originalClock
+        }
     }
 
     private fun startSdk(placementId: String, refreshInterval: Int? = null) {
@@ -178,7 +216,7 @@ class AdCacheBehaviorTest {
             val cache = cacheField.get(sdk) as MutableMap<String, Any?>
             val cached = cache[placement] ?: return
             val expiryField = cached::class.java.getDeclaredField("expiryAtMs").apply { isAccessible = true }
-            expiryField.setLong(cached, System.currentTimeMillis() - 1)
+            expiryField.setLong(cached, com.rivalapexmediation.sdk.util.ClockProvider.clock.monotonicNow() - 1)
         }
     }
 }

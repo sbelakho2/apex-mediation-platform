@@ -8,7 +8,7 @@ import UIKit
 @MainActor
 public enum BelAppOpen {
     private static var lastPlacement: String?
-    private static var lastShowTime: Date?
+    private static var lastShowMonotonic: TimeInterval?
     private static let minimumHoursBetweenShows: TimeInterval = 4 * 3600 // 4 hours
     
     /// Load an app open ad for the placement.
@@ -30,8 +30,8 @@ public enum BelAppOpen {
     /// Show the loaded app open ad using the optional listener callbacks.
     @discardableResult
     public static func show(from viewController: UIViewController, placementId: String? = nil, listener: BelAdEventListener? = nil) -> Bool {
-        if let lastShow = lastShowTime {
-            let timeSinceLastShow = Date().timeIntervalSince(lastShow)
+        if let lastShow = lastShowMonotonic {
+            let timeSinceLastShow = Clock.shared.monotonicSeconds() - lastShow
             if timeSinceLastShow < minimumHoursBetweenShows {
                 listener?.onAdFailedToShow(placementId: placementId ?? lastPlacement ?? "", error: SDKError.frequencyLimited)
                 return false
@@ -63,7 +63,7 @@ public enum BelAppOpen {
                 listener?.onAdFailedToShow(placementId: placement, error: SDKError.noFill)
                 return
             }
-            lastShowTime = Date()
+            lastShowMonotonic = Clock.shared.monotonicSeconds()
             listener?.onAdShown(placementId: placement)
             SKAdNetworkCoordinator.shared.recordImpression(
                 for: ad,
@@ -85,7 +85,7 @@ public enum BelAppOpen {
     
     /// Reset the show time limit (for testing purposes)
     public static func resetShowTimeLimit() {
-        lastShowTime = nil
+        lastShowMonotonic = nil
     }
     
     private static func presentDebugAppOpen(from viewController: UIViewController, networkName: String, completion: @escaping () -> Void) {

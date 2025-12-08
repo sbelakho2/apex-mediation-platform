@@ -9,12 +9,13 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/bel-consulting/rival-ad-stack/config/internal/api"
-	"github.com/bel-consulting/rival-ad-stack/config/internal/killswitch"
-	"github.com/bel-consulting/rival-ad-stack/config/internal/rollout"
-	"github.com/bel-consulting/rival-ad-stack/config/internal/signing"
 	"github.com/gorilla/mux"
 	"github.com/redis/go-redis/v9"
+	"github.com/sbelakho2/Ad-Project/backend/config/internal/api"
+	"github.com/sbelakho2/Ad-Project/backend/config/internal/killswitch"
+	"github.com/sbelakho2/Ad-Project/backend/config/internal/rollout"
+	"github.com/sbelakho2/Ad-Project/backend/config/internal/signing"
+	"github.com/sbelakho2/Ad-Project/backend/config/internal/validation"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -61,12 +62,16 @@ func main() {
 	// Kill switch manager
 	killSwitchManager := killswitch.NewManager(redisClient)
 
+	// Config validator (JSON + schema hooks)
+	validator := validation.NewValidator()
+
 	// API handlers
 	apiHandler := api.NewHandler(
 		signer,
 		rolloutController,
 		killSwitchManager,
 		redisClient,
+		validator,
 	)
 
 	// Setup HTTP server

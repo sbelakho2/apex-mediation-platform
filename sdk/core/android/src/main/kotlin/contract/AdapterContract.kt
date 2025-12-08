@@ -1,6 +1,7 @@
 package com.rivalapexmediation.sdk.contract
 
 import com.rivalapexmediation.sdk.models.AdType
+import com.rivalapexmediation.sdk.util.ClockProvider
 
 /**
  * Canonical adapter contract derived from backend Adapters.md spec.
@@ -118,7 +119,7 @@ data class AdHandle(
     val id: String,
     val adType: AdType,
     val partnerPlacementId: String? = null,
-    val createdAtMs: Long = System.currentTimeMillis()
+    val createdAtMs: Long = ClockProvider.clock.monotonicNow()
 )
 
 data class PaidEvent(

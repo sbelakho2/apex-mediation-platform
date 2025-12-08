@@ -2,6 +2,12 @@
 
 This guide explains how to validate and ship real ad network adapters without ever bundling vendor SDKs inside ApexMediation Core. It provides parity across all supported platforms and keeps production code clean and single-entry.
 
+Per‑platform Dev Kits (Developer‑Facing)
+- iOS/tvOS: `docs/Developer-Facing/DevKits/ios-tvos.md`
+- Android & Android TV: `docs/Developer-Facing/DevKits/android-androidtv.md`
+- Unity: `docs/Developer-Facing/DevKits/unity.md`
+- Web: `docs/Developer-Facing/DevKits/web.md`
+
 Key principles
 - Core principle: No vendor SDKs in the ApexMediation core libraries (Release). BYO-first only.
 - Single point of entry: initialize once per app lifecycle using each platform’s `MediationSDK` (or Unity wrapper), then use `loadAd`/`isAdReady`/`show` APIs.

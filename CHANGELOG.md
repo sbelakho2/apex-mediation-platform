@@ -1,3 +1,108 @@
+Changelog — Unity/Android TV Clock Drift Hardening (2025-12-08)
+
+Summary
+- Added monotonic clock abstractions and drift simulations to Unity and Android TV ad caches to keep TTL and readiness stable under ±10 minute wall-clock jumps.
+
+What changed
+- Unity SDK: Introduced `IClock`/`MonotonicClock` (Stopwatch-based) and wired `RenderableAd` to use it; ad cache tests now use a mutable monotonic clock with forward/backward drift simulations replacing sleeps.
+- Android TV SDK: Added injectable monotonic `Clock` to `AdCache`, plus unit tests covering forward/backward drift and single-use eviction; added `kotlin-test` to support assertions.
+
+Validation
+- `cd sdk/core/unity/Tests && DOTNET_ROLL_FORWARD=LatestMajor dotnet test`
+- `cd sdk/ctv/android-tv && JAVA_HOME=/Library/Java/JavaVirtualMachines/temurin-17.jdk/Contents/Home gradle clean testDebugUnitTest`
+
+---
+
+Changelog — Config Signing Fail-Closed (2025-12-08)
+
+Summary
+- Added monotonic clock injection to CTV tvOS ad cache to resist wall-clock drift and covered with forward/backward drift tests.
+
+What changed
+- CTV tvOS: `ClockProtocol` introduced with injectable `Clock`; `AdCache` now uses monotonic uptime and accepts an injected clock for tests.
+- CTV tvOS Tests: `AdCacheTests` updated with `MutableClock` to simulate forward/backward jumps and ensure expired ads stay expired.
+
+Validation
+- `cd sdk/ctv/tvos && xcodebuild test -scheme CTVSDK -destination "platform=tvOS Simulator,name=Apple TV 4K (3rd generation)"`
+
+---
+
+Summary
+- Enforced fail-closed config loading on Android/iOS when missing/invalid signing keys, signature verification failures, or schema violations occur.
+- Added signing/schema rejection tests on both platforms to lock the behavior, and hardened the backend validation endpoint with schema + signature enforcement.
+
+What changed
+- Android SDK: `ConfigManager` now throws in production when no public key is provided, when signature verification fails, or when schema bounds/required fields are violated; `ConfigManagerSigningTest` updated to assert fail-closed behavior. Schema validation tests now expect exceptions and confirm placements stay empty.
+- iOS SDK: `ConfigManager` already requires a verifier in production; added `ConfigManagerSigningTests` to assert missing verifier fails closed before fetch.
+- Backend: `/api/v1/config/validate` now enforces schema + Ed25519 signature verification and rollout guard helper; tests cover valid/tampered/invalid-key/missing-key paths.
+- Docs: `SDK_CHECKS` status updated to reflect Android/iOS enforcement and backend validation coverage.
+
+Validation
+- `cd sdk/core/ios && xcodebuild test -scheme RivalApexMediationSDK -destination "platform=iOS Simulator,name=iPhone 15,OS=17.5"`
+- `cd sdk/core/android && ./gradlew.sh testDebugUnitTest`
+- `cd backend && npm test -- config.routes.test.ts`
+
+---
+Changelog — Checklist Detailing (2025-12-08)
+
+Summary
+- Refined SDK checklist items: config signing guardrails, Unity/CTV drift rollout follow-ups, supply-chain enforcement (app-ads.txt + sellers.json), and OMID helper scope/tests.
+
+What changed
+- Docs: `SDK_CHECKS` now spells out SafeConfigManager signing rejection paths and backend signature/schema enforcement with staged rollout guardrails.
+- Docs: Added next steps for Unity/CTV monotonic drift simulations, app-ads.txt crawler surface in Console, sellers.json ingestion + weak labels, and OMID helper scaffolding/tests.
+
+Validation
+- Docs-only update (no runtime changes).
+
+---
+Changelog — iOS Clock Drift Hardening (2025-12-08)
+
+Summary
+- Added a shared monotonic `ClockProtocol` and wired it through cache, circuit breaker, auction client, and telemetry timing paths to resist wall-clock jumps.
+- Refactored ad cache readiness/pruning to store monotonic expirations and added regression coverage for backward clock drift in iOS tests.
+
+What changed
+- iOS SDK: new `Support/Clock.swift` supplies wall/monotonic time; injected into `ConfigManager`, `AdapterRuntime`, `AuctionClient`, `BelAppOpen`, and runtime caching/metrics.
+- iOS SDK: cache now records expiry in monotonic millis; readiness/prune paths use monotonic time, and adapter load latencies use monotonic deltas.
+- iOS SDK Tests: `AdCacheBehaviorTests` gains mutable clock + backward wall-clock jump test; sleeps replaced with deterministic clock advances.
+- iOS SDK Tests: `AuctionClientErrorTests` now uses a mutable clock to exercise circuit-breaker cooldown deterministically.
+
+Validation
+- `cd sdk/core/ios && xcodebuild test -scheme RivalApexMediationSDK -destination "platform=iOS Simulator,name=iPhone 15,OS=17.5"`
+
+---
+Changelog — Android Clock Drift Hardening (2025-12-08)
+
+Summary
+- Added a monotonic clock drift simulation test to guard ad expiry logic against wall-clock jumps.
+- Ensured Android ad caching/readiness paths rely solely on the monotonic clock for expiry and pruning.
+
+What changed
+- Android SDK: `sdk/core/android/src/test/kotlin/models/ClockDriftAdExpiryTest.kt` uses a dual clock to verify ads remain valid across wall-clock jumps and expire only when monotonic time advances.
+- Android SDK: `sdk/core/android/src/test/kotlin/dx/AdCacheBehaviorTest.kt` now includes a monotonic cache readiness test that ensures wall-clock jumps do not evict cached ads while monotonic time still governs expiry.
+- Android SDK: Expanded drift test to cover backward wall-clock jumps to ensure expired ads stay expired once monotonic time passes TTL.
+- Android SDK: `MediationSDK.kt` now computes S2S/runtime expiry and cache pruning with `ClockProvider.clock.monotonicNow()`, aligning runtime behavior with the drift-safe abstraction used by tests.
+- Android SDK: `Models.kt` uses the monotonic clock for ad creation timestamps and expiry checks to avoid wall-clock drift issues.
+
+Validation
+- `cd sdk/core/android && ./gradlew.sh testDebugUnitTest`
+
+---
+Changelog — Config Schema & Drift Plan (2025-12-08)
+
+Summary
+- Documented the enforcement plan for immutable config schemas and signed rollouts across SDKs and backend validation paths.
+- Captured the cross-platform clock-drift tolerance plan using time-provider abstractions and drift-aware tests.
+
+What changed
+- Docs: `SDK_CHECKS` now records that config/schema signing will reject missing public keys in production, expand schema checks, and add backend schema/signature validation with tests across SDKs.
+- Docs: `SDK_CHECKS` also notes the upcoming time-provider abstraction and ±10 minute drift simulation tests for Android/iOS/Unity/CTV to keep TTL/backoff behavior stable.
+
+Validation
+- Docs-only update (no runtime changes).
+
+---
 Changelog — SDK Build Tooling Hardening (2025-12-08)
 
 Summary
@@ -2064,7 +2169,7 @@ What changed (highlights)
 - FIX-07-04 — `quality/e2e/billing/usage-to-invoice.spec.ts` now reads console/API base URLs plus login credentials from env vars, letting CI supply real tenants instead of hard-coded `demo@apexmediation.ee` values while preserving the local defaults.
 - FIX-07-05 — `quality/load-tests/auction-load-test.js` shares the staging-ready defaults from the tracking test (placement/adFormat/device/app metadata), injects unique request IDs each iteration, and normalizes the optional Bearer token header so load runs surface real adapter issues.
 - FIX-07-06 — `quality/e2e/website/visual.spec.ts` now accepts `WEBSITE_BASE_URL`, writes every screenshot to `artifacts/website-visual/`, and attaches the PNG to the test run so CI retains visual evidence even when snapshots pass/fail.
-- FIX-07-07 — `quality/go.mod` now declares `github.com/bel-consulting/rival-ad-stack/quality` (instead of the generic `quality` path) and `go mod tidy` refreshed `go.sum`, preventing accidental dependency resolution conflicts when importing the suite externally.
+- FIX-07-07 — `quality/go.mod` now declares `github.com/sbelakho2/Ad-Project/quality` (instead of the generic `quality` path) and `go mod tidy` refreshed `go.sum`, preventing accidental dependency resolution conflicts when importing the suite externally.
 - FIX-07-08 — `quality/integration/helpers_test.go` introduces an in-memory publisher/ad server, payment ledger, and config rollout simulator so `end_to_end_test.go` can exercise real flows (ad auction, fraud blocking, payouts, staged rollouts) without external services. The helper also backs `queryAnalyticsPostgres`, `generateTestRevenue`, and the `makeAPIRequest` shim, meaning `go test ./integration` now passes locally and in CI.
 - FIX-07-09 — `quality/lighthouse/website.config.cjs` now runs three Lighthouse samples by default (override with `LHCI_RUNS`) so CI compares median scores instead of a single potentially cold run.
 - FIX-07-10 — `quality/lint/no-hardcoded-hex.js` expands its extension allowlist to `.scss/.sass/.json`, ensuring theme tokens defined outside TS/JS files are linted for rogue hex colors.
@@ -3469,3 +3574,30 @@ Submission
 - Zip `evidence-2025-12-06/` and link from checklist sections after completion.
 
 ---
+
+---
+
+Changelog — Dev Kit docs complete across platforms (2025-12-08)
+
+Summary
+- Completed Developer‑Facing Adapter Dev Kit documentation across iOS/tvOS, Android/Android TV, Unity, and Web, with a central index and cross‑links from all customer‑facing SDK guides. Reinforces BYO‑first, single‑entry, consent, and sandbox/test gating principles.
+
+What changed
+- Added Developer‑Facing index and per‑platform Dev Kits:
+  - docs/Developer-Facing/AdapterDevKit.md (index)
+  - docs/Developer-Facing/DevKits/ios-tvos.md
+  - docs/Developer-Facing/DevKits/android-androidtv.md
+  - docs/Developer-Facing/DevKits/unity.md
+  - docs/Developer-Facing/DevKits/web.md
+- Cross‑linked from customer‑facing SDK guides:
+  - docs/Customer-Facing/SDK-Integration/ios-sdk.md → links to iOS/tvOS Dev Kit + index
+  - docs/Customer-Facing/SDK-Integration/android-sdk.md → links to Android/TV Dev Kit + index
+  - docs/Customer-Facing/SDK-Integration/unity-sdk.md → links to Unity Dev Kit + index
+  - docs/Customer-Facing/SDK-Integration/web-sdk.md → links to Web Dev Kit + index
+- Updated customer‑facing Adapter Dev Kit overview to include per‑platform quick links:
+  - docs/Customer-Facing/AdapterDevKit.md
+- Updated customer docs index to point to Developer‑Facing Dev Kits:
+  - docs/Customer-Facing/README.md
+
+Impact
+- Clear, discoverable documentation for building adapters in a BYO‑first model on all platforms; consistent guidance on single‑entry initialization, simple consent, sandbox flags, and Release safety (no vendor SDKs in core). Customers and partners can validate adapters using the iOS/tvOS CLI and Android JUnit/instrumented tests, with Unity and Web patterns documented.

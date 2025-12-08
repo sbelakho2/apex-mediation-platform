@@ -23,15 +23,18 @@ public final class CircuitBreaker {
     private var lastFailureTime: Int64 = 0
     
     private let lock = NSLock()
+    private let clock: ClockProtocol
     
     public init(
         failureThreshold: Int = 5,
         resetTimeoutMs: Int64 = 60000,
-        halfOpenMaxAttempts: Int = 3
+        halfOpenMaxAttempts: Int = 3,
+        clock: ClockProtocol = Clock.shared
     ) {
         self.failureThreshold = failureThreshold
         self.resetTimeoutMs = resetTimeoutMs
         self.halfOpenMaxAttempts = halfOpenMaxAttempts
+        self.clock = clock
     }
     
     /**
@@ -88,7 +91,7 @@ public final class CircuitBreaker {
     }
     
     private func onFailure() {
-        lastFailureTime = Int64(Date().timeIntervalSince1970 * 1000)
+        lastFailureTime = clock.monotonicMillis()
         
         switch state {
         case .halfOpen:
@@ -107,7 +110,7 @@ public final class CircuitBreaker {
     }
     
     private func shouldAttemptReset() -> Bool {
-        let now = Int64(Date().timeIntervalSince1970 * 1000)
+        let now = clock.monotonicMillis()
         return now - lastFailureTime >= resetTimeoutMs
     }
     
@@ -171,16 +174,18 @@ public final class RateLimiter {
     private let maxRequestsPerSecond: Int
     private var timestamps: [Int64] = []
     private let lock = NSLock()
+    private let clock: ClockProtocol
     
-    public init(maxRequestsPerSecond: Int) {
+    public init(maxRequestsPerSecond: Int, clock: ClockProtocol = Clock.shared) {
         self.maxRequestsPerSecond = maxRequestsPerSecond
+        self.clock = clock
     }
     
     public func acquire() -> Bool {
         lock.lock()
         defer { lock.unlock() }
         
-        let now = Int64(Date().timeIntervalSince1970 * 1000)
+        let now = clock.monotonicMillis()
         
         // Remove timestamps older than 1 second
         timestamps.removeAll { $0 < now - 1000 }
