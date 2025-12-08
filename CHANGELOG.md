@@ -1,3 +1,17 @@
+Changelog — Supply Chain Status Service (2025-12-08)
+
+Summary
+- Added a supply chain status service that reads the manifest-resolved corpus, returns declared entries, and surfaces seller directory context for authorization checks.
+
+What changed
+- Backend: `getSupplyChainStatus` now uses the public `listDomainEntries` accessor, accepts an optional base directory override for testability, and reads the weak-supervision manifest via fs to avoid require caching.
+- Tests: Added `src/services/__tests__/supplyChainStatusService.test.ts` covering authorized seller, missing-domain, and undeclared-seller paths.
+
+Validation
+- `cd backend && npm test -- supplyChainStatusService`
+
+---
+
 Changelog — Supply Chain Ingestion (2025-12-08)
 
 Summary
