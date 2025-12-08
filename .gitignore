@@ -94,6 +94,7 @@ quality/**/results*.json
 *.aab
 *.ipa
 *.dSYM
+*.hprof
 *.xcuserstate
 *.xcworkspace
 xcuserdata/
@@ -105,6 +106,7 @@ sdk/core/ios/.build/
 .gradle/
 sdk/core/android/.gradle/
 sdk/core/android/.gradle-home/
+sdk/core/android/*.hprof
 gradle/
 gradlew
 gradlew.bat
