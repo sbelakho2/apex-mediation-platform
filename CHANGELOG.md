@@ -12,6 +12,23 @@ Validation
 
 ---
 
+Changelog — Supply Chain Status Endpoint & Console Tool (2025-12-08)
+
+Summary
+- Added a supply chain status service and tools endpoint to fetch per-domain authorization plus sellers.json context, and surfaced a Console tool to inspect the ingested corpus.
+
+What changed
+- Backend: Added `getSupplyChainStatus` service reading the weak-supervision manifest, using `SupplyChainCorpus.listDomainEntries`, and logging authorization outcomes for weak supervision.
+- Backend: Exposed `GET /api/v1/tools/supply-chain-status` behind auth to return authorization status, declared entries, and seller directory info.
+- Console: Added "Supply Chain Status" tool page and navigation link to query the backend endpoint with optional seller/app/site IDs, showing corpus entries and directory metadata.
+- Backend: Weak supervision now logs supply chain authorization outcomes to aid observability.
+- Tests: Added `src/services/__tests__/supplyChainStatusService.test.ts` covering authorized, missing-domain, and undeclared-seller paths.
+
+Validation
+- `cd backend && npm test -- supplyChainStatusService`
+
+---
+
 Changelog — Supply Chain Ingestion (2025-12-08)
 
 Summary

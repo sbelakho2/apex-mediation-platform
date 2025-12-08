@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { authenticate } from '../middleware/auth'
-import { appAdsInspector } from '../controllers/tools.controller'
+import { appAdsInspector, supplyChainStatus } from '../controllers/tools.controller'
 
 const router = Router()
 
@@ -9,5 +9,8 @@ router.use(authenticate)
 
 // App-ads.txt inspector
 router.get('/app-ads-inspector', appAdsInspector)
+
+// Supply chain status lookup
+router.get('/supply-chain-status', supplyChainStatus)
 
 export default router

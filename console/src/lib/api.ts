@@ -32,6 +32,7 @@ import type {
   NetworkCredentialsList,
   NetworkVerificationResult,
   AppAdsInspectorResult,
+  SupplyChainStatusResult,
 } from '@/types'
 
 const USE_MOCK_API = process.env.NEXT_PUBLIC_USE_MOCK_API === 'true' && process.env.NODE_ENV !== 'production'
@@ -141,6 +142,18 @@ export const toolsApi = {
     if (!domain || !domain.trim()) throw new Error('Domain is required')
     const resp = await apiClient.get<AppAdsInspectorResult>(`/tools/app-ads-inspector`, {
       params: { domain: domain.trim() },
+    })
+    return unwrapSuccessEnvelope(resp.data as any)
+  },
+  getSupplyChainStatus: async (params: { domain: string; sellerId?: string; appStoreId?: string; siteId?: string }): Promise<SupplyChainStatusResult> => {
+    if (!params.domain || !params.domain.trim()) throw new Error('Domain is required')
+    const resp = await apiClient.get<SuccessEnvelope<SupplyChainStatusResult> | SupplyChainStatusResult>(`/tools/supply-chain-status`, {
+      params: {
+        domain: params.domain.trim(),
+        sellerId: params.sellerId?.trim(),
+        appStoreId: params.appStoreId?.trim(),
+        siteId: params.siteId?.trim(),
+      },
     })
     return unwrapSuccessEnvelope(resp.data as any)
   },

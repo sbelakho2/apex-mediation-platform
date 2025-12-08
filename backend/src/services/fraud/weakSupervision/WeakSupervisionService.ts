@@ -142,6 +142,19 @@ export class WeakSupervisionService {
     const result = this.supplyChainCorpus.evaluateAuthorization(context.supplyChain);
 
     if (!result.authorized) {
+      logger.warn('[WeakSupervision] supply chain unauthorized', {
+        domain: context.supplyChain.domain,
+        sellerId: context.supplyChain.sellerId,
+        reason: result.reason,
+      });
+    } else {
+      logger.info('[WeakSupervision] supply chain authorized', {
+        domain: context.supplyChain.domain,
+        sellerId: context.supplyChain.sellerId,
+      });
+    }
+
+    if (!result.authorized) {
       const reasons = [result.reason ?? 'Seller unauthorized for declared supply chain'];
       if (result.sellerInfo?.name) {
         reasons.push(`Directory seller name: ${result.sellerInfo.name}`);

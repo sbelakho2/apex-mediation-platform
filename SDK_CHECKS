@@ -23,13 +23,13 @@
 	- Where: services/quality/appadstxt-crawler/ + nightly job
 	- How to verify: Console “Supply Chain” tab shows “OK/Missing/Mismatch” per store app ID; warning banners in placements page
 	- (Why) IAB supply chain integrity is expected by buyers; even for BYO you should surface issues so devs get paid.
-	- Status (2025-12-08): Added ingestion utilities + script: `backend/src/services/appAdsIngestion.ts` parses app-ads lines and builds the corpus; `backend/scripts/ingestSupplyChainCorpus.ts` ingests from `data/weak-supervision/supply-chain/inventory.json` and writes `app-ads.json`. Added supply chain status service that resolves the manifest/corpus, returns declared entries, and surfaces seller directory context (tests: `cd backend && npm test -- supplyChainStatusService`). Next: add scheduled crawler, persist per app, and surface Console “Supply Chain” tab + placement warnings.
+	- Status (2025-12-08): Added ingestion utilities + script: `backend/src/services/appAdsIngestion.ts` parses app-ads lines and builds the corpus; `backend/scripts/ingestSupplyChainCorpus.ts` ingests from `data/weak-supervision/supply-chain/inventory.json` and writes `app-ads.json`. Added authenticated tools endpoint `GET /api/v1/tools/supply-chain-status` backed by `SupplyChainCorpus` for per-domain lookups plus Console “Supply Chain Status” tool UI to surface entries and seller directory context (tests: `cd backend && npm test -- appAdsIngestion`, `cd backend && npm test -- supplyChainStatusService`). Next: add scheduled crawler, persist per app, and surface Console “Supply Chain” tab + placement warnings.
 
 - [ ] sellers.json & schain parsing (adaptor-agnostic)
 	- Where: services/quality/supplychain/
 	- How to verify: Stored per partner; exposed in auction logs & bid-landscape; “unauthorized reseller” weak-label for fraud model
 	- (Why) Standardized transparency for buyers; improves trust and troubleshooting.
-	- Status (2025-12-08): Added sellers.json ingestion helper and CLI (`ingestSupplyChainCorpus.ts`) to merge sellers directories from provided URLs and normalize into `data/weak-supervision/supply-chain/sellers.json`; tests in `backend && npm test -- appAdsIngestion`. `SupplyChainCorpus` now feeds the status service for per-domain authorization lookups; next: persist directory, link into weak-supervision logs/bid-landscape with weak-labels.
+	- Status (2025-12-08): Added sellers.json ingestion helper and CLI (`ingestSupplyChainCorpus.ts`) to merge sellers directories from provided URLs and normalize into `data/weak-supervision/supply-chain/sellers.json`; tests in `backend && npm test -- appAdsIngestion`. `SupplyChainCorpus` now feeds the status endpoint and weak-supervision logging for per-domain authorization; next: persist directory, link into weak-supervision logs/bid-landscape with weak-labels.
 
 ## 2) Open Measurement (OMSDK) readiness (non-blocking in BYO)
 

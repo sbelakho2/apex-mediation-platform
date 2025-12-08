@@ -47,6 +47,7 @@ const NAV_BLUEPRINT: NavBlueprint[] = [
   { key: 'payouts', label: 'Payouts', href: '/payouts', icon: DollarSign },
   { key: 'billing', label: 'Billing', href: '/billing/usage', icon: CreditCard, featureFlag: 'billing' },
   // Developer tools (always visible to authenticated users)
+  { key: 'tool-supply-chain-status', label: 'Supply Chain Status', href: '/tools/supply-chain-status', icon: ShieldCheck },
   { key: 'tool-app-ads-inspector', label: 'app-ads.txt Inspector', href: '/tools/app-ads-inspector', icon: Wrench },
   { key: 'tool-mediation-debugger', label: 'Mediation Debugger', href: '/tools/mediation-debugger', icon: BarChart3 },
   { key: 'settings', label: 'Settings', href: '/settings', icon: Settings },

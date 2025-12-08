@@ -55,6 +55,25 @@ export interface AppAdsInspectorResult {
   rawSample?: string
 }
 
+// Tools: supply chain status
+export interface SupplyChainStatusEntry {
+  sellerId: string
+  relationship?: string
+  appStoreId?: string
+  siteId?: string
+}
+
+export interface SupplyChainStatusResult {
+  domain: string
+  sellerId?: string
+  appStoreId?: string
+  siteId?: string
+  authorized: boolean
+  reason?: string
+  sellerInfo?: { sellerId: string; domain?: string; name?: string; status?: 'active' | 'inactive' }
+  entries?: SupplyChainStatusEntry[]
+}
+
 // Revenue types
 export interface RevenueData {
   date: string
