@@ -1,13 +1,18 @@
 package com.rivalapexmediation.sdk.network
 
 import com.google.gson.Gson
+import com.rivalapexmediation.sdk.threading.CircuitBreaker
+import okhttp3.OkHttpClient
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import org.junit.After
 import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Test
+import java.net.ConnectException
+import java.net.UnknownHostException
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 
 class AuctionClientTest {
     private fun takeRequestOrFail(): okhttp3.mockwebserver.RecordedRequest {
@@ -112,6 +117,179 @@ class AuctionClientTest {
         } catch (e: AuctionClient.AuctionException) {
             assertEquals("timeout", e.reason)
         }
+    }
+
+    @Test
+    fun rateLimited429_mapsReasonWithoutRetry() {
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(429)
+                .setBody("slow down")
+                .setHeader("Retry-After", "2")
+        )
+        try {
+            client.requestInterstitial(opts())
+            fail("expected rate_limited")
+        } catch (e: AuctionClient.AuctionException) {
+            assertEquals("rate_limited", e.reason)
+            assertTrue(e.message?.contains("retry_after_ms") == true)
+        }
+        assertEquals(1, server.requestCount)
+    }
+
+    @Test
+    fun circuitBreakerTripsAfterTransientFailures() {
+        server.enqueue(MockResponse().setResponseCode(500))
+        server.enqueue(MockResponse().setResponseCode(500))
+        server.enqueue(MockResponse().setResponseCode(500))
+        val breakerClient = AuctionClient(
+            server.url("/").toString().trimEnd('/'),
+            apiKey = "test-key",
+            httpClient = null,
+            circuitBreakerFactory = {
+                CircuitBreaker(failureThreshold = 1, resetTimeoutMs = 60_000, halfOpenMaxAttempts = 1)
+            }
+        )
+        try {
+            breakerClient.requestInterstitial(opts())
+            fail("expected status_500 on first call")
+        } catch (e: AuctionClient.AuctionException) {
+            assertTrue(e.reason.startsWith("status_5"))
+        }
+        try {
+            breakerClient.requestInterstitial(opts())
+            fail("expected circuit_open on second call")
+        } catch (e: AuctionClient.AuctionException) {
+            assertEquals("circuit_open", e.reason)
+        }
+        assertEquals(3, server.requestCount)
+    }
+
+    @Test
+    fun cancellationMapsToNavigationCancelled() {
+        val cancelingClient = AuctionClient(
+            server.url("/").toString().trimEnd('/'),
+            apiKey = "test-key",
+            httpClient = OkHttpClient.Builder()
+                .addInterceptor { throw java.io.IOException("Canceled") }
+                .build()
+        )
+        try {
+            cancelingClient.requestInterstitial(opts())
+            fail("expected navigation_cancelled")
+        } catch (e: AuctionClient.AuctionException) {
+            assertEquals("navigation_cancelled", e.reason)
+        }
+    }
+
+    @Test
+    fun airplaneMode_connectFailure_retriesAndMapsNetworkError() {
+        val attempts = AtomicInteger(0)
+        val failingClient = AuctionClient(
+            baseUrl = "http://localhost",
+            apiKey = "test-key",
+            httpClient = OkHttpClient.Builder()
+                .addInterceptor {
+                    attempts.incrementAndGet()
+                    throw ConnectException("failed to connect")
+                }
+                .build()
+        )
+        try {
+            failingClient.requestInterstitial(opts())
+            fail("expected network_error")
+        } catch (e: AuctionClient.AuctionException) {
+            assertEquals("network_error", e.reason)
+        }
+        assertEquals(3, attempts.get())
+    }
+
+    @Test
+    fun dnsFailure_unknownHost_retriesAndMapsNetworkError() {
+        val attempts = AtomicInteger(0)
+        val dnsClient = AuctionClient(
+            baseUrl = "http://does-not-resolve",
+            apiKey = "test-key",
+            httpClient = OkHttpClient.Builder()
+                .addInterceptor {
+                    attempts.incrementAndGet()
+                    throw UnknownHostException("no dns")
+                }
+                .build()
+        )
+        try {
+            dnsClient.requestInterstitial(opts())
+            fail("expected network_error")
+        } catch (e: AuctionClient.AuctionException) {
+            assertEquals("network_error", e.reason)
+        }
+        assertEquals(3, attempts.get())
+    }
+
+    @Test
+    fun captivePortal_redirect_mapsStatus302WithoutRetry() {
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(302)
+                .setHeader("Location", "http://captive.portal/login")
+                .setBody("redirect")
+        )
+        try {
+            client.requestInterstitial(opts())
+            fail("expected status_302")
+        } catch (e: AuctionClient.AuctionException) {
+            assertEquals("status_302", e.reason)
+        }
+        assertEquals(1, server.requestCount)
+    }
+
+    @Test
+    fun networkFlip_disconnectAfterRequest_recoversOnRetry() {
+        val winner = mapOf(
+            "winner" to mapOf(
+                "adapter_name" to "admob",
+                "cpm" to 3.2,
+                "currency" to "USD",
+                "creative_id" to "cr-2",
+                "ad_markup" to "<div>ad</div>"
+            )
+        )
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(200)
+                .setBody(Gson().toJson(winner))
+        )
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(200)
+                .setBody(Gson().toJson(winner))
+        )
+
+        val flipCounter = AtomicInteger(0)
+        val flakyClient = AuctionClient(
+            baseUrl = server.url("/").toString().trimEnd('/'),
+            apiKey = "test-key",
+            httpClient = OkHttpClient.Builder()
+                .addInterceptor { chain ->
+                    val attempt = flipCounter.getAndIncrement()
+                    if (attempt == 0) {
+                        val resp = chain.proceed(chain.request())
+                        resp.close()
+                        throw java.io.IOException("connection reset mid-response")
+                    }
+                    chain.proceed(chain.request())
+                }
+                .build()
+        )
+
+        val result: AuctionClient.InterstitialResult = try {
+            flakyClient.requestInterstitial(opts())
+        } catch (e: AuctionClient.AuctionException) {
+            throw AssertionError("expected success after retry, got ${e.reason}; requests=${server.requestCount}")
+        }
+        assertEquals("admob", result.adapter)
+        assertTrue("should have performed at least two attempts", flipCounter.get() >= 2)
+        assertEquals(2, server.requestCount)
     }
 
     @Test

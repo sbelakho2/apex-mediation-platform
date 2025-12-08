@@ -1,0 +1,275 @@
+## 0) Global production posture
+
+- [X] Single source of truth for env & feature flags
+	- Where: config/production.yaml, config/staging.yaml, SDK ConfigManager (Android/iOS/Unity/Web/CTV)
+	- How to verify: Env flip propagates in ≤5 min; GET /v1/status returns env + flag hashes; SDK debug panel shows the same hash
+	- (Why) OTA safety & reproducibility; prevents “split brain” during rollouts.
+
+- [ ] Immutable config schema + signed rollouts
+	- Where: Config service (/services/config), SDK SafeConfigManager (Android/iOS)
+	- How to verify: Invalid or unsigned config fails closed; staged rollout 1%→5%→25%→100% with auto-rollback on SLO breach
+	- (Why) OTA-proofing avoids Unity-style config outages; staged guardrails.
+
+- [ ] Clock-drift tolerance on clients
+	- Where: SDK time provider wrapper in Android/iOS/Unity
+	- How to verify: If device clock drifts ±10 min, TTL, throttles and backoffs remain correct (simulation test)
+	- (Why) Prevents burst storms & stale caches.
+
+## 1) App-ads.txt / sellers.json enforcement (publisher-help, don’t block)
+
+- [ ] Crawl & cache publisher app-ads.txt (publisher root site) and flag violations in Console
+	- Where: services/quality/appadstxt-crawler/ + nightly job
+	- How to verify: Console “Supply Chain” tab shows “OK/Missing/Mismatch” per store app ID; warning banners in placements page
+	- (Why) IAB supply chain integrity is expected by buyers; even for BYO you should surface issues so devs get paid.
+
+- [ ] sellers.json & schain parsing (adaptor-agnostic)
+	- Where: services/quality/supplychain/
+	- How to verify: Stored per partner; exposed in auction logs & bid-landscape; “unauthorized reseller” weak-label for fraud model
+	- (Why) Standardized transparency for buyers; improves trust and troubleshooting.
+
+## 2) Open Measurement (OMSDK) readiness (non-blocking in BYO)
+
+- [ ] OMID session lifecycle helpers (SDK)
+	- Where: sdk/*/viewability/OmSdkHelper.*
+	- How to verify: Start/finish sessions per impression; friendly obstructions list; no leaks in teardown
+	- (Why) Verification vendors rely on OM SDK; must not crash/ANR.
+
+- [ ] Disable-by-default if publisher doesn’t bundle OM SDK (BYO)
+	- Where: Adapter registry feature flag enable_om_sdk
+	- How to verify: No runtime class-not-found; health counters show “OMSDK disabled (BYO)”
+	- (Why) BYO means you don’t ship vendor binaries.
+
+- [ ] (CTV) Track OM SDK device attestation roadmap
+	- Where: Backlog note + console flag placeholder
+	- How to verify: Feature flag documented; not active until vendor support confirmed
+	- (Why) Emerging IAB device attestation can reduce spoofing on CTV.
+
+## 3) Privacy & attribution (BYO-only—but you must pass signals through)
+
+- [ ] GDPR/CCPA/COPPA/LimitAdTracking propagation
+	- Where: SDK consent struct → auction meta → adapter runtime meta
+	- How to verify: Debug panel shows normalized consent; server logs redact PII; unit tests for all matrix combos
+	- (Why) Legal & partner policy compliance.
+
+- [ ] Android Privacy Sandbox — Attribution Reporting (adapter-agnostic pass-through)
+	- Where: Android SDK: ConsentManager, AttributionBridge
+	- How to verify: Demo app registers sources/triggers in debug mode; reports visible in ADB log / sandbox UI
+	- (Why) Prepare for GA; don’t block if host doesn’t use it.
+
+- [ ] iOS AdAttributionKit + SKAN interoperability
+	- Where: iOS: AdAttributionBridge.swift
+	- How to verify: If iOS ≥ 26.2, AAK path; else SKAN. Conversion table present; postbacks observed in sandbox
+	- (Why) AAK is replacing SKAN; keep graceful fallback.
+
+iOS (crash-shielded)
+## 4) SDK runtime stability (the #1 source of tickets in BYO)
+
+### Android (ANR-minimal)
+- [ ] Zero network/disk on main thread (StrictMode fatal in debug)
+	- Where: MediationSDK.kt#setupStrictMode() already present—enforce in CI
+	- How to verify: CI runs espresso/robolectric with StrictMode penaltyDeath; no violations
+	- (Why) ANRs crush ratings; ad SDKs are frequent offenders.
+- [ ] OkHttp client tuned (connection pool 5–10, connect/read 2s/5s, HTTP/2 ON, gzip, TLS1.2+)
+	- Where: AuctionClient.kt
+	- How to verify: Telemetry shows p95 connect < 200ms; retries bounded; no SSL handshake regressions
+	- (Why) Tail latency & battery.
+- [ ] Timeouts & hedged requests (already in backend—mirror in SDK if client-HB used)
+	- Where: loadWithCircuitBreaker(), fallback paths
+	- How to verify: Inject test delays; observe hedged winner; no deadline overrun
+	- (Why) Don’t stall auctions on a single slow adapter.
+- [ ] R8/Proguard keep rules for callback interfaces / parcelables
+	- Where: consumer-proguard.pro template
+	- How to verify: Release build retains needed classes; no reflection breakages
+	- (Why) Obfuscation commonly breaks partner callbacks.
+- [ ] Process death & Activity recreation safety
+	- Where: InterstitialController, SavedStateHandle or idempotent resume
+	- How to verify: Kill & rotate during show; no leaks, no duplicate callbacks
+	- (Why) Real-world lifecycle churn.
+
+### iOS (crash-shielded)
+- [ ] Main-actor boundary only for UI; networking on background
+	- Where: MediationSDK.swift (async/await), URLSession configuration
+	- How to verify: Instruments shows zero main-thread stalls > 16ms on network ops
+	- (Why) Responsiveness & energy.
+- [ ] App extension / background safe guards
+	- Where: Availability checks; no using APIs unavailable in extensions
+	- How to verify: Build app extension target → no linker errors
+	- (Why) Prevent integration traps.
+- [ ] WKWebView memory pressure handling for rich media
+	- Where: Ad view layer; reclaim on UIApplication.didReceiveMemoryWarning
+	- How to verify: Stress test; no SIGKILL (jetsam)
+	- (Why) Heavy creatives.
+
+### Unity
+- [ ] IL2CPP & Mono compatibility
+	- Where: Runtime/Plugins/ meta; conditional compilation symbols
+	- How to verify: CI builds for Android/iOS; sample scene runs; threading is native-safe
+	- (Why) Many SDKs break on IL2CPP differences.
+
+## 5) Adapter runtime (BYO boundary) — correctness without shipping vendor SDKs
+
+- [ ] Credential-less adapters (only runtime metadata from Console)
+	- Where: Android AdapterContract.kt + iOS AdapterConfig
+	- How to verify: Secrets never land in SDK logs/telemetry; only hashed IDs in debug output
+	- (Why) BYO keeps secrets in publisher app / partner dashboards.
+
+- [ ] Adapter error taxonomy normalized (no_fill, timeout, network_error, status_4xx/5xx, below_floor)
+	- Where: Android commons.kt / iOS SDKError
+	- How to verify: Unit tests map vendor codes → normalized reasons; Console debugger displays canonical reason
+	- (Why) Cross-network comparability.
+
+- [ ] Circuit breakers per adapter + quarantine
+	- Where: Android CircuitBreaker, iOS retry policy
+	- How to verify: 3 consecutive fails → open; half-open heals; metrics reflect state
+	- (Why) Avoids tail-latency & cascading failures.
+
+- [ ] Backpressure & pacing (don’t spam requests on no-fill)
+	- Where: Placement controller; min retry interval
+	- How to verify: Logs show capped retry cadence under no-fill
+	- (Why) Partner protection & battery.
+
+## 6) Auction path (S2S primary) — even in BYO
+
+- [ ] Idempotent requests (request_id), deadline budget, partial aggregation
+	- Where: Auction service; SDK request metadata
+	- How to verify: Duplicate POST returns same landscape_id; auction never exceeds timeout_ms
+	- (Why) Safety under retries & hedging.
+
+- [ ] Bid landscape export (privacy-safe)
+	- Where: data-plane/impressions, auctions
+	- How to verify: Per-impression: winner, top-N bids (redacted), floors, reasons, latency; surfaced in console
+	- (Why) Cryptographic transparency value prop (minus secrets).
+
+## 7) Data plane, fraud “shadow” & quality signals (safe in BYO)
+
+- [ ] Shadow fraud scoring ON; never block
+	- Where: services/inference-ml → score to analytics only
+	- How to verify: Weekly drift/PSI plots; no gating; dashboard panel present
+	- (Why) Learn without harming revenue.
+
+- [ ] Weak labels library (CTIT anomalies, DC/VPN/Tor, unauthorized reseller)
+	- Where: quality/labels/ jobs
+	- How to verify: Coverage ≥ 60% of traffic; precision estimates documented
+	- (Why) Bootstraps fraud model accuracy.
+
+- [ ] OMSDK/viewability events (if present) pass-through
+	- Where: SDK → events bus
+	- How to verify: Viewability % shows in Console; missing if publisher didn’t bundle OM SDK
+	- (Why) Optional but useful.
+
+## 8) Console & Migration Studio (tight integration checks)
+
+- [ ] Console → SDK config parity hash
+	- Where: Console “Overview” shows current SDK config hash per app; SDK debug panel shows same
+	- How to verify: Mismatch banner if drift; deep link to diff
+	- (Why) Debug velocity.
+
+- [ ] Migration Studio: per-placement parity simulator
+	- Where: console/migration/
+	- How to verify: Import Unity/MAX/ironSource JSON; simulate floor/cap/pacing; export Apex config; dry-run flag only
+	- (Why) Zero-risk migration path (BYO credentials stay with publisher).
+
+- [ ] VRA (Verification & Revenue Auditor) hooks wired
+	- Where: services/auditor/ + signed ledgers
+	- How to verify: Per-impression signed entry (hash chain); publishers can reconcile net revenue with their network dashboards
+	- (Why) Cryptographic transparency USP.
+
+## 9) Performance micro-optimizations (the “paper cuts” list)
+
+- [ ] HTTP preconnect & DNS cache to auction endpoint on app cold start
+	- Where: SDK network bootstrap
+	- How to verify: p50 connect improves ≥15% in traces
+	- (Why) Ad latency wins.
+
+- [ ] Adaptive concurrency (threadpools sized by CPU cores / big.LITTLE)
+	- Where: Android executors; iOS QoS
+	- How to verify: No over-subscription on low-end devices; no starvation on high-end
+	- (Why) Smoothness & battery.
+
+- [ ] Ad cache TTL = 2× refreshInterval (cap 60min)
+	- Where: Already present; ensure clamp
+	- How to verify: isAdReady() logic and TTL unit tests
+	- (Why) Predictable freshness.
+
+- [ ] Graceful no-network mode (fast fail, no UI jank)
+	- Where: Network layer
+	- How to verify: Airplane mode test → under 150ms failure surface, no spinners
+	- (Why) UX polish.
+
+## 10) Web & CTV specifics (if you expose them)
+
+- [ ] Web SDK: postMessage contract & CSP doc
+	- Where: sdks/web/ + sample integration
+	- How to verify: Works inside strict CSP; no inline eval
+	- (Why) Enterprise security.
+
+- [ ] CTV: video ad surface + device model whitelist
+	- Where: CTV SDK + console device matrices
+	- How to verify: QA on Fire TV / tvOS; scaling & audio focus correct
+	- (Why) Platform quirks common.
+
+## 11) Observability & runbooks (for a one-person team)
+
+- [ ] Per-adapter metrics: latency p50/p95/p99, timeouts, fill, CB state
+	- Where: metrics/adapters/*; website observability pages
+	- How to verify: 7-day trend visible; SLO badges green
+	- (Why) Rapid triage.
+
+- [ ] Mediation debugger (sanitized)
+	- Where: GET /v1/debug/mediation?placement=
+	- How to verify: Shows request timeline & normalized reason; secrets redacted
+	- (Why) Support without screen-shares.
+
+- [ ] Alert playbooks (fill dive, timeout surge, payout lag)
+	- Where: docs/runbooks/*.md
+	- How to verify: On-call you can follow steps without context
+	- (Why) Solo founder survivability.
+
+## 12) Billing alignment (BYO model)
+
+- [ ] Usage metering (monthly active apps, auctions processed, API calls)
+	- Where: billing/metering/*
+	- How to verify: Test tenant accrues units; invoice preview equals console numbers
+	- (Why) Flat + usage tiers need trust.
+
+- [ ] Publisher-facing exports (CSV/JSON & signed daily statement)
+	- Where: billing/exports/*
+	- How to verify: Publisher downloads match metering pipeline; SHA256 signature verified by VRA
+	- (Why) Dispute-proof.
+
+## 13) Release hygiene (fail-safe by default)
+
+- [ ] SDK size gates (<500 KB core; adapters modular)
+	- Where: CI step sdk-size-check
+	- How to verify: PR fails when exceeded
+	- (Why) App footprint & adoption.
+
+- [ ] Backward-compatible config (unknown fields ignored)
+	- Where: Protobuf/JSON schema with defaults
+	- How to verify: Old SDK loads new config without crash
+	- (Why) Safe forward deploys.
+
+- [ ] Kill switch smoke test per release
+	- Where: Staging canary
+	- How to verify: Flip kills adapters; SDK returns killed_by_config immediately
+	- (Why) “Big red button” readiness.
+
+## Tiny troublemakers (known BYO pain points)
+
+- [ ] Partner SDK thread expectations mismatch (documented in Console)
+	- (Why) Some partner SDKs require main-thread init; warn publishers.
+
+- [ ] Android 13/14 background restrictions (Ad loading scoped to foreground service / activity as needed)
+	- (Why) Prevent OS kills.
+
+- [ ] Manifest queries for deep-link intents (if partners use them)
+	- (Why) Avoid “Activity not found”.
+
+- [ ] iOS ATS exceptions doc (if partners still require http)
+	- (Why) App Store rejection risk.
+
+- [ ] Unity duplicate symbols (Plugins/iOS .a conflicts)
+	- (Why) Common IL2CPP build failure.
+
+- [ ] Obfuscation rules crib-sheet per major network (in Console)
+	- (Why) Save integrators days of guesswork.

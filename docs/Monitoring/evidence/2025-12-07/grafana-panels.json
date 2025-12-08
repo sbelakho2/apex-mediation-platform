@@ -1,0 +1,9 @@
+{
+  "title": "Ready / Redis Overview",
+  "panels": [
+    {"id": 12, "title": "Postgres Replica Lag", "query": "max(pg_replica_lag_seconds)"},
+    {"id": 14, "title": "Redis Cache Hit Ratio", "query": "avg(redis_cache_hit_ratio)"},
+    {"id": 17, "title": "/ready Latency", "query": "avg(api_ready_latency_ms)"}
+  ],
+  "timestamp": "2025-12-07T22:40:00Z"
+}

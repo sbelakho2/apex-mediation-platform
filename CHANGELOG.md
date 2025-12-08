@@ -1,3 +1,33 @@
+Changelog — SDK Build Tooling Hardening (2025-12-08)
+
+Summary
+- Documented the Swift concurrency sendability fixes so the BYO adapter path is future-proofed for Xcode 16.
+- Upgraded the Android Gradle Plugin stack to the metadata-based dependency model so Gradle 9 no longer warns about `clientModule` usage.
+
+What changed
+- iOS SDK: `sdk/core/ios/Sources/MediationSDK.swift`, `AdapterRegistry.swift`, `Adapter/StubAdapters.swift`, and the `MemoryManagementTests` harness now wrap adapter metatypes in a sendable token and mark completion closures `@Sendable`, eliminating the Swift 6 concurrency warnings triggered by `registerAdapter`/stub completions.
+- Android SDKs (handset + CTV): both `sdk/core/android/build.gradle` and `sdk/ctv/android-tv/build.gradle` bump to `com.android.library` 8.5.2 / Kotlin 1.9.23 so the plugin’s internal `Aapt2FromMaven` dependency is declared through component metadata rules instead of the deprecated `clientModule` API. This keeps the build ready for Gradle 9 and surfaces no warnings when `--warning-mode all` is used.
+
+Validation
+- `cd sdk/core/ios && swift test`
+- `cd sdk/core/android && ./gradlew.sh testDebugUnitTest --warning-mode all`
+
+---
+
+Changelog — Observability Evidence (2025-12-07)
+
+Summary
+- Published the 2025-12-07 log redaction matrix plus `/ready` alert artifacts so the final 0.0.14 observability items have traceable evidence.
+
+What changed
+- Docs: `docs/Internal/Observability/log-redaction-2025-12-07.md` enumerates identifier handling (hash/truncate/drop) with a sanitized log sample.
+- Monitoring: `docs/Monitoring/evidence/2025-12-07/` now contains `ready-alerts.md`, `alertmanager-rules.yml`, and `grafana-panels.json`, showing the Grafana snapshot and Alertmanager config for Postgres replica lag + Redis cache hit alerts.
+
+Validation
+- `npm run test:infra -- ready-alerts`
+
+---
+
 Changelog — CTV Sandbox Evidence (2025-12-07)
 
 Summary

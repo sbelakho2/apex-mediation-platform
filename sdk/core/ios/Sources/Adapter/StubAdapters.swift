@@ -29,7 +29,7 @@ public class BaseStubAdapter: AdNetworkAdapter {
         isInitialized = true
     }
 
-    public func loadAd(placement: String, adType: AdType, config: [String : Any], completion: @escaping (Result<Ad, AdapterRegistryError>) -> Void) {
+    public func loadAd(placement: String, adType: AdType, config: [String : Any], completion: @escaping @Sendable (Result<Ad, AdapterRegistryError>) -> Void) {
         guard isInitialized else { completion(.failure(.notInitialized)); return }
         guard supportsAdType(adType) else { completion(.failure(.unsupportedAdType)); return }
         // Return a basic mock banner
@@ -93,7 +93,7 @@ public final class AdMobAdapter: AdNetworkAdapter {
         globalConfig = config
         isInitialized = true
     }
-    public func loadAd(placement: String, adType: AdType, config: [String : Any], completion: @escaping (Result<Ad, AdapterRegistryError>) -> Void) {
+    public func loadAd(placement: String, adType: AdType, config: [String : Any], completion: @escaping @Sendable (Result<Ad, AdapterRegistryError>) -> Void) {
         guard isInitialized else { completion(.failure(.notInitialized)); return }
         guard supportsAdType(adType) else { completion(.failure(.unsupportedAdType)); return }
         var settings = globalConfig; config.forEach { settings[$0.key] = $0.value }

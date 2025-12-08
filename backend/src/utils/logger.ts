@@ -1,4 +1,5 @@
 import winston from 'winston';
+import crypto from 'crypto';
 import { AsyncLocalStorage } from 'async_hooks';
 import config from '../config/index';
 
@@ -27,6 +28,29 @@ const contextFormat = winston.format((info) => {
   return info;
 });
 
+const normalizeStructuredKey = (key: string): string => key.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+const getLogRedactionSalt = (): string => process.env.OBS_LOG_SALT || config.logRedactionSalt || '';
+
+const coerceToString = (value: unknown): string | null => {
+  if (value === null || value === undefined) return null;
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean' || typeof value === 'bigint') {
+    return String(value);
+  }
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return null;
+  }
+};
+
+const hashWithSalt = (value: string): string => {
+  const hash = crypto.createHash('sha256');
+  hash.update(`${getLogRedactionSalt()}::${value}`);
+  return hash.digest('hex');
+};
+
 const redactString = (val: string): string => {
   let s = val;
   // Email redaction (plain)
@@ -50,6 +74,75 @@ const redactString = (val: string): string => {
   // Potential card-like sequences (very conservative): 13-19 digits
   s = s.replace(/\b\d{13,19}\b/g, '[REDACTED_NUMERIC]');
   return s;
+};
+
+const dropStructuredValue = (): string => '[DROPPED]';
+
+const hashIdentifier = (value: unknown): string => {
+  const str = coerceToString(value);
+  if (!str) return '[REDACTED]';
+  return hashWithSalt(str);
+};
+
+const hashEmailValue = (value: unknown): string => {
+  const str = coerceToString(value);
+  if (!str) return '[REDACTED_EMAIL]';
+  const normalized = str.trim().toLowerCase();
+  const tail = normalized.length >= 2 ? normalized.slice(-2) : normalized;
+  return `hash:${hashWithSalt(normalized)}:tail:${tail}`;
+};
+
+const truncateIpBlock = (value: unknown): string => {
+  const str = coerceToString(value);
+  if (!str) return '[REDACTED_IP]';
+  const ipv4 = str.trim();
+  const octets = ipv4.split('.');
+  if (octets.length === 4 && octets.every((chunk) => {
+    const n = Number(chunk);
+    return Number.isFinite(n) && n >= 0 && n <= 255;
+  })) {
+    return `${octets[0]}.${octets[1]}.${octets[2]}.0/24`;
+  }
+  return '[REDACTED_IP]';
+};
+
+const hashPayloadValue = (value: unknown): string => {
+  const str = coerceToString(value);
+  if (!str) return '[REDACTED_PAYLOAD]';
+  return `hash:${hashWithSalt(str)}`;
+};
+
+const sanitizeUrlValue = (value: unknown): string => {
+  const str = coerceToString(value);
+  if (!str) return '[REDACTED_URL]';
+  const raw = str.trim();
+  try {
+    const hasProtocol = /^[a-z]+:/i.test(raw);
+    const parsed = new URL(raw, hasProtocol ? undefined : 'http://placeholder.local');
+    parsed.search = '';
+    parsed.hash = '';
+    const sanitized = parsed.toString();
+    const printable = hasProtocol
+      ? sanitized
+      : sanitized.replace('http://placeholder.local', '');
+    return redactString(printable);
+  } catch {
+    return redactString(raw);
+  }
+};
+
+const STRUCTURED_KEY_HANDLERS: Record<string, (value: unknown) => unknown> = {
+  userid: hashIdentifier,
+  deviceid: dropStructuredValue,
+  idfa: dropStructuredValue,
+  gaid: dropStructuredValue,
+  ipaddress: truncateIpBlock,
+  ip: truncateIpBlock,
+  bidpayload: hashPayloadValue,
+  consentstrings: dropStructuredValue,
+  consentstring: dropStructuredValue,
+  url: sanitizeUrlValue,
+  email: hashEmailValue,
 };
 
 const SENSITIVE_KEYS = new Set([
@@ -78,24 +171,29 @@ const SENSITIVE_KEYS = new Set([
   'reason_code',
 ]);
 
-function redactDeep(value: unknown): unknown {
+function redactValue(value: unknown): unknown {
   if (value == null) return value as unknown;
   if (typeof value === 'string') return redactString(value);
-  if (Array.isArray(value)) return value.map((v) => redactDeep(v));
+  if (Array.isArray(value)) return value.map((v) => redactValue(v));
   if (typeof value === 'object') {
     const out: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
-      if (SENSITIVE_KEYS.has(k)) {
-        out[k] = '[REDACTED]';
-      } else if (typeof v === 'string') {
-        out[k] = redactString(v);
-      } else {
-        out[k] = redactDeep(v);
-      }
+      out[k] = redactEntry(k, v);
     }
     return out;
   }
   return value;
+}
+
+function redactEntry(key: string, value: unknown): unknown {
+  const handler = STRUCTURED_KEY_HANDLERS[normalizeStructuredKey(key)];
+  if (handler) {
+    return handler(value);
+  }
+  if (SENSITIVE_KEYS.has(key)) {
+    return '[REDACTED]';
+  }
+  return redactValue(value);
 }
 
 export const redactLogInfo = <T extends Record<string, unknown>>(info: T): T => {
@@ -103,15 +201,13 @@ export const redactLogInfo = <T extends Record<string, unknown>>(info: T): T => 
 
   if (typeof mutated.message === 'string') {
     mutated.message = redactString(mutated.message as string);
+  } else if (mutated.message !== undefined) {
+    mutated.message = redactValue(mutated.message);
   }
 
   for (const [key, value] of Object.entries(mutated)) {
     if (key === 'message') continue;
-    if (SENSITIVE_KEYS.has(key)) {
-      mutated[key] = '[REDACTED]';
-    } else {
-      mutated[key] = redactDeep(value);
-    }
+    mutated[key] = redactEntry(key, value);
   }
 
   return mutated as T;

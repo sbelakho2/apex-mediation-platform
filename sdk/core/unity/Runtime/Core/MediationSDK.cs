@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
 using Apex.Mediation.Consent;
 using Apex.Mediation.Internal;
 using Apex.Mediation.Platforms;
@@ -75,7 +76,7 @@ namespace Apex.Mediation.Core
 
         public void ShowInterstitial(string placementId, Action<bool, string?> callback)
         {
-            InternalShow(placementId, callback, _interstitialCache, () => PlatformBridge.ShowInterstitial(placementId, callback));
+            InternalShow(placementId, callback, _interstitialCache, cb => PlatformBridge.ShowInterstitial(placementId, cb));
         }
 
         public void LoadRewarded(string placementId, Action<bool, string?> callback)
@@ -86,7 +87,7 @@ namespace Apex.Mediation.Core
 
         public void ShowRewarded(string placementId, Action<bool, string?> callback)
         {
-            InternalShow(placementId, callback, _rewardedCache, () => PlatformBridge.ShowRewarded(placementId, callback));
+            InternalShow(placementId, callback, _rewardedCache, cb => PlatformBridge.ShowRewarded(placementId, cb));
         }
 
         public void LoadBanner(string placementId, Action<bool, string?> callback)
@@ -149,17 +150,25 @@ namespace Apex.Mediation.Core
             });
         }
 
-        private void InternalShow(string placementId, Action<bool, string?> callback, AdCache cache, Action showAction)
+        private void InternalShow(string placementId, Action<bool, string?> callback, AdCache cache, Action<Action<bool, string?>> showAction)
         {
             if (!cache.TryTake(placementId, out var ad))
             {
-                callback?.Invoke(false, "Ad not ready or already shown");
+                var fallback = CreateCompletion(callback, placementId, "unavailable");
+                fallback(false, "Ad not ready or already shown");
                 return;
             }
 
-            showAction();
-            callback?.Invoke(true, null);
-            RecordTrace(placementId, ad.Adapter, "show", TimeSpan.Zero, new Dictionary<string, object?>());
+            var completion = CreateCompletion(callback, placementId, ad.Adapter);
+            try
+            {
+                showAction(completion);
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError($"Show failed for {placementId}", ex);
+                completion(false, ex.Message ?? "show_failed");
+            }
         }
 
         private Dictionary<string, object?> CreateLoadExtras()
@@ -169,6 +178,40 @@ namespace Apex.Mediation.Core
                 {"s2s", ShouldUseS2S()},
                 {"adapter", PlatformBridge.PlatformName},
                 {"consent", ConsentManager.GetConsentSnapshot().AsAdapterMap()}
+            };
+        }
+
+        private Action<bool, string?> CreateCompletion(Action<bool, string?> callback, string placementId, string adapter)
+        {
+            var dispatch = DispatchOnMainThread(callback);
+            return GuardOnce((success, error) =>
+            {
+                dispatch(success, error);
+                RecordTrace(placementId, adapter, success ? "show" : "show_failed", TimeSpan.Zero, new Dictionary<string, object?>());
+            });
+        }
+
+        private Action<bool, string?> DispatchOnMainThread(Action<bool, string?> callback)
+        {
+            if (callback == null)
+            {
+                return (_, _) => { };
+            }
+
+            return (success, error) => _eventPump.Enqueue(() => callback(success, error));
+        }
+
+        private static Action<bool, string?> GuardOnce(Action<bool, string?> inner)
+        {
+            var fired = 0;
+            return (success, error) =>
+            {
+                if (Interlocked.Exchange(ref fired, 1) == 1)
+                {
+                    return;
+                }
+
+                inner(success, error);
             };
         }
 

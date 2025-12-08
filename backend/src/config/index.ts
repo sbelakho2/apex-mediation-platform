@@ -13,6 +13,7 @@ const config = {
   adapterRegistryRefreshSec: parseInt(process.env.ADAPTER_REGISTRY_REFRESH_SEC || '60', 10),
   redisBreakersEnabled: process.env.REDIS_BREAKERS_ENABLED === '1',
   logToFiles: process.env.LOG_TO_FILES === '1',
+  logRedactionSalt: process.env.OBS_LOG_SALT || '',
   readinessThresholds: {
     dbSlowMs: parseInt(process.env.READINESS_DB_SLOW_MS || '1000', 10),
     replicaLagWarnMs: parseInt(process.env.READINESS_REPLICA_LAG_WARN_MS || '5000', 10),

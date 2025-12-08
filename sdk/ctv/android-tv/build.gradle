@@ -1,6 +1,6 @@
 plugins {
-    id 'com.android.library' version '8.1.1'
-    id 'org.jetbrains.kotlin.android' version '1.9.21'
+    id 'com.android.library' version '8.5.2'
+    id 'org.jetbrains.kotlin.android' version '1.9.23'
     id 'maven-publish'
     id 'org.jetbrains.kotlinx.binary-compatibility-validator' version '0.14.0'
 }
@@ -50,7 +50,15 @@ android {
 }
 
 dependencies {
-    implementation "org.jetbrains.kotlin:kotlin-stdlib:1.9.21"
+    components {
+        withModule("com.android.tools.build:aapt2") {
+            allVariants {
+                withDependencies { details -> details.clear() }
+            }
+        }
+    }
+
+    implementation "org.jetbrains.kotlin:kotlin-stdlib:1.9.23"
     // Networking
     implementation "com.squareup.okhttp3:okhttp:4.12.0"
     implementation "com.squareup.okhttp3:logging-interceptor:4.12.0"

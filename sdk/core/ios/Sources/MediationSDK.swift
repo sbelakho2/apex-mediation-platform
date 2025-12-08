@@ -6,6 +6,10 @@ private enum CacheConfig {
     static let expirationGrace: TimeInterval = 0.35
 }
 
+private struct AdapterTypeToken: @unchecked Sendable {
+    let type: AdNetworkAdapter.Type
+}
+
 public final class MediationSDK: @unchecked Sendable {
     public static let shared = MediationSDK()
 
@@ -74,7 +78,8 @@ public final class MediationSDK: @unchecked Sendable {
     /// This API is available in all build configurations so publishers can bring their own adapters
     /// without the SDK shipping vendor code.
     public func registerAdapter(networkName: String, adapterType: AdNetworkAdapter.Type) async {
-        await runtime.registerAdapter(networkName: networkName, adapterType: adapterType)
+        let token = AdapterTypeToken(type: adapterType)
+        await runtime.registerAdapter(networkName: networkName, adapterType: token)
     }
 
     /// Update consent state shared across the SDK.
@@ -231,7 +236,7 @@ private actor MediationRuntime {
     private let consentManager = ConsentManager.shared
     private var sandboxAdapterWhitelist: Set<String>? = nil
     private var sandboxForceAdapterPipeline = false
-    private var pendingAdapterRegistrations: [(String, AdNetworkAdapter.Type)] = []
+    private var pendingAdapterRegistrations: [(String, AdapterTypeToken)] = []
 
     init(sdkVersion: String) {
         self.sdkVersion = sdkVersion
@@ -275,7 +280,7 @@ private actor MediationRuntime {
         // Apply any adapters registered by the host app before initialization
         if !pendingAdapterRegistrations.isEmpty {
             for (name, type) in pendingAdapterRegistrations {
-                registry.registerAdapter(networkName: name, adapterClass: type)
+                registry.registerAdapter(networkName: name, adapterClass: type.type)
             }
             pendingAdapterRegistrations.removeAll()
         }
@@ -611,9 +616,9 @@ private actor MediationRuntime {
     }
 
     // MARK: - BYO Adapters
-    func registerAdapter(networkName: String, adapterType: AdNetworkAdapter.Type) {
+    func registerAdapter(networkName: String, adapterType: AdapterTypeToken) {
         if let registry = adapterRegistry {
-            registry.registerAdapter(networkName: networkName, adapterClass: adapterType)
+            registry.registerAdapter(networkName: networkName, adapterClass: adapterType.type)
         } else {
             pendingAdapterRegistrations.append((networkName, adapterType))
         }

@@ -95,16 +95,16 @@ class FacadeApisTaxonomyTest {
         val latch = CountDownLatch(1)
         var onMain = false
         var errorCode: AdError? = null
-        var message: String? = null
+        var errorMessage: String? = null
 
         BelInterstitial.load(appContext, "pl_400", object : AdLoadCallback {
             override fun onAdLoaded(ad: com.rivalapexmediation.sdk.models.Ad) {
                 fail("Expected error for HTTP 400")
             }
-            override fun onError(error: AdError, msg: String) {
+            override fun onError(error: AdError, message: String) {
                 onMain = (Looper.myLooper() == Looper.getMainLooper())
                 errorCode = error
-                message = msg
+                errorMessage = message
                 latch.countDown()
             }
         })
@@ -114,7 +114,7 @@ class FacadeApisTaxonomyTest {
         assertTrue(latch.await(1, TimeUnit.SECONDS))
         assertTrue("Callback should be on main thread", onMain)
         assertEquals(AdError.INTERNAL_ERROR, errorCode)
-        assertEquals("status_400", message)
+        assertEquals("status_400", errorMessage)
     }
 
     @Test
@@ -144,16 +144,16 @@ class FacadeApisTaxonomyTest {
         val latch = CountDownLatch(1)
         var onMain = false
         var errorCode: AdError? = null
-        var message: String? = null
+        var errorMessage: String? = null
 
         BelInterstitial.load(appContext, "pl_to", object : AdLoadCallback {
             override fun onAdLoaded(ad: com.rivalapexmediation.sdk.models.Ad) {
                 fail("Expected timeout path")
             }
-            override fun onError(error: AdError, msg: String) {
+            override fun onError(error: AdError, message: String) {
                 onMain = (Looper.myLooper() == Looper.getMainLooper())
                 errorCode = error
-                message = msg
+                errorMessage = message
                 latch.countDown()
             }
         })
@@ -162,6 +162,6 @@ class FacadeApisTaxonomyTest {
         assertTrue(latch.await(2, TimeUnit.SECONDS))
         assertTrue("Callback should be on main thread", onMain)
         assertEquals(AdError.TIMEOUT, errorCode)
-        assertTrue("Message should mention timeout", (message ?: "").contains("timeout", ignoreCase = true))
+        assertTrue("Message should mention timeout", (errorMessage ?: "").contains("timeout", ignoreCase = true))
     }
 }

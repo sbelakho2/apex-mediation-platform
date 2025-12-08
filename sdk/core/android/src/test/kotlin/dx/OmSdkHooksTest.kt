@@ -125,9 +125,8 @@ class OmSdkHooksTest {
         installOmController(calls)
 
         // Load then show
-        var loaded = false
         BelInterstitial.load(appContext, placementId, object : AdLoadCallback {
-            override fun onAdLoaded(ad: com.rivalapexmediation.sdk.models.Ad) { loaded = true }
+            override fun onAdLoaded(ad: com.rivalapexmediation.sdk.models.Ad) { }
             override fun onError(error: AdError, message: String) { }
         })
         // Build a Robolectric Activity to pass to show()
@@ -176,9 +175,8 @@ class OmSdkHooksTest {
         val calls = mutableListOf<Call>()
         installOmController(calls)
 
-        var loaded = false
         BelRewarded.load(appContext, placementId, object : AdLoadCallback {
-            override fun onAdLoaded(ad: com.rivalapexmediation.sdk.models.Ad) { loaded = true }
+            override fun onAdLoaded(ad: com.rivalapexmediation.sdk.models.Ad) { }
             override fun onError(error: AdError, message: String) { }
         })
         val activity = Robolectric.buildActivity(android.app.Activity::class.java).setup().get()
@@ -224,9 +222,8 @@ class OmSdkHooksTest {
         val calls = mutableListOf<Call>()
         installOmController(calls)
 
-        var loaded = false
         BelRewardedInterstitial.load(appContext, placementId, object : AdLoadCallback {
-            override fun onAdLoaded(ad: com.rivalapexmediation.sdk.models.Ad) { loaded = true }
+            override fun onAdLoaded(ad: com.rivalapexmediation.sdk.models.Ad) { }
             override fun onError(error: AdError, message: String) { }
         })
         val activity = Robolectric.buildActivity(android.app.Activity::class.java).setup().get()

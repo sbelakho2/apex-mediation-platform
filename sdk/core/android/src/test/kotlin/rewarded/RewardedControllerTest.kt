@@ -4,11 +4,13 @@ import com.rivalapexmediation.sdk.models.Ad
 import com.rivalapexmediation.sdk.models.AdType
 import com.rivalapexmediation.sdk.models.Creative
 import com.rivalapexmediation.sdk.AdError
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.*
 import org.junit.Test
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class RewardedControllerTest {
 
     private fun fakeAd(expireInMs: Long = 60_000): Ad {

@@ -17,6 +17,7 @@ object BelRewardedInterstitial {
     @Volatile private var lastPlacement: String? = null
 
     @JvmStatic
+    @Suppress("UNUSED_PARAMETER")
     fun load(@NonNull context: Context, @NonNull placementId: String, @NonNull listener: AdLoadCallback) {
         lastPlacement = placementId
         MediationSDK.getInstance().loadAd(placementId, listener)

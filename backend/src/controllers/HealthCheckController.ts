@@ -8,6 +8,7 @@
 
 import { Request, Response } from 'express';
 import { Pool } from 'pg';
+import { getConfigSnapshot } from '../config/configSnapshot';
 import logger from '../utils/logger';
 import { redis } from '../utils/redis';
 import config from '../config/index';
@@ -308,6 +309,8 @@ export class HealthCheckController {
           AND is_deleted = FALSE
       `);
 
+      const configSnapshot = getConfigSnapshot();
+
       // System info
       const memoryUsage = process.memoryUsage();
 
@@ -338,6 +341,15 @@ export class HealthCheckController {
           node_version: process.version,
           platform: process.platform,
           arch: process.arch,
+        },
+
+        configuration: {
+          env_hash: configSnapshot.envHash,
+          flags_hash: configSnapshot.flagsHash,
+          combined_hash: configSnapshot.combinedHash,
+          exported_env: configSnapshot.env,
+          flags: configSnapshot.flags,
+          generated_at: configSnapshot.generatedAt,
         },
       });
     } catch (error) {

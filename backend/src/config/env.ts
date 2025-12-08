@@ -71,6 +71,9 @@ const envSchema = z.object({
   BILLING_ENABLED: z.string().transform(v => v === 'true' || v === '1').default('false'),
   FRAUD_DETECTION_ENABLED: z.string().transform(v => v === 'true' || v === '1').default('true'),
   AB_TESTING_ENABLED: z.string().transform(v => v === 'true' || v === '1').default('false'),
+  FEATURE_KILL_SWITCH: z.string().transform(v => v === 'true' || v === '1').default('false'),
+  FEATURE_ENFORCE_2FA: z.string().transform(v => v === 'true' || v === '1').default('false'),
+  FEATURE_DISABLE_NEW_ADAPTERS: z.string().transform(v => v === 'true' || v === '1').default('false'),
   
   // Monitoring
   PROMETHEUS_ENABLED: z.string().transform(v => v === 'true' || v === '1').default('true'),

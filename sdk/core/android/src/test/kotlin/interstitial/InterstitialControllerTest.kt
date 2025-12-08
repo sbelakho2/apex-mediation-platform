@@ -6,6 +6,7 @@ import com.rivalapexmediation.sdk.models.Creative
 import com.rivalapexmediation.sdk.AdError
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.TestScope
@@ -14,6 +15,7 @@ import org.junit.Assert.*
 import org.junit.Test
 import java.util.concurrent.atomic.AtomicInteger
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class InterstitialControllerTest {
 
     private fun fakeAd(expireInMs: Long = 60_000): Ad {

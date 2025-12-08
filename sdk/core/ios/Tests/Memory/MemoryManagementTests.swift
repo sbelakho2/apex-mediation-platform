@@ -282,7 +282,7 @@ private final class MockAdapter: AdNetworkAdapter {
         placement: String,
         adType: AdType,
         config: [String : Any],
-        completion: @escaping (Result<Ad, AdapterRegistryError>) -> Void
+        completion: @escaping @Sendable (Result<Ad, AdapterRegistryError>) -> Void
     ) {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
             completion(.failure(.loadFailed("no_fill")))

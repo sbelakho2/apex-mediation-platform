@@ -56,9 +56,11 @@ object BelAds {
     fun setConsent(
         tcString: String? = null,
         usPrivacy: String? = null,
+        @Suppress("UNUSED_PARAMETER")
         gpp: String? = null, // reserved for future use
         gdprApplies: Boolean? = null,
         coppa: Boolean? = null,
+        @Suppress("UNUSED_PARAMETER")
         ldu: Boolean? = null,
         limitAdTracking: Boolean? = null,
         privacySandboxOptIn: Boolean? = null,

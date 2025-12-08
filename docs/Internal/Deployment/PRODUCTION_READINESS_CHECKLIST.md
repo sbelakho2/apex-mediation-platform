@@ -297,12 +297,12 @@ Postgres-only analytics/readiness (from migration plan and changelog):
   - [x] iOS/tvOS: guarantee main-thread UI presentation only (Scene-based apps & multi-scene), block double presentations, cancel timers/observers on background, and avoid presenter retain cycles; cover via `AdPresentationCoordinator` plus `swift test` suites.
   - [x] Android/CTV: `runtime/AdPresentationCoordinator.kt` tracks foreground Activities via `Application.ActivityLifecycleCallbacks`, blocks concurrent shows, waits for resumed Activities before invoking `BelInterstitial/Rewarded/RewardedInterstitial/AppOpen`, and defers execution when the process backgrounds; enforce via `./gradlew.sh testDebugUnitTest` (`AdPresentationCoordinatorTest` + OM SDK facades).
   - [x] Unity: `MediationSDK.InternalShow` routes every native `show` callback through the Unity `EventPump`, guards against duplicate platform invocations, and records telemetry once; keep `MediationSdkShowTests` in `sdk/core/unity/Tests` green under `DOTNET_ROOT=$HOME/.dotnet8 dotnet test`.
-- [ ] Error states & networking
-  - [ ] Map no-fill/HTTP 204, timeouts, 429 rate limits (Retry-After), 5xx retries/backoff, and navigation cancellations deterministically with exponential backoff + circuit breaker guards.
+- [X] Error states & networking
+  - [X] Map no-fill/HTTP 204, timeouts, 429 rate limits (Retry-After), 5xx retries/backoff, and navigation cancellations deterministically with exponential backoff + circuit breaker guards.
     - [x] Android SDK: `sdk/core/android/src/main/kotlin/network/AuctionClient.kt` applies deterministic exponential backoff, circuit breaker gating, explicit 429 `rate_limited` taxonomy (parsing `Retry-After`), and navigation-cancel detection, all covered in `sdk/core/android/src/test/kotlin/network/AuctionClientTest.kt` via `./gradlew.sh testDebugUnitTest`.
     - [x] iOS/tvOS: extend `sdk/core/ios/Tests` with deterministic HTTP 204/429/5xx/timeouts coverage plus retry/circuit-breaker assertions (`AuctionClientErrorTests.swift`, `AuctionClientTests.swift`, `AdCacheBehaviorTests.swift`); see `CHANGELOG.md` (2025-12-07) for commands and evidence locations.
     - [x] Unity: add coverage in `sdk/core/unity/Tests/Networking/NetworkingErrorSurfaceTests.cs` validating the C# bridge surfaces `NoFill`, `Timeout`, `RateLimited`, and retriable server failures; run `$HOME/.dotnet8/dotnet test sdk/core/unity/Tests/ApexMediation.Tests.csproj` and store the latest log under `docs/Internal/QA/unity-network-errors-2025-12-07/dotnet-test.log`.
-  - [ ] Exercise airplane mode, captive portals, DNS failures, and Wi-Fi/Ethernet/Cell flips mid-load to prove graceful recovery.
+  - [X] Exercise airplane mode, captive portals, DNS failures, and Wi-Fi/Ethernet/Cell flips mid-load to prove graceful recovery.
     - [x] Android SDK: Added targeted scenarios in `sdk/core/android/src/test/kotlin/network/AuctionClientTest.kt` (`airplaneMode_connectFailure_retriesAndMapsNetworkError`, `dnsFailure_unknownHost_retriesAndMapsNetworkError`, `captivePortal_redirect_mapsStatus302WithoutRetry`, and `networkFlip_disconnectAfterRequest_recoversOnRetry`) covering simulated airplane/DNS outages, captive portal redirects, and mid-load network flips; exercised via `./gradlew.sh testDebugUnitTest`.
     - [x] iOS/tvOS: document simulator runs toggling airplane mode, DNS overrides, and captive portal proxies mid-load while the sandbox apps remain responsive; see `CHANGELOG.md` (2025-12-07 “iOS/tvOS Network Failure Evidence”) for artifact paths.
     - [x] Unity: run the macOS play mode harness with `NetworkEmulationBehaviour` toggles (offline, high-latency, captive portal) and export the Unity console log demonstrating graceful retries; see `CHANGELOG.md` (2025-12-07 “Unity Network Emulation Evidence”).
@@ -312,12 +312,12 @@ Postgres-only analytics/readiness (from migration plan and changelog):
     - iOS: deterministic overrides feed `sdk/core/ios/Tests/Runtime/AdCacheBehaviorTests.swift` to assert claim-once + TTL eviction while UISmoke harness drives warm-cache reloads; validate with `swift test` under `sdk/core/ios`.
     - Unity: single-use guarantees and expiry replacement scenarios live in `sdk/core/unity/Tests/RenderableAdTests.cs`; confirm via `DOTNET_ROOT=$HOME/.dotnet8 dotnet test sdk/core/unity/Tests/ApexMediation.Tests.csproj`.
     - tvOS: dedicated `sdk/ctv/tvos/Tests/CTVSDKTests/AdCacheTests.swift` mirrors the shared semantics (peek vs take, expiry purge, replacement) and runs via `xcodebuild test -scheme CTVSDK -destination "platform=tvOS Simulator,name=Apple TV 4K (3rd generation)"`.
-- [ ] Platform-specific polish
+- [X] Platform-specific polish
   - [x] tvOS: drive `Test Apps/ApexSandboxCTV-tvOS` on Apple TV 4K simulator (and physical Apple TV if available), record video proving focus engine loops, Menu/back long-press dismissal, and single-presenter enforcement (look for `AdPresentationCoordinator` "show blocked" log). Store evidence under `docs/Internal/QA/tvos-sandbox/<date>/`; see `CHANGELOG.md` (2025-12-07 “CTV Sandbox Evidence”).
   - [x] CTV (Android TV/Fire TV): run the Android TV/Fire TV sandbox build on 1080p + 4K hardware/emulators, capture screenshots of safe-area/overscan compliance, demonstrate remote key-repeat spam tolerance, and include adb logcat excerpts tagged with `platform=android_tv` inside `docs/Internal/QA/androidtv-sandbox/<date>/`; see `CHANGELOG.md` (2025-12-07 “CTV Sandbox Evidence”).
-- [ ] Observability
-  - [ ] Publish a redaction matrix (`docs/Internal/Observability/log-redaction-YYYY-MM-DD.md`) mapping every log field to `hash`, `truncate`, or `drop`, and include sanitized sample log lines showing adapter-level telemetry for auction reasons/no-bids.
-  - [ ] Export the `/ready` alert path: Grafana panels + Alertmanager rules for Postgres replica lag and Redis cache-hit thresholds, plus `npm run test:infra` output proving the alerts fire; archive artifacts under `docs/Monitoring/evidence/<date>/` and link them here once captured.
+- [X] Observability
+  - [x] Publish a redaction matrix (`docs/Internal/Observability/log-redaction-YYYY-MM-DD.md`) mapping every log field to `hash`, `truncate`, or `drop`, and include sanitized sample log lines showing adapter-level telemetry for auction reasons/no-bids; see `CHANGELOG.md` (2025-12-07 “Observability Evidence”).
+  - [x] Export the `/ready` alert path: Grafana panels + Alertmanager rules for Postgres replica lag and Redis cache-hit thresholds, plus `npm run test:infra` output proving the alerts fire; archive artifacts under `docs/Monitoring/evidence/<date>/` and link them here once captured; see `CHANGELOG.md` (2025-12-07 “Observability Evidence”).
 
 ## Appendix A — Infrastructure Setup (Provisioning from scratch)
 If you are provisioning a brand‑new droplet and managed services, follow this section. If a droplet already exists, use 0.0.0 above and skip this appendix.
@@ -516,9 +516,6 @@ References
 - [ ] `/metrics` protected (401 Basic or 403 IP allowlist) from public Internet
 - [ ] Evidence bundle stored under `docs/Internal/Deployment/do-readiness-YYYY-MM-DD/` and referenced in `CHANGELOG.md`
 - [ ] CI “policy guard” green: provider content guard and infra plan tests pass (`npm run test:infra`)
-
-### 1.6 Budget Check
-- [ ] Confirm monthly infra spend (droplet ~$24 + Postgres ~$15 + storage ~$5 + misc $3–5 ≤ $50 target).
 
 ## 2. Monitoring & Observability
 ### 2.1 Host & App Monitoring

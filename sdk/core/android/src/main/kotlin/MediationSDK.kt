@@ -1006,7 +1006,10 @@ class MediationSDK private constructor(
 
     private fun currentAuctionConsent(): AuctionClient.ConsentOptions = ConsentManager.toAuctionConsent(consentState)
 
-    private fun buildRuntimeRequestMeta(placement: String, placementConfig: PlacementConfig): RuntimeRequestMeta {
+    private fun buildRuntimeRequestMeta(
+        @Suppress("UNUSED_PARAMETER") placement: String,
+        placementConfig: PlacementConfig
+    ): RuntimeRequestMeta {
         val consent = buildRuntimeConsentState()
         val device = RuntimeDeviceMeta(
             os = "android",
@@ -1163,8 +1166,11 @@ class MediationSDK private constructor(
             reason == null -> AdError.INTERNAL_ERROR
             reason.equals("timeout", ignoreCase = true) -> AdError.TIMEOUT
             reason.equals("network_error", ignoreCase = true) -> AdError.NETWORK_ERROR
+            reason.equals("navigation_cancelled", ignoreCase = true) -> AdError.NETWORK_ERROR
+            reason.equals("rate_limited", ignoreCase = true) -> AdError.NETWORK_ERROR
             reason.equals("no_fill", ignoreCase = true) -> AdError.NO_FILL
             reason.equals("below_floor", ignoreCase = true) -> AdError.NO_FILL
+            reason.equals("circuit_open", ignoreCase = true) -> AdError.NETWORK_ERROR
             reason.startsWith("status_4", ignoreCase = true) -> AdError.INTERNAL_ERROR
             reason.startsWith("status_5", ignoreCase = true) -> AdError.NETWORK_ERROR
             else -> AdError.INTERNAL_ERROR

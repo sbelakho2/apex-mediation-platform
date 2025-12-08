@@ -1,3 +1,5 @@
+import { env } from './env';
+
 // Feature flags (in-memory overrides with env defaults)
 // Risky features controlled here to enable fast mitigation/rollback in staging/production.
 
@@ -7,16 +9,15 @@ export type FeatureFlags = {
   disableNewAdapters: boolean; // example flag to disable newly added adapters rollout
 };
 
-const envBool = (val: string | undefined, def = false) => {
+const envBool = (val: boolean | undefined, def = false) => {
   if (val == null) return def;
-  const v = String(val).trim().toLowerCase();
-  return v === '1' || v === 'true' || v === 'yes' || v === 'on';
+  return Boolean(val);
 };
 
 let current: FeatureFlags = {
-  killSwitch: envBool(process.env.FEATURE_KILL_SWITCH, false),
-  enforce2fa: envBool(process.env.FEATURE_ENFORCE_2FA, false),
-  disableNewAdapters: envBool(process.env.FEATURE_DISABLE_NEW_ADAPTERS, false),
+  killSwitch: envBool(env.FEATURE_KILL_SWITCH, false),
+  enforce2fa: envBool(env.FEATURE_ENFORCE_2FA, false),
+  disableNewAdapters: envBool(env.FEATURE_DISABLE_NEW_ADAPTERS, false),
 };
 
 export function getFeatureFlags(): FeatureFlags {
@@ -30,8 +31,8 @@ export function setFeatureFlags(partial: Partial<FeatureFlags>): FeatureFlags {
 
 export function resetFeatureFlags(): void {
   current = {
-    killSwitch: envBool(process.env.FEATURE_KILL_SWITCH, false),
-    enforce2fa: envBool(process.env.FEATURE_ENFORCE_2FA, false),
-    disableNewAdapters: envBool(process.env.FEATURE_DISABLE_NEW_ADAPTERS, false),
+    killSwitch: envBool(env.FEATURE_KILL_SWITCH, false),
+    enforce2fa: envBool(env.FEATURE_ENFORCE_2FA, false),
+    disableNewAdapters: envBool(env.FEATURE_DISABLE_NEW_ADAPTERS, false),
   };
 }

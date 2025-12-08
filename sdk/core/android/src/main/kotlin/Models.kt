@@ -16,6 +16,7 @@ data class Ad(
     // Creation time (epoch millis) recorded by the SDK; informative only.
     val createdAtMs: Long = System.currentTimeMillis()
 ) {
+    @Suppress("UNUSED_PARAMETER")
     fun show(activity: android.app.Activity) {
         // Implementation for showing ad
     }

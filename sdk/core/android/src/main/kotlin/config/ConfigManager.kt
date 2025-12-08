@@ -8,6 +8,8 @@ import com.rivalapexmediation.sdk.models.*
 import com.google.gson.Gson
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import com.rivalapexmediation.sdk.util.Clock
+import com.rivalapexmediation.sdk.util.SystemClockClock
 import java.io.IOException
 import java.security.MessageDigest
 import java.util.concurrent.TimeUnit
@@ -25,7 +27,8 @@ class ConfigManager(
     private val context: Context,
     private val sdkConfig: SDKConfig,
     private val client: OkHttpClient? = null,
-    private val configPublicKey: ByteArray? = null
+    private val configPublicKey: ByteArray? = null,
+    private val clock: Clock = SystemClockClock
 ) {
     private val prefs: SharedPreferences = context.getSharedPreferences(
         "rival_ad_stack_config",
@@ -60,7 +63,7 @@ class ConfigManager(
                 if (sigOk && validateSchema(remoteConfig)) {
                     currentConfig = remoteConfig
                     saveToCache(remoteConfig)
-                    lastFetchTime = System.currentTimeMillis()
+                    lastFetchTime = clock.monotonicNow()
                 }
             } catch (e: IOException) {
                 // Use cached config if network fails
@@ -104,7 +107,7 @@ class ConfigManager(
      */
     fun isConfigValid(): Boolean {
         val config = currentConfig ?: return false
-        val age = System.currentTimeMillis() - lastFetchTime
+        val age = clock.monotonicNow() - lastFetchTime
         return age < configTTL
     }
     
@@ -238,7 +241,7 @@ class ConfigManager(
             return true
         }
         
-        val age = System.currentTimeMillis() - lastFetchTime
+        val age = clock.monotonicNow() - lastFetchTime
         return age >= configTTL
     }
     

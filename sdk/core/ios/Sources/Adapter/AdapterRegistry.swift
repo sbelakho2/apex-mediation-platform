@@ -20,7 +20,7 @@ public protocol AdNetworkAdapter {
         placement: String,
         adType: AdType,
         config: [String: Any],
-        completion: @escaping (Result<Ad, AdapterRegistryError>) -> Void
+        completion: @escaping @Sendable (Result<Ad, AdapterRegistryError>) -> Void
     )
     
     /// Check if adapter supports specific ad type

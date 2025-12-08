@@ -88,16 +88,16 @@ class KillSwitchTest {
         var onMain = false
         var gotError = false
         var errorCode: AdError? = null
-        var message: String? = null
+        var errorMessage: String? = null
 
         BelInterstitial.load(appContext, "pl_kill", object : AdLoadCallback {
             override fun onAdLoaded(ad: com.rivalapexmediation.sdk.models.Ad) {
                 fail("Should not load when killSwitch is active")
             }
-            override fun onError(error: AdError, msg: String) {
+            override fun onError(error: AdError, message: String) {
                 gotError = true
                 errorCode = error
-                message = msg
+                errorMessage = message
                 onMain = (Looper.myLooper() == Looper.getMainLooper())
                 latch.countDown()
             }
@@ -111,7 +111,7 @@ class KillSwitchTest {
         assertTrue(gotError)
         // Our MediationSDK maps kill switch to INTERNAL_ERROR with reason string
         assertEquals(AdError.INTERNAL_ERROR, errorCode)
-        assertEquals("kill_switch_active", message)
+        assertEquals("kill_switch_active", errorMessage)
         // No ad should be ready
         assertFalse(BelInterstitial.isReady())
     }

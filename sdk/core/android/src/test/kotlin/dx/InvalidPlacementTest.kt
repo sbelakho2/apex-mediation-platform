@@ -87,16 +87,16 @@ class InvalidPlacementTest {
         val latch = CountDownLatch(1)
         var onMain = false
         var errCode: AdError? = null
-        var message: String? = null
+        var errorMessage: String? = null
 
         BelInterstitial.load(appContext, "pl_unknown", object : AdLoadCallback {
             override fun onAdLoaded(ad: com.rivalapexmediation.sdk.models.Ad) {
                 fail("Expected INVALID_PLACEMENT error")
             }
-            override fun onError(error: AdError, msg: String) {
+            override fun onError(error: AdError, message: String) {
                 onMain = (Looper.myLooper() == Looper.getMainLooper())
                 errCode = error
-                message = msg
+                errorMessage = message
                 latch.countDown()
             }
         })
@@ -106,7 +106,7 @@ class InvalidPlacementTest {
         assertTrue(latch.await(1, TimeUnit.SECONDS))
         assertTrue("Callback should be on main thread", onMain)
         assertEquals(AdError.INVALID_PLACEMENT, errCode)
-        assertTrue((message ?: "").contains("Unknown placement"))
+        assertTrue((errorMessage ?: "").contains("Unknown placement"))
         assertFalse(BelInterstitial.isReady())
     }
 }

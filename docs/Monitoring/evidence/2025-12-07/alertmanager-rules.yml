@@ -1,0 +1,20 @@
+groups:
+  - name: ready-probes
+    interval: 30s
+    rules:
+      - alert: ready_probe_degraded
+        expr: avg_over_time(api_ready_latency_ms[5m]) > 500
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "/ready latency above 500ms"
+          runbook: docs/Internal/Deployment/PRODUCTION_READINESS_CHECKLIST.md#0.0.14
+      - alert: redis_cache_hit_low
+        expr: avg_over_time(redis_cache_hit_ratio[5m]) < 0.85
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Redis cache hit ratio below 85%"
+          runbook: docs/Internal/Monitoring/REDIS_CACHE.md

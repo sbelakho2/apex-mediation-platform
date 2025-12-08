@@ -2,14 +2,19 @@ package com.rivalapexmediation.sdk.network
 
 import android.os.Build
 import com.google.gson.Gson
+import com.rivalapexmediation.sdk.threading.CircuitBreaker
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.InterruptedIOException
 import java.net.SocketTimeoutException
+import java.text.SimpleDateFormat
 import java.util.Locale
+import java.util.TimeZone
+import java.util.concurrent.CancellationException
 import java.util.concurrent.TimeUnit
+import kotlin.math.min
 
 /**
  * Lightweight Auction client for the Android SDK.
@@ -22,12 +27,20 @@ class AuctionClient(
     baseUrl: String,
     private val apiKey: String,
     httpClient: OkHttpClient? = null,
+    circuitBreakerFactory: () -> CircuitBreaker = {
+        CircuitBreaker(failureThreshold = 4, resetTimeoutMs = 15_000, halfOpenMaxAttempts = 1)
+    },
 ) {
     private val gson = Gson()
     private val base = baseUrl.trimEnd('/')
     private val client: OkHttpClient = (httpClient ?: OkHttpClient()).newBuilder()
         .retryOnConnectionFailure(false)
+        .followRedirects(false)
+        .followSslRedirects(false)
         .build()
+    private val circuitBreaker = circuitBreakerFactory()
+    private val maxAttempts = 3
+    private val initialBackoffMs = 120L
 
     private fun buildUserAgent(): String {
     val sdkVersion = try { com.rivalapexmediation.sdk.BuildConfig.SDK_VERSION } catch (_: Throwable) { "0.0.0" }
@@ -76,6 +89,25 @@ class AuctionClient(
         if (opts.publisherId.isBlank() || opts.placementId.isBlank()) {
             throw AuctionException("invalid_placement", "publisherId/placementId required")
         }
+        val outcome = circuitBreaker.execute {
+            try {
+                RequestOutcome.Success(performRequestWithRetries(opts, consent))
+            } catch (ae: AuctionException) {
+                if (shouldTripCircuit(ae.reason)) {
+                    throw ae
+                }
+                RequestOutcome.Error(ae)
+            }
+        } ?: throw AuctionException("circuit_open", "auction circuit breaker open")
+
+        outcome.error?.let { throw it }
+        return outcome.result ?: throw AuctionException("error")
+    }
+
+    private fun performRequestWithRetries(
+        opts: InterstitialOptions,
+        consent: ConsentOptions?
+    ): InterstitialResult {
         val timeout = opts.timeoutMs.coerceAtLeast(100)
         val callClient = client.newBuilder()
             .callTimeout(timeout.toLong(), TimeUnit.MILLISECONDS)
@@ -95,18 +127,21 @@ class AuctionClient(
             .addHeader("X-Api-Key", apiKey)
             .build()
 
-        var attempt = 0
+        var attempt = 1
         var lastErr: AuctionException? = null
         var sawTimeout = false
-        while (attempt < 2) { // initial + 1 retry
-            attempt++
+        while (attempt <= maxAttempts) {
             val call = callClient.newCall(req)
             try {
                 call.execute().use { resp ->
                     val code = resp.code
-                    // 204 → no_fill
                     if (code == 204) {
                         throw AuctionException("no_fill")
+                    }
+                    if (code == 429) {
+                        val retryAfter = parseRetryAfterMillis(resp)
+                        val msg = retryAfter?.let { "rate limited; retry_after_ms=$it" } ?: "rate limited"
+                        throw AuctionException("rate_limited", msg)
                     }
                     if (!resp.isSuccessful) {
                         val reason = "status_" + code
@@ -125,7 +160,6 @@ class AuctionClient(
                     val ecpmNum = (winner["cpm"] as? Number)
                         ?: (winner["CPM"] as? Number)
                     if (adapter.isNullOrBlank() || ecpmNum == null) {
-                        // Treat missing critical fields as no_fill to avoid crashing integrators on malformed payloads
                         throw AuctionException("no_fill")
                     }
                     val ecpm = ecpmNum.toDouble()
@@ -150,14 +184,14 @@ class AuctionClient(
                 if (reason == "timeout") {
                     sawTimeout = true
                 }
-                val ex = AuctionException(reason, e.message)
+                val ex = if (e is AuctionException) e else AuctionException(reason, e.message)
                 lastErr = ex
-                // Retry only for transient reasons and only on first attempt
-                if (attempt >= 2 || !isTransient(reason)) break
-                try { Thread.sleep((10L..100L).random()) } catch (_: InterruptedException) {}
-            } finally {
-                // ensure any leaked body closed if exception before .use
-                // OkHttp's use{} closes body; nothing extra to do here.
+                if (!shouldRetry(reason) || attempt == maxAttempts) {
+                    break
+                }
+                safeSleep(computeBackoffDelay(attempt))
+                attempt++
+                continue
             }
         }
         if (sawTimeout && (lastErr == null || lastErr.reason != "timeout")) {
@@ -168,13 +202,14 @@ class AuctionClient(
         throw lastErr ?: AuctionException("error")
     }
 
-    private fun isTransient(reason: String): Boolean {
-        return reason == "timeout" || reason.startsWith("status_5") || reason == "network_error"
+    private fun shouldRetry(reason: String): Boolean {
+        return reason == "timeout" || reason == "network_error" || reason.startsWith("status_5")
     }
 
     private fun mapExceptionToReason(e: Exception): String {
         return when {
             e is AuctionException -> e.reason
+            isCancellationException(e) -> "navigation_cancelled"
             isTimeoutException(e) -> "timeout"
             else -> {
                 val msg = e.message ?: ""
@@ -184,6 +219,15 @@ class AuctionClient(
                 }
             }
         }
+    }
+
+    private fun shouldTripCircuit(reason: String?): Boolean {
+        if (reason == null) return true
+        val normalized = reason.lowercase(Locale.US)
+        return normalized == "timeout" ||
+            normalized == "network_error" ||
+            normalized.startsWith("status_5") ||
+            normalized == "rate_limited"
     }
 
     // OkHttp surfaces call-timeout breaches as generic IOExceptions, so walk the cause chain
@@ -210,6 +254,58 @@ class AuctionClient(
     private fun isNetworkIOException(e: Exception): Boolean {
         // Basic heuristic; OkHttp surfaces IOExceptions for network conditions
         return e is java.io.IOException
+    }
+
+    private fun isCancellationException(t: Throwable?): Boolean {
+        var current: Throwable? = t
+        while (current != null) {
+            if (current is CancellationException) return true
+            if (current is kotlinx.coroutines.CancellationException) return true
+            val msg = current.message
+            if (!msg.isNullOrBlank() && msg.contains("canceled", ignoreCase = true)) {
+                return true
+            }
+            current = current.cause
+        }
+        return false
+    }
+
+    private fun computeBackoffDelay(attempt: Int): Long {
+        val exponent = (attempt - 1).coerceAtLeast(0)
+        val delay = initialBackoffMs * (1 shl exponent)
+        return min(delay, 1000L)
+    }
+
+    private fun safeSleep(durationMs: Long) {
+        if (durationMs <= 0) return
+        try {
+            Thread.sleep(durationMs)
+        } catch (_: InterruptedException) {
+            Thread.currentThread().interrupt()
+        }
+    }
+
+    private fun parseRetryAfterMillis(resp: okhttp3.Response): Long? {
+        val header = resp.header("Retry-After")?.trim() ?: return null
+        header.toLongOrNull()?.let { return (it * 1000L).coerceAtLeast(0) }
+        return try {
+            val sdf = SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss zzz", Locale.US)
+            sdf.timeZone = TimeZone.getTimeZone("GMT")
+            val date = sdf.parse(header)
+            date?.time?.let { (it - System.currentTimeMillis()).coerceAtLeast(0) }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private data class RequestOutcome(
+        val result: InterstitialResult? = null,
+        val error: AuctionException? = null,
+    ) {
+        companion object {
+            fun Success(result: InterstitialResult) = RequestOutcome(result = result)
+            fun Error(ex: AuctionException) = RequestOutcome(error = ex)
+        }
     }
 
     private fun buildRequestBody(opts: InterstitialOptions, consent: ConsentOptions?): Map<String, Any?> {
