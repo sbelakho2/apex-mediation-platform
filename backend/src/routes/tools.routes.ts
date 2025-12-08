@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { authenticate } from '../middleware/auth'
-import { appAdsInspector, supplyChainStatus } from '../controllers/tools.controller'
+import { appAdsInspector, supplyChainStatus, supplyChainSummary } from '../controllers/tools.controller'
 
 const router = Router()
 
@@ -12,5 +12,8 @@ router.get('/app-ads-inspector', appAdsInspector)
 
 // Supply chain status lookup
 router.get('/supply-chain-status', supplyChainStatus)
+
+// Supply chain summary (per app) and snapshot
+router.get('/supply-chain/summary', supplyChainSummary)
 
 export default router

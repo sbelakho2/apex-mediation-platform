@@ -7,10 +7,11 @@ namespace Apex.Mediation.Core
         private bool _shown;
         private readonly IClock _clock;
 
-        public RenderableAd(string placementId, string adapter, TimeSpan ttl, IClock? clock = null)
+        public RenderableAd(string placementId, string adapter, string format, TimeSpan ttl, IClock? clock = null)
         {
             PlacementId = placementId;
             Adapter = adapter;
+            Format = format;
             Ttl = ttl;
             _clock = clock ?? MonotonicClock.Instance;
             LoadedAt = _clock.Now;
@@ -18,6 +19,7 @@ namespace Apex.Mediation.Core
 
         public string PlacementId { get; }
         public string Adapter { get; }
+        public string Format { get; }
         public TimeSpan Ttl { get; }
         public TimeSpan LoadedAt { get; }
 

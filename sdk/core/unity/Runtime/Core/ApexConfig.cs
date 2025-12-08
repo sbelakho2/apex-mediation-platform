@@ -16,6 +16,7 @@ namespace Apex.Mediation.Core
         public SdkMode Mode = SdkMode.BYO;
         public bool EnableAutoConsentRead = true;
         public bool EnableViewability = true;
+        public bool EnableOmSdk = false;
         public bool EnableTelemetry = true;
         public double RenderTimeoutSeconds = 3.5d;
         public IAdapterConfigProvider AdapterConfigProvider = NullAdapterConfigProvider.Instance;

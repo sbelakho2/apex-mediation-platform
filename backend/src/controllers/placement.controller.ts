@@ -3,10 +3,21 @@ import { z } from 'zod';
 import { AppError } from '../middleware/errorHandler';
 import logger from '../utils/logger';
 import * as placementsRepo from '../repositories/placementRepository';
+import { getSupplyChainStatus } from '../services/supplyChainStatusService';
 
 // Validation schemas
 const iso2 = z.string().regex(/^[A-Z]{2}$/);
 const Platform = z.enum(['ios', 'android', 'unity', 'web']);
+
+const supplyChainSchema = z
+  .object({
+    domain: z.string().min(1),
+    sellerId: z.string().min(1).optional(),
+    appStoreId: z.string().min(1).optional(),
+    siteId: z.string().min(1).optional(),
+  })
+  .partial()
+  .refine((val) => !!val.domain, { message: 'domain is required when supplyChain block is present' });
 
 // Placement configuration schema (proposed v1; additive and optional)
 export const placementConfigSchema = z
@@ -52,6 +63,7 @@ export const placementConfigSchema = z
       })
       .partial()
       .optional(),
+    supplyChain: supplyChainSchema.optional(),
   })
   .strict();
 const createPlacementSchema = z.object({
@@ -76,6 +88,27 @@ const requirePublisherId = (req: Request): string => {
   return publisherId;
 };
 
+async function attachSupplyChainStatus(rows: placementsRepo.PlacementRow[]) {
+  return Promise.all(
+    rows.map(async (row) => {
+      const supplyChain = (row.config as any)?.supplyChain;
+      if (!supplyChain?.domain) return row;
+      try {
+        const status = await getSupplyChainStatus({
+          domain: supplyChain.domain,
+          sellerId: supplyChain.sellerId,
+          appStoreId: supplyChain.appStoreId,
+          siteId: supplyChain.siteId,
+        });
+        return { ...row, supplyChainStatus: status } as any;
+      } catch (error) {
+        logger.warn('[Placement] supply chain status lookup failed', { placementId: row.id, error });
+        return row;
+      }
+    })
+  );
+}
+
 /**
  * List all placements
  */
@@ -90,7 +123,12 @@ export const list = async (
     const page = Math.max(1, parseInt(String(req.query.page || 1), 10) || 1);
     const offset = (page - 1) * limit;
     const rows = await placementsRepo.list(publisherId, limit, offset);
-    res.json({ success: true, data: { items: rows, total: rows.length, page, pageSize: limit } });
+
+    const includeSupplyChain = String(req.query.includeSupplyChainStatus || 'false').toLowerCase() === 'true';
+    const items = includeSupplyChain ? await attachSupplyChainStatus(rows) : rows;
+    const hasMore = items.length === limit;
+
+    res.json({ success: true, data: { items, total: items.length, page, pageSize: limit, hasMore } });
   } catch (error) {
     next(error);
   }
@@ -111,7 +149,9 @@ export const getById = async (
     if (!row) {
       return next(new AppError('Placement not found', 404));
     }
-    res.json({ success: true, data: row });
+    const includeSupplyChain = String(req.query.includeSupplyChainStatus || 'false').toLowerCase() === 'true';
+    const enriched = includeSupplyChain ? (await attachSupplyChainStatus([row]))[0] : row;
+    res.json({ success: true, data: enriched });
   } catch (error) {
     next(error);
   }

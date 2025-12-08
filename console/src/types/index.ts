@@ -21,6 +21,16 @@ export interface Placement {
   publisherId: string
   createdAt: string
   updatedAt: string
+  config?: {
+    supplyChain?: {
+      domain: string
+      sellerId?: string
+      appStoreId?: string
+      siteId?: string
+    }
+    [key: string]: any
+  }
+  supplyChainStatus?: SupplyChainStatusResult
 }
 
 // Adapter types
@@ -72,6 +82,36 @@ export interface SupplyChainStatusResult {
   reason?: string
   sellerInfo?: { sellerId: string; domain?: string; name?: string; status?: 'active' | 'inactive' }
   entries?: SupplyChainStatusEntry[]
+}
+
+export interface SupplyChainPlacementStatus {
+  placementId: string
+  placementName: string
+  domain?: string
+  sellerId?: string
+  appStoreId?: string
+  siteId?: string
+  authorized: boolean
+  reason?: string
+}
+
+export interface SupplyChainAppSummary {
+  appId: string
+  ok: number
+  issues: number
+  missingDomain: number
+  placements: SupplyChainPlacementStatus[]
+}
+
+export interface SupplyChainSummaryResponse {
+  summary: {
+    publisherId: string
+    generatedAt: string
+    apps: SupplyChainAppSummary[]
+  }
+  snapshotPath?: string
+  snapshotId?: string
+  persistedAt?: string
 }
 
 // Revenue types

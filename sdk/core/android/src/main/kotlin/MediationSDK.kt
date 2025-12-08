@@ -47,6 +47,10 @@ import com.rivalapexmediation.sdk.network.AuctionClient
 import com.rivalapexmediation.sdk.privacy.PrivacyIdentifierProvider
 import com.rivalapexmediation.sdk.privacy.PrivacyIdentifiers
 import com.rivalapexmediation.sdk.privacy.PrivacySandboxStateProvider
+import com.rivalapexmediation.sdk.measurement.NoOpOmSdkController
+import com.rivalapexmediation.sdk.measurement.OmSdkHelper
+import com.rivalapexmediation.sdk.measurement.OmSdkRegistry
+import com.rivalapexmediation.sdk.measurement.OmSdkSessionController
 import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.runBlocking
 
@@ -92,7 +96,7 @@ class MediationSDK private constructor(
             }
         }
         
-        private val mainHandler = Handler(Looper.getMainLooper())
+        private val mainHandler by lazy { Handler(Looper.getMainLooper()) }
         
         /**
          * Initialize the SDK (must be called from Application.onCreate())
@@ -133,6 +137,19 @@ class MediationSDK private constructor(
         private fun isTestEnvironment(): Boolean {
             println("[debug] isTestRuntime fingerprint=" + Build.FINGERPRINT)
             return Build.FINGERPRINT == "robolectric"
+        }
+
+        /**
+         * Public helper primarily for tests: filters network ids by a whitelist.
+         * Matching is case-insensitive against the whitelist set, but original
+         * casing of items in [networks] is preserved in the returned list.
+         */
+        @JvmStatic
+        fun filterByWhitelist(networks: List<String>, whitelist: Set<String>?): List<String> {
+            val wl = whitelist
+            if (wl == null || wl.isEmpty()) return networks
+            val wlLower = wl.map { it.lowercase() }.toSet()
+            return networks.filter { wlLower.contains(it.lowercase()) }
         }
     }
     
@@ -498,6 +515,25 @@ class MediationSDK private constructor(
         }
     }
 
+    private fun installOmSdkController(features: FeatureFlags) {
+        val isByo = config.sdkMode == SdkMode.BYO
+        val status: String = when {
+            !features.enableOmSdk -> {
+                OmSdkRegistry.controller = NoOpOmSdkController()
+                if (isByo) "disabled_byo" else "disabled_by_config"
+            }
+            !OmSdkHelper.initIfAvailable(context) -> {
+                OmSdkRegistry.controller = NoOpOmSdkController()
+                if (isByo) "missing_sdk_byo" else "missing_sdk"
+            }
+            else -> {
+                OmSdkRegistry.controller = OmSdkSessionController(telemetry, features)
+                "enabled"
+            }
+        }
+        telemetry.recordOmSdkStatus(status)
+    }
+
     fun setTestModeOverride(enabled: Boolean?) {
         this.testModeOverride = enabled
     }
@@ -511,6 +547,9 @@ class MediationSDK private constructor(
             try {
                 // Load configuration
                 configManager.loadConfig()
+
+                // OM SDK: install helper only if host bundles the vendor library and enables flag.
+                installOmSdkController(configManager.getFeatureFlags())
 
                 // Initialize adapters
                 adapterRegistry.initialize(context)
@@ -869,20 +908,6 @@ class MediationSDK private constructor(
      */
     private fun applyAdapterWhitelist(networks: List<String>): List<String> =
         filterByWhitelist(networks, sandboxAdapterWhitelist)
-
-    companion object {
-        /**
-         * Public helper primarily for tests: filters network ids by a whitelist.
-         * Matching is case-insensitive against the whitelist set, but original
-         * casing of items in [networks] is preserved in the returned list.
-         */
-        @JvmStatic
-        fun filterByWhitelist(networks: List<String>, whitelist: Set<String>?): List<String> {
-            val wl = whitelist
-            if (wl == null || wl.isEmpty()) return networks
-            return networks.filter { wl.contains(it.lowercase()) }
-        }
-    }
     
     /**
      * Select best ad based on eCPM

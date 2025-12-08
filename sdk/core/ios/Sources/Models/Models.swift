@@ -184,14 +184,27 @@ public struct SDKRemoteConfig: Codable, Sendable {
     public let adapters: [String: AdapterConfig]
     public let killswitches: [String]
     public let telemetryEnabled: Bool
+    public let enableOmSdk: Bool?
+    public let ctvOmSdk: Bool?
     public let signature: String?
     
-    public init(version: Int, placements: [PlacementConfig], adapters: [String: AdapterConfig], killswitches: [String], telemetryEnabled: Bool, signature: String? = nil) {
+    public init(
+        version: Int,
+        placements: [PlacementConfig],
+        adapters: [String: AdapterConfig],
+        killswitches: [String],
+        telemetryEnabled: Bool,
+        enableOmSdk: Bool? = nil,
+        ctvOmSdk: Bool? = nil,
+        signature: String? = nil
+    ) {
         self.version = version
         self.placements = placements
         self.adapters = adapters
         self.killswitches = killswitches
         self.telemetryEnabled = telemetryEnabled
+        self.enableOmSdk = enableOmSdk
+        self.ctvOmSdk = ctvOmSdk
         self.signature = signature
     }
 }
@@ -270,6 +283,7 @@ public enum EventType: String, Codable, Sendable {
     case adImpression = "ad_impression"
     case timeout = "timeout"
     case anrDetected = "anr_detected"
+    case omSdkStatus = "omsdk_status"
 }
 
 /// Telemetry event
@@ -308,6 +322,7 @@ public struct SDKConfig: Codable, Equatable, Sendable {
     public let logLevel: LogLevel
     public let testMode: Bool
     public let configSignaturePublicKey: String?
+    public let enableOmSdk: Bool
 
     public init(
         appId: String,
@@ -316,7 +331,8 @@ public struct SDKConfig: Codable, Equatable, Sendable {
         telemetryEnabled: Bool = true,
         logLevel: LogLevel = .info,
         testMode: Bool = false,
-        configSignaturePublicKey: String? = nil
+        configSignaturePublicKey: String? = nil,
+        enableOmSdk: Bool = false
     ) {
         self.appId = appId
         self.configEndpoint = configEndpoint
@@ -325,6 +341,7 @@ public struct SDKConfig: Codable, Equatable, Sendable {
         self.logLevel = logLevel
         self.testMode = testMode
         self.configSignaturePublicKey = configSignaturePublicKey
+        self.enableOmSdk = enableOmSdk
     }
 
     public func withAppId(_ newAppId: String) -> SDKConfig {
@@ -335,7 +352,8 @@ public struct SDKConfig: Codable, Equatable, Sendable {
             telemetryEnabled: telemetryEnabled,
             logLevel: logLevel,
             testMode: testMode,
-            configSignaturePublicKey: configSignaturePublicKey
+            configSignaturePublicKey: configSignaturePublicKey,
+            enableOmSdk: enableOmSdk
         )
     }
 
@@ -346,7 +364,8 @@ public struct SDKConfig: Codable, Equatable, Sendable {
         telemetryEnabled: Bool = true,
         logLevel: LogLevel = .info,
         testMode: Bool = false,
-        configSignaturePublicKey: String? = nil
+        configSignaturePublicKey: String? = nil,
+        enableOmSdk: Bool = false
     ) -> SDKConfig {
         SDKConfig(
             appId: appId,
@@ -355,7 +374,8 @@ public struct SDKConfig: Codable, Equatable, Sendable {
             telemetryEnabled: telemetryEnabled,
             logLevel: logLevel,
             testMode: testMode,
-            configSignaturePublicKey: configSignaturePublicKey
+            configSignaturePublicKey: configSignaturePublicKey,
+            enableOmSdk: enableOmSdk
         )
     }
 }

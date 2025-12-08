@@ -233,6 +233,16 @@ class TelemetryCollector(
         )
     }
 
+    /** Lightweight status counter for OM SDK availability/config state. */
+    fun recordOmSdkStatus(status: String) {
+        recordEvent(
+            TelemetryEvent(
+                eventType = EventType.OMSDK_STATUS,
+                metadata = mapOf("status" to status)
+            )
+        )
+    }
+
     /**
      * Adapter span start (observability). Uses sampling; no secrets allowed.
      */

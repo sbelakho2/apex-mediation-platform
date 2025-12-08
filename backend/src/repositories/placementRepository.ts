@@ -29,6 +29,16 @@ export async function list(publisherId: string, limit = 50, offset = 0): Promise
   return res.rows;
 }
 
+export async function listAll(publisherId: string): Promise<PlacementRow[]> {
+  const sql = `
+    ${BASE_SELECT}
+    WHERE a.publisher_id = $1
+    ORDER BY p.created_at DESC
+  `;
+  const res = await query<PlacementRow>(sql, [publisherId]);
+  return res.rows;
+}
+
 export async function getById(publisherId: string, id: string): Promise<PlacementRow | null> {
   const sql = `
     ${BASE_SELECT}

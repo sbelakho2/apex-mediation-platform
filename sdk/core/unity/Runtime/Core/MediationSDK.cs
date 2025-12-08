@@ -141,7 +141,7 @@ namespace Apex.Mediation.Core
                 {
                     if (success)
                     {
-                        cache.TryStore(new RenderableAd(placementId, extras["adapter"]?.ToString() ?? "mock", Config.AdCacheTtl));
+                        cache.TryStore(new RenderableAd(placementId, extras["adapter"]?.ToString() ?? "mock", format, Config.AdCacheTtl));
                     }
 
                     callback?.Invoke(success, error);
@@ -159,7 +159,9 @@ namespace Apex.Mediation.Core
                 return;
             }
 
-            var completion = CreateCompletion(callback, placementId, ad.Adapter);
+            var startedOmSdk = MaybeStartOmSdkSession(ad);
+
+            var completion = CreateCompletion(callback, placementId, ad.Adapter, () => FinishOmSdkSessionIfStarted(startedOmSdk));
             try
             {
                 showAction(completion);
@@ -167,6 +169,7 @@ namespace Apex.Mediation.Core
             catch (Exception ex)
             {
                 Logger.LogError($"Show failed for {placementId}", ex);
+                FinishOmSdkSessionIfStarted(startedOmSdk);
                 completion(false, ex.Message ?? "show_failed");
             }
         }
@@ -181,11 +184,12 @@ namespace Apex.Mediation.Core
             };
         }
 
-        private Action<bool, string?> CreateCompletion(Action<bool, string?> callback, string placementId, string adapter)
+        private Action<bool, string?> CreateCompletion(Action<bool, string?> callback, string placementId, string adapter, Action? after = null)
         {
             var dispatch = DispatchOnMainThread(callback);
             return GuardOnce((success, error) =>
             {
+                after?.Invoke();
                 dispatch(success, error);
                 RecordTrace(placementId, adapter, success ? "show" : "show_failed", TimeSpan.Zero, new Dictionary<string, object?>());
             });
@@ -219,6 +223,46 @@ namespace Apex.Mediation.Core
         {
             var sanitized = Redactor.RedactMap(extras);
             var trace = new TelemetryTrace(placementId, adapter, outcome, latency, sanitized);
+            _telemetry.Record(trace);
+            _ledger.Record(trace);
+        }
+
+        private bool MaybeStartOmSdkSession(RenderableAd ad)
+        {
+            if (!Config.EnableOmSdk)
+            {
+                RecordOmSdkStatus("disabled_byo");
+                return false;
+            }
+
+            if (!OmSdkBridge.IsAvailable())
+            {
+                RecordOmSdkStatus("missing_sdk_byo");
+                return false;
+            }
+
+            var format = ad.Format ?? string.Empty;
+            var isVideo = string.Equals(format, "rewarded", StringComparison.OrdinalIgnoreCase)
+                          || string.Equals(format, "rewarded_interstitial", StringComparison.OrdinalIgnoreCase)
+                          || string.Equals(format, "video", StringComparison.OrdinalIgnoreCase);
+            OmSdkBridge.StartSession(isVideo);
+            RecordOmSdkStatus("enabled");
+            return true;
+        }
+
+        private void FinishOmSdkSessionIfStarted(bool started)
+        {
+            if (!started)
+            {
+                return;
+            }
+            OmSdkBridge.FinishSession();
+        }
+
+        private void RecordOmSdkStatus(string status)
+        {
+            var extras = new Dictionary<string, object?> { { "status", status } };
+            var trace = new TelemetryTrace("omsdk", "omsdk", status, TimeSpan.Zero, extras);
             _telemetry.Record(trace);
             _ledger.Record(trace);
         }

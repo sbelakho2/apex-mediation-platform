@@ -1,3 +1,71 @@
+# Changelog — OM SDK Helpers & Flag (2025-12-08)
+
+Summary
+
+- Added reflection-only OM SDK helpers on Android/iOS with Unity bridge; helpers no-op safely when OMSDK classes are missing.
+- Gated Android helper via new `enableOmSdk` feature flag and telemetry `omsdk_status` counters; backend config schema now carries `enableOmSdk` and `ctvOmSdk` placeholder.
+- iOS helper starts/finishes sessions via selectors without linking OMSDK; Unity bridge calls Android helper when present.
+
+What changed
+
+- Android: Added `measurement/OmSdkHelper` and `OmSdkSessionController`, installs post-config load when `enableOmSdk` is true and vendor SDK is present; friendly obstructions supported; telemetry records enabled/disabled/missing states.
+- iOS: Added `Viewability/OmSdkHelper.swift` reflection helper to init/start/finish sessions without crashing when OMSDK is absent.
+- Unity: Added `Platforms/OmSdkBridge.cs` to proxy availability/start/finish to native Android helper; safe no-op elsewhere.
+- Backend: `featureFlagsSchema` now includes `enableOmSdk` and `ctvOmSdk` placeholder for CTV attestation planning.
+
+Validation
+
+- `cd sdk/core/android && ./gradlew.sh testDebugUnitTest`
+
+---
+
+Changelog — Supply Chain Checklist Closure (2025-12-08)
+
+Summary
+- Completed app-ads.txt/sellers.json enforcement checklist: ingestion, cron refresh, Console surfacing, and DO migration applied.
+
+What changed
+- Checklist: Marked app-ads.txt crawling/Console warnings and sellers.json parsing as complete in `SDK_CHECKS`.
+- Backend: supply_chain_snapshots migration applied on DO Managed Postgres (`apexmediation`) via SSH tunnel; status recorded.
+- Docs: SDK_CHECKS updated to reflect completion and migration; existing Supply Chain docs unchanged.
+
+Validation
+- `cd backend && npm test -- supplyChainStatusService`
+- `cd backend && npm test -- appAdsIngestion`
+- `PGSSLMODE=no-verify DATABASE_URL=postgres://doadmin:...@localhost:25060/apexmediation npm run migrate`
+
+---
+
+Changelog — OMID Helpers Status (2025-12-08)
+
+Summary
+- Documented that OMID session lifecycle helpers remain pending after clock parity; clarified required scaffolding/tests in `SDK_CHECKS`.
+
+What changed
+- Docs: `SDK_CHECKS` updated to state OMID helper work still pending (start/finish per impression, friendly obstructions, teardown guards, mock-OMSDK smoke tests).
+
+Validation
+- Docs-only; no runtime changes.
+
+---
+
+Changelog — Supply Chain Snapshot Persistence (2025-12-08)
+
+Summary
+- Persist per-app supply chain summaries into Postgres for Console and auditing, while keeping filesystem snapshots for parity.
+
+What changed
+- Backend: Added `supply_chain_snapshots` table and repository to store per-publisher summary JSON with generated timestamps; `GET /api/v1/tools/supply-chain/summary` now writes to DB + file and can return the latest stored snapshot via `latestOnly=true`.
+- Backend: Snapshot service now persists summary metadata (id, persistedAt) alongside the file path.
+- Console: Supply Chain page now surfaces persisted snapshot metadata (ID, persisted timestamp, file path) in addition to generated time.
+- Docs: Added customer-facing Console guide and developer-facing snapshot persistence notes; `SDK_CHECKS` updated to reflect DB persistence.
+
+Validation
+- `cd backend && npm test -- supplyChainStatusService` (existing coverage).
+- DB migrations applied to DigitalOcean Managed Postgres (`apexmediation` DB) via SSH tunnel with `PGSSLMODE=no-verify DATABASE_URL=postgres://doadmin:...@localhost:25060/apexmediation npm run migrate`.
+
+---
+
 Changelog — Supply Chain Status Service (2025-12-08)
 
 Summary
@@ -9,6 +77,24 @@ What changed
 
 Validation
 - `cd backend && npm test -- supplyChainStatusService`
+
+---
+
+Changelog — Supply Chain Auto-Ingestion & Placement Warnings (2025-12-08)
+
+Summary
+- Scheduled supply-chain corpus refresh (app-ads.txt + sellers.json) and surfaced placement-level supply-chain warnings in Console using the status endpoint.
+
+What changed
+- Backend: `scripts/cron-jobs.ts` now runs supply-chain ingestion every 6 hours using `ingestAppAdsCorpus`/`ingestSellersFromUrls`, writing to `data/weak-supervision/supply-chain/app-ads.json` and `sellers.json` (paths overridable via env).
+- Backend: Placement config now supports a `supplyChain` block (domain/seller/appStoreId/siteId); placement list/get can include `supplyChainStatus` when `includeSupplyChainStatus=true`, sourced from `getSupplyChainStatus`.
+- Backend: Placement list now returns `hasMore` for pagination.
+- Console: Added placement card badges/warnings using `supplyChainStatus`; placement API now requests supply-chain status and normalizes pagination.
+- Backend: Added per-app supply chain summary endpoint with snapshots persisted under `data/weak-supervision/supply-chain/snapshots/`, aggregating placement statuses by app.
+- Console: New `Supply Chain` tab shows per-app summaries and links to the domain checker.
+
+Validation
+- `cd backend && npm test -- supplyChainStatusService` (status service coverage)
 
 ---
 
@@ -3647,3 +3733,91 @@ What changed
 
 Impact
 - Clear, discoverable documentation for building adapters in a BYO‑first model on all platforms; consistent guidance on single‑entry initialization, simple consent, sandbox flags, and Release safety (no vendor SDKs in core). Customers and partners can validate adapters using the iOS/tvOS CLI and Android JUnit/instrumented tests, with Unity and Web patterns documented.
+
+Changelog — Networked Sandbox Execution Progress & Remaining Tasks (2025-12-08)
+
+Summary
+- Updated repository with BYO‑first parity across SDKs, conformance tooling, staging orchestration scripts, and comprehensive developer/customer documentation. Began execution of the production readiness networked sandbox run (0.0.7–0.0.12) with evidence capture scaffolding and live tracking.
+
+What’s done in this cycle
+- Core SDKs (Release‑safe, BYO‑first)
+  - iOS/tvOS: Runtime BYO registration (`registerAdapter`), sandbox controls (`setSandboxAdapterWhitelist`, `setSandboxForceAdapterPipeline`), adapter enumeration (`adapterNames`). Test‑mode init fix to avoid network hangs when offline unless mocks are present. DEBUG‑only stubs (including an enhanced AdMob simulation) gated behind `#if DEBUG || APEX_SANDBOX_ADAPTERS`.
+  - Android/Android TV: Removed default vendor adapters; reflection discovery gated to DEBUG/`apex.sandbox.adapters=1`. Added sandbox controls (`setSandboxAdapterWhitelist(List<String>)`, `setSandboxForceAdapterPipeline(Boolean)`), and diagnostics (`getAdapterNames()`). Applied whitelist filtering in selection and disabled S2S when force‑pipeline is true.
+  - Unity: C# bridge exposes `SetSandboxAdapterWhitelist(string[])` and `SetSandboxForceAdapterPipeline(bool)`; iOS/tvOS native exports added for sandbox only.
+  - Web: BYO adapter interface documented; no vendor scripts in core.
+
+- Adapter Dev Kits & Tests
+  - iOS/tvOS Adapter Dev Kit (SPM): `sdk/adapter-dev-kit/ios` with `ApexAdapterDevKit` (ConformanceSuite, AdapterTestContext) and CLI `apex-adapter-runner`. Pre‑wired test‑only conformance for AdMob, AppLovin, IronSource.
+  - Android: Added unit/instrumented conformance tests (exactly‑once callback order, runtime registration) and expanded error/consent mapping tests (ErrorMapper, ConsentMapping). Android TV sandbox reflection bridge + Run All button.
+
+- Sandbox apps & tooling
+  - iOS sandbox: Adapter Picker + Run All (uses adapterNames + whitelist). tvOS sandbox: reads `SandboxConfig.json` and logs adapter set.
+  - Android phone sandbox: reads/prints whitelist/force flags; Run All helper. Android TV sandbox: config loader + reflection bridge (init, whitelist, force pipeline, run all interstitial).
+  - Ops scripts (staging):
+    - `scripts/ops/run_networked_sandbox.sh` — pre‑checks (website/backend/iOS/Android tests) and evidence folders.
+    - `scripts/ops/console_up.sh`, `scripts/ops/console_check.sh` — bring up/verify Console/API via compose.
+    - `scripts/ops/staging_console_capture.sh` — captures `/health`, `/ready`, transparency export, redaction validation, and Resend evidence (env only); auto‑resolves seeded app id via Postgres.
+    - `scripts/ops/redaction_validate.js` — transparency PII guard (sha256 checks, required fields, no TCF string).
+    - `scripts/ops/billing_staging.sh` — synthetic usage, aggregation, Stripe logs/CLI capture, Resend billing previews.
+    - `scripts/ops/vra_export.sh` — exports `recon_*` CSVs + rowcounts and optional Proof‑of‑Revenue tables.
+    - `scripts/ops/k6/load.js` + `scripts/ops/run_soak.sh` + `scripts/ops/metrics_snapshot.sh` — soak test and metrics snapshots.
+    - `scripts/ops/run_staging_full.sh` — orchestration for 0.0.7–0.0.12 and zips evidence for 0.0.13.
+
+- Documentation (developer + customer facing)
+  - Developer‑Facing Dev Kits: `docs/Developer-Facing/DevKits/{ios-tvos.md,android-androidtv.md,unity.md,web.md}`; index: `docs/Developer-Facing/AdapterDevKit.md`.
+  - Customer‑Facing SDK guides updated (iOS/Android/Unity/Web) to emphasize BYO‑first, single‑entry, consent, sandbox flags, and Dev Kit links.
+  - Data flow & compliance spec: `docs/Internal/Transparency/DATA_FLOW_AND_COMPLIANCE.md`.
+  - Networked runbook & live tracker: `docs/Internal/QA/networked-sandbox-runbook-2025-12-06.md`, `docs/Internal/QA/sandbox-execution/2025-12-08/PROGRESS.md`.
+
+- Evidence structure
+  - `evidence-2025-12-08/` created with subfolders: `console/ website/ billing/ vra/ cron/ soak/ sdk-logs/`. Pre‑checks run and logs saved (website security headers, backend Jest, iOS Swift tests; Android unit on CI/Android host).
+
+Remaining to do (tracked in PROGRESS.md and the Production Readiness Checklist)
+- 0.0.7 Console & Dashboard (staging)
+  - Complete auth flows (signup/login/reset) and capture Resend evidence (env‑only key).
+  - Org/apps/API keys/placements CRUD; verify propagation to sandboxes; screenshots/exports.
+  - Configure FakeNetwork A/B/C; validate logs (no secrets) and per‑placement toggles.
+  - Mediation Debugger timelines + no‑bid reasons; pagination/filters; confirm PII redaction.
+  - Export transparency artifacts; run redaction validator; store report.
+
+- 0.0.8 Website / Landing Page
+  - Responsive sweep (screenshots for `/`, `/pricing`, `/docs`, `/legal/*`).
+  - SEO/canonical/robots/404 checks; broken‑link scan; store artifacts.
+
+- 0.0.9 Billing, Usage & Stripe
+  - Generate synthetic usage across tiers and run aggregation; verify tier assignments.
+  - Confirm Starter cap flips to `requires_payment_method` on threshold.
+  - Customer Portal add card; metered events; finalize invoice; verify webhooks open→paid; archive PDF.
+  - Email previews (upcoming/paid/failed); simulate dunning; store artifacts.
+
+- 0.0.10 VRA / Reconciliation
+  - Drive multi‑day sandbox traffic; ingest statements (match/under/FX mismatch).
+  - Execute VRA pipeline; export `recon_*` tables (rowcounts + CSVs); Console deltas; dispute‑kit ZIP.
+  - Proof‑of‑Revenue: export daily roots + monthly digest; run verification tool; save outputs.
+
+- 0.0.11 Cron Jobs, Emails & Automation
+  - Verify cron/worker stack is up; zero crashes; capture logs and failure alerting evidence.
+  - Render/collect sample emails.
+
+- 0.0.12 Soak (1–5 RPS ≥1h)
+  - Run k6 scenario; save `k6-report.txt`.
+  - Export Prometheus/Grafana snapshots (p95 latency, error rate, CPU/mem), if configured.
+
+- SDK conformance & parity wrap‑ups
+  - iOS/tvOS: run Dev Kit CLI on simulators and archive logs.
+  - Android: extend conformance to cover error taxonomy and consent propagation end‑to‑end in adapter modules; run unit + instrumented on CI/device/emulator.
+  - Unity: batchmode Editor tests and smoke builds; verify sandbox flags.
+  - Web: adapter harness tests as applicable.
+
+- Documentation & website
+  - Final pass: ensure customer docs are fully aligned and simple; cross‑checks with code samples.
+  - Verify website benefits emphasize transparency (exports/PoR), BYO adapters, billing (Starter cap/autopay), VRA/compliance; capture screenshots.
+
+- 0.0.13 Closure & sign‑off
+  - Zip `evidence-2025-12-08/` and attach to the checklist.
+  - Update the Production Readiness Checklist with links to each artifact set.
+  - Add final “All checks passed” entry with evidence link(s) and commit SHAs.
+
+Notes
+- Postgres‑only readiness remains the policy for `/ready` (Postgres/Redis health only), with alerting on replica lag and cache hit rates as per checklist guidance.
+- Resend and Stripe keys remain strictly in env (never committed). All exports follow hashing/redaction rules defined in the compliance spec.

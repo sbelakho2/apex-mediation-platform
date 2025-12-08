@@ -162,6 +162,7 @@ enum class EventType {
     // Observability adapter spans (P1.9)
     ADAPTER_SPAN_START,
     ADAPTER_SPAN_FINISH,
+    OMSDK_STATUS,
 }
 
 /**
@@ -199,6 +200,8 @@ data class FeatureFlags(
     // Example JSON: { "api.apexmediation.ee": ["sha256/AAAAAAAA...", "sha256/BBBBBBBB..."] }
     val netTlsPinningEnabled: Boolean = false,
     val netTlsPinning: Map<String, List<String>> = emptyMap(),
+    // OM SDK is BYO; default off unless the host bundles the vendor library.
+    val enableOmSdk: Boolean = false,
 )
 
 /**

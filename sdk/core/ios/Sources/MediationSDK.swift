@@ -289,6 +289,8 @@ private actor MediationRuntime {
                 adapters: [:],
                 killswitches: [],
                 telemetryEnabled: false,
+                enableOmSdk: false,
+                ctvOmSdk: nil,
                 signature: nil
             )
         } else {
@@ -308,6 +310,7 @@ private actor MediationRuntime {
         let telemetryCollector = TelemetryCollector(config: resolvedConfig)
         telemetryCollector.start()
         telemetryCollector.recordInitialization()
+        installOmSdkIfAvailable(remote: remote, config: resolvedConfig, telemetry: telemetryCollector)
 
         if resolvedConfig.testMode {
             guard let loader = TestModeAdLoader(auctionEndpoint: resolvedConfig.auctionEndpoint) else {
@@ -326,6 +329,17 @@ private actor MediationRuntime {
         initialized = true
 
         return snapshot()
+    }
+
+    private func installOmSdkIfAvailable(remote: SDKRemoteConfig, config: SDKConfig, telemetry: TelemetryCollector) {
+        let flagEnabled = remote.enableOmSdk ?? config.enableOmSdk
+        if flagEnabled == false {
+            telemetry.recordOmSdkStatus("disabled_byo")
+            return
+        }
+
+        let available = OmSdkHelper.shared.initializeIfAvailable(partnerName: "ApexMediation", version: sdkVersion)
+        telemetry.recordOmSdkStatus(available ? "enabled" : "missing_sdk_byo")
     }
 
     func loadAd(placementId: String) async throws -> Ad? {

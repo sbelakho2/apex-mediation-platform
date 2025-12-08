@@ -81,6 +81,7 @@ namespace Apex.Mediation.Core
             public string mode = SdkMode.BYO.ToString();
             public bool enableAutoConsentRead = true;
             public bool enableViewability = true;
+            public bool enableOmSdk = false;
             public bool enableTelemetry = true;
             public double renderTimeoutSeconds = 3.5d;
             public double adCacheTtlMinutes = 30;
@@ -96,6 +97,7 @@ namespace Apex.Mediation.Core
                     mode = config.Mode.ToString(),
                     enableAutoConsentRead = config.EnableAutoConsentRead,
                     enableViewability = config.EnableViewability,
+                    enableOmSdk = config.EnableOmSdk,
                     enableTelemetry = config.EnableTelemetry,
                     renderTimeoutSeconds = config.RenderTimeoutSeconds,
                     adCacheTtlMinutes = config.AdCacheTtl.TotalMinutes,
@@ -138,6 +140,7 @@ namespace Apex.Mediation.Core
                     Mode = Enum.TryParse(mode, true, out SdkMode parsed) ? parsed : SdkMode.BYO,
                     EnableAutoConsentRead = enableAutoConsentRead,
                     EnableViewability = enableViewability,
+                    EnableOmSdk = enableOmSdk,
                     EnableTelemetry = enableTelemetry,
                     RenderTimeoutSeconds = renderTimeoutSeconds,
                     AdCacheTtl = TimeSpan.FromMinutes(adCacheTtlMinutes)
@@ -174,6 +177,7 @@ namespace Apex.Mediation.Core
                     mode = mode,
                     enableAutoConsentRead = enableAutoConsentRead,
                     enableViewability = enableViewability,
+                    enableOmSdk = enableOmSdk,
                     enableTelemetry = enableTelemetry,
                     renderTimeoutSeconds = renderTimeoutSeconds,
                     adCacheTtlMinutes = adCacheTtlMinutes,

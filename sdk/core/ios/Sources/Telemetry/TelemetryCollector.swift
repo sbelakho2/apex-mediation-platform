@@ -151,6 +151,16 @@ public class TelemetryCollector: @unchecked Sendable {
             )
         )
     }
+
+    /// Record OM SDK availability/status transitions (BYO-safe).
+    public func recordOmSdkStatus(_ status: String) {
+        recordEvent(
+            TelemetryEvent(
+                eventType: .omSdkStatus,
+                metadata: ["status": status]
+            )
+        )
+    }
     
     // MARK: - Private Methods
     

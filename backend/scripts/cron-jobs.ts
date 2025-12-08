@@ -11,6 +11,9 @@ import { valueMultiplierService } from '../services/monetization/ValueMultiplier
 import { selfEvolvingSystemService } from '../services/automation/SelfEvolvingSystemService';
 import { automatedGrowthEngine } from '../services/automation/AutomatedGrowthEngine';
 import { influenceBasedSalesService } from '../services/sales/InfluenceBasedSalesService';
+import { ingestAppAdsCorpus, ingestSellersFromUrls, writeJsonFile, type InventoryDomain } from '../src/services/appAdsIngestion';
+import path from 'node:path';
+import fs from 'node:fs/promises';
 
 /**
  * 04:15 - Enrichment cache refresh (daily)
@@ -33,6 +36,31 @@ console.log('[Cron] Starting ApexMediation cron jobs...');
 console.log('[Cron] 🤖 ZERO-TOUCH AUTOMATION ENABLED');
 console.log('');
 
+async function refreshSupplyChainCorpus() {
+  const baseDir = process.env.SUPPLYCHAIN_BASE_DIR || path.resolve(process.cwd(), '..', 'data', 'weak-supervision', 'supply-chain');
+  const inventoryPath = process.env.SUPPLYCHAIN_INVENTORY_PATH || path.join(baseDir, 'inventory.json');
+  const appAdsOutput = process.env.SUPPLYCHAIN_APP_ADS_PATH || path.join(baseDir, 'app-ads.json');
+  const sellersOutput = process.env.SUPPLYCHAIN_SELLERS_PATH || path.join(baseDir, 'sellers.json');
+  const sellersUrls = (process.env.SUPPLYCHAIN_SELLERS_URLS || '').split(',').map((u) => u.trim()).filter(Boolean);
+
+  try {
+    const inventoryRaw = await fs.readFile(inventoryPath, 'utf8');
+    const inventory = JSON.parse(inventoryRaw) as InventoryDomain[];
+
+    const corpus = await ingestAppAdsCorpus(inventory);
+    await writeJsonFile(appAdsOutput, corpus);
+    console.log(`[Cron] Supply chain: wrote app-ads corpus for ${Object.keys(corpus).length} domains -> ${appAdsOutput}`);
+
+    if (sellersUrls.length > 0) {
+      const sellers = await ingestSellersFromUrls(sellersUrls);
+      await writeJsonFile(sellersOutput, sellers);
+      console.log(`[Cron] Supply chain: wrote sellers directory with ${Object.keys(sellers).length} entries -> ${sellersOutput}`);
+    }
+  } catch (error) {
+    console.error('[Cron] Supply chain ingestion failed', error);
+  }
+}
+
 /**
  * 00:00 - Email queue processing (every minute)
  */
@@ -42,6 +70,14 @@ cron.schedule('* * * * *', async () => {
   } catch (error) {
     console.error('[Cron] Error processing email queue:', error);
   }
+});
+
+/**
+ * Supply chain ingestion (every 6 hours)
+ * Keeps app-ads.txt corpus and sellers.json fresh for weak supervision and Console tooling.
+ */
+cron.schedule('15 */6 * * *', async () => {
+  await refreshSupplyChainCorpus();
 });
 
 /**

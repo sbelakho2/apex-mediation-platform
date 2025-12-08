@@ -31,8 +31,7 @@ export default function PlacementsClient() {
     queryKey: ['placements', pageSize],
     initialPageParam: 1,
     queryFn: async ({ pageParam }) => {
-      const { data } = await placementApi.list({ page: pageParam, pageSize })
-      return data
+      return placementApi.list({ page: pageParam, pageSize })
     },
     getNextPageParam: (lastPage) => (lastPage.hasMore ? lastPage.page + 1 : undefined),
   })
@@ -206,6 +205,13 @@ function PlacementCard({ placement }: { placement: Placement }) {
     rewarded: '🎁',
   }
 
+  const supplyChain = placement.supplyChainStatus
+  const supplyChainState = supplyChain
+    ? supplyChain.authorized
+      ? { label: 'Supply chain ok', tone: 'bg-green-100 text-green-800', detail: undefined }
+      : { label: 'Supply chain issue', tone: 'bg-amber-100 text-amber-800', detail: supplyChain.reason }
+    : undefined
+
   return (
     <div className="card hover:shadow-lg transition-shadow duration-200">
       <div className="flex items-start justify-between">
@@ -232,7 +238,18 @@ function PlacementCard({ placement }: { placement: Placement }) {
                 {placement.status.replace(/_/g, ' ')}
               </span>
             </div>
+            {supplyChainState && (
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-gray-500">Supply chain:</span>
+                <span className={`badge ${supplyChainState.tone}`}>{supplyChainState.label}</span>
+              </div>
+            )}
           </div>
+          {supplyChainState?.detail && (
+            <div className="mt-2 rounded border border-amber-200 bg-amber-50 text-amber-900 text-xs px-2 py-1 max-w-xl">
+              {supplyChainState.detail}
+            </div>
+          )}
           <div className="mt-3 text-xs text-gray-400">
             Created {new Date(placement.createdAt).toLocaleDateString()} · 
             Updated {new Date(placement.updatedAt).toLocaleDateString()}

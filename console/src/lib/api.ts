@@ -33,6 +33,7 @@ import type {
   NetworkVerificationResult,
   AppAdsInspectorResult,
   SupplyChainStatusResult,
+  SupplyChainSummaryResponse,
 } from '@/types'
 
 const USE_MOCK_API = process.env.NEXT_PUBLIC_USE_MOCK_API === 'true' && process.env.NODE_ENV !== 'production'
@@ -111,9 +112,22 @@ export const placementApi = {
   list: async (params?: { page?: number; pageSize?: number }) => {
     if (USE_MOCK_API) return mockApiCall<PaginatedResponse<Placement>>('placements')
     const pagination = withPaginationDefaults(params)
-    return apiClient.get<PaginatedResponse<Placement>>('/placements', { params: pagination })
+    const resp = await apiClient.get('/placements', { params: { ...pagination, includeSupplyChainStatus: true } })
+    const payload: any = resp.data
+    const base = payload?.data ?? payload ?? {}
+    const items = base.items ?? base.data ?? []
+    return {
+      data: items as Placement[],
+      total: base.total ?? items.length,
+      page: base.page ?? pagination.page,
+      pageSize: base.pageSize ?? pagination.pageSize,
+      hasMore: Boolean(base.hasMore ?? (items.length === pagination.pageSize)),
+    } satisfies PaginatedResponse<Placement>
   },
-  get: (id: string) => apiClient.get<Placement>(`/placements/${id}`),
+  get: async (id: string) => {
+    const resp = await apiClient.get(`/placements/${id}`, { params: { includeSupplyChainStatus: true } })
+    return unwrapSuccessEnvelope(resp.data as any) as Placement
+  },
   create: (data: Partial<Placement>) => apiClient.post<Placement>('/placements', data),
   update: (id: string, data: Partial<Placement>) =>
     apiClient.put<Placement>(`/placements/${id}`, data),
@@ -121,6 +135,10 @@ export const placementApi = {
   getFormatCatalog: () => {
     if (USE_MOCK_API) return mockApiCall<Record<string, string[]>>('placement-formats')
     return apiClient.get<Record<string, string[]>>('/placements/formats')
+  },
+  getSupplyChainSummary: async (): Promise<SupplyChainSummaryResponse> => {
+    const resp = await apiClient.get<SuccessEnvelope<SupplyChainSummaryResponse> | SupplyChainSummaryResponse>(`/tools/supply-chain/summary`)
+    return unwrapSuccessEnvelope(resp.data as any)
   },
 }
 

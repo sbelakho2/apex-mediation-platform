@@ -19,6 +19,8 @@ const featureFlagsSchema = z.object({
   debugLoggingEnabled: z.boolean().optional(),
   experimentalFeaturesEnabled: z.boolean().optional(),
   killSwitch: z.boolean().optional(),
+  enableOmSdk: z.boolean().optional(),
+  ctvOmSdk: z.boolean().optional(),
 });
 
 export const configSchema = z
