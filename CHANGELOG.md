@@ -1,3 +1,18 @@
+Changelog — Supply Chain Ingestion (2025-12-08)
+
+Summary
+- Added backend ingestion helpers and CLI to build the app-ads.txt corpus and sellers.json directory from publisher inventory and remote sellers endpoints; wired tests for normalization and merge logic.
+
+What changed
+- Backend: `src/services/appAdsIngestion.ts` parses app-ads.txt lines into supply-chain entries, ingests from an inventory list, and merges sellers directories from remote sellers.json sources with normalization helpers.
+- Backend: `scripts/ingestSupplyChainCorpus.ts` ingests `data/weak-supervision/supply-chain/inventory.json` into `app-ads.json` and optionally merges sellers directories into `sellers.json`; default inventory file added under `data/weak-supervision/supply-chain/inventory.json`.
+- Tests: Added `src/services/__tests__/appAdsIngestion.test.ts` covering app-ads parsing, corpus building, and sellers.json merging.
+
+Validation
+- `cd backend && npm test -- appAdsIngestion`
+
+---
+
 Changelog — Unity/Android TV Clock Drift Hardening (2025-12-08)
 
 Summary
