@@ -39,6 +39,7 @@ enum OverlayPosition: String {
 
 #if os(iOS)
 /// Presents SKOverlay instances on the main thread, enforcing UI safety.
+@available(iOSApplicationExtension, unavailable)
 @MainActor
 final class SKOverlayPresenter {
     static let shared = SKOverlayPresenter()

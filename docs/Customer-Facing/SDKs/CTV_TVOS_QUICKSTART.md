@@ -15,9 +15,9 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
   func application(_ application: UIApplication,
                    didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
     let config = SDKConfig(appId: "your-app-id",
-                           apiBaseUrl: ProcessInfo.processInfo.environment["API_BASE"] ?? "http://localhost:4000/api/v1",
-                           apiKey: ProcessInfo.processInfo.environment["API_KEY"],
-                           testMode: true)
+                 apiBaseUrl: ProcessInfo.processInfo.environment["API_BASE"] ?? "https://api.apexmediation.ee/api/v1",
+                 apiKey: ProcessInfo.processInfo.environment["API_KEY"],
+                 testMode: true)
     ApexMediation.shared.initialize(config: config) { ok in
       // SDK ready
     }
@@ -70,6 +70,7 @@ Impressions are auto‑fired at playback start; clicks are reported by calling `
 - The SDK uses S2S auction (`/rtb/bid`) and signed tokens for delivery and tracking.
 - Runs on tvOS 14+.
 - For staging/dev, ensure your backend is reachable by the device or simulator.
+- Default API base is the droplet staging endpoint (`https://api.apexmediation.ee/api/v1`); override via `API_BASE` for other environments.
 
 5. Troubleshooting
 - 401 Unauthorized: provide an API key (Bearer) or ensure backend allows your origin/host.

@@ -18,10 +18,10 @@ Ensure your app declares INTERNET permission and, for dev over http, cleartext p
 
 ```kotlin
 val config = com.rivalapexmediation.ctv.SDKConfig(
-    appId = "your-app-id",
-    apiBaseUrl = System.getenv("API_BASE") ?: "http://localhost:4000/api/v1",
-    apiKey = System.getenv("API_KEY"),
-    testMode = true,
+  appId = "your-app-id",
+  apiBaseUrl = System.getenv("API_BASE") ?: "https://api.apexmediation.ee/api/v1",
+  apiKey = System.getenv("API_KEY"),
+  testMode = true,
 )
 com.rivalapexmediation.ctv.ApexMediation.initialize(applicationContext, config) { ok ->
     // ready
@@ -72,3 +72,4 @@ Impressions are auto‑fired at first frame; clicks are handled via the signed U
 - The SDK uses S2S auction (`/rtb/bid`) and signed tokens for delivery and tracking.
 - OTA config is fetched best‑effort on init; local config remains valid if remote fails.
 - Size budget: ≤ 1MB AAR; R8 is enabled in release.
+- Default API base is the droplet staging endpoint (`https://api.apexmediation.ee/api/v1`); override via `API_BASE` for other environments.

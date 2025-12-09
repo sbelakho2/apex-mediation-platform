@@ -3,6 +3,7 @@
 @preconcurrency import UIKit
 
 /// Coordinates ad presentations to guarantee main-thread execution and prevent overlapping shows.
+@available(iOSApplicationExtension, unavailable)
 @MainActor
 final class AdPresentationCoordinator {
     struct Token: Equatable {

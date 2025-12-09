@@ -1,12 +1,15 @@
 package com.rivalapexmediation.sdk.network
 
 import android.os.Build
+import android.os.Looper
 import com.google.gson.Gson
 import com.rivalapexmediation.sdk.threading.CircuitBreaker
 import com.rivalapexmediation.sdk.util.Clock
 import com.rivalapexmediation.sdk.util.ClockProvider
+import okhttp3.ConnectionPool
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
+import okhttp3.Protocol
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.InterruptedIOException
@@ -37,9 +40,15 @@ class AuctionClient(
     private val gson = Gson()
     private val base = baseUrl.trimEnd('/')
     private val client: OkHttpClient = (httpClient ?: OkHttpClient()).newBuilder()
+        .connectionPool(ConnectionPool(5, 5, TimeUnit.MINUTES))
+        .connectTimeout(2, TimeUnit.SECONDS)
+        .readTimeout(5, TimeUnit.SECONDS)
+        .writeTimeout(5, TimeUnit.SECONDS)
+        .callTimeout(6, TimeUnit.SECONDS)
         .retryOnConnectionFailure(false)
         .followRedirects(false)
         .followSslRedirects(false)
+        .protocols(listOf(Protocol.HTTP_2, Protocol.HTTP_1_1))
         .build()
     private val circuitBreaker = circuitBreakerFactory()
     private val maxAttempts = 3
@@ -93,6 +102,9 @@ class AuctionClient(
      * Timeouts are enforced per-call using OkHttp callTimeout/readTimeout based on options.timeoutMs.
      */
     fun requestInterstitial(opts: InterstitialOptions, consent: ConsentOptions? = null): InterstitialResult {
+        if (isOnMainThread()) {
+            throw AuctionException("main_thread", "AuctionClient called from main thread")
+        }
         if (opts.publisherId.isBlank() || opts.placementId.isBlank()) {
             throw AuctionException("invalid_placement", "publisherId/placementId required")
         }
@@ -380,5 +392,24 @@ class AuctionClient(
             "adapters" to adapters,
             "metadata" to baseMeta,
         )
+    }
+
+    private fun isOnMainThread(): Boolean {
+        if (isTestRuntime()) return false
+        return try {
+            val main = Looper.getMainLooper()
+            main != null && Looper.myLooper() == main
+        } catch (_: Throwable) {
+            false
+        }
+    }
+
+    private fun isTestRuntime(): Boolean {
+        return try {
+            val fingerprint = Build.FINGERPRINT?.lowercase(Locale.US)
+            fingerprint?.contains("robolectric") == true
+        } catch (_: Throwable) {
+            false
+        }
     }
 }

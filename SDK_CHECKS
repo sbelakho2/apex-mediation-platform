@@ -78,42 +78,51 @@ iOS (crash-shielded)
 	- Where: MediationSDK.kt#setupStrictMode() already present—enforce in CI
 	- How to verify: CI runs espresso/robolectric with StrictMode penaltyDeath; no violations
 	- (Why) ANRs crush ratings; ad SDKs are frequent offenders.
+	- Status (2025-12-09): Need to confirm `penaltyDeath()` is enabled in debug StrictMode and main-thread guards exist on AuctionClient entry points; add CI test to fail on violations.
 - [ ] OkHttp client tuned (connection pool 5–10, connect/read 2s/5s, HTTP/2 ON, gzip, TLS1.2+)
 	- Where: AuctionClient.kt
 	- How to verify: Telemetry shows p95 connect < 200ms; retries bounded; no SSL handshake regressions
 	- (Why) Tail latency & battery.
+	- Status (2025-12-09): Centralize OkHttpClient builder with 2s connect / 5s read/write, HTTP/2 allowed, connectionPool(5,5m); add latency telemetry target p95<200ms.
 - [ ] Timeouts & hedged requests (already in backend—mirror in SDK if client-HB used)
 	- Where: loadWithCircuitBreaker(), fallback paths
 	- How to verify: Inject test delays; observe hedged winner; no deadline overrun
 	- (Why) Don’t stall auctions on a single slow adapter.
+	- Status (2025-12-09): Ensure per-placement deadline enforced on adapter futures and circuit breaker wraps each adapter; hedging remains backend-only for now.
 - [ ] R8/Proguard keep rules for callback interfaces / parcelables
 	- Where: consumer-proguard.pro template
 	- How to verify: Release build retains needed classes; no reflection breakages
 	- (Why) Obfuscation commonly breaks partner callbacks.
+	- Status (2025-12-09): Add/verify consumer-proguard rules for public API, adapters (reflection), enums, parcelables; run release build smoke test.
 - [ ] Process death & Activity recreation safety
 	- Where: InterstitialController, SavedStateHandle or idempotent resume
 	- How to verify: Kill & rotate during show; no leaks, no duplicate callbacks
 	- (Why) Real-world lifecycle churn.
+	- Status (2025-12-09): Ensure controllers hold WeakReference<Activity>, guard duplicate callbacks, survive rotation via retained instance/ViewModel; add rotation/background instrumentation test.
 
 ### iOS (crash-shielded)
 - [ ] Main-actor boundary only for UI; networking on background
 	- Where: MediationSDK.swift (async/await), URLSession configuration
 	- How to verify: Instruments shows zero main-thread stalls > 16ms on network ops
 	- (Why) Responsiveness & energy.
+	- Status (2025-12-09): MediationSDK remains a @MainActor facade; ConfigManager/AdapterRegistry/HTTP clients kept non-actor with URLSession tuned (waitsForConnectivity, 5s/10s timeouts, reloadIgnoring cache). initialize/loadAd hop to Task.detached for config fetch + adapter loads, then assign results back on main. Need Instruments pass to confirm <16ms main-thread stalls.
 - [ ] App extension / background safe guards
 	- Where: Availability checks; no using APIs unavailable in extensions
 	- How to verify: Build app extension target → no linker errors
 	- (Why) Prevent integration traps.
+	- Status (2025-12-09): App-only APIs (UIApplication notifications/lifecycle helpers) marked @available(iOSApplicationExtension, unavailable) and wrapped with #if !APP_EXTENSION / UIKit checks. Next: compile sample extension target against SDK to confirm no missing symbol/linker errors.
 - [ ] WKWebView memory pressure handling for rich media
 	- Where: Ad view layer; reclaim on UIApplication.didReceiveMemoryWarning
 	- How to verify: Stress test; no SIGKILL (jetsam)
 	- (Why) Heavy creatives.
+	- Status (2025-12-09): Added RichMediaAdView wrapper around WKWebView (inline media, scroll disabled) that observes didReceiveMemoryWarning, stops loading, clears HTML, and cleans delegates on deinit; not wired by default. Pending: simulator/device memory-warning test with heavy creative to confirm no jetsam.
 
 ### Unity
 - [ ] IL2CPP & Mono compatibility
 	- Where: Runtime/Plugins/ meta; conditional compilation symbols
 	- How to verify: CI builds for Android/iOS; sample scene runs; threading is native-safe
 	- (Why) Many SDKs break on IL2CPP differences.
+	- Status (2025-12-09): Confirm Plugins/Android+iOS import settings, IL2CPP-safe bindings (no reflection/dynamic); ensure callbacks marshal to Unity main thread; need CI batchmode build for Android/iOS sample scene.
 
 ## 5) Adapter runtime (BYO boundary) — correctness without shipping vendor SDKs
 
@@ -216,6 +225,7 @@ iOS (crash-shielded)
 	- Where: CTV SDK + console device matrices
 	- How to verify: QA on Fire TV / tvOS; scaling & audio focus correct
 	- (Why) Platform quirks common.
+	- Status (2025-12-09): tvOS and Android TV defaults now point to droplet staging API (`https://api.apexmediation.ee/api/v1`); unit tests green (`cd sdk/ctv/tvos && xcodebuild test -scheme CTVSDK -destination "platform=tvOS Simulator,name=Apple TV 4K (3rd generation)" -sdk appletvsimulator`, `cd sdk/ctv/android-tv && ../core/android/.gradle-dist/gradle-8.7/bin/gradle testDebugUnitTest`). QA on device matrix still pending.
 
 ## 11) Observability & runbooks (for a one-person team)
 

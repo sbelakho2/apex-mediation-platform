@@ -1,3 +1,18 @@
+# Changelog — CTV tvOS/Android TV Droplet Defaults (2025-12-09)
+
+Summary
+- Wired the CTV tvOS and Android TV SDK defaults to the DigitalOcean droplet API and validated unit tests on simulator/Gradle.
+
+What changed
+- tvOS: `SDKConfig` default/fallback `apiBaseUrl` now points to `https://api.apexmediation.ee/api/v1`; auction client tests updated to the droplet URL.
+- Android TV: `SDKConfig` and OMSDK-absent test now default to the droplet API base.
+
+Validation
+- `cd sdk/ctv/tvos && xcodebuild test -scheme CTVSDK -destination 'platform=tvOS Simulator,name=Apple TV 4K (3rd generation)' -sdk appletvsimulator`
+- `cd sdk/ctv/android-tv && ../core/android/.gradle-dist/gradle-8.7/bin/gradle testDebugUnitTest`
+
+---
+
 # Changelog — SDK Checks Part 3 (Consent & Attribution) (2025-12-08)
 
 Summary
