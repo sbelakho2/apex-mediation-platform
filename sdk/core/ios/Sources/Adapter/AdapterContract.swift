@@ -23,11 +23,15 @@ public enum PartnerRegion: String, Codable, Sendable {
 
 /// Normalized privacy metadata forwarded to vendors.
 public struct ConsentState: Codable, Equatable, Sendable {
+    public let gdprApplies: Bool?
     public let iabTCFv2: String?
     public let iabUSPrivacy: String?
     public let coppa: Bool
     public let attStatus: ATTStatus
     public let limitAdTracking: Bool
+    public let privacySandboxOptIn: Bool?
+    public let advertisingId: String?
+    public let appSetId: String?
 }
 
 public enum ATTStatus: String, Codable, Sendable {
@@ -53,6 +57,8 @@ public struct DeviceMeta: Codable, Equatable, Sendable {
 public struct UserMeta: Codable, Equatable, Sendable {
     public let ageRestricted: Bool
     public let consent: ConsentState
+    public let advertisingId: String?
+    public let appSetId: String?
 }
 
 public struct NetworkMeta: Codable, Equatable, Sendable {

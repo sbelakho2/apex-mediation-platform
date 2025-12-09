@@ -397,11 +397,17 @@ private actor MediationRuntime {
                     adType: placement.adType,
                     networkName: networkName,
                     latency: latency,
-                    success: true
+                    success: true,
+                    metadata: consentTelemetryMetadata()
                 )
                 return ad
             } catch let adapterError as AdapterError where adapterError.code == .timeout {
-                telemetry?.recordTimeout(placement: placementId, adType: placement.adType, reason: "adapter_timeout")
+                telemetry?.recordTimeout(
+                    placement: placementId,
+                    adType: placement.adType,
+                    reason: "adapter_timeout",
+                    metadata: consentTelemetryMetadata()
+                )
             } catch {
                 let latency = Int(clock.monotonicMillis() - startMs)
                 telemetry?.recordAdLoad(
@@ -409,9 +415,10 @@ private actor MediationRuntime {
                     adType: placement.adType,
                     networkName: networkName,
                     latency: latency,
-                    success: false
+                    success: false,
+                    metadata: consentTelemetryMetadata()
                 )
-                telemetry?.recordError(errorCode: "adapter_failure", error: error)
+                telemetry?.recordError(errorCode: "adapter_failure", error: error, metadata: consentTelemetryMetadata())
             }
         }
 
@@ -420,9 +427,16 @@ private actor MediationRuntime {
             adType: placement.adType,
             networkName: "none",
             latency: 0,
-            success: false
+            success: false,
+            metadata: consentTelemetryMetadata()
         )
         return nil
+    }
+
+    private func consentTelemetryMetadata() -> [String: String]? {
+        let summary = consentManager.getRedactedConsentInfo()
+        if summary.isEmpty { return nil }
+        return summary.mapValues { String(describing: $0) }
     }
 
     func shutdown() -> SDKSnapshot {

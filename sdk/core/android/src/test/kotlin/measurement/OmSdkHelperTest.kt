@@ -17,15 +17,39 @@ import org.robolectric.RobolectricTestRunner
 class OmSdkHelperTest {
     private lateinit var appContext: Context
 
+    private fun setHelperField(name: String, value: Any?) {
+        val field = OmSdkHelper::class.java.getDeclaredField(name)
+        field.isAccessible = true
+        field.set(OmSdkHelper, value)
+    }
+
     @Before
     fun setup() {
         appContext = ApplicationProvider.getApplicationContext()
         TestOmidRecorder.reset()
+        setHelperField("initialized", false)
+        setHelperField("sdkAvailable", false)
+        setHelperField("partner", null)
     }
 
     @After
     fun teardown() {
         TestOmidRecorder.reset()
+        setHelperField("initialized", false)
+        setHelperField("sdkAvailable", false)
+        setHelperField("partner", null)
+    }
+
+    @Test
+    fun startSession_returnsNull_whenOmSdkUnavailable() {
+        // Simulate missing OMSDK classes and ensure helper no-ops safely.
+        setHelperField("initialized", true)
+        setHelperField("sdkAvailable", false)
+        setHelperField("partner", null)
+
+        val handle = OmSdkHelper.startSession(View(appContext), isVideo = false)
+
+        assertEquals(null, handle)
     }
 
     @Test

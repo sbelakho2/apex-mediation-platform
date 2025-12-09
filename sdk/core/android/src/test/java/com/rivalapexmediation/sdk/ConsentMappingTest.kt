@@ -12,7 +12,7 @@ class ConsentMappingTest {
     @Test
     fun normalize_trims_strings_and_accepts_nulls() {
         val s = ConsentManager.normalize(tcf = "  BOJObISOJObISAABAAENAA4AAAAA  ", usp = " 1YNN ")
-        assertEquals("BOJObISOJObISAABAAENAA4AAAAA", s.consentString)
+        assertEquals("BOJObISOJObISAABAAENAA4AAAAA", s.tcfString)
         assertEquals("1YNN", s.usPrivacy)
     }
 
@@ -20,7 +20,7 @@ class ConsentMappingTest {
     fun toRuntimeConsent_maps_flags_and_identifiers() {
         val state = ConsentManager.State(
             gdprApplies = true,
-            consentString = "BOJObISOJObISAABAAENAA4AAAAA",
+            tcfString = "BOJObISOJObISAABAAENAA4AAAAA",
             usPrivacy = "1YNN",
             coppa = false,
             limitAdTracking = false,

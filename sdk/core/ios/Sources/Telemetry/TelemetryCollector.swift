@@ -75,7 +75,7 @@ public class TelemetryCollector: @unchecked Sendable {
     }
     
     /// Record ad load event
-    public func recordAdLoad(placement: String, adType: AdType, networkName: String, latency: Int, success: Bool) {
+    public func recordAdLoad(placement: String, adType: AdType, networkName: String, latency: Int, success: Bool, metadata: [String: String]? = nil) {
         let eventType: EventType = success ? .adLoaded : .adFailed
         recordEvent(
             TelemetryEvent(
@@ -83,7 +83,8 @@ public class TelemetryCollector: @unchecked Sendable {
                 placement: placement,
                 adType: adType,
                 networkName: networkName,
-                latency: latency
+                latency: latency,
+                metadata: metadata
             )
         )
     }
@@ -113,28 +114,34 @@ public class TelemetryCollector: @unchecked Sendable {
     }
     
     /// Record timeout event
-    public func recordTimeout(placement: String, adType: AdType, reason: String) {
+    public func recordTimeout(placement: String, adType: AdType, reason: String, metadata: [String: String]? = nil) {
         recordEvent(
             TelemetryEvent(
                 eventType: .timeout,
                 placement: placement,
                 adType: adType,
-                metadata: ["reason": reason]
+                metadata: {
+                    var meta = metadata ?? [:]
+                    meta["reason"] = reason
+                    return meta
+                }()
             )
         )
     }
     
     /// Record error event
-    public func recordError(errorCode: String, error: Error) {
+    public func recordError(errorCode: String, error: Error, metadata: [String: String]? = nil) {
         recordEvent(
             TelemetryEvent(
                 eventType: .adFailed,
                 errorCode: errorCode,
                 errorMessage: error.localizedDescription,
-                metadata: [
-                    "error_domain": (error as NSError).domain,
-                    "error_code": String((error as NSError).code)
-                ]
+                metadata: {
+                    var meta = metadata ?? [:]
+                    meta["error_domain"] = (error as NSError).domain
+                    meta["error_code"] = String((error as NSError).code)
+                    return meta
+                }()
             )
         )
     }

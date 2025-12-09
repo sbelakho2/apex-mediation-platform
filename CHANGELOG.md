@@ -1,3 +1,35 @@
+# Changelog — SDK Checks Part 3 (Consent & Attribution) (2025-12-08)
+
+Summary
+- Completed SDK_CHECKS Part 3: consent propagation end-to-end and attribution bridges on Android/iOS.
+
+What changed
+- Android: Consent payload now carries `gdprApplies`/TCF/USP/COPPA/LAT into runtime adapters and telemetry (redacted). Added reflection-based `AttributionBridge` to register Privacy Sandbox sources/triggers when AdServices is present, safe no-op otherwise.
+- iOS: Consent contract mirrored (`gdprApplies`, LAT) and telemetry now includes redacted consent snapshot. Added `AdAttributionBridge` that prefers AdAttributionKit when available and falls back to SKAdNetwork; facades now route impressions through the bridge.
+- Docs: SDK_CHECKS updated to mark Part 3 complete; Android/iOS dev kit docs note consent/attribution flows.
+
+Validation
+- `cd sdk/core/android && ./gradlew.sh testDebugUnitTest`
+- `cd sdk/core/ios && swift test --parallel`
+
+---
+
+# Changelog — OMSDK Coverage Hardening (2025-12-08)
+
+Summary
+- Added regression coverage for OMSDK absence on Android core and CTV modules; ensured helper state resets between tests to avoid cross-test leakage.
+
+What changed
+- Android: `OmSdkHelperTest` now resets helper state and asserts `startSession` cleanly no-ops when OMSDK classes are missing.
+- Android TV: Added `OmSdkAbsentTest` to confirm CTV SDK initialization succeeds when OMSDK/OMID classes are not present (BYO baseline).
+- Assets: Confirmed OMSDK test artifacts are present under `sdk/core/android/Vendor/OMSDK` and `sdk/core/ios/Vendor/OMSDK`; no production bundling changes.
+
+Validation
+- `cd sdk/core/android && ./gradlew.sh testDebugUnitTest strictmode-sample:testDebugUnitTest`
+- `cd sdk/ctv/android-tv && ../core/android/.gradle-dist/gradle-8.7/bin/gradle testDebugUnitTest`
+
+---
+
 # Changelog — OM SDK Helpers & Flag (2025-12-08)
 
 Summary

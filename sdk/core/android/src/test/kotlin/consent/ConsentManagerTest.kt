@@ -16,7 +16,7 @@ class ConsentManagerTest {
             coppa = null,
             limitAdTracking = null,
         )
-        assertNull(s.consentString)
+            assertNull(s.tcfString)
         assertNull(s.usPrivacy)
         assertNull(s.gdprApplies)
     }
@@ -30,7 +30,7 @@ class ConsentManagerTest {
             coppa = false,
             limitAdTracking = true,
         )
-        assertEquals("TCF_V2", s.consentString)
+            assertEquals("TCF_V2", s.tcfString)
         assertEquals("1YNN", s.usPrivacy)
         assertEquals(true, s.gdprApplies)
         assertEquals(false, s.coppa)
@@ -106,7 +106,7 @@ class ConsentManagerTest {
     fun toRuntimeConsent_carriesGlobalPrivacyStrings() {
         val state = ConsentManager.State(
             gdprApplies = true,
-            consentString = "tc",
+            tcfString = "tc",
             usPrivacy = "1YNN",
             coppa = true,
             limitAdTracking = true,
@@ -126,5 +126,45 @@ class ConsentManagerTest {
         assertTrue(runtime.limitAdTracking)
         assertEquals("gaid-1", runtime.advertisingId)
         assertEquals("set-2", runtime.appSetId)
+    }
+
+    @Test
+    fun auctionMeta_maps_all_flags_and_strings() {
+        val state = ConsentManager.State(
+            gdprApplies = false,
+            tcfString = "BOJObISOJObISAABAAENAA4AAAAA",
+            usPrivacy = "1YNN",
+            coppa = true,
+            limitAdTracking = false,
+            privacySandboxOptIn = true
+        )
+
+        val meta = ConsentManager.toAuctionMeta(state)
+
+        assertEquals(mapOf(
+            "gdpr_applies" to "0",
+            "gdpr_consent" to "BOJObISOJObISAABAAENAA4AAAAA",
+            "us_privacy" to "1YNN",
+            "coppa" to "1",
+            "limit_ad_tracking" to "0",
+            "privacy_sandbox" to "1"
+        ), meta)
+    }
+
+    @Test
+    fun debugSummary_redacts_tcf_string_presence_only() {
+        val state = ConsentManager.State(
+            gdprApplies = true,
+            tcfString = "BOJObISOJObISAABAAENAA4AAAAA",
+            usPrivacy = "1YNN",
+            coppa = false,
+            limitAdTracking = true
+        )
+
+        val summary = ConsentManager.debugSummary(state)
+
+        assertEquals(true, summary["has_tcf_string"])
+        assertEquals("1YNN", summary["us_privacy"])
+        assertFalse("raw tcf string must not appear", summary.values.contains(state.tcfString))
     }
 }

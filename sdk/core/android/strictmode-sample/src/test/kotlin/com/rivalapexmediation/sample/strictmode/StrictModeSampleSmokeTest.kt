@@ -27,7 +27,7 @@ import java.util.concurrent.TimeUnit
  * Confirms SDK public flows keep blocking I/O off the main thread.
  */
 @RunWith(RobolectricTestRunner::class)
-@Config(application = StrictModeSampleApp::class)
+@Config(application = StrictModeSampleApp::class, manifest = Config.NONE)
 class StrictModeSampleSmokeTest {
     private lateinit var server: MockWebServer
 

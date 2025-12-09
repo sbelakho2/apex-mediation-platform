@@ -37,7 +37,7 @@
 	- Where: sdk/*/viewability/OmSdkHelper.*
 	- How to verify: Start/finish sessions per impression; friendly obstructions list; no leaks in teardown
 	- (Why) Verification vendors rely on OM SDK; must not crash/ANR.
-	- Status (2025-12-08): Reflection-only helpers across Android/iOS/Unity. Android: `measurement/OmSdkHelper` + `OmSdkSessionController` installs when `enableOmSdk` flag is true and OM SDK is bundled; Robolectric smoke test (`sdk/core/android/src/test/kotlin/measurement/OmSdkHelperTest.kt` with stubbed `com.iab.omid.*` classes) exercises start/register friendly obstructions/events/finish. iOS: `MediationRuntime.installOmSdkIfAvailable` honors `enableOmSdk` and records `omsdk_status` telemetry (`enabled`/`missing_sdk_byo`/`disabled_byo`). Unity: `ApexConfig.EnableOmSdk` (default false) plus runtime start/finish via `OmSdkBridge` gated by availability; traces emit OMSDK status. No vendor binaries are bundled in production; test-only fetch script added at `sdk/scripts/fetch-omsdk-test.sh` to download OMSDK artifacts when needed.
+	- Status (2025-12-08): Reflection-only helpers across Android/iOS/Unity. Android: `measurement/OmSdkHelper` + `OmSdkSessionController` installs when `enableOmSdk` flag is true and OM SDK is bundled; Robolectric smoke test (`sdk/core/android/src/test/kotlin/measurement/OmSdkHelperTest.kt` with stubbed `com.iab.omid.*` classes) exercises start/register friendly obstructions/events/finish and now asserts safe no-op when OMSDK classes are absent. iOS: `MediationRuntime.installOmSdkIfAvailable` honors `enableOmSdk` and records `omsdk_status` telemetry (`enabled`/`missing_sdk_byo`/`disabled_byo`). Unity: `ApexConfig.EnableOmSdk` (default false) plus runtime start/finish via `OmSdkBridge` gated by availability; traces emit OMSDK status. CTV: `OmSdkAbsentTest` documents BYO baseline (init succeeds when OMSDK missing). No vendor binaries are bundled in production; test-only fetch script added at `sdk/scripts/fetch-omsdk-test.sh` to download OMSDK artifacts when needed.
 
 - [X] Disable-by-default if publisher doesn’t bundle OM SDK (BYO)
 	- Where: Adapter registry feature flag enable_om_sdk
@@ -52,20 +52,23 @@
 
 ## 3) Privacy & attribution (BYO-only—but you must pass signals through)
 
-- [ ] GDPR/CCPA/COPPA/LimitAdTracking propagation
+- [X] GDPR/CCPA/COPPA/LimitAdTracking propagation
 	- Where: SDK consent struct → auction meta → adapter runtime meta
 	- How to verify: Debug panel shows normalized consent; server logs redact PII; unit tests for all matrix combos
 	- (Why) Legal & partner policy compliance.
+	- Status (2025-12-08): Android consent normalized to `tcfString`; auction meta emits `gdpr_consent` / `limit_ad_tracking` / `coppa`; runtime adapters receive `gdprApplies` + normalized LAT/IDs; telemetry spans include redacted consent snapshot; tests green (`cd sdk/core/android && ./gradlew.sh testDebugUnitTest`). iOS adapter contract mirrors `gdprApplies` + LAT/US privacy; telemetry now carries redacted consent snapshot; tests green (`cd sdk/core/ios && swift test --parallel`).
 
-- [ ] Android Privacy Sandbox — Attribution Reporting (adapter-agnostic pass-through)
-	- Where: Android SDK: ConsentManager, AttributionBridge
+- [X] Android Privacy Sandbox — Attribution Reporting (adapter-agnostic pass-through)
+	- Where: Android SDK: `privacy/AttributionBridge`
 	- How to verify: Demo app registers sources/triggers in debug mode; reports visible in ADB log / sandbox UI
 	- (Why) Prepare for GA; don’t block if host doesn’t use it.
+	- Status (2025-12-08): Added reflection-based `AttributionBridge` that safely no-ops on devices without AdServices; BYO apps can call `registerSource`/`registerTrigger` with source/trigger URIs. No runtime dependency on adservices; returns success/fail boolean.
 
-- [ ] iOS AdAttributionKit + SKAN interoperability
-	- Where: iOS: AdAttributionBridge.swift
-	- How to verify: If iOS ≥ 26.2, AAK path; else SKAN. Conversion table present; postbacks observed in sandbox
+- [X] iOS AdAttributionKit + SKAN interoperability
+	- Where: iOS: `Privacy/AdAttributionBridge.swift`
+	- How to verify: If iOS ≥ 17.2 and AdAttributionKit is present, bridge will prefer it; else SKAN. Conversion table present; postbacks observed in sandbox
 	- (Why) AAK is replacing SKAN; keep graceful fallback.
+	- Status (2025-12-08): Added `AdAttributionBridge` that routes impressions through SKAN today and will opportunistically use AdAttributionKit when the framework is available at runtime; facades now call the bridge instead of SKAN directly. SKAN overlay/conversion handling remains via `SKAdNetworkCoordinator`.
 
 iOS (crash-shielded)
 ## 4) SDK runtime stability (the #1 source of tickets in BYO)

@@ -110,25 +110,29 @@ public final class ConsentManager {
     /// Convert consent to metadata for ad requests
     public func toAdRequestMetadata() -> [String: Any] {
         var metadata: [String: Any] = [:]
-        
+
         let consent = getConsent()
+        let limitAdTracking = !canShowPersonalizedAds()
 
         if let gdprApplies = consent.gdprApplies {
             metadata["gdpr"] = gdprApplies ? 1 : 0
+            metadata["gdpr_applies"] = gdprApplies ? 1 : 0
         }
-        
+
         if let consentString = consent.gdprConsentString, !consentString.isEmpty {
             metadata["gdpr_consent"] = consentString
         }
-        
+
         if let usp = normalizedUsPrivacyString(consent) {
             metadata["us_privacy"] = usp
         }
-        
+
         if consent.coppa {
             metadata["coppa"] = 1
         }
-        
+
+        metadata["limit_ad_tracking"] = limitAdTracking ? 1 : 0
+
         return metadata
     }
     
@@ -136,18 +140,26 @@ public final class ConsentManager {
     public func toAdapterConsentPayload(attStatusProvider: () -> ATTStatus = { .notDetermined }) -> [String: Any] {
         let consent = getConsent()
         let usPrivacy = normalizedUsPrivacyString(consent)
-        let consentState = ConsentState(
+        let limitAdTracking = !canShowPersonalizedAds()
+            let consentState = ConsentState(
+            gdprApplies: consent.gdprApplies,
             iabTCFv2: consent.gdprConsentString,
             iabUSPrivacy: usPrivacy,
             coppa: consent.coppa,
             attStatus: attStatusProvider(),
-            limitAdTracking: !canShowPersonalizedAds()
+            limitAdTracking: limitAdTracking,
+            privacySandboxOptIn: nil,
+            advertisingId: nil,
+            appSetId: nil
         )
         var payload: [String: Any] = [
             "coppa": consentState.coppa,
             "att_status": consentState.attStatus.rawValue,
             "limit_ad_tracking": consentState.limitAdTracking
         ]
+        if let applies = consentState.gdprApplies {
+            payload["gdpr_applies"] = applies ? 1 : 0
+        }
         if let tcf = consentState.iabTCFv2, !tcf.isEmpty {
             payload["iab_tcf_v2"] = tcf
         }

@@ -4,6 +4,7 @@ Current state (2025-12-08):
 - No CTV OM SDK integration is shipped today; the SDK does **not** load or link any CTV OMID binaries.
 - Placeholder feature flag only: `features.ctv_om_sdk` (reserved) so Console/Config can surface "Planned / Not active" without behavioral impact.
 - Device attestation (IAB/OMID for CTV) is under vendor evaluation; do not enable until standards and major vendors converge.
+- Regression test `OmSdkAbsentTest` covers the BYO baseline: initialization succeeds and remains crash-free when OMSDK classes are missing.
 
 Planned shape (once vendor support lands):
 - Mirror mobile `OmSdkHelper` design: runtime detection via reflection, start/finish per impression, and friendly-obstruction guards.

@@ -65,7 +65,7 @@ public enum BelAppOpen {
             }
             lastShowMonotonic = Clock.shared.monotonicSeconds()
             listener?.onAdShown(placementId: placement)
-            SKAdNetworkCoordinator.shared.recordImpression(
+            AdAttributionBridge.shared.recordImpression(
                 for: ad,
                 presentingScene: viewController.view.window?.windowScene
             )

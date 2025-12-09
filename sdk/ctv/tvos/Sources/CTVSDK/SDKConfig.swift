@@ -9,7 +9,7 @@ public struct SDKConfig: Equatable {
     public let configPublicKeyPem: String?
 
     public init(appId: String,
-                apiBaseUrl: String = "http://localhost:4000/api/v1",
+                apiBaseUrl: String = "https://api.apexmediation.ee/api/v1",
                 apiKey: String? = nil,
                 testMode: Bool = false,
                 requestTimeoutMs: Int = 5000,

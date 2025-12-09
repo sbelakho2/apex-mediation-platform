@@ -22,6 +22,28 @@ public final class SystemClock: ClockProtocol {
 }
 
 /// Shared clock instance, overrideable in tests.
+@preconcurrency
 public enum Clock {
-    public static var shared: ClockProtocol = SystemClock()
+    public static var shared: ClockProtocol {
+        get { store.get() }
+        set { store.set(newValue) }
+    }
+
+    private static let store = ClockStore()
+}
+
+private final class ClockStore: @unchecked Sendable {
+    private let lock = NSLock()
+    private var clock: ClockProtocol = SystemClock()
+
+    func get() -> ClockProtocol { lock.withLock { clock } }
+    func set(_ value: ClockProtocol) { lock.withLock { clock = value } }
+}
+
+private extension NSLock {
+    func withLock<T>(_ body: () -> T) -> T {
+        lock()
+        defer { unlock() }
+        return body()
+    }
 }

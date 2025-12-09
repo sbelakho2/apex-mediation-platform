@@ -53,10 +53,10 @@ public enum BelInterstitial {
                 return
             }
             listener?.onAdShown(placementId: placement)
-            SKAdNetworkCoordinator.shared.recordImpression(
-                for: ad,
-                presentingScene: viewController.view.window?.windowScene
-            )
+                AdAttributionBridge.shared.recordImpression(
+                    for: ad,
+                    presentingScene: viewController.view.window?.windowScene
+                )
             presentDebugPlaceholder(from: viewController, networkName: ad.networkName) {
                 AdPresentationCoordinator.shared.finishPresentation(presentationToken)
                 listener?.onAdClosed(placementId: placement)

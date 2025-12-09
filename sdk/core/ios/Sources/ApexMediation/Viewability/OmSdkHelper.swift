@@ -1,3 +1,4 @@
+#if canImport(UIKit)
 import Foundation
 import UIKit
 
@@ -7,7 +8,7 @@ private enum OmSdkState {
 }
 
 /// Reflection-only helper for OM SDK. Safe to ship when the host app does not include OMSDK.
-public final class OmSdkHelper {
+public final class OmSdkHelper: @unchecked Sendable {
     public static let shared = OmSdkHelper()
 
     private let lock = NSLock()
@@ -29,11 +30,11 @@ public final class OmSdkHelper {
         lock.withLock {
             guard case .unavailable = state else { return isAvailable }
 
-            guard let sdkClass = OmSdkHelper.class(firstAvailable: ["OMIDApexSDK", "OMIDSDK"]) as? NSObject.Type else {
+            guard let sdkClass = OmSdkHelper.classType(firstAvailable: ["OMIDApexSDK", "OMIDSDK"]) as? NSObject.Type else {
                 state = .unavailable
                 return false
             }
-            guard let partnerClass = OmSdkHelper.class(firstAvailable: ["OMIDApexPartner", "OMIDPartner"]) as? NSObject.Type else {
+            guard let partnerClass = OmSdkHelper.classType(firstAvailable: ["OMIDApexPartner", "OMIDPartner"]) as? NSObject.Type else {
                 state = .unavailable
                 return false
             }
@@ -62,9 +63,9 @@ public final class OmSdkHelper {
         let snapshot = lock.withLock { state }
         guard case let .initialized(partner, _) = snapshot else { return nil }
 
-        guard let adSessionClass = OmSdkHelper.class(firstAvailable: ["OMIDAdSession"]) as? NSObject.Type,
-              let configClass = OmSdkHelper.class(firstAvailable: ["OMIDAdSessionConfiguration"]) as? NSObject.Type,
-              let contextClass = OmSdkHelper.class(firstAvailable: ["OMIDAdSessionContext"]) as? NSObject.Type else { return nil }
+          guard let adSessionClass = OmSdkHelper.classType(firstAvailable: ["OMIDAdSession"]) as? NSObject.Type,
+              let configClass = OmSdkHelper.classType(firstAvailable: ["OMIDAdSessionConfiguration"]) as? NSObject.Type,
+              let contextClass = OmSdkHelper.classType(firstAvailable: ["OMIDAdSessionContext"]) as? NSObject.Type else { return nil }
 
         let config = OmSdkHelper.makeConfiguration(configClass: configClass, isVideo: isVideo)
         let context = OmSdkHelper.makeContext(contextClass: contextClass, partner: partner, adView: adView)
@@ -85,7 +86,7 @@ public final class OmSdkHelper {
 }
 
 private extension OmSdkHelper {
-    static func class(firstAvailable names: [String]) -> AnyClass? {
+    static func classType(firstAvailable names: [String]) -> AnyClass? {
         for name in names {
             if let klass = NSClassFromString(name) {
                 return klass
@@ -170,13 +171,32 @@ private extension OmSdkHelper {
     }
 
     static func fireEventsIfPossible(adSession: AnyObject) {
-        guard let adEventsClass = class(firstAvailable: ["OMIDAdEvents"]) as? NSObject.Type else { return }
+        guard let adEventsClass = classType(firstAvailable: ["OMIDAdEvents"]) as? NSObject.Type else { return }
         if let events = adEventsClass.perform(NSSelectorFromString("adEventsWithAdSession:"), with: adSession)?.takeUnretainedValue() {
             _ = (events as AnyObject).perform(NSSelectorFromString("loaded"))
             _ = (events as AnyObject).perform(NSSelectorFromString("impressionOccurred"))
         }
     }
 }
+
+#else
+import Foundation
+
+/// Stub OMSDK helper for platforms without UIKit (e.g., macOS SwiftPM tests).
+public final class OmSdkHelper: @unchecked Sendable {
+    public static let shared = OmSdkHelper()
+    public var isAvailable: Bool { false }
+
+    @discardableResult
+    public func initializeIfAvailable(partnerName: String = "ApexMediation", version: String = "1.0.0") -> Bool { false }
+
+    public struct SessionHandle { let adSession: AnyObject }
+
+    public func startSession(adView: AnyObject, isVideo: Bool, friendlyObstructions: [AnyObject] = []) -> SessionHandle? { nil }
+    public func finishSession(_ handle: SessionHandle?) { }
+}
+
+#endif
 
 private extension NSLock {
     func withLock<T>(_ body: () -> T) -> T {

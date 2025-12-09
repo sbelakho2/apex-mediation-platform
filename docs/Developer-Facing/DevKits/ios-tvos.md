@@ -7,6 +7,7 @@ Key guarantees
 - Core SDK Release artifacts contain no vendor SDKs or adapters by default.
 - Single-point entry (`MediationSDK.initialize`) and simple consent remain unchanged.
 - Sandbox/test code is gated (`#if DEBUG || APEX_SANDBOX_ADAPTERS`) and excluded from Release.
+- Privacy & attribution: consent snapshot normalized (gdprApplies/TCF/USP/COPPA/LAT) flows into adapters + telemetry; attribution path uses `AdAttributionBridge` (prefers AdAttributionKit when present, falls back to SKAdNetwork).
 
 Adapter interface (from `RivalApexMediationSDK`)
 ```swift

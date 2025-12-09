@@ -5,7 +5,7 @@ package com.rivalapexmediation.ctv
  */
 data class SDKConfig(
     val appId: String,
-    val apiBaseUrl: String = "http://localhost:4000/api/v1",
+    val apiBaseUrl: String = "https://api.apexmediation.ee/api/v1",
     val apiKey: String? = null,
     val testMode: Boolean = false,
     val requestTimeoutMs: Int = 5000,

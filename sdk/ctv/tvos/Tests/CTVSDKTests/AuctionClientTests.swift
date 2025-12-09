@@ -13,7 +13,7 @@ final class AuctionClientTests: XCTestCase {
         let cfg = URLSessionConfiguration.ephemeral
         cfg.protocolClasses = [MockURLProtocol.self]
         session = URLSession(configuration: cfg)
-        config = SDKConfig(appId: "app-1", apiBaseUrl: "http://localhost:4000/api/v1")
+        config = SDKConfig(appId: "app-1", apiBaseUrl: "https://api.apexmediation.ee/api/v1")
     }
 
     override func tearDown() {

@@ -7,6 +7,7 @@ Key guarantees
 - Core Release artifacts ship with no vendor adapters; discovery is gated to DEBUG or `apex.sandbox.adapters=1`.
 - Single entry (`MediationSDK.initialize(...)`) and simple consent are preserved.
 - Sandbox/test logic is separate from production artifacts.
+- Privacy & attribution: consent snapshot normalized to `gdprApplies`/TCF/USP/COPPA/LAT and forwarded to adapters + telemetry; Privacy Sandbox Attribution Reporting exposed via `AttributionBridge` (reflection-based, safe no-op when AdServices is absent) for BYO demos.
 
 Runtime registration (BYO)
 ```kotlin

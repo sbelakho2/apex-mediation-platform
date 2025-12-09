@@ -1196,6 +1196,10 @@ class MediationSDK private constructor(
         meta["sdk_mode"] = config.sdkMode.name.lowercase()
         meta["test_mode"] = if (isTestModeEffective()) "1" else "0"
         if (config.validationModeEnabled) meta["validation_mode"] = "1"
+        // Attach redacted consent snapshot for adapter/runtime telemetry (no IDs or full strings).
+        ConsentManager.debugSummary(consentState).forEach { (k, v) ->
+            meta["consent_$k"] = v ?: "null"
+        }
         for ((k, v) in extra) {
             meta[k] = v
         }

@@ -79,10 +79,10 @@ class UmpConsentClient(private val activity: Activity) {
             else -> stored.gdprApplies
         }
         val limitAdTracking = stored.limitAdTracking
-        val consentString = readConsentString(consentInfo) ?: stored.consentString
+        val consentString = readConsentString(consentInfo) ?: stored.tcfString
         return stored.copy(
             gdprApplies = gdprApplies,
-            consentString = consentString,
+            tcfString = consentString,
             limitAdTracking = limitAdTracking
         )
     }

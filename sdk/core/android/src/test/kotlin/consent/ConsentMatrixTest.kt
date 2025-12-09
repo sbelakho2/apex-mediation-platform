@@ -56,7 +56,7 @@ class ConsentMatrixTest {
                 opts(),
                 AuctionClient.ConsentOptions(
                     gdprApplies = true,
-                    consentString = "TCF",
+                    tcfString = "TCF",
                     usPrivacy = null,
                     coppa = false,
                     limitAdTracking = true,
@@ -83,7 +83,7 @@ class ConsentMatrixTest {
                 opts(),
                 AuctionClient.ConsentOptions(
                     gdprApplies = false,
-                    consentString = "TCF",
+                    tcfString = "TCF",
                     usPrivacy = "1YNN",
                     coppa = null,
                     limitAdTracking = null,
@@ -106,7 +106,7 @@ class ConsentMatrixTest {
                 opts(),
                 AuctionClient.ConsentOptions(
                     gdprApplies = null,
-                    consentString = null,
+                    tcfString = null,
                     usPrivacy = null,
                     coppa = true,
                     limitAdTracking = false,

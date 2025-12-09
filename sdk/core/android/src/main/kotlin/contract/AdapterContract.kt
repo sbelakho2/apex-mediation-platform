@@ -33,6 +33,7 @@ enum class PartnerRegion { US, EU, APAC, CN, GLOBAL }
 
 /** Normalized privacy metadata forwarded to every adapter request. */
 data class ConsentState(
+    val gdprApplies: Boolean? = null,
     val iabTcfV2: String? = null,
     val iabUsPrivacy: String? = null,
     val coppa: Boolean = false,

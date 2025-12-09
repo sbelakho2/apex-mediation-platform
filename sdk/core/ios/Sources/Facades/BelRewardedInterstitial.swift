@@ -53,7 +53,7 @@ public enum BelRewardedInterstitial {
                 return
             }
             listener?.onAdShown(placementId: placement)
-            SKAdNetworkCoordinator.shared.recordImpression(
+            AdAttributionBridge.shared.recordImpression(
                 for: ad,
                 presentingScene: viewController.view.window?.windowScene
             )

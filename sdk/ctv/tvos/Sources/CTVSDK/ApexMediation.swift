@@ -30,7 +30,7 @@ public final class ApexMediation {
     public var isInitialized: Bool { _initialized }
     public func setConsent(_ consent: ConsentData) { consentMgr?.set(consent) }
     internal var consent: ConsentData { consentMgr?.get() ?? ConsentData() }
-    internal var cfg: SDKConfig { _config ?? SDKConfig(appId: "", apiBaseUrl: "http://localhost:4000/api/v1", apiKey: nil, testMode: false, requestTimeoutMs: 5000) }
+    internal var cfg: SDKConfig { _config ?? SDKConfig(appId: "", apiBaseUrl: "https://api.apexmediation.ee/api/v1", apiKey: nil, testMode: false, requestTimeoutMs: 5000) }
     internal var client: AuctionClient { auctionClient ?? AuctionClient(config: cfg) }
     internal func loadGuard(for placementId: String) -> String? { configManager?.guardLoad(placementId: placementId) }
     internal func showGuard(for placementId: String) -> String? { configManager?.guardShow(placementId: placementId) }

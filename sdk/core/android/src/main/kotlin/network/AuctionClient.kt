@@ -54,14 +54,18 @@ class AuctionClient(
 
     data class ConsentOptions(
         val gdprApplies: Boolean? = null,
-        val consentString: String? = null,
+        val tcfString: String? = null,
         val usPrivacy: String? = null,
         val coppa: Boolean? = null,
         val limitAdTracking: Boolean? = null,
         val privacySandbox: Boolean? = null,
         val advertisingId: String? = null,
         val appSetId: String? = null,
-    )
+    ) {
+        // Legacy accessor for older callers/tests.
+        val consentString: String?
+            get() = tcfString
+    }
 
     data class InterstitialOptions(
         val publisherId: String,
@@ -311,6 +315,18 @@ class AuctionClient(
         }
     }
 
+    private fun consentMeta(consent: ConsentOptions?): Map<String, String> {
+        if (consent == null) return emptyMap()
+        val meta = mutableMapOf<String, String>()
+        consent.gdprApplies?.let { meta["gdpr_applies"] = if (it) "1" else "0" }
+        consent.tcfString?.let { meta["gdpr_consent"] = it }
+        consent.usPrivacy?.let { meta["us_privacy"] = it }
+        consent.coppa?.let { meta["coppa"] = if (it) "1" else "0" }
+        consent.limitAdTracking?.let { meta["limit_ad_tracking"] = if (it) "1" else "0" }
+        consent.privacySandbox?.let { meta["privacy_sandbox"] = if (it) "1" else "0" }
+        return meta
+    }
+
     private fun buildRequestBody(opts: InterstitialOptions, consent: ConsentOptions?): Map<String, Any?> {
         val now = clock.now()
         val rand = (0..999_999).random()
@@ -332,7 +348,7 @@ class AuctionClient(
         val userInfo = mutableMapOf<String, Any?>(
             "limit_ad_tracking" to limitAdTracking
         )
-        consent?.consentString
+        consent?.tcfString
             ?.takeUnless { it.isBlank() }
             ?.let { userInfo["consent_string"] = it }
         consent?.privacySandbox?.let { userInfo["privacy_sandbox"] = it }
@@ -346,10 +362,7 @@ class AuctionClient(
         }
 
         val baseMeta = opts.metadata.toMutableMap()
-        consent?.gdprApplies?.let { baseMeta["gdpr_applies"] = if (it) "1" else "0" }
-        consent?.usPrivacy?.let { baseMeta["us_privacy"] = it }
-        consent?.coppa?.let { baseMeta["coppa"] = if (it) "1" else "0" }
-        consent?.privacySandbox?.let { baseMeta["privacy_sandbox"] = if (it) "1" else "0" }
+        baseMeta.putAll(consentMeta(consent))
 
         val adapters = if (opts.adapters != null && opts.adapters.isNotEmpty()) opts.adapters
         else listOf("admob", "meta", "unity", "applovin", "ironsource")

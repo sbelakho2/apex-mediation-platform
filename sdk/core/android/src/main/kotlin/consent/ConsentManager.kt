@@ -12,15 +12,20 @@ import com.rivalapexmediation.sdk.contract.AttStatus as RuntimeAttStatus
  * - Provides simple normalization utilities for TCF v2 (GDPR) and US Privacy (CCPA/CPRA) strings.
  */
 object ConsentManager {
+    /** Canonical normalized consent payload flowing through SDK → auction → adapters. */
     data class State(
         val gdprApplies: Boolean? = null,
-        val consentString: String? = null, // TCF v2 string
-        val usPrivacy: String? = null,     // IAB US Privacy string (e.g., "1YNN")
-        val coppa: Boolean? = null,
+        val tcfString: String? = null,     // IAB TCF v2.2 string
+        val usPrivacy: String? = null,     // IAB US Privacy/CCPA string (e.g., "1YNN")
+        val coppa: Boolean? = null,        // child-directed treatment flag
         val limitAdTracking: Boolean? = null,
         val privacySandboxOptIn: Boolean? = null,
         val identifiers: IdentifierState = IdentifierState()
-    )
+    ) {
+        // Legacy accessor to ease transition from consentString -> tcfString.
+        val consentString: String?
+            get() = tcfString
+    }
 
     data class IdentifierState(
         val advertisingId: String? = null,
@@ -48,7 +53,7 @@ object ConsentManager {
         val u = usp?.trim().orEmpty().ifEmpty { null }
         return State(
             gdprApplies = gdprApplies,
-            consentString = t,
+            tcfString = t,
             usPrivacy = u,
             coppa = coppa,
             limitAdTracking = limitAdTracking,
@@ -86,40 +91,70 @@ object ConsentManager {
         }
         return State(
             gdprApplies = gdprApplies,
-            consentString = tcf,
+            tcfString = tcf,
             usPrivacy = usp,
         )
     }
 
     /** Convert to AuctionClient.ConsentOptions used by the S2S request builder. */
-    fun toAuctionConsent(state: State): AuctionClient.ConsentOptions = AuctionClient.ConsentOptions(
-        gdprApplies = state.gdprApplies,
-        consentString = state.consentString,
-        usPrivacy = state.usPrivacy,
-        coppa = state.coppa,
-        limitAdTracking = state.limitAdTracking,
-        privacySandbox = state.privacySandboxOptIn,
-        advertisingId = state.identifiers.advertisingId,
-        appSetId = state.identifiers.appSetId
-    )
+    fun toAuctionConsent(state: State): AuctionClient.ConsentOptions {
+        val lat = effectiveLimitAdTracking(state)
+        return AuctionClient.ConsentOptions(
+            gdprApplies = state.gdprApplies,
+            tcfString = state.tcfString,
+            usPrivacy = state.usPrivacy,
+            coppa = state.coppa,
+            limitAdTracking = lat,
+            privacySandbox = state.privacySandboxOptIn,
+            advertisingId = state.identifiers.advertisingId,
+            appSetId = state.identifiers.appSetId
+        )
+    }
+
+    /** Map consent into auction metadata strings for S2S requests. */
+    fun toAuctionMeta(state: State): Map<String, String> {
+        val lat = effectiveLimitAdTracking(state)
+        val meta = mutableMapOf<String, String>()
+        state.gdprApplies?.let { meta["gdpr_applies"] = if (it) "1" else "0" }
+        state.tcfString?.let { meta["gdpr_consent"] = it }
+        state.usPrivacy?.let { meta["us_privacy"] = it }
+        state.coppa?.let { meta["coppa"] = if (it) "1" else "0" }
+        if (state.limitAdTracking != null || state.identifiers.limitAdTracking) {
+            meta["limit_ad_tracking"] = if (lat) "1" else "0"
+        }
+        state.privacySandboxOptIn?.let { meta["privacy_sandbox"] = if (it) "1" else "0" }
+        return meta
+    }
 
     /** Convert to runtime adapter consent payload. */
-    fun toRuntimeConsent(state: State): RuntimeConsentState = RuntimeConsentState(
-        iabTcfV2 = state.consentString,
-        iabUsPrivacy = state.usPrivacy,
-        coppa = state.coppa == true,
-        attStatus = RuntimeAttStatus.NOT_DETERMINED,
-        limitAdTracking = state.limitAdTracking == true,
-        privacySandboxOptIn = state.privacySandboxOptIn,
-        advertisingId = state.identifiers.advertisingId,
-        appSetId = state.identifiers.appSetId
-    )
+    fun toRuntimeConsent(state: State): RuntimeConsentState {
+        val lat = effectiveLimitAdTracking(state)
+        return RuntimeConsentState(
+            gdprApplies = state.gdprApplies,
+            iabTcfV2 = state.tcfString,
+            iabUsPrivacy = state.usPrivacy,
+            coppa = state.coppa == true,
+            attStatus = RuntimeAttStatus.NOT_DETERMINED,
+            limitAdTracking = lat,
+            privacySandboxOptIn = state.privacySandboxOptIn,
+            advertisingId = state.identifiers.advertisingId,
+            appSetId = state.identifiers.appSetId
+        )
+    }
+
+    private fun effectiveLimitAdTracking(state: State): Boolean {
+        return when {
+            state.limitAdTracking == true -> true
+            state.limitAdTracking == false -> false
+            else -> state.identifiers.limitAdTracking
+        }
+    }
 
     /** Lightweight debug summary with redacted strings for UI/debugger panels. */
     fun debugSummary(state: State): Map<String, Any?> = mapOf(
         "gdpr_applies" to state.gdprApplies,
-        "us_privacy" to state.usPrivacy?.let { redact(it) },
-        "tc_string" to state.consentString?.let { redact(it) },
+        "has_tcf_string" to (state.tcfString?.isNotEmpty() == true),
+        "us_privacy" to state.usPrivacy,
         "coppa" to state.coppa,
         "limit_ad_tracking" to state.limitAdTracking,
         "privacy_sandbox" to state.privacySandboxOptIn,

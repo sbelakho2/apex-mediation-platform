@@ -301,7 +301,7 @@ class AuctionClientTest {
                 opts(),
                 AuctionClient.ConsentOptions(
                     gdprApplies = true,
-                    consentString = "TCF",
+                    tcfString = "TCF",
                     usPrivacy = "1YNN",
                     coppa = false,
                     limitAdTracking = true,
@@ -338,7 +338,7 @@ class AuctionClientTest {
                 opts(),
                 AuctionClient.ConsentOptions(
                     gdprApplies = false,
-                    consentString = null,
+                    tcfString = null,
                     usPrivacy = null,
                     coppa = null,
                     limitAdTracking = false,

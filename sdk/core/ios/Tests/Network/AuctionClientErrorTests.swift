@@ -1,7 +1,7 @@
 import XCTest
 @testable import RivalApexMediationSDK
 
-private final class MutableClock: ClockProtocol {
+private final class MutableClock: ClockProtocol, @unchecked Sendable {
     var wallSeconds: TimeInterval
     var monotonicSecondsValue: TimeInterval
 
