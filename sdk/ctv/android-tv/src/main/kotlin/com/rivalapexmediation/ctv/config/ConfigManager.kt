@@ -188,4 +188,96 @@ class ConfigManager(private val context: Context, private val config: SDKConfig)
         val sig = Base64.getDecoder().decode(signatureB64)
         return verifier.verify(sig)
     }
+
+    // MARK: - Config Hash (Parity Verification)
+
+    /**
+     * Compute deterministic SHA-256 hash of the current configuration.
+     * Uses sorted JSON serialization to ensure cross-platform parity with server.
+     * Hash format: "v1:<hex-digest>"
+     *
+     * @return Configuration hash string or null if no config loaded
+     */
+    fun getConfigHash(): String? {
+        val cfg = current ?: return null
+        return try {
+            val canonicalJson = buildCanonicalConfigJson(cfg)
+            val digest = MessageDigest.getInstance("SHA-256")
+            val hashBytes = digest.digest(canonicalJson.toByteArray(Charsets.UTF_8))
+            val hexHash = hashBytes.joinToString("") { "%02x".format(it) }
+            "v1:$hexHash"
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    /**
+     * Build canonical JSON representation for hashing.
+     * Keys are sorted alphabetically to ensure deterministic output.
+     */
+    private fun buildCanonicalConfigJson(cfg: RemoteConfig): String {
+        val sortedMap = LinkedHashMap<String, Any?>()
+
+        // Add fields in alphabetical order
+        sortedMap["appId"] = config.appId
+
+        // Caps - sorted by placement ID (CTV doesn't have explicit caps, use defaults)
+        val caps = LinkedHashMap<String, Any>()
+        cfg.placements.keys.sorted().forEach { placementId ->
+            caps[placementId] = mapOf("daily" to 0, "hourly" to 0)
+        }
+        sortedMap["caps"] = caps
+
+        // Compliance - CTV specific
+        sortedMap["compliance"] = mapOf(
+            "ccpaApplies" to false,
+            "coppaApplies" to false,
+            "gdprApplies" to false
+        )
+
+        // Features
+        sortedMap["features"] = mapOf(
+            "bannerRefresh" to false,
+            "bannerRefreshIntervalMs" to 0,
+            "bidding" to true,
+            "waterfall" to true
+        )
+
+        // Floors - CTV uses defaults
+        val floors = LinkedHashMap<String, Any>()
+        cfg.placements.keys.sorted().forEach { placementId ->
+            floors[placementId] = 0.0
+        }
+        sortedMap["floors"] = floors
+
+        // Networks - enabled networks from placements
+        val allNetworks = mutableSetOf<String>()
+        cfg.placements.values.forEach { placement ->
+            allNetworks.addAll(placement.enabledNetworks)
+        }
+        sortedMap["networks"] = allNetworks.sorted()
+
+        // Pacing
+        sortedMap["pacing"] = mapOf(
+            "enabled" to false,
+            "minIntervalMs" to 0
+        )
+
+        // Version
+        sortedMap["version"] = cfg.version
+
+        return gson.toJson(sortedMap)
+    }
+
+    /**
+     * Validate that local config hash matches server hash.
+     * Useful for debugging configuration sync issues.
+     *
+     * @param serverHash Hash returned from /api/v1/config/sdk/config/hash endpoint
+     * @return true if hashes match, false otherwise
+     */
+    fun validateConfigHash(serverHash: String): Boolean {
+        val localHash = getConfigHash() ?: return false
+        return localHash == serverHash
+    }
 }

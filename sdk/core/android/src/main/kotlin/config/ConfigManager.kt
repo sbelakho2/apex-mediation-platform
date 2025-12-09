@@ -292,6 +292,92 @@ class ConfigManager(
             com.rivalapexmediation.sdk.util.Rollout.isInRollout(context, percentage)
         } catch (_: Throwable) { percentage >= 100 }
     }
+
+    /**
+     * Compute deterministic SHA-256 hash of the current configuration.
+     * Uses sorted JSON serialization to ensure cross-platform parity with server.
+     * Hash format: "v1:<hex-digest>"
+     * 
+     * @return Configuration hash string or null if no config loaded
+     */
+    fun getConfigHash(): String? {
+        val config = currentConfig ?: return null
+        return try {
+            val canonicalJson = buildCanonicalConfigJson(config)
+            val digest = MessageDigest.getInstance("SHA-256")
+            val hashBytes = digest.digest(canonicalJson.toByteArray(Charsets.UTF_8))
+            val hexHash = hashBytes.joinToString("") { "%02x".format(it) }
+            "v1:$hexHash"
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    /**
+     * Build canonical JSON representation for hashing.
+     * Keys are sorted alphabetically to ensure deterministic output.
+     */
+    private fun buildCanonicalConfigJson(config: SDKRemoteConfig): String {
+        val sortedMap = LinkedHashMap<String, Any?>()
+        
+        // Add fields in alphabetical order
+        sortedMap["appId"] = sdkConfig.appId
+        
+        // Adapters - sorted alphabetically
+        val adaptersMap = LinkedHashMap<String, Any>()
+        config.adapters.keys.sorted().forEach { adapterName ->
+            config.adapters[adapterName]?.let { adapter ->
+                adaptersMap[adapterName] = mapOf(
+                    "enabled" to adapter.enabled,
+                    "priority" to adapter.priority
+                )
+            }
+        }
+        sortedMap["adapters"] = adaptersMap
+        
+        // Features
+        sortedMap["features"] = mapOf(
+            "crashReportingEnabled" to config.features.crashReportingEnabled,
+            "debugLoggingEnabled" to config.features.debugLoggingEnabled,
+            "enableOmSdk" to config.features.enableOmSdk,
+            "experimentalFeaturesEnabled" to config.features.experimentalFeaturesEnabled,
+            "killSwitch" to config.features.killSwitch,
+            "telemetryEnabled" to config.features.telemetryEnabled
+        )
+        
+        // Placements - sorted by placement ID
+        val placementsMap = LinkedHashMap<String, Any>()
+        config.placements.keys.sorted().forEach { placementId ->
+            config.placements[placementId]?.let { placement ->
+                placementsMap[placementId] = mapOf(
+                    "adType" to placement.adType.name,
+                    "enabledNetworks" to placement.enabledNetworks.sorted(),
+                    "floorPrice" to placement.floorPrice,
+                    "maxWaitMs" to placement.maxWaitMs,
+                    "refreshInterval" to (placement.refreshInterval ?: 0),
+                    "timeoutMs" to placement.timeoutMs
+                )
+            }
+        }
+        sortedMap["placements"] = placementsMap
+        
+        // Version
+        sortedMap["version"] = config.version
+        
+        return gson.toJson(sortedMap)
+    }
+
+    /**
+     * Validate that local config hash matches server hash.
+     * Useful for debugging configuration sync issues.
+     * 
+     * @param serverHash Hash returned from /api/v1/config/sdk/config/hash endpoint
+     * @return true if hashes match, false otherwise
+     */
+    fun validateConfigHash(serverHash: String): Boolean {
+        val localHash = getConfigHash() ?: return false
+        return localHash == serverHash
+    }
 }
 
 

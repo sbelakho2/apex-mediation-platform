@@ -323,5 +323,37 @@ namespace Apex.Mediation.Core
             _telemetry.Record(trace);
             _ledger.Record(trace);
         }
+
+        /// <summary>
+        /// Compute deterministic SHA-256 hash of the current configuration.
+        /// Uses sorted JSON serialization to ensure cross-platform parity with server.
+        /// Hash format: "v1:&lt;hex-digest&gt;"
+        /// </summary>
+        /// <returns>Configuration hash string or null if SDK not initialized</returns>
+        public string? GetConfigHash()
+        {
+            if (_config == null)
+            {
+                return null;
+            }
+
+            return ConfigHasher.ComputeHash(_config);
+        }
+
+        /// <summary>
+        /// Validate that local config hash matches server hash.
+        /// Useful for debugging configuration sync issues.
+        /// </summary>
+        /// <param name="serverHash">Hash returned from /api/v1/config/sdk/config/hash endpoint</param>
+        /// <returns>true if hashes match, false otherwise</returns>
+        public bool ValidateConfigHash(string serverHash)
+        {
+            if (_config == null || string.IsNullOrEmpty(serverHash))
+            {
+                return false;
+            }
+
+            return ConfigHasher.ValidateHash(_config, serverHash);
+        }
     }
 }

@@ -8,6 +8,8 @@ import { signToken } from '../../utils/signing';
 import { recordShadowOutcome, OutcomeStatus, CandidateBidSnapshot } from './shadowRecorder';
 import config from '../../config/index';
 import * as breaker from '../../utils/redisCircuitBreaker';
+import { generateLandscapeId } from './auctionIdempotency';
+import { scoreShadow, ShadowScoreInput } from '../inference/shadowFraudScoring';
 
 const envInt = (key: string, dflt: number) => {
   const v = parseInt(process.env[key] || '', 10);
@@ -32,8 +34,10 @@ export interface AuctionInput extends AdapterBidRequest {
 
 export interface AuctionOutput {
   success: boolean;
+  landscapeId: string;
   response?: {
     requestId: string;
+    landscapeId: string;
     bidId: string;
     adapter: string;
     cpm: number;
@@ -45,6 +49,7 @@ export interface AuctionOutput {
     consentEcho?: Record<string, unknown>;
   };
   reason?: string;
+  latencyMs?: number;
 }
 
 const makeAbortError = () => { const e: any = new Error('Aborted'); e.name = 'AbortError'; return e; };
@@ -104,18 +109,20 @@ export async function runAuction(input: AuctionInput, baseUrl: string): Promise<
   };
 
   if (migration && migration.arm === 'control') {
+    const landscapeId = generateLandscapeId(requestId);
     await recordOutcome('skipped', {
       metadata: {
         ...(baseMetadata || {}),
         skip_reason: 'control_arm',
       },
     });
-    return { success: false, reason: 'CONTROL_ARM' };
+    return { success: false, landscapeId, reason: 'CONTROL_ARM' };
   }
 
   try {
   const adapters = getAdaptersForFormat(input.adFormat);
     if (adapters.length === 0) {
+      const landscapeId = generateLandscapeId(requestId);
       rtbErrorsTotal.inc({ code: 'NO_ADAPTER', adapter: 'none', ...metricLabels });
       if (migration) {
         await recordOutcome('error', {
@@ -126,7 +133,7 @@ export async function runAuction(input: AuctionInput, baseUrl: string): Promise<
           },
         });
       }
-      return { success: false, reason: 'NO_ADAPTER' };
+      return { success: false, landscapeId, reason: 'NO_ADAPTER' };
     }
 
     const abort = new AbortController();
@@ -165,6 +172,7 @@ export async function runAuction(input: AuctionInput, baseUrl: string): Promise<
       .filter((r): r is AdapterBid => Boolean(r) && !(r as any).nobid);
 
     if (bids.length === 0) {
+      const landscapeId = generateLandscapeId(requestId);
       if (migration) {
         await recordOutcome('no_fill', {
           bids: candidateSnapshots,
@@ -180,10 +188,10 @@ export async function runAuction(input: AuctionInput, baseUrl: string): Promise<
       }
 
       if (migration && mode === 'shadow') {
-        return { success: false, reason: 'SHADOW_NO_BID' };
+        return { success: false, landscapeId, reason: 'SHADOW_NO_BID', latencyMs: Date.now() - decisionStartedAt };
       }
 
-      return { success: true, response: undefined, reason: 'NO_BID' };
+      return { success: true, landscapeId, response: undefined, reason: 'NO_BID', latencyMs: Date.now() - decisionStartedAt };
     }
 
     bids.sort((a: any, b: any) => (b.cpm - a.cpm) || ((a.latencyMs || 9999) - (b.latencyMs || 9999)));
@@ -191,6 +199,30 @@ export async function runAuction(input: AuctionInput, baseUrl: string): Promise<
     abort.abort();
 
     const latencyMs = Date.now() - decisionStartedAt;
+    const bidId = crypto.randomUUID();
+    const landscapeId = generateLandscapeId(requestId, bidId);
+
+    // Shadow fraud scoring: score ALL requests but NEVER block traffic (SDK_CHECKS 7.1)
+    // This is async/fire-and-forget - auction proceeds regardless of scoring result
+    const deviceRecord = (input.device as Record<string, unknown>) || {};
+    void scoreShadow({
+      requestId,
+      placementId: input.placementId,
+      deviceInfo: {
+        ip: deviceRecord.ip as string | undefined,
+        userAgent: deviceRecord.ua as string | undefined,
+        platform: deviceRecord.os as string | undefined,
+        osVersion: deviceRecord.osv as string | undefined,
+      },
+      auctionContext: {
+        adFormat: input.adFormat,
+        floorCpm: input.floorCpm,
+        bidCount: bids.length,
+        winningCpm: winner.cpm,
+        latencyMs,
+      },
+      metadata: migration ? { experimentId: migration.experimentId, arm: migration.arm } : undefined,
+    }).catch(() => { /* silent fail - shadow scoring must never impact auction */ });
 
     if (migration && mode === 'shadow') {
       await recordOutcome('win', {
@@ -207,10 +239,9 @@ export async function runAuction(input: AuctionInput, baseUrl: string): Promise<
         },
       });
 
-      return { success: false, reason: 'SHADOW_MODE' };
+      return { success: false, landscapeId, reason: 'SHADOW_MODE', latencyMs };
     }
 
-    const bidId = crypto.randomUUID();
     const impressionToken = signToken({
       bidId,
       placementId: input.placementId,
@@ -279,8 +310,11 @@ export async function runAuction(input: AuctionInput, baseUrl: string): Promise<
 
     return {
       success: true,
+      landscapeId,
+      latencyMs,
       response: {
         requestId,
+        landscapeId,
         bidId,
         adapter: winner.adapter,
         cpm: winner.cpm,

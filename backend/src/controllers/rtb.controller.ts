@@ -6,6 +6,7 @@ import { runAuction } from '../services/rtb/orchestrator';
 import { getAllAdapters } from '../services/rtb/adapterRegistry';
 import config from '../config/index';
 import * as breaker from '../utils/redisCircuitBreaker';
+import * as idempotency from '../services/rtb/auctionIdempotency';
 
 /**
  * POST /api/v1/rtb/bid
@@ -21,11 +22,32 @@ export const requestBid = async (
     const body = req.body as AuctionRequestBody;
     const enabled = process.env.ENABLE_PRODUCTION_RTB === '1';
 
+    // Ensure requestId is present (generate if missing)
+    const requestId = body.requestId || crypto.randomUUID?.() || `req-${Date.now()}`;
+
+    // Check idempotency cache for duplicate request
+    if (enabled && idempotency.isIdempotencyEnabled()) {
+      const cached = await idempotency.getCachedAuctionResult(requestId);
+      if (cached) {
+        logger.debug('Returning cached auction result', { requestId, landscapeId: cached.landscapeId });
+        if (!cached.success || !cached.response) {
+          if (cached.reason === 'NO_BID') {
+            res.status(204).send();
+            return;
+          }
+          res.status(400).json({ success: false, error: 'Auction failed', reason: cached.reason, landscapeId: cached.landscapeId });
+          return;
+        }
+        res.json(cached.response);
+        return;
+      }
+    }
+
     if (!enabled) {
       // Fallback to legacy mock engine
       const { executeBid } = await import('../services/rtbEngine');
       const resp = await executeBid({
-        requestId: body.requestId || crypto.randomUUID?.() || 'req',
+        requestId,
         placementId: body.placementId,
         adFormat: body.adFormat,
         floorCpm: body.floorCpm ?? 0,
@@ -54,7 +76,7 @@ export const requestBid = async (
       : undefined;
 
     const result = await runAuction({
-      requestId: body.requestId!,
+      requestId,
       placementId: body.placementId,
       adFormat: body.adFormat,
       floorCpm: body.floorCpm ?? 0,
@@ -71,14 +93,24 @@ export const requestBid = async (
       migration,
     }, baseUrl);
 
+    // Cache result for idempotency
+    if (idempotency.isIdempotencyEnabled()) {
+      await idempotency.cacheAuctionResult(requestId, {
+        landscapeId: result.landscapeId,
+        success: result.success,
+        response: result.response,
+        reason: result.reason,
+      });
+    }
+
     if (!result.success || !result.response) {
       if (result.reason === 'CONTROL_ARM' || result.reason === 'SHADOW_MODE') {
         res.status(204).send();
         return;
       }
       // Provide structured error response to aid debugging and instrumentation
-      const reason = (result as any).reason || 'UNKNOWN';
-      res.status(400).json({ success: false, error: 'Auction failed', reason });
+      const reason = result.reason || 'UNKNOWN';
+      res.status(400).json({ success: false, error: 'Auction failed', reason, landscapeId: result.landscapeId });
       return;
     }
 

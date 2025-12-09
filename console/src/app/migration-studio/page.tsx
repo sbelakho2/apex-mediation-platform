@@ -9,6 +9,7 @@ import { migrationApi, placementApi } from '@/lib/api'
 import type { MigrationExperiment, Placement } from '@/types'
 import { formatDate, t } from '@/i18n'
 import ImportWizard from '@/components/migration-studio/ImportWizard'
+import ParitySimulator from '@/components/migration-studio/ParitySimulator'
 import { Spinner } from '@/components/ui/Spinner'
 
 interface Banner {
@@ -44,6 +45,7 @@ const GUARDRAIL_EVALUATE_COOLDOWN_MS = 4000
 export default function MigrationStudioPage() {
   const [selectedPlacement, setSelectedPlacement] = useState<string>('')
   const [showImportWizard, setShowImportWizard] = useState<boolean>(false)
+  const [showParitySimulator, setShowParitySimulator] = useState<boolean>(false)
 
   const placementsQuery = useQuery({
     queryKey: ['placements', 'migration-studio'],
@@ -307,6 +309,15 @@ export default function MigrationStudioPage() {
               >
                 {t('migrationStudio.import.cta')}
               </button>
+              <button
+                type="button"
+                className="btn btn-secondary flex items-center gap-2"
+                onClick={() => setShowParitySimulator(true)}
+                disabled={!selectedPlacement}
+                title="Simulate floor/cap/pacing parity"
+              >
+                Parity Simulator
+              </button>
             </div>
           </div>
         </div>
@@ -397,6 +408,12 @@ export default function MigrationStudioPage() {
           onCompleted={() => {
             void experimentsQuery.refetch()
           }}
+        />
+      )}
+      {showParitySimulator && selectedPlacement && (
+        <ParitySimulator
+          placementId={selectedPlacement}
+          onClose={() => setShowParitySimulator(false)}
         />
       )}
     </div>

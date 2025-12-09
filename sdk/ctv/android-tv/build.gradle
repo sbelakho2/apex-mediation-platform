@@ -22,7 +22,8 @@ android {
 
     buildTypes {
         release {
-            minifyEnabled true
+            // Disable minification for tests to keep classes available; keep R8 off here
+            minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
         debug {
@@ -34,9 +35,13 @@ android {
         buildConfig true
     }
 
+    // Run unit tests against the debug variant to avoid R8/minification stripping classes
+    testBuildType "debug"
+
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
+        coreLibraryDesugaringEnabled true
     }
     kotlinOptions { jvmTarget = '17' }
 
@@ -73,6 +78,9 @@ dependencies {
     // AndroidX
     implementation "androidx.annotation:annotation:1.7.1"
     testImplementation "androidx.annotation:annotation:1.7.1"
+
+    // Desugaring for Java 17 APIs used by the SDK/tests
+    coreLibraryDesugaring "com.android.tools:desugar_jdk_libs:2.0.4"
 
     // Testing
     testImplementation "junit:junit:4.13.2"

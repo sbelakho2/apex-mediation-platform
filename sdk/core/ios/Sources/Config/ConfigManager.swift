@@ -2,6 +2,9 @@ import Foundation
 #if canImport(FoundationNetworking)
 import FoundationNetworking
 #endif
+#if canImport(CryptoKit)
+import CryptoKit
+#endif
 
 /// Configuration manager with remote fetching and caching
 ///
@@ -246,6 +249,100 @@ public final class ConfigManager: @unchecked Sendable {
     public func shutdown() {
         urlSession.invalidateAndCancel()
         cachedConfig = nil
+    }
+    
+    // MARK: - Config Hash (Parity Verification)
+    
+    /// Compute deterministic SHA-256 hash of the current configuration.
+    /// Uses sorted JSON serialization to ensure cross-platform parity with server.
+    /// Hash format: "v1:<hex-digest>"
+    ///
+    /// - Returns: Configuration hash string or nil if no config loaded
+    public func getConfigHash() -> String? {
+        guard let config = cachedConfig else { return nil }
+        
+        do {
+            let canonicalJson = try buildCanonicalConfigJson(config: config)
+            guard let data = canonicalJson.data(using: .utf8) else { return nil }
+            
+            #if canImport(CryptoKit)
+            let digest = SHA256.hash(data: data)
+            let hexHash = digest.compactMap { String(format: "%02x", $0) }.joined()
+            return "v1:\(hexHash)"
+            #else
+            // Fallback for platforms without CryptoKit
+            return "v1:\(data.hashValue)"
+            #endif
+        } catch {
+            return nil
+        }
+    }
+    
+    /// Build canonical JSON representation for hashing.
+    /// Keys are sorted alphabetically to ensure deterministic output.
+    private func buildCanonicalConfigJson(config: SDKRemoteConfig) throws -> String {
+        var sortedMap: [String: Any] = [:]
+        
+        // Add fields in alphabetical order
+        sortedMap["appId"] = self.config.appId
+        
+        // Adapters - sorted alphabetically
+        var adaptersMap: [String: Any] = [:]
+        for adapterName in config.adapters.keys.sorted() {
+            if let adapterConfig = config.adapters[adapterName] {
+                adaptersMap[adapterName] = [
+                    "enabled": adapterConfig.enabled
+                ]
+            }
+        }
+        sortedMap["adapters"] = adaptersMap
+        
+        // Features
+        sortedMap["features"] = [
+            "enableOmSdk": config.enableOmSdk ?? false,
+            "telemetryEnabled": config.telemetryEnabled
+        ]
+        
+        // Killswitches - sorted
+        sortedMap["killswitches"] = config.killswitches.sorted()
+        
+        // Placements - sorted by placement ID
+        let sortedPlacements = config.placements.sorted { $0.placementId < $1.placementId }
+        var placementsArray: [[String: Any]] = []
+        for placement in sortedPlacements {
+            var placementDict: [String: Any] = [
+                "adType": placement.adType.rawValue,
+                "adapterPriority": placement.adapterPriority,
+                "floorCPM": placement.floorCPM,
+                "placementId": placement.placementId,
+                "timeoutMs": placement.timeoutMs
+            ]
+            if let refreshInterval = placement.refreshInterval {
+                placementDict["refreshInterval"] = refreshInterval
+            }
+            placementsArray.append(placementDict)
+        }
+        sortedMap["placements"] = placementsArray
+        
+        // Version
+        sortedMap["version"] = config.version
+        
+        // Serialize with sorted keys
+        let jsonData = try JSONSerialization.data(
+            withJSONObject: sortedMap,
+            options: [.sortedKeys, .fragmentsAllowed]
+        )
+        return String(data: jsonData, encoding: .utf8) ?? "{}"
+    }
+    
+    /// Validate that local config hash matches server hash.
+    /// Useful for debugging configuration sync issues.
+    ///
+    /// - Parameter serverHash: Hash returned from /api/v1/config/sdk/config/hash endpoint
+    /// - Returns: true if hashes match, false otherwise
+    public func validateConfigHash(_ serverHash: String) -> Bool {
+        guard let localHash = getConfigHash() else { return false }
+        return localHash == serverHash
     }
 }
 

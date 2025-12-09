@@ -9,6 +9,7 @@ import {
   BellRing,
   ArrowRight,
   Key,
+  Hash,
 } from 'lucide-react'
 import { authOptions } from '@/lib/auth/options'
 import { hasRole, type Role } from '@/lib/rbac'
@@ -49,6 +50,12 @@ const sections = [
     description: 'Set consent requirements and regional privacy enforcement.',
     href: '/settings/compliance',
     icon: Globe,
+  },
+  {
+    title: 'SDK Configuration',
+    description: 'Verify SDK config parity and debug configuration sync issues.',
+    href: '/settings/sdk',
+    icon: Hash,
   },
 ]
 

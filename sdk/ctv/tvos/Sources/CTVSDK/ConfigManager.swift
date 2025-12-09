@@ -159,6 +159,109 @@ final class ConfigManager {
         guard let json = defaults.string(forKey: Keys.cache)?.data(using: .utf8) else { return nil }
         return try? JSONDecoder().decode(RemoteConfig.self, from: json)
     }
+    
+    // MARK: - Config Hash (Parity Verification)
+    
+    /// Compute deterministic SHA-256 hash of the current configuration.
+    /// Uses sorted JSON serialization to ensure cross-platform parity with server.
+    /// Hash format: "v1:<hex-digest>"
+    ///
+    /// - Returns: Configuration hash string or nil if no config loaded
+    func getConfigHash() -> String? {
+        guard let cfg = current else { return nil }
+        
+        guard let canonicalJson = buildCanonicalConfigJson(config: cfg) else { return nil }
+        guard let data = canonicalJson.data(using: .utf8) else { return nil }
+        
+        #if canImport(CryptoKit)
+        let digest = SHA256.hash(data: data)
+        let hexHash = digest.compactMap { String(format: "%02x", $0) }.joined()
+        return "v1:\(hexHash)"
+        #else
+        // Fallback for platforms without CryptoKit
+        return "v1:\(data.hashValue)"
+        #endif
+    }
+    
+    /// Build canonical JSON representation for hashing.
+    /// Keys are sorted alphabetically to ensure deterministic output.
+    private func buildCanonicalConfigJson(config: RemoteConfig) -> String? {
+        var sortedMap: [String: Any] = [:]
+        
+        // Add fields in alphabetical order
+        sortedMap["appId"] = self.config.appId
+        
+        // Caps - sorted by placement ID (CTV doesn't have explicit caps in same format, use defaults)
+        var caps: [String: [String: Int]] = [:]
+        if let placements = config.placements {
+            for placementId in placements.keys.sorted() {
+                caps[placementId] = ["daily": 0, "hourly": 0]
+            }
+        }
+        sortedMap["caps"] = caps
+        
+        // Compliance - CTV specific
+        sortedMap["compliance"] = [
+            "ccpaApplies": false,
+            "coppaApplies": false,
+            "gdprApplies": false
+        ]
+        
+        // Features
+        let features = config.features
+        sortedMap["features"] = [
+            "bannerRefresh": false,
+            "bannerRefreshIntervalMs": 0,
+            "bidding": true,
+            "waterfall": true
+        ]
+        
+        // Floors - CTV uses defaults
+        var floors: [String: Double] = [:]
+        if let placements = config.placements {
+            for placementId in placements.keys.sorted() {
+                floors[placementId] = 0.0
+            }
+        }
+        sortedMap["floors"] = floors
+        
+        // Networks - enabled networks from placements
+        var allNetworks: Set<String> = []
+        if let placements = config.placements {
+            for (_, placement) in placements {
+                if let networks = placement.enabledNetworks {
+                    allNetworks.formUnion(networks)
+                }
+            }
+        }
+        sortedMap["networks"] = Array(allNetworks).sorted()
+        
+        // Pacing
+        sortedMap["pacing"] = [
+            "enabled": false,
+            "minIntervalMs": 0
+        ]
+        
+        // Version
+        sortedMap["version"] = config.version
+        
+        // Serialize with sorted keys
+        guard let jsonData = try? JSONSerialization.data(
+            withJSONObject: sortedMap,
+            options: [.sortedKeys, .fragmentsAllowed]
+        ) else { return nil }
+        return String(data: jsonData, encoding: .utf8)
+    }
+    
+    /// Validate that local config hash matches server hash.
+    /// Useful for debugging configuration sync issues.
+    ///
+    /// - Parameter serverHash: Hash returned from /api/v1/config/sdk/config/hash endpoint
+    /// - Returns: true if hashes match, false otherwise
+    func validateConfigHash(_ serverHash: String) -> Bool {
+        guard let localHash = getConfigHash() else { return false }
+        return localHash == serverHash
+    }
 }
 #else
 // macOS test host: provide stubs so the package can build without tvOS-only APIs.
@@ -169,5 +272,7 @@ final class ConfigManager {
     func guardShow(placementId: String) -> String? { nil }
     func recordSloSample(success: Bool) {}
     var metricsEnabled: Bool { false }
+    func getConfigHash() -> String? { nil }
+    func validateConfigHash(_ serverHash: String) -> Bool { false }
 }
 #endif

@@ -1,3 +1,101 @@
+# Changelog — SDK Checks Parts 6, 7, 8 (Auction Path, Data Plane, Console Integration) (2025-12-09)
+
+Summary
+- Completed SDK_CHECKS Parts 6, 7, and 8: auction path hardening (idempotency, bid landscape), data plane fraud shadow scoring & quality signals, and console/migration studio integration (config parity, VRA hooks). All 65 tests passing.
+
+## Part 6: Auction Path (S2S Primary)
+
+### 6.1 Idempotent Requests, Deadline Budget, Partial Aggregation
+- **IdempotencyService**: Tracks `request_id` → `landscape_id` with 5-minute TTL in Redis; duplicate POSTs return same landscape.
+- **DeadlineService**: Enforces `timeout_ms` budget with 500ms reserve; soft and hard deadline tracking.
+- **PartialAggregationService**: Returns partial results if deadline exceeded; graceful degradation under load.
+- **Location**: `backend/src/services/rtb/auctionIdempotency.ts`
+
+### 6.2 Bid Landscape Export (Privacy-Safe)
+- Creates `landscape_id` per-auction with winner + redacted top-N bids (bidder hashed, network redacted).
+- Stores floors, normalized rejection reasons, and latency breakdown.
+- **Location**: `backend/src/services/bidLandscapeService.ts`
+
+## Part 7: Data Plane, Fraud Shadow & Quality Signals
+
+### 7.1 Shadow Fraud Scoring (Analytics-Only, Never Blocks)
+- Extracts 15 features: CTIT, device patterns, IP signals, behavioral anomalies.
+- Computes multi-signal fraud score with uncertainty bounds.
+- Persists to `shadow_fraud_scores` table; PSI drift metrics calculated weekly.
+- **Location**: `backend/src/services/inference/shadowFraudScoring.ts`
+
+### 7.2 Weak Labels Library
+- **CTITDetector**: Click-to-install-time anomaly detection via z-score.
+- **NetworkDetector**: DC/VPN/Tor detection via IP range matching + heuristics.
+- **ResellerDetector**: Unauthorized reseller detection via sellers.json corpus.
+- Each detector provides precision/confidence estimates.
+- **Location**: `backend/src/services/quality/weakLabels/`
+
+### 7.3 OMSDK/Viewability Events Pass-Through
+- SDKs send viewability events via `POST /api/v1/analytics/viewability`.
+- Events stored in `viewability_events` table with impression_id, session_id, metrics.
+- Console displays viewability % per placement.
+- **Location**: `backend/src/services/viewabilityEvents.ts`
+
+## Part 8: Console & Migration Studio Integration
+
+### 8.1 Console → SDK Config Parity Hash
+- **Backend**: `SDKConfigParityService` computes deterministic SHA256 hash of SDK config.
+- **Console UI**: SDK settings page (`/settings/sdk`) displays current hash per app with copy button and mismatch detection.
+- **All 6 SDKs** compute matching hash:
+  - Android: `ConfigManager.getConfigHash()`
+  - iOS: `ConfigManager.getConfigHash()` (CryptoKit)
+  - tvOS: `ConfigManager.getConfigHash()`
+  - Android TV: `ConfigManager.getConfigHash()`
+  - Unity: `ConfigHasher.ComputeConfigHash()`
+  - Web: `getConfigHash()` (SubtleCrypto)
+- **Location**: `backend/src/services/sdkConfigParity.ts`, `console/src/app/settings/sdk/page.tsx`
+
+### 8.2 Migration Studio: Per-Placement Parity Simulator
+- `ParitySimulator` component imports Unity Ads/AppLovin MAX/ironSource JSON configs.
+- Parses network-specific schemas and simulates floor/cap/pacing behavior.
+- Exports as Apex config JSON; dry-run mode enabled by default.
+- Supports floor simulation (random bid vs floor), cap simulation (request counting), pacing simulation (time-based throttling).
+- **Location**: `console/src/components/migration-studio/ParitySimulator.tsx`
+
+### 8.3 VRA (Verification & Revenue Auditor) Hooks Wired
+- **VRAService**: Creates per-impression signed ledger entries with Ed25519 signatures.
+- Hash chain links each entry to previous via SHA256 for tamper-evident audit trail.
+- Entries stored in `vra_ledger` table with impression_id, publisher_id, network, revenue data, signature, prev_hash.
+- Publishers can verify chain integrity and reconcile via `GET /api/v1/vra/ledger/:publisherId`.
+- Public key exposed at `GET /api/v1/vra/public-key`.
+- **Location**: `backend/src/services/vraService.ts`, `backend/migrations/033_vra_ledger.sql`
+
+## Validation
+```bash
+# Part 6 tests
+cd backend && npm test -- --testPathPattern="auctionIdempotency|bidLandscape" --no-coverage
+
+# Part 7 tests
+cd backend && npm test -- --testPathPattern="shadowFraudScoring|weakLabels|viewability" --no-coverage
+
+# Part 8 tests
+cd backend && npm test -- --testPathPattern="sdkConfigParity|vraService" --no-coverage
+
+# All Parts 6-8 tests (65 total)
+cd backend && npm test -- --testPathPattern="auctionIdempotency|bidLandscape|shadowFraudScoring|weakLabels|viewability|sdkConfigParity|vraService" --no-coverage
+```
+
+## Files Changed/Created
+- `backend/src/services/rtb/auctionIdempotency.ts` - Idempotency + deadline + partial aggregation
+- `backend/src/services/bidLandscapeService.ts` - Privacy-safe bid landscape export
+- `backend/src/services/inference/shadowFraudScoring.ts` - Shadow fraud scoring (analytics-only)
+- `backend/src/services/quality/weakLabels/` - CTIT, network, reseller detectors
+- `backend/src/services/viewabilityEvents.ts` - OMSDK viewability pass-through
+- `backend/src/services/sdkConfigParity.ts` - Config hash generation/validation
+- `backend/src/services/vraService.ts` - VRA hash chain + Ed25519 signing
+- `backend/migrations/033_vra_ledger.sql` - VRA ledger tables
+- `console/src/app/settings/sdk/page.tsx` - SDK config parity UI
+- `console/src/components/migration-studio/ParitySimulator.tsx` - Parity simulator
+- SDK config hash implementations across all 6 platforms
+
+---
+
 # Changelog — SDK Checks Part 5 (Pacing & Circuit Breakers) (2025-12-09)
 
 Summary

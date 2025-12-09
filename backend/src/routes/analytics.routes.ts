@@ -48,6 +48,20 @@ router.post('/events/clicks', authRateLimiter, invalidatePublisherCache(), analy
 // POST /api/v1/analytics/events/revenue - Record revenue events
 router.post('/events/revenue', authRateLimiter, invalidatePublisherCache(), analyticsController.recordRevenue);
 
+// POST /api/v1/analytics/events/viewability - Record OMSDK/viewability events (SDK_CHECKS 7.3)
+router.post('/events/viewability', authRateLimiter, analyticsController.recordViewability);
+
+// GET /api/v1/analytics/viewability/:placementId - Get viewability summary for a placement
+router.get('/viewability/:placementId', authenticateOrApiKey, cache({ 
+  ttl: cacheTTL.medium,
+  varyBy: ['query.startDate', 'query.endDate']
+}), analyticsController.getViewabilitySummary);
+
+// GET /api/v1/analytics/omsdk-status - Get OMSDK status for publisher
+router.get('/omsdk-status', authenticateOrApiKey, cache({ 
+  ttl: cacheTTL.medium 
+}), analyticsController.getOmsdkStatus);
+
 export default router;
 
 // ========================================

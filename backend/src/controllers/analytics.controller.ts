@@ -7,6 +7,7 @@ import {
   getPerformanceBreakdown,
 } from '../services/analyticsPipeline';
 import analyticsService from '../services/analyticsService';
+import * as viewabilityService from '../services/viewabilityEvents';
 import logger from '../utils/logger';
 import config from '../config/index';
 import { queueManager, QueueName } from '../queues/queueManager';
@@ -375,4 +376,155 @@ export const getBufferStats = (req: Request, res: Response): void => {
     success: true,
     data: stats,
   });
+};
+
+// Viewability event schema for SDK_CHECKS 7.3
+const viewabilityEventSchema = z.object({
+  requestId: z.string(),
+  impressionId: z.string(),
+  placementId: z.string(),
+  publisherId: z.string().optional(),
+  platform: z.enum(['ios', 'android', 'android_tv', 'tvos', 'unity', 'web']),
+  adFormat: z.enum(['banner', 'interstitial', 'rewarded', 'native', 'video']),
+  omsdkAvailable: z.boolean(),
+  omsdkSessionStarted: z.boolean().optional(),
+  omsdkVersion: z.string().optional(),
+  wasViewable: z.boolean(),
+  measurable: z.boolean(),
+  viewableTimeMs: z.number().optional(),
+  totalDurationMs: z.number().optional(),
+  viewablePercent: z.number().min(0).max(100).optional(),
+  quartiles: z.object({
+    start: z.boolean().optional(),
+    firstQuartile: z.boolean().optional(),
+    midpoint: z.boolean().optional(),
+    thirdQuartile: z.boolean().optional(),
+    complete: z.boolean().optional(),
+  }).optional(),
+  engagementEvents: z.array(z.string()).optional(),
+  geometry: z.object({
+    coveragePercent: z.number().optional(),
+    overlappingCreatives: z.number().optional(),
+    onScreenPercent: z.number().optional(),
+  }).optional(),
+  eventTimestamp: z.string().transform(s => new Date(s)),
+});
+
+/**
+ * POST /api/v1/analytics/events/viewability
+ * Record OMSDK/viewability events from SDK (SDK_CHECKS 7.3)
+ */
+export const recordViewability = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const body = req.body;
+    
+    // Accept single event or array
+    const events = Array.isArray(body.events) ? body.events : [body];
+    
+    const parsedEvents: viewabilityService.ViewabilityEvent[] = [];
+    
+    for (const event of events) {
+      const parsed = viewabilityEventSchema.parse(event);
+      parsedEvents.push(parsed as viewabilityService.ViewabilityEvent);
+    }
+    
+    // Record events (buffered, non-blocking)
+    viewabilityService.recordViewabilityEvents(parsedEvents);
+    
+    res.status(202).json({
+      success: true,
+      message: `Accepted ${parsedEvents.length} viewability event(s)`,
+    });
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      res.status(400).json({
+        success: false,
+        error: 'Invalid viewability event data',
+        details: error.errors,
+      });
+      return;
+    }
+    
+    logger.error('Failed to record viewability events', { error });
+    res.status(500).json({
+      success: false,
+      error: 'Failed to record viewability events',
+    });
+  }
+};
+
+/**
+ * GET /api/v1/analytics/viewability/:placementId
+ * Get viewability summary for a placement
+ */
+export const getViewabilitySummary = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const { placementId } = req.params;
+    const startDate = req.query.startDate ? new Date(req.query.startDate as string) : undefined;
+    const endDate = req.query.endDate ? new Date(req.query.endDate as string) : undefined;
+    
+    const summary = await viewabilityService.getViewabilitySummary(placementId, startDate, endDate);
+    
+    if (!summary) {
+      res.status(404).json({
+        success: false,
+        error: 'No viewability data found for placement',
+      });
+      return;
+    }
+    
+    res.json({
+      success: true,
+      data: summary,
+    });
+  } catch (error) {
+    logger.error('Failed to get viewability summary', { error });
+    res.status(500).json({
+      success: false,
+      error: 'Failed to get viewability summary',
+    });
+  }
+};
+
+/**
+ * GET /api/v1/analytics/omsdk-status
+ * Get OMSDK status for publisher (shows in Console)
+ */
+export const getOmsdkStatus = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const publisherId = (req as any).user?.id || req.query.publisherId as string;
+    
+    if (!publisherId) {
+      res.status(400).json({
+        success: false,
+        error: 'Publisher ID required',
+      });
+      return;
+    }
+    
+    const status = await viewabilityService.getOmsdkStatus(publisherId);
+    
+    res.json({
+      success: true,
+      data: status,
+    });
+  } catch (error) {
+    logger.error('Failed to get OMSDK status', { error });
+    res.status(500).json({
+      success: false,
+      error: 'Failed to get OMSDK status',
+    });
+  }
 };
