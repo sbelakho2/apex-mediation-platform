@@ -116,13 +116,17 @@ public final class MediationSDK: @unchecked Sendable {
 
     /// Initialize the mediation SDK.
     public func initialize(appId: String, configuration: SDKConfig? = nil) async throws {
-        let digest = try await runtime.initialize(appId: appId, configuration: configuration)
+        let digest = try await runOffMain { [self] in
+            try await runtime.initialize(appId: appId, configuration: configuration)
+        }
         updateSnapshot(digest)
     }
 
     /// Load an ad for the supplied placement.
     public func loadAd(placementId: String) async throws -> Ad? {
-        let ad = try await runtime.loadAd(placementId: placementId)
+        let ad = try await runOffMain { [self] in
+            try await runtime.loadAd(placementId: placementId)
+        }
         await refreshSnapshot()
         return ad
     }
@@ -141,14 +145,18 @@ public final class MediationSDK: @unchecked Sendable {
 
     /// Claim and remove a cached ad for the placement.
     public func claimAd(placementId: String) async -> Ad? {
-        let ad = await runtime.claimAd(placementId: placementId)
+        let ad = await runOffMain { [self] in
+            await runtime.claimAd(placementId: placementId)
+        }
         await refreshSnapshot()
         return ad
     }
 
     /// Peek at the next cached ad without consuming it.
     public func peekAd(placementId: String) async -> Ad? {
-        await runtime.peekAd(placementId: placementId)
+        await runOffMain { [self] in
+            await runtime.peekAd(placementId: placementId)
+        }
     }
 
     /// Shutdown the SDK and release resources.
@@ -166,6 +174,24 @@ public final class MediationSDK: @unchecked Sendable {
     private func refreshSnapshot() async {
         let digest = await runtime.snapshot()
         updateSnapshot(digest)
+    }
+
+    /// Ensure heavy/IO work is executed off the main thread to avoid UI stalls.
+    private func runOffMain<T: Sendable>(
+        _ work: @escaping @Sendable () async -> T
+    ) async -> T {
+        await Task.detached(priority: .userInitiated) {
+            await work()
+        }.value
+    }
+
+    /// Throwing variant for call sites that propagate errors.
+    private func runOffMain<T: Sendable>(
+        _ work: @escaping @Sendable () async throws -> T
+    ) async throws -> T {
+        try await Task.detached(priority: .userInitiated) {
+            try await work()
+        }.value
     }
     
     private func updateConsentSummarySnapshot() {
@@ -249,6 +275,8 @@ private actor MediationRuntime {
     private var adapterRegistry: AdapterRegistry?
     private var signatureVerifier: SignatureVerifier?
     private var testModeLoader: TestModeAdLoader?
+    private var adapterCircuitBreakers: [String: AdapterCircuitBreaker] = [:]
+    private var pacingMarks: [String: Int64] = [:]
     private var initialized = false
     private var adCache: [String: [CachedAd]] = [:]
     private let consentManager = ConsentManager.shared
@@ -383,6 +411,26 @@ private actor MediationRuntime {
                 continue
             }
 
+            let breaker = adapterCircuitBreaker(for: networkName)
+            if breaker.isOpen() {
+                let retryAfterSeconds = 15.0
+                telemetry?.recordError(
+                    errorCode: "adapter_circuit_open",
+                    error: SDKError.circuitBreakerOpen(retryAfter: retryAfterSeconds),
+                    metadata: consentTelemetryMetadata()
+                )
+                continue
+            }
+
+            if shouldPace(networkName: networkName, placementId: placementId, minRetryMs: 2_000) {
+                telemetry?.recordError(
+                    errorCode: "adapter_paced",
+                    error: SDKError.noFill,
+                    metadata: consentTelemetryMetadata()
+                )
+                continue
+            }
+
             ensureAdapterInitialized(networkName: networkName, adapterConfig: adapterConfig)
 
             let settings = adapterSettingsWithConsent(adapterConfig.settings.mapValues { $0.value })
@@ -392,6 +440,7 @@ private actor MediationRuntime {
                 let ad = try await loadAd(from: adapter, placement: placementId, adType: placement.adType, settings: settings)
                 storeAd(ad)
                 let latency = Int(clock.monotonicMillis() - startMs)
+                breaker.recordSuccess()
                 telemetry?.recordAdLoad(
                     placement: placementId,
                     adType: placement.adType,
@@ -401,15 +450,41 @@ private actor MediationRuntime {
                     metadata: consentTelemetryMetadata()
                 )
                 return ad
-            } catch let adapterError as AdapterError where adapterError.code == .timeout {
-                telemetry?.recordTimeout(
+            } catch let adapterError as AdapterError {
+                let latency = Int(clock.monotonicMillis() - startMs)
+                var metadata = consentTelemetryMetadata() ?? [:]
+                metadata["reason"] = adapterError.normalizedReason()
+                if let vendor = adapterError.vendorCode { metadata["vendor_code"] = vendor }
+
+                if adapterError.code == .noFill || adapterError.code == .belowFloor {
+                    markPace(networkName: networkName, placementId: placementId)
+                    breaker.recordSuccess()
+                } else {
+                    breaker.recordFailure()
+                }
+
+                telemetry?.recordAdLoad(
                     placement: placementId,
                     adType: placement.adType,
-                    reason: "adapter_timeout",
-                    metadata: consentTelemetryMetadata()
+                    networkName: networkName,
+                    latency: latency,
+                    success: false,
+                    metadata: metadata
                 )
+
+                if adapterError.code == .timeout {
+                    telemetry?.recordTimeout(
+                        placement: placementId,
+                        adType: placement.adType,
+                        reason: "adapter_timeout",
+                        metadata: metadata
+                    )
+                } else {
+                    telemetry?.recordError(errorCode: "adapter_failure", error: adapterError, metadata: metadata)
+                }
             } catch {
                 let latency = Int(clock.monotonicMillis() - startMs)
+                breaker.recordFailure()
                 telemetry?.recordAdLoad(
                     placement: placementId,
                     adType: placement.adType,
@@ -676,6 +751,29 @@ private actor MediationRuntime {
         } else {
             pendingAdapterRegistrations.append((networkName, adapterType))
         }
+    }
+
+    // MARK: - Adapter pacing/circuit helpers
+
+    private func adapterCircuitBreaker(for networkName: String) -> AdapterCircuitBreaker {
+        if adapterCircuitBreakers[networkName] == nil {
+            adapterCircuitBreakers[networkName] = AdapterCircuitBreaker(clock: clock)
+        }
+        return adapterCircuitBreakers[networkName]!
+    }
+
+    private func shouldPace(networkName: String, placementId: String, minRetryMs: Int64) -> Bool {
+        let key = "\(networkName):\(placementId)"
+        let now = clock.monotonicMillis()
+        if let last = pacingMarks[key], now - last < minRetryMs {
+            return true
+        }
+        return false
+    }
+
+    private func markPace(networkName: String, placementId: String) {
+        let key = "\(networkName):\(placementId)"
+        pacingMarks[key] = clock.monotonicMillis()
     }
 }
 

@@ -15,16 +15,19 @@ public final class RewardedAd {
         if let reason = sdk.loadGuard(for: placementId) { completion(reason); return }
         sdk.client.requestBid(placementId: placementId, adFormat: "rewarded", floorCpm: floorCpm, consent: sdk.consent) { res in
             if let error = res.error {
+                sdk.recordLoadFailure(placementId: self.placementId, reason: error.reason)
                 completion(error.reason)
                 return
             }
             guard let win = res.win else {
+                sdk.recordLoadFailure(placementId: self.placementId, reason: "no_fill")
                 completion("no_fill")
                 return
             }
             AdCache.shared.store(win: win, for: self.placementId)
             self.win = win
             self.loaded = true
+            sdk.recordLoadSuccess(placementId: self.placementId)
             completion(nil)
         }
     }

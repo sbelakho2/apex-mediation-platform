@@ -1,13 +1,40 @@
 import Foundation
+#if canImport(CryptoKit)
+import CryptoKit
+#endif
 
 // MARK: - Data Contracts
 
 /// Publisher-supplied vendor credentials injected at runtime. Keep on-device.
+/// Publisher-supplied vendor credentials injected at runtime. Keep on-device and never log.
 public struct AdapterCredentials: Codable, Equatable, Sendable {
     public let key: String
     public let secret: String?
     public let appId: String?
     public let accountIds: [String: String]?
+
+    /// Returns a redacted/hashed view for telemetry/debugging (secrets omitted).
+    public func redacted() -> [String: String] {
+        var result: [String: String] = [:]
+        result["key_hash"] = Self.hashValue(key)
+        if let appId { result["app_id_hash"] = Self.hashValue(appId) }
+        if let accounts = accountIds, !accounts.isEmpty {
+            result["account_ids"] = accounts.keys.sorted().joined(separator: ",")
+        }
+        return result
+    }
+
+    private static func hashValue(_ input: String) -> String {
+        // lightweight SHA256 hex for non-cryptographic labeling; secrets never emitted raw
+        if let data = input.data(using: .utf8) {
+            #if canImport(CryptoKit)
+            return SHA256.hash(data: data).compactMap { String(format: "%02x", $0) }.joined()
+            #else
+            return String(input.hashValue)
+            #endif
+        }
+        return ""
+    }
 }
 
 /// Optional knobs the controller can hand to adapters per placement.
@@ -142,7 +169,16 @@ public enum PaidEventPrecision: String, Codable, Sendable { case publisher, esti
 // MARK: - Error Taxonomy
 
 public enum AdapterErrorCode: String, Codable, Sendable {
-    case noFill, timeout, networkError, belowFloor, error, circuitOpen, config, noAdReady
+    case noFill
+    case timeout
+    case networkError
+    case status4xx
+    case status5xx
+    case belowFloor
+    case error
+    case circuitOpen
+    case config
+    case noAdReady
 }
 
 /// Normalized failure mapped from vendor-specific errors.
@@ -151,6 +187,22 @@ public struct AdapterError: Error, Codable, Equatable, Sendable {
     public let detail: String
     public let vendorCode: String?
     public let recoverable: Bool
+
+    /// Normalizes vendor reasons into canonical strings for parity with Android.
+    public func normalizedReason() -> String {
+        switch code {
+        case .noFill: return "no_fill"
+        case .timeout: return "timeout"
+        case .networkError: return "network_error"
+        case .status4xx: return "status_4xx"
+        case .status5xx: return "status_5xx"
+        case .belowFloor: return "below_floor"
+        case .circuitOpen: return "circuit_open"
+        case .config: return "config"
+        case .noAdReady: return "no_ad_ready"
+        case .error: return "error"
+        }
+    }
 }
 
 // MARK: - Callbacks

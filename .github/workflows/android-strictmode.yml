@@ -33,6 +33,7 @@ jobs:
         working-directory: sdk/core/android
         env:
           GRADLE_OPTS: "-Dorg.gradle.jvmargs='-Xmx2g' -Dkotlin.daemon.jvm.options=-Xmx2g"
+          BEL_DEBUG_STRICTMODE: "1"
         run: |
           chmod +x ./gradlew
           ./gradlew --version

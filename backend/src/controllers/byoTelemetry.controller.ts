@@ -12,7 +12,7 @@ export async function ingestByoSpans(req: Request, res: Response) {
     if (!Array.isArray(body)) {
       return res.status(400).json({ error: 'invalid_payload', message: 'Expected an array of span events' })
     }
-    ingestAdapterSpanBatch(req, body)
+    await ingestAdapterSpanBatch(req, body)
     return res.json({ success: true })
   } catch (e: any) {
     return res.status(500).json({ error: 'ingest_error', message: e?.message || 'Unknown error' })

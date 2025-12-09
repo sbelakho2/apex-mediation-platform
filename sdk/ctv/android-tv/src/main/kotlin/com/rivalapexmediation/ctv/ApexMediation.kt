@@ -6,6 +6,8 @@ import android.os.Looper
 import android.os.StrictMode
 import com.rivalapexmediation.ctv.consent.ConsentData
 import com.rivalapexmediation.ctv.consent.ConsentManager
+import com.rivalapexmediation.ctv.ads.AdapterCircuitBreaker
+import com.rivalapexmediation.ctv.ads.SystemMonotonicClock
 import com.rivalapexmediation.ctv.network.AuctionClient
 import com.rivalapexmediation.ctv.util.Logger
 import com.rivalapexmediation.ctv.config.ConfigManager
@@ -23,6 +25,8 @@ object ApexMediation {
     private lateinit var auctionClient: AuctionClient
     private val mainHandler = Handler(Looper.getMainLooper())
     private var configMgr: ConfigManager? = null
+    private val pacing: MutableMap<String, Long> = mutableMapOf()
+    private val breakers: MutableMap<String, AdapterCircuitBreaker> = mutableMapOf()
 
     @JvmStatic
     fun initialize(context: Context, config: SDKConfig, onComplete: ((Boolean) -> Unit)? = null) {
@@ -69,6 +73,8 @@ object ApexMediation {
     internal fun metricsEnabled(): Boolean = configMgr?.get()?.features?.metricsEnabled == true
 
     internal fun loadBlockedReason(placementId: String): String? {
+        if (shouldPace(placementId)) return "pacing"
+        if (breakerFor(placementId).isOpen()) return "circuit_open"
         val rc = remoteConfig() ?: return null
         if (rc.features.killSwitch) return "kill_switch_active"
         val placement = rc.placements[placementId]
@@ -90,4 +96,32 @@ object ApexMediation {
     }
 
     internal fun postMain(block: () -> Unit) { if (Looper.myLooper() == Looper.getMainLooper()) block() else mainHandler.post(block) }
+
+    internal fun recordLoadSuccess(placementId: String) {
+        breakerFor(placementId).recordSuccess()
+    }
+
+    internal fun recordLoadFailure(placementId: String, reason: String) {
+        val normalized = reason.lowercase()
+        if (normalized.contains("no_fill") || normalized.contains("below_floor")) {
+            markPaced(placementId)
+            breakerFor(placementId).recordSuccess()
+        } else {
+            breakerFor(placementId).recordFailure()
+        }
+    }
+
+    private fun shouldPace(placementId: String, minRetryMs: Long = 2_000): Boolean {
+        val now = SystemMonotonicClock.now()
+        val last = pacing[placementId] ?: return false
+        return now - last < minRetryMs
+    }
+
+    private fun markPaced(placementId: String) {
+        pacing[placementId] = SystemMonotonicClock.now()
+    }
+
+    private fun breakerFor(placementId: String): AdapterCircuitBreaker {
+        return breakers.getOrPut(placementId) { AdapterCircuitBreaker(clock = SystemMonotonicClock) }
+    }
 }

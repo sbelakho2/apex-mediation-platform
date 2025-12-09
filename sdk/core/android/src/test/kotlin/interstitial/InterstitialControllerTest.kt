@@ -106,4 +106,50 @@ class InterstitialControllerTest {
         assertEquals(InterstitialController.State.Idle, ctrl.getState())
         assertFalse(ctrl.isReady())
     }
+
+    @Test
+    fun show_guard_prevents_double_callbacks() = runTest {
+        val dispatcher = UnconfinedTestDispatcher(testScheduler)
+        val ctrl = InterstitialController(mainDispatcher = dispatcher)
+        val events = mutableListOf<String>()
+        val callbacks = InterstitialController.Callbacks(
+            onLoaded = { events.add("loaded") },
+            onError = { _, _ -> events.add("error") },
+            onShown = { events.add("shown") },
+            onClosed = { events.add("closed") }
+        )
+
+        ctrl.load(this, loader = { fakeAd() }, cb = callbacks)
+        testScheduler.advanceUntilIdle()
+
+        assertTrue(ctrl.showIfReady(callbacks))
+        assertFalse(ctrl.showIfReady(callbacks))
+        assertEquals(listOf("loaded", "shown", "closed"), events)
+    }
+
+    @Test
+    fun restore_and_rebind_replays_loaded_once_and_remains_ready() = runTest {
+        val dispatcher = UnconfinedTestDispatcher(testScheduler)
+        val ctrl = InterstitialController(mainDispatcher = dispatcher)
+        val events = mutableListOf<String>()
+        val callbacks = InterstitialController.Callbacks(
+            onLoaded = { events.add("loaded") },
+            onError = { _, _ -> events.add("error") },
+            onShown = { events.add("shown") },
+            onClosed = { events.add("closed") }
+        )
+
+        ctrl.load(this, loader = { fakeAd() }, cb = callbacks)
+        testScheduler.advanceUntilIdle()
+        val saved = ctrl.saveState()
+
+        val restored = InterstitialController(mainDispatcher = dispatcher)
+        restored.restoreState(saved)
+        restored.rebindCallbacks(callbacks)
+        restored.rebindCallbacks(callbacks) // should not duplicate
+
+        assertEquals(listOf("loaded", "loaded"), events)
+        assertTrue(restored.isReady())
+        assertTrue(restored.showIfReady(callbacks))
+    }
 }

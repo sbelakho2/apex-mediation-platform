@@ -1,3 +1,56 @@
+# Changelog — SDK Checks Part 5 (Pacing & Circuit Breakers) (2025-12-09)
+
+Summary
+- Completed iOS/Unity/tvOS/Android TV pacing and circuit breaker parity; all platform tests are green with Java 17 for Android TV.
+
+What changed
+- iOS: Added per-adapter circuit breaker and pacing guard in AdapterRuntime; no-fill/below-floor outcomes are excluded from breaker failure counts.
+- Unity: Introduced `AdapterCircuitBreaker` and normalized `AdapterError` taxonomy; MediationSDK gates loads with pacing + breaker checks and tags telemetry.
+- tvOS: Added `AdapterCircuitBreaker` and pacing/guard rails in `ApexMediation`; load paths skip open breakers and no-fill is excluded from failure tallies.
+- Android TV: `ApexMediation` now uses `AdapterCircuitBreaker` with monotonic clock pacing; imports corrected for breaker and clock utilities.
+
+Validation
+- `cd sdk/core/ios && swift test --parallel`
+- `cd sdk/core/unity/Tests && DOTNET_ROLL_FORWARD=LatestMajor dotnet test`
+- `cd sdk/ctv/tvos && xcodebuild test -scheme CTVSDK -destination "platform=tvOS Simulator,name=Apple TV 4K (3rd generation)"`
+- `cd sdk/ctv/android-tv && JAVA_HOME=/Library/Java/JavaVirtualMachines/temurin-17.jdk/Contents/Home gradle testDebugUnitTest`
+
+---
+
+# Changelog — SDK Checks Part 4 (Runtime Stability) (2025-12-09)
+# Changelog — SDK Checks Part 4 (Runtime Stability) (2025-12-09)
+
+Summary
+- Completed iOS RichMedia WKWebView memory-pressure handling and main-actor safety fixes; all iOS tests now green. Remaining Part 4 items tracked: client-side hedged requests and R8/Proguard keep rules.
+
+What changed
+- iOS: `RichMediaAdView` now synchronously clears HTML/loads blank and detaches delegates on memory warning and deinit; tests marked `@MainActor` and stabilized for WKWebView lifecycle.
+- Concurrency: `runOffMain` now provides non-throwing and throwing overloads to satisfy Swift 6 rethrows rules while keeping background work off the main thread.
+- Checklist: `SDK_CHECKS` Part 4 updated with current status; still pending are hedged requests mirroring backend behavior and consumer Proguard/keep rules for callbacks/parcelables.
+
+Validation
+- `cd sdk/core/ios && xcodebuild test -scheme RivalApexMediationSDK -destination 'platform=iOS Simulator,name=iPhone 15,OS=17.5'`
+
+Outstanding
+- Timeouts & hedged requests now enforce a shared placement deadline and cancel stragglers; hedging stays backend-only by design.
+- R8/Proguard keep rules expanded to cover public API, adapters/callbacks, enums, and parcelables.
+
+---
+
+# Changelog — Android StrictMode & Auction Telemetry (2025-12-09)
+
+Summary
+- Hardened StrictMode enforcement and added auction latency telemetry for Android SDK.
+
+What changed
+- StrictMode: SDKConfig builder now honors `BEL_DEBUG_STRICTMODE`/`bel.debug.strictmode` to force `penaltyDeath` in debug; CI `android-strictmode.yml` sets the env and runs strictmode smoke. AuctionClient main-thread guard allows Robolectric by default, but can be forced to production behavior via `BEL_FORCE_TEST_RUNTIME`/`bel.force.testRuntime` with new Robolectric tests covering bypass/block.
+- Telemetry: AuctionClient now records per-call latency/outcome via `TelemetryCollector.recordAuctionClientLatency`, with timestamps driven by monotonic clock and injected through `MediationSDK.ensureAuctionClient`.
+
+Validation
+- `cd sdk/core/android && ./gradlew.sh testDebugUnitTest`
+
+---
+
 # Changelog — CTV tvOS/Android TV Droplet Defaults (2025-12-09)
 
 Summary

@@ -11,6 +11,8 @@ namespace Apex.Mediation.Internal
                 "api_key",
                 "access_key",
                 "account_id",
+                "token",
+                "api_token",
                 "placement_id",
                 "app_token",
                 "secret",

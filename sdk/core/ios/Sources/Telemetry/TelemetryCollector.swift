@@ -175,8 +175,10 @@ public class TelemetryCollector: @unchecked Sendable {
     private func recordEvent(_ event: TelemetryEvent) {
         guard config.telemetryEnabled, isRunning else { return }
         
+        let sanitized = sanitize(event)
+
         queueLock.lock()
-        eventQueue.append(event)
+        eventQueue.append(sanitized)
         let shouldFlush = eventQueue.count >= batchSize
         queueLock.unlock()
         
@@ -218,6 +220,48 @@ public class TelemetryCollector: @unchecked Sendable {
                 }
             }
         }
+    }
+
+    private func sanitize(_ event: TelemetryEvent) -> TelemetryEvent {
+        guard let metadata = event.metadata else { return event }
+
+        let redacted = sanitizeMetadata(metadata)
+        if redacted == metadata { return event }
+
+        return TelemetryEvent(
+            eventType: event.eventType,
+            timestamp: event.timestamp,
+            placement: event.placement,
+            adType: event.adType,
+            networkName: event.networkName,
+            latency: event.latency,
+            errorCode: event.errorCode,
+            errorMessage: event.errorMessage,
+            metadata: redacted
+        )
+    }
+
+    private func sanitizeMetadata(_ metadata: [String: String]) -> [String: String] {
+        var cleaned: [String: String] = [:]
+        let sensitive = Set([
+            "api_key",
+            "access_key",
+            "secret",
+            "token",
+            "api_token",
+            "account_id",
+            "placement_id",
+            "app_token"
+        ])
+
+        for (key, value) in metadata {
+            if sensitive.contains(key.lowercased()) {
+                cleaned[key] = "****"
+            } else {
+                cleaned[key] = value
+            }
+        }
+        return cleaned
     }
     
     /// Send events to telemetry endpoint

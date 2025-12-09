@@ -2,6 +2,7 @@ package com.rivalapexmediation.sdk.contract
 
 import com.rivalapexmediation.sdk.models.AdType
 import com.rivalapexmediation.sdk.util.ClockProvider
+import java.security.MessageDigest
 
 /**
  * Canonical adapter contract derived from backend Adapters.md spec.
@@ -20,7 +21,27 @@ data class AdapterCredentials(
     val secret: String? = null,
     val appId: String? = null,
     val accountIds: Map<String, String>? = null
-)
+) {
+    // Redact secrets by default if ever stringified or logged.
+    override fun toString(): String = buildString {
+        append("AdapterCredentials(key=")
+        append(hash(key))
+        append(", secret=")
+        append(secret?.let { "***" } ?: "null")
+        append(", appId=")
+        append(appId?.let { hash(it) } ?: "null")
+        append(", accountIds=")
+        append(accountIds?.mapValues { (_, v) -> hash(v) })
+        append(")")
+    }
+
+    private fun hash(value: String): String = try {
+        val digest = MessageDigest.getInstance("SHA-256").digest(value.toByteArray())
+        digest.take(6).joinToString("") { byte -> "%02x".format(byte) }
+    } catch (_: Exception) {
+        "hash_err"
+    }
+}
 
 /** Adapter tuning knobs supplied by the controller per placement. */
 data class AdapterOptions(
@@ -141,6 +162,8 @@ enum class ErrorCode {
     NO_FILL,
     TIMEOUT,
     NETWORK_ERROR,
+    STATUS_4XX,
+    STATUS_5XX,
     BELOW_FLOOR,
     ERROR,
     CIRCUIT_OPEN,
@@ -152,6 +175,23 @@ enum class ErrorCode {
 sealed class AdapterError(open val code: ErrorCode, open val detail: String, open val vendorCode: String? = null) : Exception("[$code] $detail") {
     data class Fatal(override val code: ErrorCode, override val detail: String, override val vendorCode: String? = null): AdapterError(code, detail, vendorCode)
     data class Recoverable(override val code: ErrorCode, override val detail: String, override val vendorCode: String? = null): AdapterError(code, detail, vendorCode)
+
+    /**
+     * Normalized reason string for telemetry/debug surfaces.
+     * This keeps Console debugger and adapters aligned on a shared taxonomy.
+     */
+    fun normalizedReason(): String = when (code) {
+        ErrorCode.NO_FILL -> "no_fill"
+        ErrorCode.TIMEOUT -> "timeout"
+        ErrorCode.NETWORK_ERROR -> "network_error"
+        ErrorCode.STATUS_4XX -> "status_4xx"
+        ErrorCode.STATUS_5XX -> "status_5xx"
+        ErrorCode.BELOW_FLOOR -> "below_floor"
+        ErrorCode.CIRCUIT_OPEN -> "circuit_open"
+        ErrorCode.CONFIG -> "config_error"
+        ErrorCode.NO_AD_READY -> "no_ad_ready"
+        ErrorCode.ERROR -> "error"
+    }
 }
 
 // ----- Callback contracts -----

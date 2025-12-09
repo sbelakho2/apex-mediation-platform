@@ -63,9 +63,9 @@ internal class IronSourceApiClient(
         return when {
             code == 204 -> AdapterError.Recoverable(ErrorCode.NO_FILL, "ironSource 204 no fill")
             code == 408 -> AdapterError.Recoverable(ErrorCode.TIMEOUT, "ironSource timeout")
-            code in 500..599 -> AdapterError.Recoverable(ErrorCode.NETWORK_ERROR, "ironSource $code")
-            code == 401 || code == 403 -> AdapterError.Fatal(ErrorCode.CONFIG, "ironSource auth failed $code")
-            code in 400..499 -> AdapterError.Fatal(ErrorCode.ERROR, "ironSource HTTP $code")
+            code in 500..599 -> AdapterError.Recoverable(ErrorCode.STATUS_5XX, "ironSource $code")
+            code == 401 || code == 403 -> AdapterError.Fatal(ErrorCode.STATUS_4XX, "ironSource auth failed $code")
+            code in 400..499 -> AdapterError.Fatal(ErrorCode.STATUS_4XX, "ironSource HTTP $code")
             else -> AdapterError.Recoverable(ErrorCode.ERROR, "ironSource HTTP $code")
         }
     }

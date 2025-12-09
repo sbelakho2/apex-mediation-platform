@@ -23,6 +23,7 @@ class InterstitialAd(private val placementId: String) {
         val consent = ApexMediation.consent()
         ApexMediation.client().requestBid(placementId, "interstitial", floorCpm, consent) { result ->
             result.error?.let {
+                ApexMediation.recordLoadFailure(placementId, it.reason())
                 ApexMediation.postMain { callback.onError(it.reason()) }
                 return@requestBid
             }
@@ -31,8 +32,10 @@ class InterstitialAd(private val placementId: String) {
             if (nextWin != null) {
                 AdCache.put(placementId, nextWin)
                 win = nextWin
+                ApexMediation.recordLoadSuccess(placementId)
                 ApexMediation.postMain { callback.onLoaded() }
             } else {
+                ApexMediation.recordLoadFailure(placementId, "no_fill")
                 ApexMediation.postMain { callback.onError("no_fill") }
             }
         }

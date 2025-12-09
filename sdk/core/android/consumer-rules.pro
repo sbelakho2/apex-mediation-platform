@@ -6,12 +6,24 @@
 -keep class com.rivalapexmediation.sdk.models.** { *; }
 -keep interface com.rivalapexmediation.sdk.** { *; }
 
+# Keep adapter contracts and callback interfaces used via reflection
+-keep interface com.rivalapexmediation.sdk.adapters.** { *; }
+-keep class com.rivalapexmediation.sdk.adapters.** { *; }
+
+# Keep parcelables and their CREATOR fields for interop
+-keepclassmembers class * implements android.os.Parcelable {
+	public static final android.os.Parcelable$Creator *;
+}
+
 # Keep Kotlin metadata (for reflection and default args)
 -keep class kotlin.Metadata { *; }
 
 # Gson model classes are accessed reflectively
 -keep class com.rivalapexmediation.sdk.models.** { *; }
 -keepclassmembers class com.rivalapexmediation.sdk.models.** { <fields>; <methods>; }
+
+# Keep enums and sealed error reasons used in callbacks/telemetry
+-keepclassmembers enum * { **[] $VALUES; ** valueOf(java.lang.String); }
 
 # OkHttp/Retrofit and Gson types that may be reflectively accessed
 -dontwarn okio.**

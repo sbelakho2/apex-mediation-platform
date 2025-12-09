@@ -1,5 +1,7 @@
 package com.rivalapexmediation.sdk.network
 
+import android.os.Handler
+import android.os.Looper
 import com.google.gson.Gson
 import com.rivalapexmediation.sdk.threading.CircuitBreaker
 import okhttp3.OkHttpClient
@@ -9,11 +11,17 @@ import org.junit.After
 import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows
+import org.robolectric.annotation.Config
 import java.net.ConnectException
 import java.net.UnknownHostException
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [33])
 class AuctionClientTest {
     private fun takeRequestOrFail(): okhttp3.mockwebserver.RecordedRequest {
         val req = server.takeRequest(1, java.util.concurrent.TimeUnit.SECONDS)
@@ -422,6 +430,46 @@ class AuctionClientTest {
             fail("expected no_fill due to missing cpm")
         } catch (e: AuctionClient.AuctionException) {
             assertEquals("no_fill", e.reason)
+        }
+    }
+
+    @Test
+    fun mainThreadGuard_allowsRobolectricOnMainLooper() {
+        // Ensure the test runtime (Robolectric) bypasses the main-thread guard; should surface auction result, not main_thread
+        server.enqueue(MockResponse().setResponseCode(204))
+        try {
+            client.requestInterstitial(opts())
+            fail("expected no_fill, not success")
+        } catch (e: AuctionClient.AuctionException) {
+            assertEquals("no_fill", e.reason)
+            assertNotEquals("main_thread", e.reason)
+        }
+    }
+
+    @Test
+    fun mainThreadGuard_blocksWhenForcedProdInTests() {
+        val prev = System.getProperty("bel.force.testRuntime")
+        System.setProperty("bel.force.testRuntime", "false")
+        val latch = java.util.concurrent.CountDownLatch(1)
+        val captured = java.util.concurrent.atomic.AtomicReference<AuctionClient.AuctionException?>()
+        Handler(Looper.getMainLooper()).post {
+            try {
+                client.requestInterstitial(opts())
+            } catch (e: AuctionClient.AuctionException) {
+                captured.set(e)
+            } finally {
+                latch.countDown()
+            }
+        }
+        Shadows.shadowOf(Looper.getMainLooper()).idle()
+        latch.await(1, java.util.concurrent.TimeUnit.SECONDS)
+        val ex = captured.get()
+        assertNotNull("expected main_thread exception", ex)
+        assertEquals("main_thread", ex?.reason)
+        try {
+            // no-op
+        } finally {
+            if (prev == null) System.clearProperty("bel.force.testRuntime") else System.setProperty("bel.force.testRuntime", prev)
         }
     }
 }

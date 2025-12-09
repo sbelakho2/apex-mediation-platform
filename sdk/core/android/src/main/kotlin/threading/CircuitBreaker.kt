@@ -20,7 +20,8 @@ class CircuitBreaker(
     private val failureThreshold: Int = 5,
     private val resetTimeoutMs: Long = 60000,
     private val halfOpenMaxAttempts: Int = 3,
-    private val clock: Clock = SystemClockClock
+    private val clock: Clock = SystemClockClock,
+    private val onStateChange: (state: String) -> Unit = {}
 ) {
     private enum class State {
         CLOSED, OPEN, HALF_OPEN
@@ -34,37 +35,41 @@ class CircuitBreaker(
     /**
      * Execute action with circuit breaker protection
      */
-    fun <T> execute(action: () -> T): T? {
+    fun <T> execute(
+        action: () -> T,
+        classifySuccess: (T) -> Boolean = { true },
+        countException: (Exception) -> Boolean = { true }
+    ): T? {
         when (state.get()) {
             State.OPEN -> {
-                // Check if we should transition to HALF_OPEN
                 if (shouldAttemptReset()) {
-                    state.set(State.HALF_OPEN)
+                    transitionTo(State.HALF_OPEN)
                     successCount.set(0)
                 } else {
-                    // Circuit is open, fail fast
                     return null
                 }
             }
             State.HALF_OPEN -> {
-                // Limited attempts to test recovery
                 if (successCount.get() >= halfOpenMaxAttempts) {
-                    // Too many attempts, back to OPEN
-                    state.set(State.OPEN)
+                    transitionTo(State.OPEN)
                     return null
                 }
             }
-            State.CLOSED -> {
-                // Normal operation
-            }
+            State.CLOSED -> { /* normal */ }
         }
-        
+
         return try {
             val result = action()
-            onSuccess()
+            if (classifySuccess(result)) {
+                onSuccess()
+            } else {
+                onFailure()
+            }
             result
         } catch (e: Exception) {
-            onFailure()
+            if (countException(e)) {
+                onFailure()
+            }
             throw e
         }
     }
@@ -78,8 +83,9 @@ class CircuitBreaker(
                 val count = successCount.incrementAndGet()
                 if (count >= halfOpenMaxAttempts) {
                     // Enough successes, close the circuit
-                    state.set(State.CLOSED)
+                    transitionTo(State.CLOSED)
                     failureCount.set(0)
+                    successCount.set(0)
                 }
             }
             State.CLOSED -> {
@@ -101,14 +107,14 @@ class CircuitBreaker(
         when (state.get()) {
             State.HALF_OPEN -> {
                 // Failed during recovery test, back to OPEN
-                state.set(State.OPEN)
+                transitionTo(State.OPEN)
                 successCount.set(0)
             }
             State.CLOSED -> {
                 val count = failureCount.incrementAndGet()
                 if (count >= failureThreshold) {
                     // Too many failures, open the circuit
-                    state.set(State.OPEN)
+                    transitionTo(State.OPEN)
                 }
             }
             State.OPEN -> {
@@ -146,10 +152,17 @@ class CircuitBreaker(
      * Manual reset (for testing/debugging)
      */
     fun reset() {
-        state.set(State.CLOSED)
+        transitionTo(State.CLOSED)
         failureCount.set(0)
         successCount.set(0)
         lastFailureTime.set(0)
+    }
+
+    private fun transitionTo(newState: State) {
+        val previous = state.getAndSet(newState)
+        if (previous != newState) {
+            try { onStateChange(newState.name) } catch (_: Throwable) { /* guard telemetry */ }
+        }
     }
 }
 

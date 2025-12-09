@@ -3,6 +3,9 @@ package com.rivalapexmediation.sdk
 import android.app.Activity
 import android.content.Context
 import android.content.res.Configuration
+import com.rivalapexmediation.sdk.logging.Logger
+import com.rivalapexmediation.sdk.runtime.PlacementPacer
+import com.rivalapexmediation.sdk.util.ClockProvider
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
@@ -32,6 +35,7 @@ import com.rivalapexmediation.sdk.contract.ConnectionType as RuntimeConnectionTy
 import com.rivalapexmediation.sdk.contract.ContextMeta as RuntimeContextMeta
 import com.rivalapexmediation.sdk.contract.ConsentState as RuntimeConsentState
 import com.rivalapexmediation.sdk.contract.DeviceMeta as RuntimeDeviceMeta
+import com.rivalapexmediation.sdk.contract.ErrorCode
 import com.rivalapexmediation.sdk.contract.LoadResult as RuntimeLoadResult
 import com.rivalapexmediation.sdk.contract.NetworkMeta as RuntimeNetworkMeta
 import com.rivalapexmediation.sdk.contract.Orientation as RuntimeOrientation
@@ -173,6 +177,7 @@ class MediationSDK private constructor(
         override fun onRewardVerified(rewardType: String, rewardAmount: Double) {}
     }
     private val circuitBreakers = ConcurrentHashMap<String, CircuitBreaker>()
+    private val pacing = PlacementPacer(config.minNoFillRetryMs, ClockProvider.clock)
     // Simple in-memory ad cache per placement (interstitials): preserves last loaded ad for fast show.
     private data class CachedAd(val ad: Ad, val expiryAtMs: Long)
     private val adCache = mutableMapOf<String, CachedAd>()
@@ -481,7 +486,23 @@ class MediationSDK private constructor(
     private fun ensureAuctionClient(): AuctionClient {
         val existing = auctionClient
         if (existing != null) return existing
-        val created = AuctionClient(config.auctionEndpoint, auctionApiKey, buildPinnedHttpClientIfEnabled())
+        val latencySink: (Long, String) -> Unit = { latency, outcome ->
+            telemetry.recordAuctionClientLatency(outcome, latency)
+        }
+        val created = AuctionClient(
+            config.auctionEndpoint,
+            auctionApiKey,
+            buildPinnedHttpClientIfEnabled(),
+            circuitBreakerFactory = {
+                CircuitBreaker(
+                    failureThreshold = config.circuitBreakerFailureThreshold,
+                    resetTimeoutMs = config.circuitBreakerResetTimeoutMs,
+                    halfOpenMaxAttempts = config.circuitBreakerHalfOpenMaxAttempts
+                )
+            },
+            clock = ClockProvider.clock,
+            latencyRecorder = latencySink,
+        )
         auctionClient = created
         return created
     }
@@ -605,6 +626,24 @@ class MediationSDK private constructor(
             val startTime = clock.monotonicNow()
             val traceId = try { java.util.UUID.randomUUID().toString() } catch (_: Throwable) { "trace-${clock.now()}" }
 
+            if (pacing.shouldThrottle(placement)) {
+                val remaining = pacing.remainingMs(placement)
+                Logger.i("MediationSDK", "Pacing placement=$placement for ${remaining}ms after no_fill")
+                telemetry.recordAdapterSpanFinish(
+                    traceId = traceId,
+                    placement = placement,
+                    adapter = "pacer",
+                    outcome = "no_fill",
+                    latencyMs = 0L,
+                    errorCode = "pacing",
+                    errorMessage = "pacing_active",
+                    metadata = runtimeTelemetryMetadata(LoadStrategy.CLIENT_ADAPTER, mapOf("remaining_ms" to remaining))
+                )
+                telemetry.recordAdLoad(placement, 0L, false)
+                postToMainThread { callback.onError(AdError.NO_FILL, "pacing_active") }
+                return@Runnable
+            }
+
             try {
                 if (config.validationModeEnabled) {
                     val message = "ValidationMode is enabled; ad loads are blocked until disabled"
@@ -718,10 +757,12 @@ class MediationSDK private constructor(
                 // 2) Adapter fallback: prefer runtime V2 adapters, fallback to legacy when needed.
                 val enabledNetworks = applyAdapterWhitelist(placementConfig.enabledNetworks)
                 val runtimeEntries = adapterRegistry.getRuntimeAdapters(enabledNetworks)
+                    .filterNot { isAdapterInCircuit(it.partnerId) }
                 val legacyAdapters = enabledNetworks.mapNotNull { adapterRegistry.getAdapter(it) }
-                    .filter { adapter -> adapter.isAvailable() && !isAdapterInCircuit(adapter) }
+                    .filter { adapter -> adapter.isAvailable() && !isAdapterInCircuit(adapter.name) }
 
                 if (runtimeEntries.isEmpty() && legacyAdapters.isEmpty()) {
+                    pacing.markNoFill(placement)
                     postToMainThread {
                         callback.onError(AdError.NO_FILL, "No adapters available")
                     }
@@ -743,34 +784,7 @@ class MediationSDK private constructor(
                             entry.partnerId,
                             metadata
                         )
-                        try {
-                            val payload = loadViaRuntime(entry, placement, placementConfig)
-                            val latency = com.rivalapexmediation.sdk.util.ClockProvider.clock.monotonicNow() - adapterStart
-                            val response = payload?.response?.copy(loadTime = latency)
-                            val outcome = if (response?.isValid() == true) "fill" else "no_fill"
-                            telemetry.recordAdapterSpanFinish(
-                                traceId = traceId,
-                                placement = placement,
-                                adapter = entry.partnerId,
-                                outcome = outcome,
-                                latencyMs = latency,
-                                metadata = metadata
-                            )
-                            AdapterResult(response, payload?.binding)
-                        } catch (t: Throwable) {
-                            val latency = com.rivalapexmediation.sdk.util.ClockProvider.clock.monotonicNow() - adapterStart
-                            telemetry.recordAdapterSpanFinish(
-                                traceId = traceId,
-                                placement = placement,
-                                adapter = entry.partnerId,
-                                outcome = "error",
-                                latencyMs = latency,
-                                errorCode = "exception",
-                                errorMessage = t.message,
-                                metadata = metadata
-                            )
-                            throw t
-                        }
+                        loadRuntimeWithCircuitBreaker(entry, placement, placementConfig, traceId, metadata)
                     })
                 }
 
@@ -812,17 +826,28 @@ class MediationSDK private constructor(
                     })
                 }
 
+                val deadlineNs = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(placementConfig.timeoutMs)
                 val adapterResults = mutableListOf<AdapterResult>()
                 futures.forEach { future ->
+                    val remainingNs = deadlineNs - System.nanoTime()
+                    if (remainingNs <= 0) {
+                        future.cancel(true)
+                        telemetry.recordTimeout(placement, "adapter_timeout")
+                        return@forEach
+                    }
                     try {
-                        val result = future.get(placementConfig.timeoutMs, TimeUnit.MILLISECONDS)
+                        val result = future.get(remainingNs, TimeUnit.NANOSECONDS)
                         adapterResults += result
                     } catch (e: TimeoutException) {
+                        future.cancel(true)
                         telemetry.recordTimeout(placement, "adapter_timeout")
                     } catch (e: Exception) {
                         telemetry.recordError("adapter_load_failed", e)
                     }
                 }
+
+                // Cancel any stragglers beyond the placement deadline to avoid overruns.
+                futures.filter { !it.isDone }.forEach { it.cancel(true) }
 
                 val results = adapterResults.mapNotNull { it.response }
 
@@ -834,10 +859,12 @@ class MediationSDK private constructor(
                     val expiry = bestAd.expiryTimeMs ?: (com.rivalapexmediation.sdk.util.ClockProvider.clock.monotonicNow() + computeDefaultExpiryMs(placementConfig))
                     val cached = bestAd.copy(expiryTimeMs = expiry)
                     cacheAd(placement, cached)
+                    pacing.reset(placement)
                     val latency = com.rivalapexmediation.sdk.util.ClockProvider.clock.monotonicNow() - startTime
                     telemetry.recordAdLoad(placement, latency, true)
                     postToMainThread { callback.onAdLoaded(cached) }
                 } else {
+                    pacing.markNoFill(placement)
                     telemetry.recordAdLoad(placement, com.rivalapexmediation.sdk.util.ClockProvider.clock.monotonicNow() - startTime, false)
                     postToMainThread { callback.onError(AdError.NO_FILL, "No valid bids received") }
                 }
@@ -863,24 +890,43 @@ class MediationSDK private constructor(
         config: PlacementConfig
     ): AdResponse? {
         val breaker = circuitBreakers.getOrPut(adapter.name) {
-            createCircuitBreaker()
+            createCircuitBreaker(adapter.name)
         }
-        
-        return breaker.execute {
-            adapter.loadAd(placement, config)
-        }
+
+        return breaker.execute(
+            action = { adapter.loadAd(placement, config) },
+            classifySuccess = { resp -> resp?.isValid() == true },
+            countException = { ex -> shouldCountException(ex) }
+        )
     }
 
-    private fun createCircuitBreaker(): CircuitBreaker {
+    private fun createCircuitBreaker(adapterName: String? = null): CircuitBreaker {
         val failureThreshold = config.circuitBreakerFailureThreshold.coerceAtLeast(1)
         val resetTimeoutMs = config.circuitBreakerResetTimeoutMs.coerceAtLeast(1000L)
         val halfOpenMaxAttempts = config.circuitBreakerHalfOpenMaxAttempts.coerceAtLeast(1)
 
-        return CircuitBreaker(
+        lateinit var breaker: CircuitBreaker
+        breaker = CircuitBreaker(
             failureThreshold = failureThreshold,
             resetTimeoutMs = resetTimeoutMs,
-            halfOpenMaxAttempts = halfOpenMaxAttempts
+            halfOpenMaxAttempts = halfOpenMaxAttempts,
+            onStateChange = { state ->
+                adapterName?.let { telemetry.recordCircuitState(it, state, breaker.getFailureCount()) }
+            }
         )
+        return breaker
+    }
+
+    private fun shouldCountException(ex: Exception): Boolean {
+        return !(ex is AdapterError && (ex.code == ErrorCode.NO_FILL || ex.code == ErrorCode.BELOW_FLOOR))
+    }
+
+    private fun outcomeForError(error: AdapterError): String {
+        return when (error.code) {
+            ErrorCode.NO_FILL -> "no_fill"
+            ErrorCode.TIMEOUT -> "timeout"
+            else -> "error"
+        }
     }
     
     /**
@@ -892,15 +938,15 @@ class MediationSDK private constructor(
         return filteredNetworks.mapNotNull { networkId ->
             adapterRegistry.getAdapter(networkId)
         }.filter { adapter ->
-            adapter.isAvailable() && !isAdapterInCircuit(adapter)
+            adapter.isAvailable() && !isAdapterInCircuit(adapter.name)
         }
     }
     
     /**
      * Check if adapter's circuit breaker is open
      */
-    private fun isAdapterInCircuit(adapter: AdAdapter): Boolean {
-        return circuitBreakers[adapter.name]?.isOpen() ?: false
+    private fun isAdapterInCircuit(adapterName: String): Boolean {
+        return circuitBreakers[adapterName]?.isOpen() ?: false
     }
 
     /**
@@ -1012,6 +1058,67 @@ class MediationSDK private constructor(
         val response = adFromRuntime(placement, placementConfig, entry.partnerId, loadResult)
         val binding = RuntimeHandleBinding(entry.partnerId, loadResult.handle, placementConfig.adType)
         return RuntimeLoadPayload(response, binding)
+    }
+
+    private fun loadRuntimeWithCircuitBreaker(
+        entry: AdapterRegistry.RuntimeAdapterEntry,
+        placement: String,
+        placementConfig: PlacementConfig,
+        traceId: String,
+        metadata: Map<String, Any>
+    ): AdapterResult {
+        val breaker = circuitBreakers.getOrPut(entry.partnerId) { createCircuitBreaker(entry.partnerId) }
+        val adapterStart = com.rivalapexmediation.sdk.util.ClockProvider.clock.monotonicNow()
+
+        if (breaker.isOpen()) {
+            telemetry.recordAdapterSpanFinish(
+                traceId = traceId,
+                placement = placement,
+                adapter = entry.partnerId,
+                outcome = "error",
+                latencyMs = 0L,
+                errorCode = ErrorCode.CIRCUIT_OPEN.name.lowercase(),
+                errorMessage = "circuit_open",
+                metadata = metadata
+            )
+            return AdapterResult(null, null, AdapterError.Recoverable(ErrorCode.CIRCUIT_OPEN, "circuit_open"))
+        }
+
+        return try {
+            val payload = breaker.execute(
+                action = { loadViaRuntime(entry, placement, placementConfig) },
+                classifySuccess = { result -> result?.response?.isValid() == true },
+                countException = { ex -> shouldCountException(ex) }
+            )
+            val response = payload?.response
+            val outcome = if (response?.isValid() == true) "fill" else "no_fill"
+            val latency = com.rivalapexmediation.sdk.util.ClockProvider.clock.monotonicNow() - adapterStart
+            telemetry.recordAdapterSpanFinish(
+                traceId = traceId,
+                placement = placement,
+                adapter = entry.partnerId,
+                outcome = outcome,
+                latencyMs = latency,
+                metadata = metadata
+            )
+            AdapterResult(response?.copy(loadTime = latency), payload?.binding)
+        } catch (t: Exception) {
+            val latency = com.rivalapexmediation.sdk.util.ClockProvider.clock.monotonicNow() - adapterStart
+            val adapterError = t as? AdapterError
+            val reason = adapterError?.normalizedReason() ?: "exception"
+            val outcome = adapterError?.let { outcomeForError(it) } ?: "error"
+            telemetry.recordAdapterSpanFinish(
+                traceId = traceId,
+                placement = placement,
+                adapter = entry.partnerId,
+                outcome = outcome,
+                latencyMs = latency,
+                errorCode = reason,
+                errorMessage = adapterError?.detail ?: t.message,
+                metadata = metadata
+            )
+            AdapterResult(null, null, adapterError)
+        }
     }
 
     private fun buildRuntimeAdapterConfig(networkId: String, placementConfig: PlacementConfig): RuntimeAdapterConfig? {
@@ -1165,7 +1272,8 @@ class MediationSDK private constructor(
 
     private data class AdapterResult(
         val response: AdResponse?,
-        val runtimeBinding: RuntimeHandleBinding?
+        val runtimeBinding: RuntimeHandleBinding?,
+        val error: AdapterError? = null
     )
 
     private data class RuntimeLoadPayload(
@@ -1300,9 +1408,10 @@ data class SDKConfig @JvmOverloads constructor(
     val strictModePenaltyDeath: Boolean = false,
     // Optional: Base64-encoded Ed25519 public key for config signature verification (non-test builds)
     val configPublicKeyBase64: String? = null,
-    val circuitBreakerFailureThreshold: Int = 5,
+    val circuitBreakerFailureThreshold: Int = 3,
     val circuitBreakerResetTimeoutMs: Long = 60_000L,
     val circuitBreakerHalfOpenMaxAttempts: Int = 3,
+    val minNoFillRetryMs: Long = 2_000L,
     // SDK operating mode; default BYO per SDK_FIXES.md
     val sdkMode: SdkMode = SdkMode.BYO,
     // When true (and not BYO), permit S2S auctions when capable and properly credentialed
@@ -1312,8 +1421,10 @@ data class SDKConfig @JvmOverloads constructor(
     // Enable developer credential validation flows (no ad requests)
     val validationModeEnabled: Boolean = false,
     // P1.9 Observability flags
-    val observabilityEnabled: Boolean = false,
-    val observabilitySampleRate: Double = 0.1,
+    // Enable observability by default so auction latency spans reach backend.
+    val observabilityEnabled: Boolean = true,
+    // Default to full sampling for telemetry (hosts can lower if needed).
+    val observabilitySampleRate: Double = 1.0,
     val observabilityMaxQueue: Int = 500,
 ) {
     class Builder {
@@ -1326,15 +1437,16 @@ data class SDKConfig @JvmOverloads constructor(
         private var auctionApiKey: String? = null
         private var strictModePenaltyDeath: Boolean = false
         private var configPublicKeyBase64: String? = null
-        private var circuitBreakerFailureThreshold: Int = 5
+        private var circuitBreakerFailureThreshold: Int = 3
         private var circuitBreakerResetTimeoutMs: Long = 60_000L
         private var circuitBreakerHalfOpenMaxAttempts: Int = 3
+        private var minNoFillRetryMs: Long = 2_000L
         private var sdkMode: SdkMode = SdkMode.BYO
         private var enableS2SWhenCapable: Boolean = false
         private var autoConsentReadEnabled: Boolean = false
         private var validationModeEnabled: Boolean = false
-        private var observabilityEnabled: Boolean = false
-        private var observabilitySampleRate: Double = 0.1
+        private var observabilityEnabled: Boolean = true
+        private var observabilitySampleRate: Double = 1.0
         private var observabilityMaxQueue: Int = 500
         
         fun appId(id: String) = apply { this.appId = id }
@@ -1349,6 +1461,7 @@ data class SDKConfig @JvmOverloads constructor(
         fun circuitBreakerThreshold(threshold: Int) = apply { this.circuitBreakerFailureThreshold = threshold }
         fun circuitBreakerResetTimeoutMs(timeoutMs: Long) = apply { this.circuitBreakerResetTimeoutMs = timeoutMs }
         fun circuitBreakerHalfOpenAttempts(attempts: Int) = apply { this.circuitBreakerHalfOpenMaxAttempts = attempts }
+        fun minNoFillRetryMs(intervalMs: Long) = apply { this.minNoFillRetryMs = intervalMs }
         
         fun sdkMode(mode: SdkMode) = apply { this.sdkMode = mode }
         fun enableS2SWhenCapable(enabled: Boolean) = apply { this.enableS2SWhenCapable = enabled }
@@ -1366,11 +1479,12 @@ data class SDKConfig @JvmOverloads constructor(
             configEndpoint = configEndpoint,
             auctionEndpoint = auctionEndpoint,
             auctionApiKey = auctionApiKey,
-            strictModePenaltyDeath = strictModePenaltyDeath,
+            strictModePenaltyDeath = strictModePenaltyDeath || strictModeEnvEnabled(),
             configPublicKeyBase64 = configPublicKeyBase64,
             circuitBreakerFailureThreshold = circuitBreakerFailureThreshold,
             circuitBreakerResetTimeoutMs = circuitBreakerResetTimeoutMs,
             circuitBreakerHalfOpenMaxAttempts = circuitBreakerHalfOpenMaxAttempts,
+            minNoFillRetryMs = minNoFillRetryMs,
             sdkMode = sdkMode,
             enableS2SWhenCapable = enableS2SWhenCapable,
             autoConsentReadEnabled = autoConsentReadEnabled,
@@ -1379,6 +1493,13 @@ data class SDKConfig @JvmOverloads constructor(
             observabilitySampleRate = observabilitySampleRate,
             observabilityMaxQueue = observabilityMaxQueue,
         )
+
+        private fun strictModeEnvEnabled(): Boolean {
+            val override = (System.getenv("BEL_DEBUG_STRICTMODE")
+                ?: System.getProperty("bel.debug.strictmode"))
+                ?.lowercase()
+            return override == "1" || override == "true"
+        }
     }
 }
 

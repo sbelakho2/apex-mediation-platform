@@ -1,4 +1,5 @@
 import Foundation
+#if os(tvOS)
 #if canImport(FoundationNetworking)
 import FoundationNetworking
 #endif
@@ -159,3 +160,14 @@ final class ConfigManager {
         return try? JSONDecoder().decode(RemoteConfig.self, from: json)
     }
 }
+#else
+// macOS test host: provide stubs so the package can build without tvOS-only APIs.
+final class ConfigManager {
+    init(config: SDKConfig, session: URLSession = .shared, defaults: UserDefaults = .standard) {}
+    func load() {}
+    func guardLoad(placementId: String) -> String? { nil }
+    func guardShow(placementId: String) -> String? { nil }
+    func recordSloSample(success: Bool) {}
+    var metricsEnabled: Bool { false }
+}
+#endif

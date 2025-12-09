@@ -29,6 +29,7 @@ class InterstitialController(
     private val stateRef = AtomicReference(State.Idle)
     private val currentAdRef = AtomicReference<Ad?>(null)
     private val inFlightCallbackFired = AtomicBoolean(false)
+    private val showGuard = AtomicBoolean(false)
 
     @Volatile private var loadJob: Job? = null
 
@@ -55,6 +56,7 @@ class InterstitialController(
             if (stateRef.get() == State.Loading) return false
             stateRef.set(State.Loading)
             inFlightCallbackFired.set(false)
+            showGuard.set(false)
         }
         val job = scope.launch(start = CoroutineStart.UNDISPATCHED) {
             try {
@@ -78,6 +80,7 @@ class InterstitialController(
     fun showIfReady(cb: Callbacks): Boolean {
         val ad = currentAdRef.get()
         if (ad == null || ad.isExpired() || stateRef.get() != State.Loaded) return false
+        if (!showGuard.compareAndSet(false, true)) return false
         stateRef.set(State.Showing)
         cb.onShown?.invoke(ad)
         // In a real implementation we would render and then move to Closed on callbacks
@@ -93,7 +96,35 @@ class InterstitialController(
         loadJob?.cancel()
         stateRef.set(State.Idle)
         inFlightCallbackFired.set(true)
+        showGuard.set(true)
+        currentAdRef.set(null)
     }
+
+    /** Save lightweight state for process-death / rotation handoff. */
+    fun saveState(): SavedState {
+        val ad = currentAdRef.get()
+        return SavedState(state = stateRef.get(), ad = ad?.takeIf { !it.isExpired() })
+    }
+
+    /** Restore a previously saved state; drops expired ads and resets duplicate-callback guards. */
+    fun restoreState(saved: SavedState?) {
+        if (saved == null) return
+        val ad = saved.ad?.takeIf { !it.isExpired() }
+        currentAdRef.set(ad)
+        stateRef.set(if (ad != null) saved.state else State.Idle)
+        inFlightCallbackFired.set(ad == null)
+        showGuard.set(false)
+    }
+
+    /** Rebind callbacks after rotation; replays onLoaded once if still in Loaded state. */
+    suspend fun rebindCallbacks(cb: Callbacks) {
+        val ad = currentAdRef.get()
+        if (ad != null && stateRef.get() == State.Loaded) {
+            deliverOnMain { cb.onLoaded(ad) }
+        }
+    }
+
+    data class SavedState(val state: State, val ad: Ad?)
 
     private suspend fun deliverOnMain(block: suspend () -> Unit) {
         if (inFlightCallbackFired.compareAndSet(false, true)) {

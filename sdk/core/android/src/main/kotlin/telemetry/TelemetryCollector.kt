@@ -201,6 +201,20 @@ class TelemetryCollector(
             )
         )
     }
+
+    /** Circuit breaker state transition for an adapter (no secrets). */
+    fun recordCircuitState(adapter: String, state: String, failureCount: Int) {
+        recordEvent(
+            TelemetryEvent(
+                eventType = EventType.CIRCUIT_OPEN,
+                networkName = adapter,
+                metadata = mapOf(
+                    "state" to state.take(40),
+                    "failure_count" to failureCount
+                )
+            )
+        )
+    }
     
     /**
      * Record error event
@@ -305,6 +319,26 @@ class TelemetryCollector(
         )
     }
 
+    /** Auction client network latency recorder (dev/observability). Outcome: success | timeout | network_error | status_XXX | error. */
+    fun recordAuctionClientLatency(outcome: String, latencyMs: Long) {
+        // Reuse local metrics reservoirs under a dedicated key
+        recordOutcomeSampled("auction", "client", outcome, latencyMs)
+        if (!config.observabilityEnabled || !shouldSample()) return
+        val meta = HashMap<String, Any>()
+        meta["phase"] = "finish"
+        meta["outcome"] = outcome
+        meta["latency_ms"] = latencyMs
+        recordEvent(
+            TelemetryEvent(
+                eventType = EventType.ADAPTER_SPAN_FINISH,
+                placement = "auction",
+                networkName = "client",
+                latency = latencyMs,
+                metadata = meta
+            )
+        )
+    }
+
     /**
      * Record a credential validation success for a given network (BYO ValidationMode).
      * Metadata must not contain secrets; only include key names or booleans.
@@ -375,9 +409,13 @@ class TelemetryCollector(
             eventsToSend = eventQueue.toList()
             eventQueue.clear()
         }
-        
+
+        // Partition into adapter-span events (observability) vs general telemetry
+        val spans = eventsToSend.filter { it.eventType == EventType.ADAPTER_SPAN_START || it.eventType == EventType.ADAPTER_SPAN_FINISH }
+        val others = eventsToSend - spans.toSet()
         try {
-            sendEvents(eventsToSend)
+            if (spans.isNotEmpty()) sendSpanEvents(spans)
+            if (others.isNotEmpty()) sendEvents(others)
         } catch (e: Exception) {
             // Re-queue events on failure
             synchronized(queueLock) {
@@ -392,7 +430,26 @@ class TelemetryCollector(
     }
     
     /**
-     * Send events to telemetry endpoint
+     * Send adapter span events to analytics BYO spans endpoint (no gzip; sampled and sanitized).
+     */
+    private fun sendSpanEvents(events: List<TelemetryEvent>) {
+        val base = config.configEndpoint.trimEnd('/')
+        val url = "$base/api/v1/analytics/byo/spans"
+        val json = gson.toJson(events)
+        val request = Request.Builder()
+            .url(url)
+            .post(json.toRequestBody("application/json".toMediaType()))
+            .addHeader("User-Agent", "RivalApexMediation-Android/${BuildConfig.SDK_VERSION}")
+            .addHeader("X-App-Id", config.appId)
+            .build()
+        val response = httpClient.newCall(request).execute()
+        if (!response.isSuccessful) {
+            throw Exception("Span telemetry upload failed: ${response.code}")
+        }
+    }
+
+    /**
+     * Send general telemetry events to legacy endpoint (compressed)
      */
     private fun sendEvents(events: List<TelemetryEvent>) {
         val payload = mapOf(

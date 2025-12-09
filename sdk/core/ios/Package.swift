@@ -38,7 +38,16 @@ let package = Package(
         .testTarget(
             name: "RivalApexMediationSDKTests",
             dependencies: ["RivalApexMediationSDK"],
-            path: "Tests"
+            path: "Tests",
+            exclude: ["AppExtension"]
+        ),
+        .testTarget(
+            name: "RivalApexMediationSDKAppExtensionTests",
+            dependencies: ["RivalApexMediationSDK"],
+            path: "Tests/AppExtension",
+            swiftSettings: [
+                .define("APP_EXTENSION")
+            ]
         ),
     ]
 )

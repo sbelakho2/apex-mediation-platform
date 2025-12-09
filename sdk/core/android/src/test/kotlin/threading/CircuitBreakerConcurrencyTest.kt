@@ -11,7 +11,7 @@ class CircuitBreakerConcurrencyTest {
     fun fastFailsConcurrentCallsWhenOpen() {
         val breaker = CircuitBreaker(failureThreshold = 1, resetTimeoutMs = 10_000, halfOpenMaxAttempts = 1)
         try {
-            breaker.execute<Unit> { throw IllegalStateException("boom") }
+            breaker.execute(action = { throw IllegalStateException("boom") })
         } catch (_: Exception) {
             // expected – opens the circuit immediately
         }
@@ -22,7 +22,7 @@ class CircuitBreakerConcurrencyTest {
 
         repeat(4) {
             executor.execute {
-                val result = breaker.execute { 42 }
+                val result = breaker.execute(action = { 42 })
                 fastFailures += (result == null)
                 latch.countDown()
             }

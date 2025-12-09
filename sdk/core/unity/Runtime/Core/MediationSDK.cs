@@ -19,6 +19,9 @@ namespace Apex.Mediation.Core
         private readonly ConsentManager _consentManager = new(true);
         private readonly TelemetryBuffer _telemetry = new();
         private readonly TransparencyLedger _ledger = new();
+        private readonly Dictionary<string, AdapterCircuitBreaker> _circuitBreakers = new(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, long> _pacingMarks = new(StringComparer.OrdinalIgnoreCase);
+        private readonly IClock _clock = MonotonicClock.Instance;
         private CredentialStore? _credentialStore;
         private IPlatformBridge? _bridge;
         private bool _initialized;
@@ -134,7 +137,26 @@ namespace Apex.Mediation.Core
 
             var extras = CreateLoadExtras();
             extras["format"] = format;
+            extras["placement_id"] = placementId;
             var start = DateTime.UtcNow;
+
+            var gateKey = placementId;
+            if (IsPaced(gateKey, 2_000))
+            {
+                extras["reason"] = "pacing";
+                callback?.Invoke(false, "pacing");
+                RecordTrace(placementId, "pacing", "load_failure", TimeSpan.Zero, extras);
+                return;
+            }
+
+            var breaker = GetCircuitBreaker(gateKey);
+            if (breaker.IsOpen())
+            {
+                extras["reason"] = "circuit_open";
+                callback?.Invoke(false, "circuit_open");
+                RecordTrace(placementId, "circuit", "load_failure", TimeSpan.Zero, extras);
+                return;
+            }
             loader(extras, (success, error) =>
             {
                 _eventPump.Enqueue(() =>
@@ -142,9 +164,27 @@ namespace Apex.Mediation.Core
                     if (success)
                     {
                         cache.TryStore(new RenderableAd(placementId, extras["adapter"]?.ToString() ?? "mock", format, Config.AdCacheTtl));
+                        breaker.RecordSuccess();
+                        extras["reason"] = "success";
                     }
 
                     callback?.Invoke(success, error);
+                    if (!success)
+                    {
+                        var parsed = AdapterError.Parse(error);
+                        if (parsed.Code == AdapterErrorCode.NoFill || parsed.Code == AdapterErrorCode.BelowFloor)
+                        {
+                            MarkPaced(gateKey);
+                            breaker.RecordSuccess();
+                        }
+                        else
+                        {
+                            breaker.RecordFailure();
+                        }
+
+                        extras["reason"] = parsed.NormalizedReason();
+                    }
+
                     RecordTrace(placementId, format, success ? "load_success" : "load_failure", DateTime.UtcNow - start, extras);
                 });
             });
@@ -162,6 +202,7 @@ namespace Apex.Mediation.Core
             var startedOmSdk = MaybeStartOmSdkSession(ad);
 
             var completion = CreateCompletion(callback, placementId, ad.Adapter, () => FinishOmSdkSessionIfStarted(startedOmSdk));
+            private AdapterCircuitBreaker GetCircuitBreaker(string key)
             try
             {
                 showAction(completion);
@@ -171,6 +212,22 @@ namespace Apex.Mediation.Core
                 Logger.LogError($"Show failed for {placementId}", ex);
                 FinishOmSdkSessionIfStarted(startedOmSdk);
                 completion(false, ex.Message ?? "show_failed");
+
+            private bool IsPaced(string key, long minRetryMs)
+            {
+                var nowMs = (long)_clock.Now.TotalMilliseconds;
+                if (_pacingMarks.TryGetValue(key, out var last) && nowMs - last < minRetryMs)
+                {
+                    return true;
+                }
+
+                return false;
+            }
+
+            private void MarkPaced(string key)
+            {
+                _pacingMarks[key] = (long)_clock.Now.TotalMilliseconds;
+            }
             }
         }
 

@@ -176,6 +176,7 @@ public final class AdapterRuntimeWrapper: @unchecked Sendable {
     private let adapter: AdNetworkAdapterV2
     private let partnerId: String
     private var circuitBreakers: [String: AdapterCircuitBreaker] = [:]
+    private var pacing: [String: Int64] = [:]
     private let hedgeManager = HedgeManager()
     private let timeoutEnforcer = AdapterTimeoutEnforcer()
     private let lock = NSLock()
@@ -197,17 +198,38 @@ public final class AdapterRuntimeWrapper: @unchecked Sendable {
         }
         return circuitBreakers[key]!
     }
+
+    private func shouldPace(placement: String, minRetryMs: Int64) -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        let key = "\(partnerId):\(placement)"
+        let now = clock.monotonicMillis()
+        if let last = pacing[key], now - last < minRetryMs {
+            return true
+        }
+        return false
+    }
+
+    private func markPace(placement: String) {
+        lock.lock(); defer { lock.unlock() }
+        let key = "\(partnerId):\(placement)"
+        pacing[key] = clock.monotonicMillis()
+    }
     
     public func loadInterstitialWithEnforcement(
         placement: String,
         meta: RequestMeta,
-        timeoutMs: Int
+        timeoutMs: Int,
+        minNoFillRetryMs: Int64 = 2_000
     ) async throws -> LoadResult {
         let cb = getCircuitBreaker(placement: placement)
         
         // Fast-fail if circuit open
         guard !cb.isOpen() else {
             throw AdapterError(code: .circuitOpen, detail: "Circuit breaker open for \(partnerId):\(placement)", vendorCode: nil, recoverable: true)
+        }
+
+        if shouldPace(placement: placement, minRetryMs: minNoFillRetryMs) {
+            throw AdapterError(code: .noFill, detail: "pacing_guard", vendorCode: nil, recoverable: true)
         }
         
         let startTimeMs = clock.monotonicMillis()
@@ -231,9 +253,18 @@ public final class AdapterRuntimeWrapper: @unchecked Sendable {
                 
             } catch let error as AdapterError {
                 lastError = error
-                
-                guard RetryPolicy.shouldRetry(error: error, attemptCount: attemptCount) else {
-                    cb.recordFailure()
+
+                let shouldRetryError = RetryPolicy.shouldRetry(error: error, attemptCount: attemptCount)
+                if error.code == .noFill || error.code == .belowFloor {
+                    markPace(placement: placement)
+                }
+                guard shouldRetryError else {
+                    // Do not punish the circuit breaker for no-fill/below-floor responses.
+                    if error.code != .noFill && error.code != .belowFloor {
+                        cb.recordFailure()
+                    } else {
+                        cb.recordSuccess()
+                    }
                     throw error
                 }
                 
@@ -243,7 +274,8 @@ public final class AdapterRuntimeWrapper: @unchecked Sendable {
                 let wrappedError = AdapterError(code: .error, detail: error.localizedDescription, vendorCode: nil, recoverable: true)
                 lastError = wrappedError
                 
-                guard RetryPolicy.shouldRetry(error: wrappedError, attemptCount: attemptCount) else {
+                let shouldRetryError = RetryPolicy.shouldRetry(error: wrappedError, attemptCount: attemptCount)
+                guard shouldRetryError else {
                     cb.recordFailure()
                     throw wrappedError
                 }

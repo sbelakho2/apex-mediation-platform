@@ -32,7 +32,7 @@ public final class AttributionManager {
     }
 }
 
-#if canImport(StoreKit) && !os(Linux) && !os(tvOS)
+#if os(iOS)
 extension AttributionManager {
     /// Forward SKAdNetwork postbacks (decoded upstream) to the developer handler.
     @available(tvOS 16.1, *)

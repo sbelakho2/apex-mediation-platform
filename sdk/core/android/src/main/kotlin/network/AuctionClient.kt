@@ -36,6 +36,7 @@ class AuctionClient(
         CircuitBreaker(failureThreshold = 4, resetTimeoutMs = 15_000, halfOpenMaxAttempts = 1)
     },
     private val clock: Clock = ClockProvider.clock,
+    private val latencyRecorder: ((Long, String) -> Unit)? = null,
 ) {
     private val gson = Gson()
     private val base = baseUrl.trimEnd('/')
@@ -102,25 +103,39 @@ class AuctionClient(
      * Timeouts are enforced per-call using OkHttp callTimeout/readTimeout based on options.timeoutMs.
      */
     fun requestInterstitial(opts: InterstitialOptions, consent: ConsentOptions? = null): InterstitialResult {
+        val startMs = clock.monotonicNow()
         if (isOnMainThread()) {
             throw AuctionException("main_thread", "AuctionClient called from main thread")
         }
         if (opts.publisherId.isBlank() || opts.placementId.isBlank()) {
             throw AuctionException("invalid_placement", "publisherId/placementId required")
         }
-        val outcome = circuitBreaker.execute {
-            try {
-                RequestOutcome.Success(performRequestWithRetries(opts, consent))
-            } catch (ae: AuctionException) {
-                if (shouldTripCircuit(ae.reason)) {
-                    throw ae
+        val outcome = circuitBreaker.execute(
+            action = {
+                try {
+                    RequestOutcome.Success(performRequestWithRetries(opts, consent))
+                } catch (ae: AuctionException) {
+                    if (shouldTripCircuit(ae.reason)) {
+                        throw ae
+                    }
+                    RequestOutcome.Error(ae)
                 }
-                RequestOutcome.Error(ae)
-            }
-        } ?: throw AuctionException("circuit_open", "auction circuit breaker open")
+            },
+            classifySuccess = { result ->
+                result?.error?.let { err ->
+                    !shouldTripCircuit(err.reason)
+                } ?: (result?.result != null)
+            },
+            countException = { ex -> shouldTripCircuit(mapExceptionToReason(ex)) }
+        ) ?: throw AuctionException("circuit_open", "auction circuit breaker open")
 
-        outcome.error?.let { throw it }
-        return outcome.result ?: throw AuctionException("error")
+        outcome.error?.let {
+            latencyRecorder?.invoke(clock.monotonicNow() - startMs, it.reason)
+            throw it
+        }
+        val result = outcome.result ?: throw AuctionException("error")
+        latencyRecorder?.invoke(clock.monotonicNow() - startMs, "success")
+        return result
     }
 
     private fun performRequestWithRetries(
@@ -218,7 +233,8 @@ class AuctionClient(
             val msg = detail?.let { "timeout (after retry): $it" } ?: "timeout"
             throw AuctionException("timeout", msg)
         }
-        throw lastErr ?: AuctionException("error")
+        val finalErr = lastErr ?: AuctionException("error")
+        throw finalErr
     }
 
     private fun shouldRetry(reason: String): Boolean {
@@ -405,11 +421,24 @@ class AuctionClient(
     }
 
     private fun isTestRuntime(): Boolean {
+        val override = (System.getProperty("bel.force.testRuntime")
+            ?: System.getenv("BEL_FORCE_TEST_RUNTIME"))
+            ?.lowercase(Locale.US)
+        if (override == "1" || override == "true") return true
+        if (override == "0" || override == "false") return false
         return try {
             val fingerprint = Build.FINGERPRINT?.lowercase(Locale.US)
-            fingerprint?.contains("robolectric") == true
+            val robolectricDetected = fingerprint?.contains("robolectric") == true
+            val hasRobolectricRuntime = try {
+                Class.forName("org.robolectric.RuntimeEnvironment")
+                true
+            } catch (_: Throwable) {
+                false
+            }
+            robolectricDetected || hasRobolectricRuntime
         } catch (_: Throwable) {
             false
         }
     }
+
 }

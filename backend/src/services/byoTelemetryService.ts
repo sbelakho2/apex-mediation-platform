@@ -1,4 +1,6 @@
 import type { Request } from 'express'
+import { v4 as uuidv4 } from 'uuid'
+import { query } from '../utils/postgres'
 
 export type AdapterSpanStart = {
   eventType: 'ADAPTER_SPAN_START'
@@ -53,7 +55,7 @@ function getTenantContext(req: Request): { appId: string; publisherId: string } 
   return { appId, publisherId }
 }
 
-export function ingestAdapterSpanBatch(req: Request, events: AdapterSpanEvent[]) {
+export async function ingestAdapterSpanBatch(req: Request, events: AdapterSpanEvent[]) {
   prune()
   const { appId, publisherId } = getTenantContext(req)
   for (const ev of events) {
@@ -82,7 +84,43 @@ export function ingestAdapterSpanBatch(req: Request, events: AdapterSpanEvent[])
         spans.push(base)
       }
     }
+    // Persist a summary row for durability/Grafana tables; best-effort so ingestion never fails.
+    try {
+      await persistSpanEvent(ev, appId, publisherId)
+    } catch (e) {
+      // Swallow to avoid impacting SDK ingestion
+    }
   }
+}
+
+async function persistSpanEvent(ev: AdapterSpanEvent, appId: string, publisherId: string) {
+  const observed = new Date(typeof ev.timestamp === 'number' ? ev.timestamp : Date.now())
+  const payload: Record<string, any> = {
+    placement: ev.placement,
+    adapter: ev.networkName,
+    metadata: ev.metadata,
+  }
+  if (ev.eventType === 'ADAPTER_SPAN_FINISH') {
+    if (typeof ev.latency === 'number') payload.latency_ms = ev.latency
+    if (ev.errorCode) payload.error_code = ev.errorCode
+    if (ev.errorMessage) payload.error_message = ev.errorMessage
+  }
+  await query(
+    `INSERT INTO analytics_sdk_telemetry (
+      event_id, observed_at, publisher_id, adapter_id, event_type, severity, message, error_message, payload
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+    [
+      uuidv4(),
+      observed,
+      publisherId || 'unknown',
+      ev.networkName,
+      ev.eventType,
+      'info',
+      ev.eventType,
+      (ev as any).errorMessage ?? null,
+      payload,
+    ]
+  )
 }
 
 export function queryAdapterMetrics(params: {

@@ -1,5 +1,5 @@
 import Foundation
-#if canImport(AppTrackingTransparency)
+#if os(tvOS) && canImport(AppTrackingTransparency)
 import AppTrackingTransparency
 #endif
 
@@ -13,7 +13,7 @@ public enum TrackingAuthorizationStatus {
 
 public enum ATTHelper {
     public static func status() -> TrackingAuthorizationStatus {
-        #if canImport(AppTrackingTransparency)
+        #if os(tvOS) && canImport(AppTrackingTransparency)
         if #available(tvOS 14.0, *) {
             switch ATTrackingManager.trackingAuthorizationStatus {
             case .notDetermined: return .notDetermined
@@ -28,7 +28,7 @@ public enum ATTHelper {
     }
 
     public static func requestAuthorization(completion: @escaping (TrackingAuthorizationStatus) -> Void) {
-        #if canImport(AppTrackingTransparency)
+        #if os(tvOS) && canImport(AppTrackingTransparency)
         if #available(tvOS 14.0, *) {
             let current = ATTrackingManager.trackingAuthorizationStatus
             if current != .notDetermined {
