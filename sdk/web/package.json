@@ -55,7 +55,7 @@
     "@rollup/plugin-commonjs": "^25.0.7",
     "@rollup/plugin-typescript": "^11.1.6",
     "tslib": "^2.6.3",
-    "typescript": "^5.5.4",
+    "typescript": "^5.9.3",
     "whatwg-fetch": "^3.6.20",
     "typedoc": "^0.25.13"
   }
