@@ -22,7 +22,7 @@ jobs:
           ./scripts/generate-api-baseline.sh
 
       - name: Commit baseline changes
-        uses: peter-evans/create-pull-request@v6
+        uses: peter-evans/create-pull-request@v8
         with:
           commit-message: "iOS: add/refresh Swift API digester baseline"
           title: "iOS: Add/refresh Swift API digester baseline"
