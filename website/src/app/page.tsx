@@ -46,8 +46,8 @@ const heroStats: Array<{ icon: LucideIcon; title: string; description: string }>
   },
   {
     icon: ShieldCheck,
-    title: '99.7% fraud precision',
-    description: 'AI models from the Fraud Prevention playbook quarantine IVT before finance ever feels the revenue clawback.',
+    title: 'Real-time IVT Protection',
+    description: 'AI-driven architecture blocks invalid traffic before it impacts your bottom line, keeping your accounts safe from clawbacks.',
   },
   {
     icon: Network,
@@ -77,7 +77,7 @@ const featureCards: FeatureCardConfig[] = [
   {
     icon: ShieldCheck,
     title: 'Fraud sentinel',
-    description: 'Behavioral, device, and timing models from the Fraud Prevention guide block IVT with 99.7% precision before advertisers claw back spend.',
+    description: 'Behavioral, device, and timing models from the Fraud Prevention guide block IVT with enterprise-grade precision before advertisers claw back spend.',
   },
   {
     icon: Scale,
@@ -91,7 +91,7 @@ const featureCards: FeatureCardConfig[] = [
   },
   {
     icon: Wallet,
-    title: 'Finance-ready payouts',
+    title: 'Automated Net-30 Payouts',
     description: 'A simple platform fee (0–2.5%) funds payouts, invoicing, FX, and compliance—publishers keep their demand while we automate NET 30 payments and €100 minimums across SEPA/SWIFT.',
   },
   {
@@ -234,7 +234,7 @@ const pricingTiers: PricingTierConfig[] = [
       'Upgrade only when trailing 30-day revenue crosses $10k; add a card/ACH/SEPA rail at that point.',
     ],
     badge: 'Free tier',
-    ctaLabel: 'Launch for free',
+    ctaLabel: 'Start Building Now',
     ctaHref: '/signup',
     accent: 'brand',
   },
@@ -459,10 +459,10 @@ function HeroSection() {
         <div className="flex flex-col items-center gap-4">
           <span className="eyebrow">Bring-your-own mediation SDKs</span>
           <h1 id="hero-heading">
-            Launch one control plane, keep your demand, and tap every adapter we ship
+            Maximize Yield. Minimize SDK Fatigue.
           </h1>
           <p>
-            The Android, iOS/tvOS, Unity, Android TV, and Web SDKs all share the same 15 documented adapters—{supportedNetworksList}—so your engineers can bring their own credentials without rewriting code per platform.
+            Integrate 15 top networks in 13 minutes. Enterprise-grade fraud protection, real-time bidding, and automated payouts—all in one control plane.
           </p>
         </div>
 

@@ -12,14 +12,18 @@ Add the Apex Mediation script to the `<head>` of your HTML page:
 
 ### 2. Initialize SDK
 
-Initialize the SDK with your App ID (Site ID). You can do this in a separate script block or your main bundle.
+Initialize the SDK with your configuration. Note that the `endpoint` is required.
 
 ```javascript
 window.apex = window.apex || [];
 function apex() { window.apex.push(arguments); }
 
 apex('init', {
-  appId: 'YOUR_SITE_ID'
+  appId: 'YOUR_APP_ID',
+  endpoint: 'https://api.apexmediation.ee', // Required: Auction endpoint
+  publisherId: 'YOUR_PUB_ID', // Optional but recommended
+  debug: true, // Enable debug logging
+  timeoutMs: 2000 // Auction timeout in milliseconds
 });
 ```
 
@@ -50,7 +54,7 @@ apex('display', 'ad-slot-1');
 
 ## Key Concepts
 
-*   **Site ID**: Equivalent to App ID for web properties.
+*   **Endpoint**: The Web SDK requires an explicit auction endpoint URL. This allows for white-labeling and enterprise proxy configurations.
 *   **Container**: The DOM element where the ad will be rendered. Must have explicit dimensions or the ad may collapse.
 *   **Async Loading**: The SDK loads asynchronously to avoid blocking page render. The `window.apex` queue ensures commands are executed once the SDK is ready.
 
@@ -65,7 +69,13 @@ npm install @apexmediation/web-sdk
 **React Example:**
 
 ```jsx
-import { ApexAd } from '@apexmediation/web-sdk/react';
+import { init, ApexAd } from '@apexmediation/web-sdk/react';
+
+// Initialize once (e.g., in App.js)
+init({
+  appId: 'YOUR_APP_ID',
+  endpoint: 'https://api.apexmediation.ee'
+});
 
 function App() {
   return (
@@ -84,17 +94,20 @@ function App() {
 ## Integration Checklist
 
 1.  [ ] Added script tag to `<head>`.
-2.  [ ] Initialized with correct Site ID.
+2.  [ ] Initialized with correct `appId` and `endpoint`.
 3.  [ ] Created container `<div>`s with correct IDs.
 4.  [ ] Verified ads.txt is updated on your domain.
 5.  [ ] Verified ads render in supported browsers.
 
 ## Debugging
 
-Enable debug mode in the console:
+Enable debug mode in the init options:
 
 ```javascript
-apex('setDebug', true);
+apex('init', {
+  // ...
+  debug: true
+});
 ```
 
-Check the browser's Developer Tools > Console for logs prefixed with `[Apex]`.
+Check the browser's Developer Tools > Console for logs.

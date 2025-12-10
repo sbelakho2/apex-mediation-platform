@@ -4,7 +4,7 @@
 
 ### 1. Add Dependencies
 
-Add the ApexMediation repository and dependency to your `build.gradle` (app level):
+Add the repository and dependency to your `build.gradle` (app level):
 
 ```groovy
 repositories {
@@ -13,78 +13,111 @@ repositories {
 }
 
 dependencies {
-    implementation 'com.apexmediation.sdk:core:1.0.0'
+    implementation 'com.rivalapexmediation.sdk:core:1.0.0'
     // Add adapters for your BYO networks
-    implementation 'com.apexmediation.sdk:adapter-admob:1.0.0'
-    implementation 'com.apexmediation.sdk:adapter-applovin:1.0.0'
+    implementation 'com.rivalapexmediation.sdk:adapter-admob:1.0.0'
+    implementation 'com.rivalapexmediation.sdk:adapter-applovin:1.0.0'
 }
 ```
 
 ### 2. Initialize SDK
 
-In your `Application` class or main `Activity`:
+In your `Application` class or main `Activity`. You can configure the SDK using the `SDKConfig` builder.
 
 ```kotlin
-import com.apexmediation.sdk.ApexMediation
+import com.rivalapexmediation.sdk.BelAds
+import com.rivalapexmediation.sdk.SDKConfig
+import com.rivalapexmediation.sdk.LogLevel
 
 class MyApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         
-        ApexMediation.initialize(this, "YOUR_APP_ID") { status ->
-            if (status == InitializationStatus.SUCCESS) {
-                Log.d("Apex", "SDK Initialized")
-            }
-        }
+        // Create configuration
+        val config = SDKConfig.Builder()
+            .appId("YOUR_APP_ID")
+            .testMode(BuildConfig.DEBUG) // Enable test mode for debug builds
+            .logLevel(LogLevel.INFO)
+            .telemetryEnabled(true)
+            .build()
+
+        // Initialize
+        BelAds.initialize(this, "YOUR_APP_ID", config)
     }
 }
 ```
 
-### 3. Load & Show Ad
+### 3. Load & Show Interstitial
+
+Use `BelInterstitial` for interstitial ads.
 
 ```kotlin
-// Load
-ApexMediation.loadInterstitial("PLACEMENT_ID")
+import com.rivalapexmediation.sdk.BelInterstitial
+import com.rivalapexmediation.sdk.AdLoadCallback
 
-// Show
-if (ApexMediation.isInterstitialReady("PLACEMENT_ID")) {
-    ApexMediation.showInterstitial(this, "PLACEMENT_ID")
+// Load
+BelInterstitial.load(context, "PLACEMENT_ID", object : AdLoadCallback {
+    override fun onAdLoaded(placementId: String) {
+        Log.d("Apex", "Ad loaded for $placementId")
+    }
+
+    override fun onAdFailedToLoad(placementId: String, error: Throwable) {
+        Log.e("Apex", "Ad failed: ${error.message}")
+    }
+})
+
+// Show (usually in response to a user action or game event)
+if (BelInterstitial.show(activity)) {
+    Log.d("Apex", "Ad shown")
+} else {
+    Log.d("Apex", "Ad not ready")
 }
 ```
 
-## Key Concepts
+## Advanced Configuration
 
-*   **App ID**: Found in the Console under App Settings. Unique per app.
-*   **Placement ID**: Found in the Console. Unique per ad unit.
-*   **Activity Context**: Always pass the current `Activity` when showing ads to ensure proper rendering.
+The `SDKConfig.Builder` offers several advanced options:
 
-## Integration Checklist
+| Option | Description | Default |
+| :--- | :--- | :--- |
+| `testMode(Boolean)` | Enables test ads and logging. **Disable in production.** | `false` |
+| `logLevel(LogLevel)` | Sets verbosity (`NONE`, `ERROR`, `INFO`, `VERBOSE`). | `INFO` |
+| `telemetryEnabled(Boolean)` | Sends anonymous performance data to improve mediation. | `true` |
+| `autoConsentReadEnabled(Boolean)` | Automatically reads TCF v2 strings from SharedPreferences. | `false` |
+| `observabilityEnabled(Boolean)` | Enables distributed tracing for auction latency debugging. | `true` |
 
-1.  [ ] Added `internet` permission to `AndroidManifest.xml` (usually auto-merged).
-2.  [ ] Configured ProGuard rules (see below).
-3.  [ ] Initialized SDK with correct App ID.
-4.  [ ] Added adapters for all networks you plan to use.
-5.  [ ] Verified test ads load in the emulator.
+## Runtime Controls
+
+You can modify some settings at runtime via `BelAds`:
+
+```kotlin
+// Enable verbose logging for debugging
+BelAds.setLogLevel(LogLevel.VERBOSE)
+
+// Toggle test mode (e.g., via a hidden debug menu)
+BelAds.setTestMode(true)
+
+// Set Auction API Key (for Enterprise/Hybrid clients)
+BelAds.setAuctionApiKey("YOUR_KEY")
+```
 
 ## ProGuard / R8
 
 If you use code shrinking, add these rules to `proguard-rules.pro`:
 
 ```proguard
--keep class com.apexmediation.sdk.** { *; }
--keep interface com.apexmediation.sdk.** { *; }
+-keep class com.rivalapexmediation.sdk.** { *; }
+-keep interface com.rivalapexmediation.sdk.** { *; }
+-keep class com.iab.omid.** { *; }
 ```
 
 ## Debugging
 
-Enable verbose logging during development:
+Open the **Mediation Debugger** to verify your integration and adapter status:
 
 ```kotlin
-ApexMediation.setLogLevel(LogLevel.VERBOSE)
-```
+import com.rivalapexmediation.sdk.debug.DebugPanel
 
-Open the **Mediation Debugger** to see adapter status:
-
-```kotlin
-ApexMediation.openDebugger(this)
+// Launch the debugger activity
+DebugPanel.open(context)
 ```

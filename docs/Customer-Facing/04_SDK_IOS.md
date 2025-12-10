@@ -31,7 +31,7 @@ Run `pod install`.
 
 ### 2. Initialize SDK
 
-In your `AppDelegate.swift`:
+In your `AppDelegate.swift` or `App` struct.
 
 ```swift
 import ApexMediation
@@ -41,9 +41,13 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
         
-        ApexMediation.initialize(appId: "YOUR_APP_ID") { status in
-            if status == .success {
+        // Initialize with default config
+        BelAds.initialize(appId: "YOUR_APP_ID") { result in
+            switch result {
+            case .success:
                 print("Apex SDK Initialized")
+            case .failure(let error):
+                print("Initialization failed: \(error)")
             }
         }
         
@@ -52,9 +56,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 }
 ```
 
-### 3. Load & Show Ad
-
-In your `ViewController`:
+### 3. Load & Show Interstitial
 
 ```swift
 import ApexMediation
@@ -64,51 +66,88 @@ class ViewController: UIViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         // Load
-        ApexMediation.loadInterstitial(placementId: "PLACEMENT_ID")
+        BelInterstitial.load(placementId: "PLACEMENT_ID") { result in
+             switch result {
+             case .success:
+                 print("Ad Loaded")
+             case .failure(let error):
+                 print("Ad Failed: \(error)")
+             }
+        }
     }
 
     @IBAction func showAd() {
         // Show
-        if ApexMediation.isInterstitialReady(placementId: "PLACEMENT_ID") {
-            ApexMediation.showInterstitial(from: self, placementId: "PLACEMENT_ID")
+        if BelInterstitial.isReady(placementId: "PLACEMENT_ID") {
+            BelInterstitial.show(from: self, placementId: "PLACEMENT_ID")
         }
     }
 }
 ```
 
-## Key Concepts
+## App Tracking Transparency (iOS 14+)
 
-*   **App ID**: Found in the Console under App Settings.
-*   **Placement ID**: Found in the Console.
-*   **SKAdNetwork**: Ensure your `Info.plist` includes the SKAdNetwork IDs for all your ad partners to track conversions on iOS 14+.
+The SDK provides a helper to request IDFA permission.
 
-## Info.plist Configuration
+```swift
+// Check status
+let status = BelAds.trackingAuthorizationStatus()
 
-Add the `NSUserTrackingUsageDescription` key to request IDFA permission:
+// Request permission
+BelAds.requestTrackingAuthorization { status in
+    if status == .authorized {
+        print("IDFA authorized")
+    }
+}
+```
 
+**Info.plist Requirement:**
+Add `NSUserTrackingUsageDescription`:
 ```xml
 <key>NSUserTrackingUsageDescription</key>
 <string>This identifier will be used to deliver personalized ads to you.</string>
 ```
 
-## Integration Checklist
+## Advanced Configuration
 
-1.  [ ] Added `NSUserTrackingUsageDescription` to `Info.plist`.
-2.  [ ] Added SKAdNetwork IDs for all partners.
-3.  [ ] Initialized SDK with correct App ID.
-4.  [ ] Requested IDFA permission (ATTrackingManager).
-5.  [ ] Verified test ads load on device.
-
-## Debugging
-
-Enable verbose logging:
+You can customize the initialization using `SDKConfig`.
 
 ```swift
-ApexMediation.setLogLevel(.verbose)
+let config = SDKConfig(
+    appId: "YOUR_APP_ID",
+    configEndpoint: "https://api.apexmediation.ee", // Enterprise only
+    auctionEndpoint: "https://api.apexmediation.ee", // Enterprise only
+    telemetryEnabled: true,
+    logLevel: .verbose,
+    testMode: true, // Enable for development
+    enableOmSdk: true // Enable Open Measurement for viewability
+)
+
+MediationSDK.shared.initialize(appId: "YOUR_APP_ID", configuration: config)
 ```
+
+## SKAdNetwork
+
+Ensure your `Info.plist` includes the SKAdNetwork IDs for all your ad partners to track conversions.
+
+```xml
+<key>SKAdNetworkItems</key>
+<array>
+  <dict>
+    <key>SKAdNetworkIdentifier</key>
+    <string>cstr6suwn9.skadnetwork</string>
+  </dict>
+  <!-- Add other network IDs here -->
+</array>
+```
+
+## Debugging
 
 Open the **Mediation Debugger**:
 
 ```swift
-ApexMediation.presentDebugger(from: self)
+import ApexMediation
+
+// Present from current view controller
+DebugPanel.present(from: self)
 ```

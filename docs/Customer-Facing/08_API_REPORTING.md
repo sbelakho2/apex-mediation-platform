@@ -2,9 +2,9 @@
 
 ## Overview
 
-The Reporting API allows you to programmatically retrieve performance data for your apps and ad units. You can query for metrics like impressions, revenue, and eCPM, grouped by various dimensions.
+The Reporting API allows you to programmatically retrieve performance data for your apps and ad units.
 
-**Base URL**: `https://api.apexmediation.com/v1/reporting`
+**Base URL**: `https://api.apexmediation.com/api/v1/reporting`
 
 ## Authentication
 
@@ -14,91 +14,94 @@ All requests must include your API Key in the `Authorization` header.
 Authorization: Bearer YOUR_API_KEY
 ```
 
-You can generate an API Key in the Console under **Account Settings > API Keys**.
-
 ## Endpoints
 
-### Generate Report
+### 1. Revenue Overview
 
-`POST /report`
+`GET /overview`
 
-Generates a report based on the provided criteria.
+Get high-level revenue statistics for a date range.
 
-**Request Body:**
+**Parameters:**
 
-```json
-{
-  "startDate": "2023-10-01",
-  "endDate": "2023-10-07",
-  "dimensions": [
-    "date",
-    "app",
-    "ad_unit",
-    "country"
-  ],
-  "metrics": [
-    "requests",
-    "impressions",
-    "revenue",
-    "ecpm",
-    "fill_rate"
-  ],
-  "filters": [
-    {
-      "dimension": "app",
-      "operator": "in",
-      "values": ["app_id_123"]
-    }
-  ],
-  "timezone": "UTC"
-}
-```
+| Parameter | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `startDate` | String | Yes | ISO8601 date (e.g., `2023-10-01`). |
+| `endDate` | String | Yes | ISO8601 date (e.g., `2023-10-07`). |
 
 **Response:**
 
 ```json
 {
-  "data": [
-    {
-      "date": "2023-10-01",
-      "app": "My Game",
-      "ad_unit": "Interstitial_LevelComplete",
-      "country": "US",
-      "requests": 1500,
-      "impressions": 1200,
-      "revenue": 15.50,
-      "ecpm": 12.92,
-      "fill_rate": 0.80
-    }
-    // ... more rows
-  ]
+  "revenue": 1250.50,
+  "impressions": 50000,
+  "ecpm": 25.01,
+  "fillRate": 0.92
 }
 ```
 
-## Dimensions & Metrics
+### 2. Time Series Data
 
-### Dimensions
+`GET /timeseries`
 
-| Dimension | Description |
-| :--- | :--- |
-| `date` | Date of the event (YYYY-MM-DD). |
-| `app` | Name of the application. |
-| `ad_unit` | Name of the ad unit/placement. |
-| `country` | 2-letter ISO country code. |
-| `network` | The ad network that filled the request. |
-| `platform` | `android`, `ios`, `web`, etc. |
+Get performance data grouped by time for charting.
 
-### Metrics
+**Parameters:**
 
-| Metric | Description |
-| :--- | :--- |
-| `requests` | Total ad requests sent to mediation. |
-| `impressions` | Total ads displayed to users. |
-| `revenue` | Estimated revenue in USD. |
-| `ecpm` | Effective Cost Per Mille (Revenue / Impressions * 1000). |
-| `fill_rate` | Impressions / Requests. |
-| `clicks` | Total clicks on ads. |
-| `ctr` | Click-Through Rate (Clicks / Impressions). |
+| Parameter | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `startDate` | String | Yes | ISO8601 date. |
+| `endDate` | String | Yes | ISO8601 date. |
+| `granularity` | String | No | `hour` or `day` (default: `day`). |
+
+### 3. Adapter Performance
+
+`GET /adapters`
+
+Breakdown of performance by ad network adapter.
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `startDate` | String | Yes | ISO8601 date. |
+| `endDate` | String | Yes | ISO8601 date. |
+
+### 4. Country Breakdown
+
+`GET /countries`
+
+Revenue and impressions by country.
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `startDate` | String | Yes | ISO8601 date. |
+| `endDate` | String | Yes | ISO8601 date. |
+| `limit` | Integer | No | Max results (default: 10). |
+
+### 5. Top Apps
+
+`GET /top-apps`
+
+Performance by application.
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `startDate` | String | Yes | ISO8601 date. |
+| `endDate` | String | Yes | ISO8601 date. |
+| `limit` | Integer | No | Max results (default: 10). |
+
+### 6. Real-time Stats
+
+`GET /realtime`
+
+Get statistics for the last hour. Useful for monitoring live issues.
+
+**Parameters:** None.
 
 ## Rate Limits
 

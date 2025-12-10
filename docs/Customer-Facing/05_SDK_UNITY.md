@@ -20,27 +20,47 @@ The SDK uses the External Dependency Manager for Unity (EDM4U) to handle Android
 Create a script (e.g., `AdsManager.cs`) and attach it to a GameObject in your first scene.
 
 ```csharp
-using ApexMediation.Unity;
+using RivalApex.Mediation;
 using UnityEngine;
 
 public class AdsManager : MonoBehaviour
 {
+    [SerializeField] private SDKConfig sdkConfig; // Assign in Inspector
+
     void Start()
     {
-        ApexMediation.Initialize("YOUR_APP_ID", OnInitializationComplete);
+        if (sdkConfig == null)
+        {
+            Debug.LogError("SDK Config not assigned!");
+            return;
+        }
+
+        ApexMediation.Initialize(sdkConfig, OnInitializationComplete);
     }
 
-    private void OnInitializationComplete(InitializationStatus status)
+    private void OnInitializationComplete(bool success)
     {
-        if (status == InitializationStatus.Success)
+        if (success)
         {
             Debug.Log("Apex SDK Initialized");
+        }
+        else
+        {
+            Debug.LogError("Apex SDK Initialization Failed");
         }
     }
 }
 ```
 
-### 4. Load & Show Ad
+### 4. Create Configuration
+
+1.  Right-click in the Project window.
+2.  Select **Create > Apex Mediation > SDK Config**.
+3.  Name the file (e.g., `MyGameConfig`).
+4.  Select the file and set your **App ID** and other settings in the Inspector.
+5.  Assign this config file to your `AdsManager` script.
+
+### 5. Load & Show Ad
 
 ```csharp
 public void LoadInterstitial()
@@ -59,22 +79,24 @@ public void ShowInterstitial()
 
 ## Key Concepts
 
-*   **Platform Specific IDs**: You may have different App IDs and Placement IDs for Android and iOS. Use preprocessor directives (`#if UNITY_ANDROID`, `#if UNITY_IOS`) to switch between them.
+*   **ScriptableObject Config**: Configuration is handled via a ScriptableObject asset, allowing you to easily swap configs for different environments (Dev vs Prod).
+*   **Platform Specific IDs**: You may have different App IDs and Placement IDs for Android and iOS. The `SDKConfig` asset allows you to override IDs per platform.
 *   **Main Thread**: All SDK calls must be made from the main Unity thread.
 
 ## Integration Checklist
 
 1.  [ ] Imported Unity Package.
 2.  [ ] Resolved Android/iOS dependencies via EDM4U.
-3.  [ ] Configured App ID (handled platform differences).
+3.  [ ] Created `SDKConfig` asset and assigned App ID.
 4.  [ ] Verified ads on Android device.
 5.  [ ] Verified ads on iOS device.
 
 ## Debugging
 
-Enable debug logging:
+Enable debug logging in your `SDKConfig` asset or via code:
 
 ```csharp
+// Runtime override
 ApexMediation.SetLogLevel(LogLevel.Verbose);
 ```
 

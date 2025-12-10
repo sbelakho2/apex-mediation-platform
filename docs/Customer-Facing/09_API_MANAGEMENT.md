@@ -2,9 +2,9 @@
 
 ## Overview
 
-The Management API allows you to programmatically configure your apps, ad units, and mediation waterfalls. This is useful for automating setup or syncing configurations with your internal systems.
+The Management API allows you to programmatically configure your placements and waterfalls.
 
-**Base URL**: `https://api.apexmediation.com/v1/management`
+**Base URL**: `https://api.apexmediation.com/api/v1`
 
 ## Authentication
 
@@ -16,81 +16,71 @@ Authorization: Bearer YOUR_API_KEY
 
 ## Resources
 
-### Apps
+### Placements
 
-#### List Apps
+#### List Placements
 
-`GET /apps`
+`GET /placements`
 
-Returns a list of all applications in your account.
+Returns a paginated list of placements.
 
-#### Create App
+**Parameters:**
 
-`POST /apps`
+| Parameter | Type | Description |
+| :--- | :--- | :--- |
+| `page` | Integer | Page number (1-based). |
+| `pageSize` | Integer | Items per page (default 50, max 200). |
+| `format` | String | Filter by format (`banner`, `interstitial`, `rewarded`, `native`). |
 
-```json
-{
-  "name": "My New Game",
-  "platform": "android",
-  "bundle_id": "com.example.mygame",
-  "store_url": "https://play.google.com/store/apps/details?id=com.example.mygame"
-}
-```
+#### Create Placement
 
-### Ad Units
+`POST /placements`
 
-#### List Ad Units
-
-`GET /apps/{app_id}/adunits`
-
-#### Create Ad Unit
-
-`POST /apps/{app_id}/adunits`
+**Request Body:**
 
 ```json
 {
   "name": "Level Complete Interstitial",
+  "appId": "app_12345",
   "format": "interstitial",
-  "reward_settings": null
+  "config": {
+    "waterfall": [
+      {
+        "network": "admob",
+        "priority": 1,
+        "params": { "adUnitId": "ca-app-pub-xxx" }
+      }
+    ]
+  }
 }
 ```
 
-### Waterfall Configuration
+#### Get Placement
 
-#### Get Waterfall
+`GET /placements/{id}`
 
-`GET /apps/{app_id}/adunits/{ad_unit_id}/waterfall`
+Returns details for a specific placement.
 
-#### Update Waterfall
+#### Update Placement
 
-`PUT /apps/{app_id}/adunits/{ad_unit_id}/waterfall`
+`PUT /placements/{id}`
 
-This endpoint allows you to configure the priority and settings for different ad networks.
+Updates a placement's configuration.
+
+**Request Body:**
 
 ```json
 {
-  "items": [
-    {
-      "network": "admob",
-      "priority": 1,
-      "settings": {
-        "ad_unit_id": "ca-app-pub-xxx/xxx"
-      }
-    },
-    {
-      "network": "applovin",
-      "priority": 2,
-      "settings": {
-        "zone_id": "xxx"
-      }
-    }
-  ]
+  "name": "New Name",
+  "config": {
+    // Full replacement of config object
+  }
 }
 ```
 
 ## Error Handling
 
-*   `400 Bad Request`: Invalid parameters.
-*   `401 Unauthorized`: Invalid API Key.
-*   `403 Forbidden`: You do not have permission to access this resource.
-*   `404 Not Found`: The requested resource does not exist.
+*   `400 Bad Request`: Invalid parameters or JSON body.
+*   `401 Unauthorized`: Invalid or missing API Key.
+*   `403 Forbidden`: Insufficient permissions.
+*   `404 Not Found`: Resource does not exist.
