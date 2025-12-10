@@ -1,0 +1,19 @@
+{
+  "apiBase": "https://api.apexmediation.ee/api/v1",
+  "placements": {
+    "interstitialA": "26c8907d-7635-4a13-a94b-6c3b12af1779",
+    "interstitialB": "3b94ce00-15d2-4b96-9d1e-b096cd12cdb9",
+    "rewardedA": "ca610a0c-8607-4a38-8a21-9cbfd3018b7b",
+    "bannerA": "bdf98482-e3c8-4792-bc06-7e98f7184d08"
+  },
+  "consent": {
+    "gdpr": false,
+    "ccpa": false,
+    "coppa": false,
+    "lat": true
+  },
+  "appId": "sandbox-app-ios",
+  "testMode": true,
+  "forceAdapterPipeline": true,
+  "adapterWhitelist": ["admob"]
+}

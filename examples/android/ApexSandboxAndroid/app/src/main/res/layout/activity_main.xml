@@ -1,0 +1,189 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="16dp">
+
+        <TextView
+            android:id="@+id/statusText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Status"
+            android:textSize="16sp"
+            android:paddingBottom="12dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="SDK Controls" />
+
+        <Button
+            android:id="@+id/initBtn"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Initialize" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Network Behavior" 
+            android:layout_marginTop="12dp"/>
+
+        <Spinner
+            android:id="@+id/networkSpinner"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content" />
+
+        <CheckBox
+            android:id="@+id/airplaneToggle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Airplane Mode (simulate no network)"
+            android:layout_marginTop="8dp"/>
+
+        <CheckBox
+            android:id="@+id/invalidPlacementToggle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Invalid Placement IDs"
+            android:layout_marginTop="4dp"/>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Placements" 
+            android:layout_marginTop="12dp"/>
+
+        <Button
+            android:id="@+id/loadInterstitialBtn"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Load Interstitial A" />
+
+        <Button
+            android:id="@+id/showInterstitialBtn"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Show Interstitial A"
+            android:layout_marginTop="8dp" />
+
+        <Button
+            android:id="@+id/loadInterstitialBBtn"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Load Interstitial B"
+            android:layout_marginTop="8dp" />
+
+        <Button
+            android:id="@+id/showInterstitialBBtn"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Show Interstitial B"
+            android:layout_marginTop="8dp" />
+
+        <Button
+            android:id="@+id/loadRewardedBtn"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Load Rewarded A"
+            android:layout_marginTop="8dp" />
+
+        <Button
+            android:id="@+id/showRewardedBtn"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Show Rewarded A"
+            android:layout_marginTop="8dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Banner"
+            android:layout_marginTop="12dp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+            <Button
+                android:id="@+id/bannerStartBtn"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Start Banner" />
+            <Button
+                android:id="@+id/bannerStopBtn"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Stop Banner"
+                android:layout_marginStart="8dp" />
+        </LinearLayout>
+
+        <FrameLayout
+            android:id="@+id/bannerContainer"
+            android:layout_width="match_parent"
+            android:layout_height="50dp"
+            android:background="#DDDDDD"
+            android:layout_marginTop="8dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Privacy & Test Toggles"
+            android:layout_marginTop="12dp" />
+
+        <CheckBox
+            android:id="@+id/gdprToggle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="GDPR" />
+        <CheckBox
+            android:id="@+id/ccpaToggle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="CCPA" />
+        <CheckBox
+            android:id="@+id/coppaToggle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="COPPA" />
+        <CheckBox
+            android:id="@+id/latToggle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Limit Ad Tracking (LAT)" />
+        <CheckBox
+            android:id="@+id/testModeToggle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Test Mode" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Request Log"
+            android:layout_marginTop="12dp" />
+
+        <Button
+            android:id="@+id/clearLogBtn"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Clear Log" />
+
+        <TextView
+            android:id="@+id/logView"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingTop="8dp"
+            android:textSize="12sp"
+            android:typeface="monospace" />
+
+    </LinearLayout>
+</ScrollView>

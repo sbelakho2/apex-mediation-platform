@@ -1,0 +1,15 @@
+{
+  "apiBase": "https://api.apexmediation.ee/api/v1",
+  "placements": {
+    "interstitialA": "edcbe420-5e96-4c0f-b7ee-e5a10eb11db3",
+    "interstitialB": "92fe3cb3-8028-4a65-aacf-c9916b2efc29",
+    "rewardedA": "b8372490-f300-49e8-b7c2-a77fc04f85e9",
+    "bannerA": "47998e9f-dfbe-4ba9-922c-3001f106722e"
+  },
+  "consent": {
+    "gdpr": false,
+    "ccpa": false,
+    "coppa": false,
+    "lat": true
+  }
+}

@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#111111">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:padding="24dp"
+        android:gravity="center_horizontal">
+
+        <TextView
+            android:id="@+id/txtTitle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Apex Sandbox CTV (Android TV)"
+            android:textColor="#FFFFFF"
+            android:textSize="24sp"
+            android:paddingBottom="12dp"/>
+
+        <TextView
+            android:id="@+id/txtStatus"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Not initialized"
+            android:textColor="#BBBBBB"
+            android:textSize="16sp"
+            android:paddingBottom="18dp"/>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_horizontal">
+
+            <Button
+                android:id="@+id/btnInit"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Initialize"
+                android:focusable="true"
+                android:nextFocusRight="@id/btnLoadInterstitial"
+                android:paddingLeft="24dp"
+                android:paddingRight="24dp"/>
+
+            <Space
+                android:layout_width="24dp"
+                android:layout_height="0dp"/>
+
+            <Button
+                android:id="@+id/btnLoadInterstitial"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Load Interstitial"
+                android:focusable="true"
+                android:nextFocusRight="@id/btnShowInterstitial"/>
+
+            <Space
+                android:layout_width="16dp"
+                android:layout_height="0dp"/>
+
+            <Button
+                android:id="@+id/btnShowInterstitial"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Show Interstitial"
+                android:focusable="true"
+                android:nextFocusRight="@id/btnLoadRewarded"/>
+        </LinearLayout>
+
+        <Space
+            android:layout_width="0dp"
+            android:layout_height="16dp"/>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_horizontal">
+
+            <Button
+                android:id="@+id/btnLoadRewarded"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Load Rewarded"
+                android:focusable="true"
+                android:nextFocusRight="@id/btnShowRewarded"/>
+
+            <Space
+                android:layout_width="16dp"
+                android:layout_height="0dp"/>
+
+            <Button
+                android:id="@+id/btnShowRewarded"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Show Rewarded"
+                android:focusable="true"/>
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- Fullscreen ad placeholder overlay (1080p+, scales to 4K) -->
+    <include
+        android:id="@+id/adOverlay"
+        layout="@layout/view_ad_overlay"
+        android:visibility="gone"/>
+
+</FrameLayout>

@@ -1,0 +1,11 @@
+# Xcode / SwiftPM
+DerivedData/
+.build/
+.swiftpm/
+xcuserdata/
+*.xcworkspace
+*.xcodeproj/project.xcworkspace/xcuserdata
+
+# Swift Package Manager build artifacts
+.swiftpm/config/registries.json
+.swiftpm/xcode/package.xcworkspace/
