@@ -92,7 +92,7 @@
     "resend": "^6.4.0",
     "stripe": "^19.2.0",
     "swagger-ui-express": "^5.0.1",
-    "typeorm": "^0.3.27",
+    "typeorm": "^0.3.28",
     "winston": "^3.11.0",
     "zod": "^3.25.76"
   },
