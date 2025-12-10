@@ -1,0 +1,44 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <!-- Set UNITY_RUNNER=true in a Unity editor/CI environment to actually build and run these tests -->
+    <UnityRunner Condition="'$(UNITY_RUNNER)' != ''">true</UnityRunner>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <IsTestProject Condition="'$(UnityRunner)' != 'true'">false</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(UnityRunner)' == 'true'">
+    <Compile Include="../Runtime/**/*.cs" />
+    <Compile Include="**/*.cs" />
+    <Compile Remove="../Runtime/Platforms/Android/**/*.cs" />
+    <Compile Remove="../Runtime/Platforms/iOS/**/*.cs" />
+    <Compile Remove="../Runtime/Core/BannerHost.cs" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(UnityRunner)' != 'true'">
+    <Compile Remove="**/*.cs" />
+  </ItemGroup>
+
+  <!-- When not running under Unity, skip compiling runtime sources to avoid UnityEngine dependency errors -->
+  <Target Name="SkipIfNotUnity" BeforeTargets="Compile" Condition="'$(UnityRunner)' != 'true'">
+    <Message Text="UNITY_RUNNER not set; skipping Unity test build (UnityEngine not available)." Importance="High" />
+    <ItemGroup>
+      <Compile Remove="**/*.cs" />
+    </ItemGroup>
+  </Target>
+
+  <Target Name="SkipTestExecutionWhenNotUnity" BeforeTargets="VSTest" Condition="'$(UnityRunner)' != 'true'">
+    <Message Text="UNITY_RUNNER not set; skipping test execution." Importance="High" />
+    <PropertyGroup>
+      <RunTests>false</RunTests>
+    </PropertyGroup>
+  </Target>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.9.0" />
+    <PackageReference Include="xunit" Version="2.7.0" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.5.8" />
+  </ItemGroup>
+</Project>

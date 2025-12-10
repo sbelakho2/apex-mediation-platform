@@ -1,0 +1,22 @@
+{
+  "name": "com.platform.mediation",
+  "version": "0.1.0",
+  "displayName": "Platform Mediation (Unity)",
+  "description": "Unity Editor + runtime package for Platform Mediation (Editor tools + runtime SDK)",
+  "unity": "2020.3",
+  "author": {
+    "name": "Platform",
+    "email": "dev@platform.com"
+  },
+  "keywords": ["mediation","ads","platform","editor"],
+  "dependencies": {
+    "com.unity.nuget.newtonsoft-json": "3.2.1"
+  },
+  "samples": [
+    {
+      "displayName": "Mediation Demo",
+      "description": "Sample scenes demonstrating BYO initialization, consent, and ad lifecycle",
+      "path": "Samples~/MediationDemo"
+    }
+  ]
+}

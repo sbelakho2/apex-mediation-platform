@@ -1,0 +1,9 @@
+<linker>
+  <assembly fullname="ApexMediation">
+    <type fullname="Apex.Mediation.*" preserve="all" />
+    <type fullname="Apex.Mediation.Internal.*" preserve="all" />
+    <type fullname="Apex.Mediation.Platforms.*" preserve="all" />
+    <type fullname="Apex.Mediation.Core.*" preserve="all" />
+    <type fullname="Apex.Mediation.Consent.*" preserve="all" />
+  </assembly>
+</linker>
