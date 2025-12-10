@@ -55,7 +55,7 @@
     "@aws-sdk/credential-providers": "^3.922.0",
     "@fast-csv/format": "^5.0.5",
     "@google-cloud/bigquery": "^8.1.1",
-    "@google-cloud/storage": "^7.17.2",
+    "@google-cloud/storage": "^7.18.0",
     "@maxmind/geoip2-node": "^6.2.0",
     "@types/axios": "^0.14.4",
     "@types/bull": "^3.15.9",
