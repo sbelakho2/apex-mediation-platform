@@ -1,0 +1,24 @@
+{
+  "root": true,
+  "env": { "es2021": true, "browser": true, "node": true, "jest": true },
+  "parser": "@typescript-eslint/parser",
+  "parserOptions": { "project": ["./tsconfig.json"], "sourceType": "module" },
+  "plugins": ["@typescript-eslint", "import", "promise", "jsdoc"],
+  "extends": [
+    "eslint:recommended",
+    "plugin:@typescript-eslint/recommended",
+    "plugin:import/recommended",
+    "plugin:promise/recommended",
+    "plugin:jsdoc/recommended",
+    "prettier"
+  ],
+  "settings": {
+    "import/resolver": {
+      "node": { "extensions": [".js", ".jsx", ".ts", ".tsx"] }
+    }
+  },
+  "rules": {
+    "@typescript-eslint/no-explicit-any": "off",
+    "import/no-unresolved": "off"
+  }
+}

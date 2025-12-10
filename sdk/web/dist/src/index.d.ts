@@ -1,0 +1,12 @@
+import { Errors, SdkError } from './errors';
+import type { ConsentState, InitOptions, AdRequest, AdResponse, SdkEvent } from './types';
+import { SUPPORTED_NETWORKS, getSupportedAdapters } from './adapters';
+import { computeConfigHash, validateConfigHash, fetchConfigWithHash, createDefaultConfig, type SDKConfig } from './configHash';
+export declare function init(options: InitOptions): void;
+export declare function setConsent(consent: ConsentState): void;
+export declare function requestAd(req: AdRequest): Promise<AdResponse>;
+export declare function on(event: SdkEvent, handler: (payload?: any) => void): () => void;
+export { Errors, SdkError };
+export type { ConsentState, InitOptions, AdRequest, AdResponse, SdkEvent };
+export { SUPPORTED_NETWORKS, getSupportedAdapters };
+export { computeConfigHash, validateConfigHash, fetchConfigWithHash, createDefaultConfig, type SDKConfig, };

@@ -1,0 +1,340 @@
+plugins {
+    id 'com.android.library' version '8.5.2'
+    id 'org.jetbrains.kotlin.android' version '1.9.23'
+    id 'maven-publish'
+    id 'org.jetbrains.dokka' version '1.9.20'
+    id 'org.jetbrains.kotlinx.binary-compatibility-validator' version '0.14.0'
+}
+
+android {
+    namespace 'com.rivalapexmediation.sdk'
+    compileSdk 34
+
+    defaultConfig {
+        minSdk 21
+        targetSdk 34
+        versionCode 1
+        versionName "0.1.0"
+
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        consumerProguardFiles "consumer-rules.pro"
+        buildConfigField "String", "SDK_VERSION", "\"${versionName}\""
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+        debug {
+            // Enable StrictMode in debug builds
+            buildConfigField "boolean", "STRICT_MODE_ENABLED", "true"
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    kotlinOptions {
+        jvmTarget = '17'
+        freeCompilerArgs += [
+            '-opt-in=kotlin.RequiresOptIn'
+        ]
+    }
+    
+    // Use system Java for compilation
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    sourceSets {
+        getByName('main') {
+            java.setSrcDirs([])
+            kotlin.setSrcDirs(['src/main/kotlin'])
+            manifest.srcFile('src/main/AndroidManifest.xml')
+        }
+        getByName('test') {
+            java.setSrcDirs(['src/test/java'])
+            kotlin.setSrcDirs(['src/test/kotlin'])
+        }
+        getByName('androidTest') {
+            java.setSrcDirs(['src/androidTest/java'])
+            kotlin.setSrcDirs(['src/androidTest/kotlin'])
+        }
+    }
+
+    buildFeatures {
+        buildConfig true
+    }
+
+    publishing {
+        singleVariant('release') {
+            withSourcesJar()
+            withJavadocJar()
+        }
+    }
+}
+
+dependencies {
+    // Ensure AAPT2 pulled from Maven has no unexpected transitive edges (Gradle 9 requirement)
+    components {
+        withModule("com.android.tools.build:aapt2") {
+            allVariants {
+                withDependencies { details -> details.clear() }
+            }
+        }
+    }
+
+    // Kotlin
+    implementation "org.jetbrains.kotlin:kotlin-stdlib:1.9.23"
+    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3"
+
+    // Networking
+    implementation "com.squareup.okhttp3:okhttp:4.12.0"
+    implementation "com.google.code.gson:gson:2.10.1"
+
+    // Privacy/consent services
+    implementation "com.google.android.gms:play-services-ads-identifier:18.1.0"
+    implementation "com.google.android.gms:play-services-appset:16.0.2"
+    implementation "com.google.android.ump:user-messaging-platform:2.2.0"
+
+    // Crypto (optional fallback via reflection only; do not ship at runtime)
+    compileOnly "com.google.crypto.tink:tink-android:1.11.0"
+
+    // AndroidX
+    implementation "androidx.annotation:annotation:1.7.1"
+    implementation "androidx.lifecycle:lifecycle-process:2.7.0"
+
+    // Testing
+    testImplementation "org.jetbrains.kotlin:kotlin-test:1.9.23"
+    testImplementation "org.jetbrains.kotlin:kotlin-test-junit:1.9.23"
+    testImplementation "junit:junit:4.13.2"
+    testImplementation "org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3"
+    testImplementation "io.mockk:mockk:1.13.8"
+    testImplementation "com.squareup.okhttp3:mockwebserver:4.12.0"
+    testImplementation "org.robolectric:robolectric:4.11.1"
+    testImplementation "androidx.test:core:1.5.0"
+    androidTestImplementation "androidx.test.ext:junit:1.1.5"
+    androidTestImplementation "androidx.test:runner:1.5.2"
+}
+
+// Size check task with JSON report and CI failure
+tasks.register('checkSdkSize') {
+    def outputDir = file("$buildDir/reports/sdk-size")
+    outputs.dir(outputDir)
+    
+    doLast {
+        def aarCandidates = fileTree("$buildDir/outputs/aar").matching {
+            include "**/*-release.aar"
+        }.files.findAll { it.isFile() }
+
+        if (aarCandidates.isEmpty()) {
+            logger.warn("No release AAR artifacts found under $buildDir/outputs/aar. Run assembleRelease before checkSdkSize.")
+            return
+        }
+
+        def aarList = aarCandidates.toList()
+        def aar = aarList.max { it.length() }
+
+        if (aarList.size() > 1) {
+            println "[INFO] Multiple release AAR artifacts detected (${aarList.collect { it.name }}); using largest ${aar.name}."
+        }
+
+        def size = aar.length()
+        def maxSize = 512000 // 500KB
+        def warningSize = 460800 // 450KB (90% of max)
+        def sizeKB = Math.round(size / 1024.0 * 100) / 100
+        def maxSizeKB = Math.round(maxSize / 1024.0 * 100) / 100
+        
+        // Generate JSON report
+        outputDir.mkdirs()
+        def jsonReport = file("${outputDir}/size-report.json")
+        def passed = size <= maxSize
+        def warning = size > warningSize && size <= maxSize
+        
+        def reportData = [
+            artifact: aar.name,
+            sizeBytes: size,
+            sizeKB: sizeKB,
+            maxSizeBytes: maxSize,
+            maxSizeKB: maxSizeKB,
+            passed: passed,
+            warning: warning,
+            percentOfBudget: Math.round((size / maxSize) * 100.0 * 100) / 100,
+            timestamp: String.valueOf(System.currentTimeMillis()),
+            thresholds: [
+                fail: maxSize,
+                warning: warningSize
+            ]
+        ]
+        
+        jsonReport.text = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(reportData))
+        println "SDK Size Report: ${jsonReport.absolutePath}"
+        
+        println "SDK Size: ${size} bytes (${sizeKB}KB) of ${maxSize} bytes (${maxSizeKB}KB) budget"
+        println "Size Budget: ${reportData.percentOfBudget}% used"
+        
+        if (warning) {
+            logger.warn("[WARN] SDK size ${size} bytes (${sizeKB}KB) exceeds 90% of budget (${warningSize} bytes)")
+        }
+        
+        if (!passed) {
+            def message = "SDK size gate FAILED: ${size} bytes (${sizeKB}KB) exceeds maximum ${maxSize} bytes (${maxSizeKB}KB)"
+            logger.error(message)
+            assert false : message
+        }
+        
+        println "[OK] SDK size gate passed"
+    }
+}
+
+tasks.matching { it.name == 'assembleRelease' }.configureEach {
+    finalizedBy 'checkSdkSize'
+}
+
+
+// Integration validator: lightweight checks for SDK consumers and release quality
+// Run with: ./gradlew :sdk:core:android:validateIntegration
+tasks.register('validateIntegration') {
+    doLast {
+        println "=== Rival Apex Mediation SDK — Integration Validator (Library checks) ==="
+        // Check presence of consumer ProGuard rules (so host apps get them)
+        def consumerRules = file("${projectDir}/consumer-rules.pro")
+        if (consumerRules.exists()) {
+            println "[OK] consumer-rules.pro present"
+        } else {
+            logger.error("[FAIL] consumer-rules.pro missing — host apps may obfuscate required classes")
+        }
+        // Check essential dependencies present
+        def okHttpDep = configurations.implementation.allDependencies.find { it.group == 'com.squareup.okhttp3' && it.name == 'okhttp' }
+        if (okHttpDep != null) println "[OK] OkHttp dependency found: ${okHttpDep.version}" else logger.error("[FAIL] OkHttp dependency missing")
+        def gsonDep = configurations.implementation.allDependencies.find { it.group == 'com.google.code.gson' && it.name == 'gson' }
+        if (gsonDep != null) println "[OK] Gson dependency found: ${gsonDep.version}" else logger.error("[FAIL] Gson dependency missing")
+        // Basic compile/target SDK sanity
+        println "[INFO] compileSdk=${android.compileSdk}, minSdk=${android.defaultConfig.minSdk}, targetSdk=${android.defaultConfig.targetSdk}"
+        // Size budget reminder (release AAR) + class count
+        def aarDir = file("$buildDir/outputs/aar")
+        if (aarDir.exists()) {
+            def aars = aarDir.listFiles()?.findAll { it.name.endsWith('-release.aar') } ?: []
+            if (!aars.isEmpty()) {
+                def aar = aars[0]
+                def size = aar.length()
+                println "[INFO] Latest release AAR size: ${size} bytes (${Math.round(size/1024)}KB). Budget ≤ 500KB"
+                if (size > 460800) {
+                    logger.warn("[WARN] Release AAR size ${size} bytes exceeds 450KB warning threshold (budget ≤ 500KB)")
+                }
+                if (size > 512000) {
+                    logger.error("[FAIL] Release AAR size ${size} bytes exceeds 500KB budget")
+                    assert size <= 512000 : "SDK size ${size} exceeds maximum 512000 bytes"
+                }
+                // Class count enumeration skipped in this environment
+            } else {
+                println "[INFO] No release AAR found yet. Build with assembleRelease to compute size."
+            }
+        }
+        // Reminder checks for host apps (cannot be validated in library): INTERNET permission and cleartext policy if using http:// dev endpoints
+        println "[HINT] Ensure host app declares <uses-permission android:name=\"android.permission.INTERNET\"/> and allows cleartext traffic if using http:// dev endpoints (Network Security Config)."
+        println "=== Validator finished ==="
+    }
+}
+
+
+publishing {
+    publications {
+        register('release', MavenPublication) {
+            afterEvaluate {
+                from components.release
+            }
+            groupId = 'com.rivalapex'
+            artifactId = 'apexmediation-sdk'
+            version = android.defaultConfig.versionName
+        }
+    }
+    repositories {
+        mavenLocal()
+        maven {
+            name = 'github'
+            // Use project property, env var, or default to actual repository
+            def githubOrg = project.findProperty('github.packages.org') ?: System.getenv('GITHUB_REPOSITORY_OWNER') ?: 'sbelakho2'
+            def githubRepo = project.findProperty('github.packages.repo') ?: System.getenv('GITHUB_REPOSITORY_NAME') ?: 'Ad-Project'
+            url = uri("https://maven.pkg.github.com/${githubOrg}/${githubRepo}")
+            credentials {
+                username = System.getenv('GITHUB_ACTOR')
+                password = System.getenv('GITHUB_TOKEN')
+            }
+        }
+    }
+}
+
+// SDK config validation (minSdk/targetSdk and R8 on)
+tasks.register('validateSdkConfig') {
+    group = 'verification'
+    description = 'Validates minSdk/targetSdk and R8 (minifyEnabled) settings for release builds.'
+    doLast {
+        def min = android.defaultConfig.minSdk.apiLevel ?: android.defaultConfig.minSdk
+        def target = android.defaultConfig.targetSdk
+        assert (min as int) >= 21 : "minSdk must be >= 21; found ${min}"
+        if ((target as int) < 33) {
+            logger.warn("[WARN] targetSdk ${target} < 33; consider updating to match Play requirements")
+        }
+        def minify = android.buildTypes.release.minifyEnabled
+        assert minify : "Release build must enable R8 (minifyEnabled=true)"
+        println "[OK] SDK config validated: minSdk=${min}, targetSdk=${target}, R8=${minify}"
+    }
+}
+
+tasks.matching { it.name == 'assembleRelease' }.configureEach {
+    finalizedBy 'validateSdkConfig'
+}
+
+
+// --- API docs (Dokka) ---
+// Generate local HTML API reference for review: ./gradlew :sdk:core:android:generateApiDocs
+tasks.register('generateApiDocs') {
+    dependsOn 'dokkaHtml'
+    doLast {
+        def outDir = file("$buildDir/dokka/html")
+        println "API docs generated at: ${outDir.absolutePath}"
+        if (!outDir.exists()) {
+            logger.warn("Dokka output directory not found; ensure dokkaHtml task ran successfully.")
+        }
+    }
+}
+
+// CI smoke gate for StrictMode sample harness. Runs the sample module's Robolectric test suite.
+def strictSampleProject = findProject(':strictmode-sample')
+tasks.register('strictmodeSmoke') {
+    group = 'verification'
+    description = 'Runs the StrictMode sample smoke tests to ensure SDK public flows respect main-thread I/O guarantees.'
+    if (strictSampleProject != null) {
+        dependsOn(':strictmode-sample:testDebugUnitTest')
+    } else {
+        doLast {
+            println "[INFO] strictmode-sample module not found; skipping StrictMode smoke tests"
+        }
+    }
+}
+
+// Binary compatibility validation (API surface checks)
+// Run `./gradlew apiDump` to generate baseline, commit the .api files
+// Run `./gradlew apiCheck` in CI to detect breaking changes
+apiValidation {
+    // Ignore internal packages from public API
+    ignoredPackages += ['com.rivalapexmediation.sdk.internal']
+    
+    // Validate only release builds
+    validationDisabled = false
+}
+
+// API check gate for PRs
+tasks.register('checkApiCompatibility') {
+    group = 'verification'
+    description = 'Checks for breaking API changes compared to committed API dump files'
+    dependsOn 'apiCheck'
+    doLast {
+        println "[OK] API compatibility check passed - no breaking changes detected"
+    }
+}

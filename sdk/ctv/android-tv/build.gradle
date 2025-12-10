@@ -1,0 +1,209 @@
+plugins {
+    id 'com.android.library' version '8.5.2'
+    id 'org.jetbrains.kotlin.android' version '1.9.23'
+    id 'maven-publish'
+    id 'org.jetbrains.kotlinx.binary-compatibility-validator' version '0.14.0'
+}
+
+android {
+    namespace 'com.rivalapexmediation.ctv'
+    compileSdk 34
+
+    defaultConfig {
+        minSdk 21
+        targetSdk 34
+        // Align with core Android module by providing explicit version fields
+        versionCode 1
+        versionName "0.1.0"
+        consumerProguardFiles 'consumer-rules.pro'
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        buildConfigField "String", "SDK_VERSION", '"0.1.0"'
+    }
+
+    buildTypes {
+        release {
+            // Disable minification for tests to keep classes available; keep R8 off here
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+        debug {
+            buildConfigField "boolean", "STRICT_MODE_ENABLED", "true"
+        }
+    }
+
+    buildFeatures {
+        buildConfig true
+    }
+
+    // Run unit tests against the debug variant to avoid R8/minification stripping classes
+    testBuildType "debug"
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+        coreLibraryDesugaringEnabled true
+    }
+    kotlinOptions { jvmTarget = '17' }
+
+    publishing {
+        // Ensure the release variant is configured before publishing references components.release
+        singleVariant('release') {
+            withSourcesJar()
+            withJavadocJar()
+        }
+    }
+}
+
+dependencies {
+    components {
+        withModule("com.android.tools.build:aapt2") {
+            allVariants {
+                withDependencies { details -> details.clear() }
+            }
+        }
+    }
+
+    implementation "org.jetbrains.kotlin:kotlin-stdlib:1.9.23"
+    // Networking
+    implementation "com.squareup.okhttp3:okhttp:4.12.0"
+    implementation "com.squareup.okhttp3:logging-interceptor:4.12.0"
+    implementation "com.google.code.gson:gson:2.10.1"
+    // Media playback for TV
+    implementation "androidx.media3:media3-exoplayer:1.4.1"
+    implementation "androidx.media3:media3-ui:1.4.1"
+
+    // Ed25519 signature verification for OTA config
+    implementation "org.bouncycastle:bcprov-jdk15to18:1.77"
+
+    // AndroidX
+    implementation "androidx.annotation:annotation:1.7.1"
+    testImplementation "androidx.annotation:annotation:1.7.1"
+
+    // Desugaring for Java 17 APIs used by the SDK/tests
+    coreLibraryDesugaring "com.android.tools:desugar_jdk_libs:2.0.4"
+
+    // Testing
+    testImplementation "junit:junit:4.13.2"
+    testImplementation "org.jetbrains.kotlin:kotlin-test:1.9.23"
+    testImplementation "org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3"
+    testImplementation "io.mockk:mockk:1.13.8"
+    testImplementation "com.squareup.okhttp3:mockwebserver:4.12.0"
+    testImplementation "org.robolectric:robolectric:4.11.1"
+    testImplementation "androidx.test:core:1.5.0"
+}
+
+publishing {
+    publications {
+        release(MavenPublication) {
+            afterEvaluate {
+                from components.release
+            }
+            groupId = 'com.rivalapex'
+            artifactId = 'apexmediation-ctv'
+            version = android.defaultConfig.versionName
+        }
+    }
+    repositories {
+        maven {
+            name = 'github'
+            def githubOrg = project.findProperty('github.packages.org') ?: System.getenv('GITHUB_REPOSITORY_OWNER') ?: 'sbelakho2'
+            def githubRepo = project.findProperty('github.packages.repo') ?: System.getenv('GITHUB_REPOSITORY_NAME') ?: 'Ad-Project'
+            url = uri("https://maven.pkg.github.com/${githubOrg}/${githubRepo}")
+            credentials {
+                username = System.getenv('GITHUB_ACTOR')
+                password = System.getenv('GITHUB_TOKEN')
+            }
+        }
+    }
+}
+
+// Size check task with JSON report and CI failure (mirroring core Android SDK)
+tasks.register('checkCtvSdkSize') {
+    def outputDir = file("$buildDir/reports/sdk-size")
+    outputs.dir(outputDir)
+    
+    doLast {
+        def aarCandidates = fileTree("$buildDir/outputs/aar").matching {
+            include "**/*-release.aar"
+        }.files.findAll { it.isFile() }
+
+        if (aarCandidates.isEmpty()) {
+            logger.warn("No release AAR artifacts found")
+            return
+        }
+
+        def aar = aarCandidates.max { it.length() }
+        def size = aar.length()
+        def maxSize = 1048576 // 1MB for CTV (larger due to ExoPlayer/Media3)
+        def warningSize = 921600 // 900KB (90% of max)
+        def sizeKB = Math.round(size / 1024.0 * 100) / 100
+        
+        // Generate JSON report
+        outputDir.mkdirs()
+        def jsonReport = file("${outputDir}/size-report.json")
+        def passed = size <= maxSize
+        def warning = size > warningSize && size <= maxSize
+        
+        def reportData = [
+            artifact: aar.name,
+            sizeBytes: size,
+            sizeKB: sizeKB,
+            maxSizeBytes: maxSize,
+            maxSizeKB: Math.round(maxSize / 1024.0),
+            passed: passed,
+            warning: warning,
+            percentOfBudget: Math.round((size / maxSize) * 100.0 * 100) / 100,
+            timestamp: String.valueOf(System.currentTimeMillis()),
+            platform: "android-tv"
+        ]
+        
+        jsonReport.text = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(reportData))
+        
+        println "CTV Android TV SDK Size: ${size} bytes (${sizeKB}KB) of ${maxSize} bytes (1MB) budget"
+        println "Size Budget: ${reportData.percentOfBudget}% used"
+        
+        if (warning) {
+            logger.warn("[WARN] CTV SDK size ${size} bytes exceeds 90% of budget")
+        }
+        
+        if (!passed) {
+            def message = "CTV SDK size gate FAILED: ${size} bytes exceeds maximum ${maxSize} bytes (1MB)"
+            logger.error(message)
+            // Use Groovy assert to fail CI without depending on GradleException symbol resolution
+            assert false : message
+        }
+        
+        println "[OK] CTV SDK size gate passed"
+    }
+}
+
+tasks.matching { it.name == 'assembleRelease' }.configureEach { finalizedBy 'checkCtvSdkSize' }
+
+// Validate minSdk/targetSdk and R8 (mirror core Android SDK)
+tasks.register('validateSdkConfig') {
+    group = 'verification'
+    description = 'Validates minSdk/targetSdk and R8 settings for CTV Android TV SDK'
+    doLast {
+        def min = android.defaultConfig.minSdk.apiLevel ?: android.defaultConfig.minSdk
+        def target = android.defaultConfig.targetSdk
+        if ((min as int) < 21) {
+            assert false : "minSdk must be >= 21; found ${min}"
+        }
+        if ((target as int) < 33) {
+            logger.warn("[WARN] targetSdk ${target} < 33; consider updating")
+        }
+        def minify = android.buildTypes.release.minifyEnabled
+        if (!minify) {
+            assert false : "Release build must enable R8 (minifyEnabled=true)"
+        }
+        println "[OK] CTV SDK config validated: minSdk=${min}, targetSdk=${target}, R8=${minify}"
+    }
+}
+
+tasks.matching { it.name == 'assembleRelease' }.configureEach { finalizedBy 'validateSdkConfig' }
+
+// API compatibility checks (mirror core Android SDK)
+apiValidation {
+    ignoredPackages += ['com.rivalapexmediation.ctv.internal']
+    validationDisabled = false
+}
