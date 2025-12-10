@@ -262,7 +262,7 @@ jobs:
       
       - name: Create GitHub Issue on production failure
         if: failure() && matrix.environment == 'production' && github.event.schedule == '*/15 * * * *'
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const issueTitle = `🚨 Production Console Health Check Failed — ${new Date().toISOString()}`;
