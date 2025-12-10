@@ -31,6 +31,7 @@ import type {
   NetworkCredentialToken,
   NetworkCredentialsList,
   NetworkVerificationResult,
+  NetworkIngestionResult,
   AppAdsInspectorResult,
   SupplyChainStatusResult,
   SupplyChainSummaryResponse,
@@ -109,8 +110,11 @@ export const publisherApi = {
 
 // Placement API
 export const placementApi = {
-  list: async (params?: { page?: number; pageSize?: number }) => {
-    if (USE_MOCK_API) return mockApiCall<PaginatedResponse<Placement>>('placements')
+  list: async (params?: { page?: number; pageSize?: number }): Promise<PaginatedResponse<Placement>> => {
+    if (USE_MOCK_API) {
+      const mockResp = await mockApiCall<PaginatedResponse<Placement>>('placements')
+      return mockResp.data
+    }
     const pagination = withPaginationDefaults(params)
     const resp = await apiClient.get('/placements', { params: { ...pagination, includeSupplyChainStatus: true } })
     const payload: any = resp.data
@@ -132,9 +136,13 @@ export const placementApi = {
   update: (id: string, data: Partial<Placement>) =>
     apiClient.put<Placement>(`/placements/${id}`, data),
   delete: (id: string) => apiClient.delete(`/placements/${id}`),
-  getFormatCatalog: () => {
-    if (USE_MOCK_API) return mockApiCall<Record<string, string[]>>('placement-formats')
-    return apiClient.get<Record<string, string[]>>('/placements/formats')
+  getFormatCatalog: async (): Promise<Record<string, string[]>> => {
+    if (USE_MOCK_API) {
+      const mockResp = await mockApiCall<Record<string, string[]>>('placement-formats')
+      return mockResp.data
+    }
+    const resp = await apiClient.get<Record<string, string[]>>('/placements/formats')
+    return resp.data
   },
   getSupplyChainSummary: async (): Promise<SupplyChainSummaryResponse> => {
     const resp = await apiClient.get<SuccessEnvelope<SupplyChainSummaryResponse> | SupplyChainSummaryResponse>(`/tools/supply-chain/summary`)
@@ -173,6 +181,10 @@ export const toolsApi = {
         siteId: params.siteId?.trim(),
       },
     })
+    return unwrapSuccessEnvelope(resp.data as any)
+  },
+  getSupplyChainSummary: async (): Promise<SupplyChainSummaryResponse> => {
+    const resp = await apiClient.get<SuccessEnvelope<SupplyChainSummaryResponse> | SupplyChainSummaryResponse>(`/tools/supply-chain/summary`)
     return unwrapSuccessEnvelope(resp.data as any)
   },
 }
@@ -777,5 +789,35 @@ export const byoApi = {
       {}
     )
     return unwrapSuccessEnvelope(response.data)
+  },
+
+  /**
+   * Upload and ingest an AdMob CSV report file
+   */
+  ingestAdmobCsv: async (file: File): Promise<NetworkIngestionResult> => {
+    const formData = new FormData()
+    formData.append('file', file)
+    const response = await apiClient.post<NetworkIngestionResult>(
+      '/byo/ingest/admob-csv',
+      formData,
+      { headers: { 'Content-Type': 'multipart/form-data' } }
+    )
+    return response.data
+  },
+
+  /**
+   * Ingest AdMob data via API for a date range
+   */
+  ingestAdmobApi: async (range: { startDate: string; endDate: string }): Promise<NetworkIngestionResult> => {
+    const response = await apiClient.post<NetworkIngestionResult>('/byo/ingest/admob-api', range)
+    return response.data
+  },
+
+  /**
+   * Ingest Unity data via API for a date range
+   */
+  ingestUnityApi: async (range: { startDate: string; endDate: string }): Promise<NetworkIngestionResult> => {
+    const response = await apiClient.post<NetworkIngestionResult>('/byo/ingest/unity-api', range)
+    return response.data
   },
 }

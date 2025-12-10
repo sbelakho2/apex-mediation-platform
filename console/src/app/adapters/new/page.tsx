@@ -38,8 +38,8 @@ export default function NewAdapterPage() {
   } = useQuery({
     queryKey: ['placements', 'lookup'],
     queryFn: async () => {
-      const { data } = await placementApi.list({ page: 1, pageSize: 200 })
-      return data.data
+      const response = await placementApi.list({ page: 1, pageSize: 200 })
+      return response.data
     },
     retry: 1,
   })

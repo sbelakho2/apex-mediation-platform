@@ -3,12 +3,12 @@
 import { forwardRef } from 'react'
 import clsx from 'clsx'
 
-export interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
+export interface InputProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'size'> {
   invalid?: boolean
-  size?: 'sm' | 'md' | 'lg'
+  inputSize?: 'sm' | 'md' | 'lg'
 }
 
-function sizeCls(size: NonNullable<InputProps['size']>) {
+function sizeCls(size: NonNullable<InputProps['inputSize']>) {
   switch (size) {
     case 'sm':
       return 'h-8 px-3 text-[var(--text-sm)]'
@@ -21,7 +21,7 @@ function sizeCls(size: NonNullable<InputProps['size']>) {
 }
 
 export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
-  { className, invalid, size = 'md', ...props },
+  { className, invalid, inputSize = 'md', ...props },
   ref
 ) {
   return (
@@ -32,7 +32,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
         'placeholder:text-[var(--color-muted)] border border-[var(--color-border)]',
         'focus-visible:outline-none focus-visible:[box-shadow:var(--focus-ring)]',
         'disabled:opacity-60 disabled:cursor-not-allowed',
-        sizeCls(size),
+        sizeCls(inputSize),
         invalid && 'border-[var(--color-danger)]',
         className
       )}

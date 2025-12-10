@@ -79,8 +79,9 @@ class AdaptiveConcurrency private constructor() {
     /**
      * Gets the detected CPU information.
      */
-    fun getCpuInfo(): CpuInfo = cpuInfo
-    
+    val cpuInformation: CpuInfo
+        get() = cpuInfo
+
     /**
      * Gets the recommended pool configuration for background work.
      */

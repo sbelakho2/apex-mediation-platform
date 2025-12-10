@@ -34,8 +34,7 @@ export default function PlacementDetailPage({ params }: PageProps) {
   const { data: placement, isLoading } = useQuery({
     queryKey: ['placement', id],
     queryFn: async () => {
-      const { data } = await placementApi.get(id)
-      return data
+      return await placementApi.get(id)
     },
   })
 

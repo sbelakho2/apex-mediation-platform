@@ -139,7 +139,7 @@ export const NETWORK_HEADER_MAPS: Record<string, HeaderMap> = {
     m('app_id', 'bundle id', 'app id', 'package name'),
     m('ad_unit_id', 'placement id', 'ad unit id', 'ad unit'),
     m('country', 'country', 'country code'),
-    m('format', 'ad type', 'format'),
+    m('format', 'ad format', 'ad type', 'format'),
     m('currency', 'currency', 'reporting currency'),
     m('impressions', 'impressions'),
     m('clicks', 'clicks'),

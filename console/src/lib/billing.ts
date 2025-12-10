@@ -93,6 +93,13 @@ const touchCacheEntry = (invoiceId: string, entry: PdfCacheEntry) => {
  * Provides methods for interacting with billing endpoints
  */
 
+export interface UsageItem {
+  date: string
+  product?: string
+  quantity?: number
+  unit_price?: number
+}
+
 export interface UsageData {
   current_period: {
     start: string
@@ -113,6 +120,7 @@ export interface UsageData {
     included_api_calls: number
     included_data_transfer_gb: number
   }
+  items?: UsageItem[]
 }
 
 export interface Invoice {

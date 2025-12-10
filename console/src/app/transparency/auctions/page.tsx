@@ -10,7 +10,7 @@ import {
 import { Section, Container, PageHeader } from '@/components/ui'
 
 type PageProps = {
-  searchParams?: Record<string, string | string[] | undefined>
+  searchParams?: Promise<Record<string, string | string[] | undefined>>
 }
 
 function pickParam(value?: string | string[]): string | undefined {
@@ -18,7 +18,8 @@ function pickParam(value?: string | string[]): string | undefined {
   return value ?? undefined
 }
 
-export default async function TransparencyAuctionsPage({ searchParams = {} }: PageProps = {}) {
+export default async function TransparencyAuctionsPage(props: PageProps) {
+  const searchParams = (await props.searchParams) ?? {}
   const pageParam = pickParam(searchParams.page)
   const initialPage = Number.parseInt(pageParam || '1', 10)
   const safePage = Number.isFinite(initialPage) && initialPage > 0 ? initialPage : 1

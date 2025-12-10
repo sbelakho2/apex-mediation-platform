@@ -15,7 +15,7 @@ describe('byoTelemetryService (in-memory)', () => {
     __resetTelemetryStore()
   })
 
-  it('ingests start/finish spans and computes percentiles and counters', () => {
+  it('ingests start/finish spans and computes percentiles and counters', async () => {
     const req = mockReq('app-1', 'pub-1')
     const base = {
       placement: 'interstitial_home',
@@ -32,7 +32,7 @@ describe('byoTelemetryService (in-memory)', () => {
       { eventType: 'ADAPTER_SPAN_FINISH', timestamp: t0 + 700, ...base, latency: 500, errorCode: 'exception', metadata: { trace_id: 't4', phase: 'finish', outcome: 'error' } },
     ]
 
-    ingestAdapterSpanBatch(req, events)
+    await ingestAdapterSpanBatch(req, events)
 
     const metrics = queryAdapterMetrics({ appId: 'app-1', publisherId: 'pub-1', from: 0, to: Number.MAX_SAFE_INTEGER })
     expect(metrics.summary.total).toBeGreaterThanOrEqual(4) // finish-only counted
@@ -48,13 +48,13 @@ describe('byoTelemetryService (in-memory)', () => {
     expect(traces.find(t => t.trace_id === 't1')?.spans[0].latency_ms).toBe(100)
   })
 
-  it('scopes by tenant (appId/publisherId)', () => {
+  it('scopes by tenant (appId/publisherId)', async () => {
     const reqA = mockReq('app-A', 'pub-A')
     const reqB = mockReq('app-B', 'pub-B')
-    ingestAdapterSpanBatch(reqA, [
+    await ingestAdapterSpanBatch(reqA, [
       { eventType: 'ADAPTER_SPAN_FINISH', timestamp: Date.now(), placement: 'p', networkName: 'n', latency: 120, metadata: { trace_id: 'ax', phase: 'finish', outcome: 'fill' } },
     ])
-    ingestAdapterSpanBatch(reqB, [
+    await ingestAdapterSpanBatch(reqB, [
       { eventType: 'ADAPTER_SPAN_FINISH', timestamp: Date.now(), placement: 'p', networkName: 'n', latency: 240, metadata: { trace_id: 'bx', phase: 'finish', outcome: 'no_fill' } },
     ])
 

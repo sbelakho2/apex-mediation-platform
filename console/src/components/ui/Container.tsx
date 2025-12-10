@@ -1,7 +1,7 @@
 import React from 'react'
 
-type ContainerProps = React.HTMLAttributes<HTMLDivElement> & {
-  as?: keyof JSX.IntrinsicElements
+type ContainerProps = React.HTMLAttributes<HTMLElement> & {
+  as?: 'div' | 'section' | 'main' | 'article' | 'header' | 'footer' | 'aside' | 'nav'
 }
 
 /**

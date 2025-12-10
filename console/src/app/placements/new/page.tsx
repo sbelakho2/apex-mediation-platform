@@ -73,8 +73,7 @@ export default function NewPlacementPage() {
     queryKey: ['placement-format-catalog'],
     queryFn: async () => {
       try {
-        const { data } = await placementApi.getFormatCatalog()
-        return data
+        return await placementApi.getFormatCatalog()
       } catch (err) {
         if (process.env.NODE_ENV !== 'production') {
           console.warn('Falling back to default placement formats', err)
@@ -88,8 +87,8 @@ export default function NewPlacementPage() {
   const { data: placementNames } = useQuery({
     queryKey: ['placements', 'names'],
     queryFn: async () => {
-      const { data } = await placementApi.list({ pageSize: 200 })
-      return data.data
+      const response = await placementApi.list({ pageSize: 200 })
+      return response.data
     },
     staleTime: 5 * 60 * 1000,
   })

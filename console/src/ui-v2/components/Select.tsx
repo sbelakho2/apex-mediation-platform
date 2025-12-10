@@ -3,12 +3,12 @@
 import { forwardRef } from 'react'
 import clsx from 'clsx'
 
-export interface SelectProps extends React.SelectHTMLAttributes<HTMLSelectElement> {
+export interface SelectProps extends Omit<React.SelectHTMLAttributes<HTMLSelectElement>, 'size'> {
   invalid?: boolean
-  size?: 'sm' | 'md' | 'lg'
+  selectSize?: 'sm' | 'md' | 'lg'
 }
 
-function sizeCls(size: NonNullable<SelectProps['size']>) {
+function sizeCls(size: NonNullable<SelectProps['selectSize']>) {
   switch (size) {
     case 'sm':
       return 'h-8 px-3 text-[var(--text-sm)]'
@@ -21,7 +21,7 @@ function sizeCls(size: NonNullable<SelectProps['size']>) {
 }
 
 export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select(
-  { className, invalid, size = 'md', children, ...props },
+  { className, invalid, selectSize = 'md', children, ...props },
   ref
 ) {
   return (
@@ -33,7 +33,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select
           'border border-[var(--color-border)] pr-10',
           'focus-visible:outline-none focus-visible:[box-shadow:var(--focus-ring)]',
           'disabled:opacity-60 disabled:cursor-not-allowed',
-          sizeCls(size),
+          sizeCls(selectSize),
           invalid && 'border-[var(--color-danger)]',
           className
         )}

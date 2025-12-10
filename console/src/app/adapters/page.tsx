@@ -47,8 +47,8 @@ export default function AdaptersPage() {
   } = useQuery<Placement[], Error>({
     queryKey: ['placements', 'lookup'],
     queryFn: async () => {
-      const { data } = await placementApi.list({ page: 1, pageSize: 200 })
-      return data.data
+      const response = await placementApi.list({ page: 1, pageSize: 200 })
+      return response.data
     },
     placeholderData: keepPreviousData,
     staleTime: 5 * 60 * 1000,
@@ -71,8 +71,7 @@ export default function AdaptersPage() {
         queryClient.prefetchQuery({
           queryKey: ['placement', adapter.placementId],
           queryFn: async () => {
-            const { data } = await placementApi.get(adapter.placementId)
-            return data
+            return await placementApi.get(adapter.placementId)
           },
           staleTime: 5 * 60 * 1000,
         })

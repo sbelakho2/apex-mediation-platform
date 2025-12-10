@@ -6,6 +6,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import okhttp3.ConnectionPool
+import okhttp3.Dns
 import okhttp3.OkHttpClient
 import okhttp3.Protocol
 import okhttp3.Request
@@ -58,11 +59,13 @@ object NetworkWarmer {
             .followSslRedirects(false)
             .protocols(listOf(Protocol.HTTP_2, Protocol.HTTP_1_1))
             // DNS cache integration
-            .dns { hostname ->
-                dnsCache[hostname] ?: InetAddress.getAllByName(hostname).toList().also {
-                    dnsCache[hostname] = it
+            .dns(object : Dns {
+                override fun lookup(hostname: String): List<InetAddress> {
+                    return dnsCache[hostname] ?: InetAddress.getAllByName(hostname).toList().also {
+                        dnsCache[hostname] = it
+                    }
                 }
-            }
+            })
             .build()
     }
     

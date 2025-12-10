@@ -46,8 +46,7 @@ export default function AdapterDetailPage({ params }: PageProps) {
     queryKey: ['placement', adapter?.placementId],
     queryFn: async () => {
       if (!adapter?.placementId) return null
-      const { data } = await placementApi.get(adapter.placementId)
-      return data
+      return await placementApi.get(adapter.placementId)
     },
     enabled: !!adapter?.placementId,
   })

@@ -1,7 +1,7 @@
 import React from 'react'
 
 type SectionProps = React.HTMLAttributes<HTMLElement> & {
-  as?: keyof JSX.IntrinsicElements
+  as?: 'section' | 'div' | 'article' | 'header' | 'footer' | 'aside' | 'main' | 'nav'
   inset?: boolean
 }
 
