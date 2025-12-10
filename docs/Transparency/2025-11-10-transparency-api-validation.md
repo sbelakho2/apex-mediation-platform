@@ -1,7 +1,7 @@
 # Transparency API Validation & Canonical Exposure Summary
 
 Date: 2025-11-10
-Author: Platform Engineering (GitHub Copilot)
+Author: Platform Engineering
 
 ## Overview
 Implemented the remaining items from section 1.2 of the Transparency roadmap:

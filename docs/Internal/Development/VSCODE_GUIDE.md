@@ -142,7 +142,6 @@ VS Code will prompt you to install recommended extensions. Here's what each does
 
 ### Git & Collaboration
 - **GitLens** - Enhanced Git features (blame, history, compare)
-- **GitHub Copilot** - AI pair programmer (requires subscription)
 
 ### Documentation
 - **Markdown All in One** - Enhanced markdown editing

@@ -2,6 +2,10 @@
  * NetworkMonitor tests
  * Tests the network monitoring and fast-fail functionality
  */
+
+// Declare global for Node.js environment
+declare const global: typeof globalThis;
+
 import {
   NetworkMonitor,
   getNetworkMonitor,

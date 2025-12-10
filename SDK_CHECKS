@@ -344,4 +344,4 @@ iOS (crash-shielded)
 
 - [x] Obfuscation rules crib-sheet per major network (in Console)
 	- (Why) Save integrators days of guesswork.
-	- Status (2025-12-09): docs/SDK/PROGUARD_OBFUSCATION_RULES.md created. Complete ProGuard/R8 rules for all major ad networks (AdMob, Meta, AppLovin, Unity Ads, ironSource, Vungle, Mintegral, InMobi, Chartboost, AdColony, Pangle, Amazon, Fyber, Smaato).
+	- Status (2025-12-09): docs/SDK/PROGUARD_OBFUSCATION_RULES.md created. Complete ProGuard/R8 rules for all 15 supported ad networks (AdMob, Meta, AppLovin, Unity Ads, ironSource, Vungle, Mintegral, Moloco, Chartboost, AdColony, Pangle, Amazon, Fyber, Smaato, Tapjoy).

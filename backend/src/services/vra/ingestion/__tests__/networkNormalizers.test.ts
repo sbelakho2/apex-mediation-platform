@@ -190,13 +190,13 @@ describe('VRA Network CSV Normalizers', () => {
     expect(rows[0]).toMatchObject({ ad_unit_id: 'pl-2', currency: 'EUR', paid: 2.22 });
   });
 
-  it('InMobi: maps bundle id + placement id + reporting currency + estimated revenue', () => {
+  it('Moloco: maps bundle id + placement id + reporting currency + estimated revenue', () => {
     const csv = [
       'Date,Bundle ID,Placement ID,Country,Ad Type,Reporting Currency,Impressions,Clicks,Estimated Revenue',
-      '2025-11-03,com.inmobi,pl-3,GB,interstitial,GBP,410,5,12.000000',
+      '2025-11-03,com.moloco,pl-3,GB,interstitial,GBP,410,5,12.000000',
     ].join('\n');
-    const { rows } = normalizeNetworkCsvReport({ network: 'inmobi', schemaVer: 2, reportId: 'rep-in-1', csv });
-    expect(rows[0]).toMatchObject({ app_id: 'com.inmobi', currency: 'GBP', paid: 12, clicks: 5 });
+    const { rows } = normalizeNetworkCsvReport({ network: 'moloco', schemaVer: 2, reportId: 'rep-mo-1', csv });
+    expect(rows[0]).toMatchObject({ app_id: 'com.moloco', currency: 'GBP', paid: 12, clicks: 5 });
   });
 
   it('Fyber: maps ad space id and payout', () => {

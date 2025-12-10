@@ -645,7 +645,7 @@ android {
     android:hardwareAccelerated="true">
 
     <!-- Declare ad activities -->
-    <activity android:name="com.apexmediation.sdk.AdActivity"
+    <activity android:name="com.rivalapexmediation.sdk.AdActivity"
               android:configChanges="keyboard|keyboardHidden|orientation|screenLayout|screenSize"
               android:theme="@android:style/Theme.Translucent.NoTitleBar"/>
 </application>

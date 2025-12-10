@@ -37,7 +37,7 @@ Scope delivered in this iteration
     - Metrics: rows parsed, loads, failures
   - Multi-network header mapping → canonical schema for CSV uploads:
     - Files: `backend/src/services/vra/ingestion/networkNormalizers.ts`
-    - Supported mappings: AdMob, Unity, AppLovin, ironSource, AdColony, Chartboost, Vungle, Mintegral, Pangle, Meta, InMobi, Fyber, Smaato, Tapjoy, Moloco
+    - Supported mappings: AdMob, Unity, AppLovin, ironSource, AdColony, Chartboost, Vungle, Mintegral, Pangle, Meta, Fyber, Smaato, Tapjoy, Moloco, Amazon
   - Operator CLI for ingestion with dry-run and guardrails:
     - File: `backend/scripts/vraIngestCsv.js`
     - Features: `--dry-run`, separator auto-detection (comma/semicolon/tab), strict MIME option, size and row caps, antivirus placeholder hook, structured exit codes (0 OK, 10 WARNINGS, 20 ERROR, 30 SCHEMA_DRIFT reserved, 40 BLOCKED)

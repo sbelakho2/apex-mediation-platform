@@ -790,7 +790,7 @@ References
 - [ ] Configure channels (#general, #support, #sdk-help, #announcements).
 - [ ] Enable GitHub Discussions.
 - [ ] Configure `support@apexmediation.ee` inbox.
-- [ ] Publish FAQ and train AI support bot (GPT-4o-mini) with FAQ context.
+- [ ] Publish FAQ and configure support bot with FAQ context.
 
 ## 13. Marketing & Launch
 ### 13.1 Website

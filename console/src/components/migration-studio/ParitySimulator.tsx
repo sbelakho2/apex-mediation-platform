@@ -104,7 +104,7 @@ const NETWORK_MAPPING: Record<string, string> = {
   chartboost: 'chartboost',
   pangle: 'pangle',
   mintegral: 'mintegral',
-  inmobi: 'inmobi',
+  moloco: 'moloco',
   meta: 'facebook',
   facebook: 'facebook',
   bidmachine: 'bidmachine',
@@ -122,7 +122,7 @@ const NETWORK_MAPPING: Record<string, string> = {
   is_adapter_vungle: 'vungle',
   is_adapter_chartboost: 'chartboost',
   is_adapter_pangle: 'pangle',
-  is_adapter_inmobi: 'inmobi',
+  is_adapter_moloco: 'moloco',
   
   // MAX specific names
   ADMOB_NETWORK: 'admob',
@@ -580,10 +580,11 @@ export default function ParitySimulator({ placementId, onClose, onExport }: Pari
                   </p>
                 </div>
                 
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label htmlFor="dailyImpressions" className="block text-sm font-medium text-gray-700 mb-2">
                   Daily impressions (per placement)
                 </label>
                 <input
+                  id="dailyImpressions"
                   type="number"
                   value={dailyImpressions}
                   onChange={(e) => setDailyImpressions(Math.max(100, parseInt(e.target.value) || 10000))}

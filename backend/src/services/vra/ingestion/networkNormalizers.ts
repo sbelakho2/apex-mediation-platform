@@ -134,7 +134,7 @@ export const NETWORK_HEADER_MAPS: Record<string, HeaderMap> = {
     m('clicks', 'clicks'),
     m('paid', 'revenue', 'earnings'),
   ]),
-  inmobi: headerMapFromPairs([
+  moloco: headerMapFromPairs([
     m('event_date', 'date'),
     m('app_id', 'bundle id', 'app id', 'package name'),
     m('ad_unit_id', 'placement id', 'ad unit id', 'ad unit'),
@@ -173,17 +173,6 @@ export const NETWORK_HEADER_MAPS: Record<string, HeaderMap> = {
     m('ad_unit_id', 'placement id', 'ad unit id'),
     m('country', 'country', 'country code'),
     m('format', 'ad type', 'format'),
-    m('currency', 'currency'),
-    m('impressions', 'impressions'),
-    m('clicks', 'clicks'),
-    m('paid', 'revenue', 'earnings'),
-  ]),
-  moloco: headerMapFromPairs([
-    m('event_date', 'date'),
-    m('app_id', 'app id', 'bundle id'),
-    m('ad_unit_id', 'placement id', 'ad unit id'),
-    m('country', 'country', 'country code'),
-    m('format', 'ad format', 'ad type', 'format'),
     m('currency', 'currency'),
     m('impressions', 'impressions'),
     m('clicks', 'clicks'),

@@ -365,7 +365,7 @@ describe('MediationDebugger', () => {
 
       const timeline = debugger_.getWaterfallTimeline(session.id);
       expect(timeline!.winningAdapter).toBeNull();
-      expect(timeline!.adapters.every(a => a.result === 'no-fill')).toBe(true);
+      expect(timeline!.adapters.every((a: { result: string }) => a.result === 'no-fill')).toBe(true);
     });
   });
 
@@ -551,7 +551,7 @@ describe('MediationDebugger', () => {
       const session = debugger_.startSession('placement-1');
       const events: MediationEvent[] = [];
 
-      debugger_.subscribe(session.id, event => {
+      debugger_.subscribe(session.id, (event: MediationEvent) => {
         events.push(event);
       });
 
@@ -569,7 +569,7 @@ describe('MediationDebugger', () => {
       const session = debugger_.startSession('placement-1');
       const events: MediationEvent[] = [];
 
-      const unsubscribe = debugger_.subscribe(session.id, event => {
+      const unsubscribe = debugger_.subscribe(session.id, (event: MediationEvent) => {
         events.push(event);
       });
 
@@ -596,8 +596,8 @@ describe('MediationDebugger', () => {
       const events1: MediationEvent[] = [];
       const events2: MediationEvent[] = [];
 
-      debugger_.subscribe(session.id, event => events1.push(event));
-      debugger_.subscribe(session.id, event => events2.push(event));
+      debugger_.subscribe(session.id, (event: MediationEvent) => events1.push(event));
+      debugger_.subscribe(session.id, (event: MediationEvent) => events2.push(event));
 
       debugger_.recordEvent(session.id, {
         type: MediationEventType.ADAPTER_REQUEST,

@@ -220,19 +220,19 @@ public final class NoFillTracker {
         
         // Get top reasons
         let topReasons = Dictionary(
-            noFillsByReason.sorted { $0.value > $1.value }.prefix(5),
+            Array(noFillsByReason.sorted { $0.value > $1.value }.prefix(5)),
             uniquingKeysWith: { first, _ in first }
         )
         
         // Get top sources
         let topSources = Dictionary(
-            noFillsBySource.sorted { $0.value > $1.value }.prefix(5),
+            Array(noFillsBySource.sorted { $0.value > $1.value }.prefix(5)),
             uniquingKeysWith: { first, _ in first }
         )
         
         // Get top placements
         let topPlacements = Dictionary(
-            noFillsByPlacement.sorted { $0.value > $1.value }.prefix(5),
+            Array(noFillsByPlacement.sorted { $0.value > $1.value }.prefix(5)),
             uniquingKeysWith: { first, _ in first }
         )
         

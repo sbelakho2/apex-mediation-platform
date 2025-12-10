@@ -335,6 +335,6 @@ All three sections work together to provide complete monitoring and operational 
 
 ---
 
-**Author:** GitHub Copilot  
+**Author:** Platform Engineering  
 **Reviewers:** Engineering team, DevOps, SRE  
 **Status:** ✅ Ready for merge

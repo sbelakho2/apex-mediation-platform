@@ -456,7 +456,7 @@ describe('NoFillAnalyzer', () => {
       const defaultAnalyzer = new NoFillAnalyzer();
       const analysis = defaultAnalyzer.analyze();
 
-      expect(analysis.totalNoFills).toBeDefined;
+      expect(analysis.healthScore).toBeDefined();
     });
   });
 });

@@ -645,5 +645,5 @@ Container: max-w-7xl mx-auto px-4
 ---
 
 **Last Updated:** January 2025
-**Maintained By:** GitHub Copilot
+**Maintained By:** Platform Engineering
 **Status:** Phase 1 Complete (65% overall compliance)

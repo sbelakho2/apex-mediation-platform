@@ -20,6 +20,17 @@ public final class AdaptiveConcurrency {
     private static let maxNetworkOperations = 16
     private static let maxComputeOperations = 4
     
+    // MARK: - Logging Helpers
+    
+    private func logInfo(_ message: String) {
+        if #available(iOS 14.0, macOS 11.0, tvOS 14.0, watchOS 7.0, *) {
+            let logger = Logger(subsystem: "com.rivalapexmediation.sdk", category: "AdaptiveConcurrency")
+            logger.info("\(message)")
+        } else {
+            os_log("%{public}@", log: OSLog(subsystem: "com.rivalapexmediation.sdk", category: "AdaptiveConcurrency"), type: .info, message)
+        }
+    }
+    
     // MARK: - CPU Information
     
     /// Detected CPU information for the current device.
@@ -60,8 +71,6 @@ public final class AdaptiveConcurrency {
     /// Dispatch queue for compute-intensive work
     public let computeDispatchQueue: DispatchQueue
     
-    private let logger = Logger(subsystem: "com.rivalapexmediation.sdk", category: "AdaptiveConcurrency")
-    
     // MARK: - Metrics
     
     private let metricsLock = NSLock()
@@ -71,24 +80,25 @@ public final class AdaptiveConcurrency {
     // MARK: - Initialization
     
     private init() {
-        self.cpuInfo = AdaptiveConcurrency.detectCpuInfo()
+        let cpuInfo = AdaptiveConcurrency.detectCpuInfo()
+        self.cpuInfo = cpuInfo
         
         // Create background queue
-        let backgroundConfig = getBackgroundPoolConfig()
+        let backgroundConfig = Self.getPoolConfig(for: .background, cpuInfo: cpuInfo)
         self.backgroundQueue = OperationQueue()
         backgroundQueue.name = "com.rivalapexmediation.sdk.background"
         backgroundQueue.maxConcurrentOperationCount = backgroundConfig.maxConcurrentOperations
         backgroundQueue.qualityOfService = backgroundConfig.qualityOfService
         
         // Create network queue
-        let networkConfig = getNetworkPoolConfig()
+        let networkConfig = Self.getPoolConfig(for: .network, cpuInfo: cpuInfo)
         self.networkQueue = OperationQueue()
         networkQueue.name = "com.rivalapexmediation.sdk.network"
         networkQueue.maxConcurrentOperationCount = networkConfig.maxConcurrentOperations
         networkQueue.qualityOfService = networkConfig.qualityOfService
         
         // Create compute queue
-        let computeConfig = getComputePoolConfig()
+        let computeConfig = Self.getPoolConfig(for: .compute, cpuInfo: cpuInfo)
         self.computeQueue = OperationQueue()
         computeQueue.name = "com.rivalapexmediation.sdk.compute"
         computeQueue.maxConcurrentOperationCount = computeConfig.maxConcurrentOperations
@@ -113,41 +123,47 @@ public final class AdaptiveConcurrency {
             attributes: .concurrent
         )
         
-        logger.info("AdaptiveConcurrency initialized: \(self.cpuInfo.totalCores) cores, heterogeneous: \(self.cpuInfo.isHeterogeneous)")
+        logInfo("AdaptiveConcurrency initialized: \(self.cpuInfo.totalCores) cores, heterogeneous: \(self.cpuInfo.isHeterogeneous)")
     }
     
     // MARK: - Pool Configuration
     
+    private enum PoolType {
+        case background
+        case network
+        case compute
+    }
+    
+    private static func getPoolConfig(for poolType: PoolType, cpuInfo: CpuInfo) -> PoolConfig {
+        switch poolType {
+        case .background:
+            let cores = cpuInfo.totalCores
+            let maxOps = max(minConcurrentOperations, min(cores - 1, maxBackgroundOperations))
+            return PoolConfig(maxConcurrentOperations: maxOps, qualityOfService: .utility)
+        case .network:
+            let cores = cpuInfo.totalCores
+            let maxOps = max(minConcurrentOperations, min(cores * 4, maxNetworkOperations))
+            return PoolConfig(maxConcurrentOperations: maxOps, qualityOfService: .userInitiated)
+        case .compute:
+            let cores = cpuInfo.isHeterogeneous ? cpuInfo.performanceCores : cpuInfo.totalCores
+            let maxOps = max(minConcurrentOperations, min(cores, maxComputeOperations))
+            return PoolConfig(maxConcurrentOperations: maxOps, qualityOfService: .userInteractive)
+        }
+    }
+    
     /// Gets the recommended pool configuration for background work.
     public func getBackgroundPoolConfig() -> PoolConfig {
-        let cores = cpuInfo.totalCores
-        let maxOps = max(Self.minConcurrentOperations, min(cores - 1, Self.maxBackgroundOperations))
-        return PoolConfig(
-            maxConcurrentOperations: maxOps,
-            qualityOfService: .utility
-        )
+        Self.getPoolConfig(for: .background, cpuInfo: cpuInfo)
     }
     
     /// Gets the recommended pool configuration for network I/O.
     public func getNetworkPoolConfig() -> PoolConfig {
-        // Network I/O is mostly waiting, so we can have more concurrent operations
-        let cores = cpuInfo.totalCores
-        let maxOps = max(Self.minConcurrentOperations, min(cores * 4, Self.maxNetworkOperations))
-        return PoolConfig(
-            maxConcurrentOperations: maxOps,
-            qualityOfService: .userInitiated
-        )
+        Self.getPoolConfig(for: .network, cpuInfo: cpuInfo)
     }
     
     /// Gets the recommended pool configuration for compute-intensive work.
     public func getComputePoolConfig() -> PoolConfig {
-        // Compute work should use performance cores preferentially
-        let cores = cpuInfo.isHeterogeneous ? cpuInfo.performanceCores : cpuInfo.totalCores
-        let maxOps = max(Self.minConcurrentOperations, min(cores, Self.maxComputeOperations))
-        return PoolConfig(
-            maxConcurrentOperations: maxOps,
-            qualityOfService: .userInteractive
-        )
+        Self.getPoolConfig(for: .compute, cpuInfo: cpuInfo)
     }
     
     // MARK: - Task Execution

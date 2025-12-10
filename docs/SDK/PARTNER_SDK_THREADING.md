@@ -21,7 +21,7 @@ Ad network partner SDKs have varying threading requirements. This document outli
 | IronSource | Yes (init + show) | Yes | Main | Mediation requires main thread |
 | Mintegral | Yes (init) | Yes | Main | Similar to IronSource |
 | Chartboost | Yes | Yes | Main | All operations on main thread |
-| InMobi | Yes (init) | Yes | Main | Load can be background |
+| Moloco | No | Yes | Any | S2S integration, no main thread requirement |
 | Pangle | Yes | No | Main | All operations on main thread |
 
 ---
@@ -82,7 +82,7 @@ fun ensureMainThread() {
 }
 
 // Or use our SDK helper
-import com.anthropic.sdk.threading.ThreadChecker
+import com.rivalapexmediation.sdk.threading.ThreadChecker
 
 ThreadChecker.assertMainThread()
 ```
@@ -132,7 +132,7 @@ func showAd() {
 #### Using Our SDK Helper
 
 ```swift
-import AnthropicAdSDK
+import ApexMediationSDK
 
 // Automatically dispatches to main if needed
 AdThreading.onMain {
@@ -173,7 +173,7 @@ public void OnAdLoaded()
 #### Thread-Safe Pattern
 
 ```csharp
-using Anthropic.SDK.Threading;
+using Apex.Mediation.Core.Threading;
 
 public class SafeAdCallback : IAdListener
 {

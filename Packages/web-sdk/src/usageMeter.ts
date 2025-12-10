@@ -1,7 +1,7 @@
 /**
  * @file Usage Meter
  * @description Track and report billable usage events for ad SDK
- * @module @anthropic/web-sdk
+ * @module @rivalapex/web-sdk
  */
 
 /**

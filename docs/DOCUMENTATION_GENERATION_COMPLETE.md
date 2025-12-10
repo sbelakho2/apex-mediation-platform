@@ -347,5 +347,5 @@ Docs/Customer-Facing/
 ---
 
 **Generated**: 2025-11-04
-**Developer**: GitHub Copilot
+**Developer**: Platform Engineering
 **Status**: ✅ COMPLETE

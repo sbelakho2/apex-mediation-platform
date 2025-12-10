@@ -5,7 +5,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace Anthropic.SDK.Metering
+namespace Apex.Mediation.Core.Metering
 {
     /// <summary>
     /// Types of billable usage events

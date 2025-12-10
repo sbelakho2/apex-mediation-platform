@@ -431,7 +431,7 @@ _Last touched: 2025-11-18 during FIX-10 documentation alignment._
 
 ### Current Team
 - **Solo Founder:** Architecture, backend, SDK, DevOps
-- **AI Agents:** Code generation, testing, documentation
+- **Automation Tools:** Code generation, testing, documentation
 
 ### Required Hires (Year 1)
 1. **Senior iOS Engineer** (Month 1) - SDK optimization

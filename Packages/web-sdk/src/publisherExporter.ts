@@ -1,7 +1,7 @@
 /**
  * @file Publisher Data Exports
  * @description Export SDK analytics and metrics data for publishers
- * @module @anthropic/web-sdk
+ * @module @rivalapex/web-sdk
  */
 
 import { UsageMetrics, UsageBreakdown } from './usageMeter';

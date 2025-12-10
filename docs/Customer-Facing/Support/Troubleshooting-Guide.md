@@ -572,7 +572,7 @@ Add to `Info.plist`:
 **Symptom:**
 ```
 Error: Attribute application@label value=(App Name) from AndroidManifest.xml
-is also present at [com.apexmediation.sdk] AndroidManifest.xml
+is also present at [com.rivalapexmediation.sdk] AndroidManifest.xml
 ```
 
 **Solution:** Add to `AndroidManifest.xml`:

@@ -40,7 +40,7 @@ public final class NetworkWarmer: @unchecked Sendable {
     private lazy var session: URLSession = {
         let config = URLSessionConfiguration.default
         config.httpMaximumConnectionsPerHost = ProcessInfo.processInfo.activeProcessorCount.clamped(to: 2...8)
-        config.timeoutIntervalForConnect = 2.0
+        // Use short timeout for requests (connection timeout is controlled by the OS)
         config.timeoutIntervalForRequest = 5.0
         config.waitsForConnectivity = false
         config.urlCache = nil // We handle caching separately

@@ -50,8 +50,8 @@ export default function MigrationStudioPage() {
   const placementsQuery = useQuery({
     queryKey: ['placements', 'migration-studio'],
     queryFn: async () => {
-      const { data } = await placementApi.list({ page: 1, pageSize: 100 })
-      return (data?.data ?? []) as Placement[]
+      const response = await placementApi.list({ page: 1, pageSize: 100 })
+      return response.data as Placement[]
     },
   })
 

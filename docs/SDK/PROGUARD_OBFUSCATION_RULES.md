@@ -301,36 +301,28 @@ When using ProGuard (Android) or R8 (Android Gradle Plugin 3.4+) with ad SDKs, i
 
 ---
 
-## InMobi
+## Moloco
 
 ```proguard
 # ==============================================================================
-# InMobi SDK
-# Version: 10.x
+# Moloco SDK
+# Version: 3.x
+# Note: Moloco uses server-to-server (S2S) integration primarily.
+# These rules are for the optional client-side SDK components.
 # ==============================================================================
 
--keep class com.inmobi.** { *; }
--keepclassmembers class com.inmobi.** { *; }
+-keep class com.moloco.** { *; }
+-keepclassmembers class com.moloco.** { *; }
 
 # Core
--keep class com.inmobi.ads.InMobiSdk { *; }
--keep class com.inmobi.ads.InMobiAdRequestStatus { *; }
+-keep class com.moloco.sdk.MolocoSdk { *; }
+-keep class com.moloco.sdk.MolocoAdRequest { *; }
 
-# Banner
--keep class com.inmobi.ads.InMobiBanner { *; }
--keep interface com.inmobi.ads.listeners.BannerAdEventListener { *; }
+# Listeners
+-keep interface com.moloco.sdk.listeners.** { *; }
 
-# Interstitial
--keep class com.inmobi.ads.InMobiInterstitial { *; }
--keep interface com.inmobi.ads.listeners.InterstitialAdEventListener { *; }
-
-# Native
--keep class com.inmobi.ads.InMobiNative { *; }
--keep interface com.inmobi.ads.listeners.NativeAdEventListener { *; }
-
-# Squall/JSON
--dontwarn com.squareup.picasso.**
--keep class com.squareup.picasso.** { *; }
+# Internal
+-dontwarn com.moloco.**
 ```
 
 ---
@@ -619,8 +611,8 @@ When using ProGuard (Android) or R8 (Android Gradle Plugin 3.4+) with ad SDKs, i
 # --- Mintegral ---
 -keep class com.mbridge.** { *; }
 
-# --- InMobi ---
--keep class com.inmobi.** { *; }
+# --- Moloco ---
+-keep class com.moloco.** { *; }
 
 # --- Chartboost ---
 -keep class com.chartboost.** { *; }
@@ -657,7 +649,7 @@ When using ProGuard (Android) or R8 (Android Gradle Plugin 3.4+) with ad SDKs, i
 -dontwarn com.ironsource.**
 -dontwarn com.vungle.**
 -dontwarn com.mbridge.**
--dontwarn com.inmobi.**
+-dontwarn com.moloco.**
 -dontwarn com.chartboost.**
 -dontwarn com.adcolony.**
 -dontwarn com.bytedance.**

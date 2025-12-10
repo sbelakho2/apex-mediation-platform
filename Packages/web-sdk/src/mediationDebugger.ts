@@ -1,7 +1,7 @@
 /**
  * @file Mediation Debugger
  * @description Debug and trace mediation waterfall execution with sanitized output
- * @module @anthropic/web-sdk
+ * @module @rivalapex/web-sdk
  */
 
 /**
