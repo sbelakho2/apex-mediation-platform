@@ -14,7 +14,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '20'
       - name: Install dependencies (root only)
@@ -48,7 +48,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '18.20.4'
       - name: Install Redocly CLI
@@ -75,7 +75,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Use Node.js 18.x
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '18.20.4'
       - name: Cache npm (deterministic with package-lock.json)
@@ -128,7 +128,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Use Node.js 18.x
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '18.20.4'
       - name: Cache npm (deterministic with package-lock.json)
@@ -192,7 +192,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Use Node.js 18.x
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '18.20.4'
       - name: Cache npm (console)
@@ -237,7 +237,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Use Node.js 18.x
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '18.20.4'
       - name: Cache npm (console)
@@ -283,7 +283,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '18.20.4'
       - name: Install openapi-diff
@@ -310,7 +310,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Use Node.js 18.x
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '18.20.4'
       - name: Cache npm (website)
@@ -367,7 +367,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Use Node.js 18.x
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '18.20.4'
       - name: Cache npm (console)
@@ -452,7 +452,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '18.20.4'
       - name: Cache npm (console)
@@ -666,7 +666,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Use Node.js 18.x
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '18.20.4'
       - name: Cache npm (website)
