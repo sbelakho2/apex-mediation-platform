@@ -48,6 +48,23 @@ services:
     depends_on:
       - backend
 
+  website:
+    profiles:
+      - ui
+    build:
+      context: ../website
+      args:
+        NEXT_PUBLIC_API_URL: https://api.apexmediation.ee/api/v1
+        NEXT_PUBLIC_CONSOLE_URL: https://console.apexmediation.ee
+        NEXT_PUBLIC_SITE_URL: https://apexmediation.ee
+        NEXT_IGNORE_TS_ERRORS: "1"
+    environment:
+      - NODE_ENV=production
+    expose:
+      - "3001"
+    networks:
+      - apex-net
+
   redis:
     image: redis:7-alpine
     command: [
