@@ -9,8 +9,6 @@ _Owner: Platform Engineering_
 - Provide a repeatable, auditable record of what every file in the repository does, its dependencies, and its current health.
 - Capture follow-up actions (defects, debt, docs gaps) as we review individual files.
 - Enable incremental updates as the codebase evolves by organizing the analysis by top-level areas.
-
-## Scope & Order of Operations
 We will progress directory by directory so that work remains reviewable and can be parallelized later if needed. Each section below mirrors the repo’s top-level layout and will be checked off once **every file** within that section has been captured in the log.
 
 1. Root files (repository top level)

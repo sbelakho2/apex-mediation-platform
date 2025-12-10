@@ -1,3 +1,25 @@
+# Changelog — Networked Sandbox Execution (2025-12-10)
+
+Summary
+- Ran staging networked sandbox dry-run via `./tools/ci/full_system_check.sh --env staging`; backend suites green (798/799 Jest tests), SDKs green across Android/iOS/Unity/Web/tvOS/Android TV, evidence saved under `evidence-2025-12-08/`.
+- Verified config signing key parity across all SDKs and VRA ledger signing/hash chaining; BYO Auction contract tests validated request/response schema and signature taxonomy.
+- Remaining checks: infra metrics endpoints, perf soak (k6), security scans (gosec/npm audit/trivy/gitleaks), console auth/CRUD flows, migration diff, BYO adapter wiring for e2e publisher, VRA chain verification/dispute-kit, schema PII linter.
+
+What changed
+- Environment/infra: required secrets present except `APEX_KAFKA_BROKER_URL`; healthz endpoints partially captured; config signing keys match Android/iOS/Unity/Web/tvOS/Android TV.
+- Backend: BYO Auction contract coverage (signature verifies, taxonomy reasons, edge cases), fraud registry/shadow scoring validated, VRA ledger signing + public key endpoint exercised.
+- SDKs: Android lint+unit tests, iOS/xcodebuild (105 tests), Unity dotnet, Web build, tvOS and Android TV tests all passing; StrictMode/clock-drift hardening confirmed.
+- QA artifacts: `scripts/ops/run_networked_sandbox.sh 2025-12-08` produced `evidence-2025-12-08/sdk-logs/*.txt` and related logs for backend Jest, iOS/tvOS, Android unit smoke, website security headers.
+
+Validation
+- `./tools/ci/full_system_check.sh --env staging`
+- Backend Jest: `cd backend && npm test` (798/799 passing, 1 skipped)
+- SDK suites: Android `./gradlew lintDebug testDebug`, iOS `xcodebuild test -scheme RivalApexMediationSDK`, Unity `dotnet test`, Web `npm run build`, tvOS `xcodebuild test -scheme CTVSDK`, Android TV `gradle testDebugUnitTest`
+
+Outstanding
+- Capture metrics endpoints (`/metrics`, `/v1/metrics/*`), run perf soak (`k6 run tools/ci/k6/auction_perf.js`), and security scans (gosec, npm audit, trivy, gitleaks, schema PII linter).
+- Finish console auth/CRUD flows + Playwright smoke, migration diff, BYO adapter configure/enable for e2e publisher, VRA chain verification + dispute-kit export.
+
 # Changelog — SDK Checks Parts 6, 7, 8 (Auction Path, Data Plane, Console Integration) (2025-12-09)
 
 Summary

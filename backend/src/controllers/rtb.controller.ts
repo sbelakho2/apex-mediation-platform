@@ -26,7 +26,7 @@ export const requestBid = async (
     const requestId = body.requestId || crypto.randomUUID?.() || `req-${Date.now()}`;
 
     // Check idempotency cache for duplicate request
-    if (enabled && idempotency.isIdempotencyEnabled()) {
+    if (idempotency.isIdempotencyEnabled()) {
       const cached = await idempotency.getCachedAuctionResult(requestId);
       if (cached) {
         logger.debug('Returning cached auction result', { requestId, landscapeId: cached.landscapeId });
@@ -41,24 +41,6 @@ export const requestBid = async (
         res.json(cached.response);
         return;
       }
-    }
-
-    if (!enabled) {
-      // Fallback to legacy mock engine
-      const { executeBid } = await import('../services/rtbEngine');
-      const resp = await executeBid({
-        requestId,
-        placementId: body.placementId,
-        adFormat: body.adFormat,
-        floorCpm: body.floorCpm ?? 0,
-        device: body.device as any,
-        user: body.user as any,
-        app: body.app as any,
-        signal: body.signal,
-      } as any);
-      if (!resp) { res.status(204).send(); return; }
-      res.json(resp);
-      return;
     }
 
     const proto = (req.headers['x-forwarded-proto'] as string) || (req.protocol || 'http');

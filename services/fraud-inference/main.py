@@ -146,6 +146,7 @@ class ModelState:
     model: Optional[ort.InferenceSession] = None
     threshold: float = 0.5
     feature_names: List[str] = []
+    cat_cardinalities: List[int] = []
     model_version: str = "unknown"
     start_time: float = time.time()
     scaler: Optional[Any] = None
@@ -423,9 +424,11 @@ def load_model():
                 meta = json.load(f)
                 state.threshold = float(meta.get("threshold", 0.5))
                 state.feature_names = meta.get("features", [])
+                state.cat_cardinalities = meta.get("cat_cardinalities", [3, 100, 100, 3])
                 state.model_version = meta.get("version", meta_path.parent.name)
         else:
             logger.warning("Model metadata not found; using defaults", extra={"meta_path": str(meta_path)})
+            state.cat_cardinalities = [3, 100, 100, 3]
 
         scaler_path_env = os.getenv("MODEL_SCALER_PATH")
         scaler_candidate = Path(scaler_path_env).expanduser().resolve() if scaler_path_env else meta_path.with_name("scaler.joblib")
@@ -448,63 +451,68 @@ def load_model():
         raise
 
 
-def _encode_bool_flag(flag: Optional[bool]) -> float:
+def _encode_bool_index(flag: Optional[bool]) -> int:
     if flag is True:
-        return 1.0
+        return 2
     if flag is False:
-        return 0.0
-    return -1.0
+        return 1
+    return 0
 
 
-def _encode_string_feature(value: Optional[str]) -> float:
+def _encode_string_index(value: Optional[str], cardinality: int) -> int:
     if not value:
-        return -1.0
+        return 0
     digest = hashlib.sha256(value.encode("utf-8")).digest()
-    return int.from_bytes(digest[:4], "big") / 0xFFFFFFFF
+    # Use modulo to map to [0, cardinality)
+    return int.from_bytes(digest[:4], "big") % cardinality
 
 
-def transform_features(sample: FraudFeatures) -> np.ndarray:
-    """Build model-ready feature array and run optional preprocessing."""
+def transform_features(sample: FraudFeatures) -> Dict[str, np.ndarray]:
+    """Build model-ready feature arrays (numerical and categorical)."""
 
-    feature_map = {
-        "feature_1": float(sample.feature_1),
-        "feature_2": float(sample.feature_2),
-        "feature_3": float(sample.feature_3),
-        "consent_gdpr": _encode_bool_flag(None),
-        "consent_tcf": -1.0,
-        "us_privacy": -1.0,
-        "coppa": _encode_bool_flag(None),
-    }
-
-    if isinstance(sample, FraudDetectionRequest):
-        feature_map.update(
-            {
-                "consent_gdpr": _encode_bool_flag(sample.consent_gdpr),
-                "consent_tcf": _encode_string_feature(sample.consent_tcf),
-                "us_privacy": _encode_string_feature(sample.us_privacy),
-                "coppa": _encode_bool_flag(sample.coppa),
-            }
-        )
-
-    ordered_names = state.feature_names or [
-        "feature_1",
-        "feature_2",
-        "feature_3",
-        "consent_gdpr",
-        "consent_tcf",
-        "us_privacy",
-        "coppa",
+    # Numerical features
+    x_num_list = [
+        float(sample.feature_1),
+        float(sample.feature_2),
+        float(sample.feature_3),
     ]
-    row = [feature_map.get(name, 0.0) for name in ordered_names]
-    feature_array = np.array([row], dtype=np.float32)
+    x_num = np.array([x_num_list], dtype=np.float32)
 
     if state.scaler is not None:
         try:
-            feature_array = state.scaler.transform(feature_array)
+            x_num = state.scaler.transform(x_num)
         except Exception as exc:
             logger.warning("Failed to transform features with scaler", extra={"error": str(exc)})
 
-    return feature_array.astype(np.float32, copy=False)
+    # Categorical features
+    # Order: consent_gdpr, consent_tcf, us_privacy, coppa
+    # Defaults if state.cat_cardinalities is not set (should be set by load_model)
+    cards = state.cat_cardinalities or [3, 100, 100, 3]
+    
+    # Ensure we have enough cardinalities, else pad with defaults
+    if len(cards) < 4:
+        cards = cards + [100] * (4 - len(cards))
+
+    consent_gdpr = None
+    consent_tcf = None
+    us_privacy = None
+    coppa = None
+
+    if isinstance(sample, FraudDetectionRequest):
+        consent_gdpr = sample.consent_gdpr
+        consent_tcf = sample.consent_tcf
+        us_privacy = sample.us_privacy
+        coppa = sample.coppa
+
+    x_cat_list = [
+        _encode_bool_index(consent_gdpr),
+        _encode_string_index(consent_tcf, cards[1]),
+        _encode_string_index(us_privacy, cards[2]),
+        _encode_bool_index(coppa),
+    ]
+    x_cat = np.array([x_cat_list], dtype=np.int64)
+
+    return {"x_num": x_num.astype(np.float32), "x_cat": x_cat}
 
 
 def _record_score_metrics(tenant: str, score: float) -> None:
@@ -650,13 +658,11 @@ async def score_fraud(
     
     try:
         # Prepare input features
-        feature_array = transform_features(payload)
+        features = transform_features(payload)
         
         # Run inference
-        input_name = state.model.get_inputs()[0].name
-        output_name = state.model.get_outputs()[0].name
-        
-        outputs = state.model.run([output_name], {input_name: feature_array})
+        # We expect inputs: x_num, x_cat
+        outputs = state.model.run(None, features)
         
         # Extract fraud probability
         if len(outputs[0].shape) > 1 and outputs[0].shape[1] > 1:
@@ -712,13 +718,12 @@ async def score_fraud_batch(
         for item in features_list:
             DEBUG_BUFFER.record(tenant, item)
 
-        feature_matrix = np.vstack([transform_features(f) for f in features_list])
+        transformed_list = [transform_features(f) for f in features_list]
+        x_num_batch = np.vstack([t["x_num"] for t in transformed_list])
+        x_cat_batch = np.vstack([t["x_cat"] for t in transformed_list])
         
         # Batch inference
-        input_name = state.model.get_inputs()[0].name
-        output_name = state.model.get_outputs()[0].name
-        
-        outputs = state.model.run([output_name], {input_name: feature_matrix})
+        outputs = state.model.run(None, {"x_num": x_num_batch, "x_cat": x_cat_batch})
         
         # Extract scores
         if len(outputs[0].shape) > 1 and outputs[0].shape[1] > 1:

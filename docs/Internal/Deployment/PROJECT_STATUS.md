@@ -11,25 +11,24 @@ _Owner: Platform Engineering_
 ## Sources of Truth
 | Artifact | Scope | Notes |
 | --- | --- | --- |
-| `docs/Internal/Development/FIXES.md` | Ordered backlog of 163 documentation + product TODOs | Every task in this doc maps to a FIX ID. Treat it as the execution backlog.
-| `docs/Internal/Development/AD_PROJECT_FILE_ANALYSIS.md` | File-by-file inventory + risk log | Each outstanding risk cites the owning FIX. Review this before making "done" claims.
-| `CHANGELOG.md` | Historical releases | Only reference it for recorded work; do not infer completion beyond the logged entries.
+| `docs/Internal/Development/AD_PROJECT_FILE_ANALYSIS.md` | File-by-file inventory + risk log | Detailed inventory of the codebase state. |
+| `CHANGELOG.md` | Historical releases | Reference for recorded work and releases. |
 
-> ⚠️ **Reminder:** Any roadmap, checklist, or customer-facing statement MUST reference a FIX ID or explicit evidence (test run, deploy log). If it cannot, it stays aspirational.
+> ⚠️ **Reminder:** Any roadmap, checklist, or customer-facing statement MUST reference explicit evidence (test run, deploy log).
 
-## Current Delivery Snapshot (linked to FIX backlog)
-| Area | Previous claim in legacy docs | Reality on 2025-11-18 | FIX coverage | Status |
-| --- | --- | --- | --- | --- |
-| Backend platform | "All services production-ready" | `backend/Dockerfile` is broken, several controllers lack auth/rate limits, transparency and billing APIs still under active remediation. | FIX-01 | In Progress |
-| Console + Admin UI | "Connected to live APIs with full RBAC" | Dozens of mock flows remain (login, billing, migration studio); navigation exposes disabled routes by default. | FIX-03 | In Progress |
-| Website | "Data-backed dashboards" | Revenue widgets now hit `/api/v1/reporting/*`, but the site still runs in mock-auth test mode so backend calls require manual tokens; compliance copy needs audit. | FIX-04 | In Progress |
-| SDKs | "Android/iOS/Unity shipped" | iOS/Android parity work is mid-stream, Unity lacks device validation, consent persistence unfinished. | FIX-05 | In Progress |
-| Docs / Runbooks | "Comprehensive & current" | Canonical sources now established (FIX-10 complete); legal/PCI docs still missing ownership + review dates. | FIX-10 | ✅ FIX-10 Complete |
-| Quality & Testing | "Unit/integration coverage" | Test structure created, test harness tooling added, validation scripts operational. | FIX-07 | ✅ Complete |
-| Infrastructure | "Kubernetes/monitoring ready" | Helm charts hardened with secret mgmt, ServiceMonitors wired, Prometheus/Grafana/Loki stack configured with `.env` secret rendering, dashboard templating added. | FIX-08 | ✅ Complete |
-| Automation & Tooling | "Scripts reliable for CI" | All 15 major scripts now support `--help`, `--dry-run`, `--yes` with repo-root normalization, secret parameterization, and CI guardrails workflow added. | FIX-09 | ✅ Complete |
+## Current Delivery Snapshot
+| Area | Previous claim in legacy docs | Reality on 2025-11-18 | Status |
+| --- | --- | --- | --- |
+| Backend platform | "All services production-ready" | `backend/Dockerfile` is valid (multi-stage), several controllers lack auth/rate limits, transparency and billing APIs still under active remediation. | In Progress |
+| Console + Admin UI | "Connected to live APIs with full RBAC" | Dozens of mock flows remain (login, billing, migration studio); navigation exposes disabled routes by default. | In Progress |
+| Website | "Data-backed dashboards" | Revenue widgets now hit `/api/v1/reporting/*`, but the site still runs in mock-auth test mode so backend calls require manual tokens; compliance copy needs audit. | In Progress |
+| SDKs | "Android/iOS/Unity shipped" | iOS/Android parity work is mid-stream, Unity lacks device validation, consent persistence unfinished. | In Progress |
+| Docs / Runbooks | "Comprehensive & current" | Canonical sources established; legal/PCI docs still missing ownership + review dates. | Complete |
+| Quality & Testing | "Unit/integration coverage" | Test structure created, test harness tooling added, validation scripts operational. | Complete |
+| Infrastructure | "Kubernetes/monitoring ready" | Helm charts hardened with secret mgmt, ServiceMonitors wired, Prometheus/Grafana/Loki stack configured with `.env` secret rendering, dashboard templating added. | Complete |
+| Automation & Tooling | "Scripts reliable for CI" | All 15 major scripts now support `--help`, `--dry-run`, `--yes` with repo-root normalization, secret parameterization, and CI guardrails workflow added. | Complete |
 
-Use this table when updating OKRs, investor decks, or PRDs. If new gaps arise, append them to `AD_PROJECT_FILE_ANALYSIS.md` and tag the corresponding FIX.
+Use this table when updating OKRs, investor decks, or PRDs. If new gaps arise, append them to `AD_PROJECT_FILE_ANALYSIS.md`.
 
 ## Documentation Merge & Scope Notes
 | Legacy file | Legacy intent | Disposition |

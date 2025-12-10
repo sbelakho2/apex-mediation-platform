@@ -70,6 +70,7 @@ const DEMAND_PARTNERS: DemandPartnerBid[] = [
 
 /**
  * Simulates hybrid waterfall + bidding engine.
+ * @deprecated This is a legacy mock engine. Use orchestrator.ts for production.
  */
 export const executeBid = async (request: BidRequest): Promise<BidResponse | null> => {
   const end = auctionLatencySeconds.startTimer({ arm: 'control', exp_id: 'none' });

@@ -625,46 +625,11 @@ async function simulateAdapterCall(
   adapter: AdapterConfig,
   request: OpenRTBBidRequest
 ): Promise<OpenRTBBidResponse> {
-  // Simulate network delay
-  await new Promise((resolve) => setTimeout(resolve, Math.random() * 50));
-
-  // Simulate 70% bid rate
-  if (Math.random() > 0.7) {
-    return {
-      id: request.id,
-      seatbid: [],
-      nbr: NoBidReason.UnmatchedUser,
-    };
-  }
-
-  // Generate mock bid
-  const imp = request.imp[0];
-  const basePrice = imp.bidfloor || 1.0;
-  const bidPrice = basePrice * (1 + Math.random() * 2); // 1x to 3x floor
-
-  const bid: Bid = {
-    id: crypto.randomUUID(),
-    impid: imp.id,
-    price: Number(bidPrice.toFixed(2)),
-    adomain: [`advertiser-${adapter.id}.com`],
-    bundle: `com.${adapter.id}.app`,
-    crid: `creative-${crypto.randomUUID().substring(0, 8)}`,
-    adm: `<creative markup for ${adapter.name}>`,
-    w: imp.banner?.w || 320,
-    h: imp.banner?.h || 50,
-  };
-
-  const seatbid: Seatbid = {
-    bid: [bid],
-    seat: adapter.seats[0],
-  };
-
-  return {
-    id: request.id,
-    seatbid: [seatbid],
-    bidid: crypto.randomUUID(),
-    cur: 'USD',
-  };
+  // In a real implementation, this would make an HTTP request to adapter.endpoint
+  // Since this is a BYO-only project, we do not provide default adapter implementations here.
+  // The adapterRegistry should be used instead.
+  
+  throw new Error('Real adapter calls not implemented in openrtbEngine. Use adapterRegistry.');
 }
 
 /**

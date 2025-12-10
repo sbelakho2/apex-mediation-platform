@@ -2,7 +2,7 @@
 
 _Last updated: 2025-11-18 16:12 UTC_
 
-> **FIX-10 governance:** Every status claim in this roadmap must trace back to `docs/Internal/Development/FIXES.md` and align with the canonical readiness record in `docs/Internal/Deployment/PROJECT_STATUS.md`. Add new work here only after the risk is logged in `docs/Internal/Development/AD_PROJECT_FILE_ANALYSIS.md` and a FIX ID exists.
+> **Governance:** Every status claim in this roadmap must align with the canonical readiness record in `docs/Internal/Deployment/PROJECT_STATUS.md`. Add new work here only after the risk is logged in `docs/Internal/Development/AD_PROJECT_FILE_ANALYSIS.md`.
 
 Document purpose: Translate COMPETITIVE_GAP_ANALYSIS insights into a concrete, engineering-first roadmap. All coding work is done before final external/sandbox integration tests. Sandbox credentials for ad networks, MMPs/SKAN, payment processors, etc., will be used only in the Final Test & Certification phase.
 
